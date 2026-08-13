@@ -2432,7 +2432,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
         return metadata;
     };
 
-    // Same migration happens in generateUtils.js
+    // The generation pipeline migrates an old form the same way (Java ModelTranslations)
     function migrateForm(formData) {
         for (let i = 0; i < formData.length; i++) {
             if (formData[i].hasOwnProperty('title')) {

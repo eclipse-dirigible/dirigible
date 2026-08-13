@@ -22,6 +22,7 @@ import jakarta.validation.Valid;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.ide.template.domain.GenerationTemplateParameters;
 import org.eclipse.dirigible.components.ide.template.service.GenerationService;
+import org.eclipse.dirigible.components.ide.template.service.model.ModelGenerationService;
 import org.eclipse.dirigible.components.ide.workspace.domain.File;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.slf4j.Logger;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -54,6 +56,10 @@ public class GenerationEndpoint {
     /** The processor. */
     @Autowired
     private WorkspaceService workspaceService;
+
+    /** The model generation pipeline. */
+    @Autowired
+    private ModelGenerationService modelGenerationService;
 
     /**
      * Generate file.
@@ -87,6 +93,41 @@ public class GenerationEndpoint {
         }
 
         generationService.generateFile(workspace, project, path, parameters);
+        return ResponseEntity.created(workspaceService.getURI(workspace, project, path))
+                             .build();
+    }
+
+    /**
+     * Generates a project's artefacts from one of its model files.
+     *
+     * @param workspace the workspace
+     * @param project the project
+     * @param path the project-relative path of the model file
+     * @param parameters the template and its generation parameters
+     * @return the location of the generated model file's project
+     * @throws URISyntaxException the URI syntax exception
+     */
+    @PostMapping("/model/{workspace}/{project}")
+    public ResponseEntity<URI> generateModel(@PathVariable("workspace") String workspace, @PathVariable("project") String project,
+            @RequestParam("path") String path, @Valid @RequestBody GenerationTemplateParameters parameters) throws URISyntaxException {
+
+        if (!workspaceService.existsWorkspace(workspace)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, format("Workspace {0} does not exist.", workspace));
+        }
+        if (!workspaceService.existsProject(workspace, project)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    format("Project {0} does not exist in Workspace {1}.", project, workspace));
+        }
+
+        try {
+            modelGenerationService.generate(workspace, project, path, parameters.getTemplate(), parameters.getParameters());
+        } catch (IOException | IllegalArgumentException e) {
+            // A model or template that is not there, a template declaring no sources, an unsupported
+            // template, a model the template cannot compile (an unparseable mapping criteria): all
+            // things the caller asked for wrongly, reported rather than generated incompletely.
+            logger.warn("Failed to generate [{}] of project [{}] with template [{}]", path, project, parameters.getTemplate(), e);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
         return ResponseEntity.created(workspaceService.getURI(workspace, project, path))
                              .build();
     }

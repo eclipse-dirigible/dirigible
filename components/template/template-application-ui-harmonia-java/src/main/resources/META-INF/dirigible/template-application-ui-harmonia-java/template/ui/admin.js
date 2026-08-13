@@ -8,7 +8,8 @@
  * The ADMINISTRATION surface - one deliberately PLAIN page per MODULE (every non-projection,
  * non-report entity as a flat table + flat record editor over the power REST controllers),
  * registered on `application-admin-perspectives` (the Administration shell, ADMINISTRATOR-gated).
- * The entity metadata is baked in by the `adminModel` collection case (generateUtils), which
+ * The entity metadata is baked in by the `adminModel` collection case (the generation pipeline's
+ * ModelGenerator), which
  * renders each source ONCE per module with `adminEntitiesJson` in the context.
  */
 export const getSources = () => [

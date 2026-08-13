@@ -10,8 +10,9 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 angular.module('GenerateService', []).provider('GenerateService', function GenerateServiceProvider() {
+    // Both generation paths are served by the platform's Java generation endpoint - the model path
+    // used to be a JavaScript service, which is gone.
     this.generateServiceUrl = '/services/ide/generate';
-    this.generateModelServiceUrl = '/services/js/service-generate/generate.mjs';
     this.$get = ['$http', function generateApiFactory($http) {
         const generateFromTemplate = function (workspace, project, file, template, parameters = { '__empty': '' }) {
             const url = UriBuilder().path(this.generateServiceUrl.split('/')).path('file').path(workspace).path(project).path(file.split('/')).build();
@@ -19,9 +20,9 @@ angular.module('GenerateService', []).provider('GenerateService', function Gener
         }.bind(this);
 
         const generateFromModel = function (workspace, project, file, template, parameters = { '__empty': '' }) {
-            let url = UriBuilder().path(this.generateModelServiceUrl.split('/')).path('model').path(workspace).path(project).build();
+            let url = UriBuilder().path(this.generateServiceUrl.split('/')).path('model').path(workspace).path(project).build();
             url = `${url}?path=${file.split('/')}`;
-            return $http.post(url, { 'template': template, 'parameters': parameters, 'model': file });
+            return $http.post(url, { 'template': template, 'parameters': parameters });
         }.bind(this);
 
         const isEnabled = function () {

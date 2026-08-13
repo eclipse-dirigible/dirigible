@@ -193,6 +193,37 @@ A single `app.intent` YAML file at a project root is the source of truth one alt
 
 **The general platform line this enshrines:** authoring artifacts (`.edm`, `.model`, `.form`, `.report`, `.intent`) get **workspace editors + an explicit Generate**; only runtime artifacts (`.roles`, `.bpmn`, `.csvim`, `.table`, jobs, listeners, …) get **synchronizers**. Applying the synchronizer hammer to an authoring artifact generates into the registry where no modeler, Projects view, or template can use it — that mistake was made once and reverted; the inventory of synchronizers (grep `extends BaseSynchronizer`) deliberately contains no authoring formats.
 
+## Model-to-code generation is Java (`ide-template`)
+
+Turning a model file into generated artefacts — the "Generate from EDM / model" step every template
+rides on — runs entirely in Java, in `components/ide/ide-template`
+(`ModelGenerationService` → `ModelGenerator` / `GlueGenerator` / `ModelParameterProcessor` /
+`ModelTemplateAdapters` / `ModelTemplateRenderer`). The endpoint is
+**`POST /services/ide/generate/model/{workspace}/{project}?path=<model>`** with body
+`{template, parameters}`; the older JavaScript path (`generate.mjs` + `generateUtils.js` +
+`parameterUtils.js` under `service-generate`) was migrated and **deleted** — see
+[`GENERATION_UTILS_JAVA_PLAN.md`](GENERATION_UTILS_JAVA_PLAN.md) §6-§7. Things to know before touching it:
+
+- **Template descriptors are still JavaScript.** Each `template-*` module exports `getTemplate()`
+  (sources + parameters), which the Java pipeline reads through
+  `GenerationService.getTemplateMetadata` (a GraalJS call per template). Their `generate()` functions
+  are gone: the per-template pre-logic lives in `ModelTemplateAdapters`, keyed by template id, and a
+  template the pipeline does not know is **refused by name** rather than half-generated. Add a
+  template → add its adapter entry.
+- **Every number in the parameter graph is a `Double`** and an absent key is not a null one
+  (`ModelValues.putNumber` / `remove`) — the graph reaches the engines through a `Map` deserialization
+  that types every JSON number as `Double`, so `minLength` renders as `0.0` and always did.
+- **Write JSON with `JavaScriptJson`, not Gson**, for the `.gen` descriptor and the translation
+  catalogs: Gson drops null keys, escapes HTML and writes `6.0` where the descriptor needs `6`.
+- **The Mustache engine writes into the parameter map it is handed** (it adds an indexed twin of every
+  collection), so `ModelTemplateRenderer` copies the context per invocation. Without that, the
+  artefacts land in the `.gen` descriptor, which is re-read on the next regeneration and accumulates.
+- **The intent Generate is one call**: `IntentGenerationService` writes the model files and then runs
+  the `.settings` recipes through this pipeline itself, reporting each one's outcome in
+  `codeGenerations` (`generated`, plus `error`). No client replays a plan any more.
+- `ModelGenerationIT` is the regression harness (it replaced the JS-vs-Java parity harness): every
+  template renders, twice, with the descriptor and the cross-project entity extension asserted.
+
 ## Harmonia runtime UI (`template-application-ui-harmonia-java` + `template-form-builder-harmonia`)
 
 The runtime UI stack for generated applications: they render as a self-contained **Alpine.js + Harmonia SPA** (client-routed by Pinecone in hash mode, no iframes/`postMessage` hubs), served at `/services/web/<project>/gen/<model>/index.html`, talking to the **reused** generated Java REST controllers over a `fetch` client. The AngularJS IDE is untouched; the application layer now ships this stack only. `template-application-ui-harmonia-java` (registered on `platform-templates` as "Application - UI (Harmonia) - Java") emits the view types (list, manage, setting, master-detail, reports) + built-in **Process Inbox** (`/inbox`) and **Documents** (`/documents`) shell sections + inline process-task surfacing; `template-form-builder-harmonia` ("Harmonia Generator from Form Model", extension `form`) is the runtime form generator. The whole stack — Alpine 3.15.11, Harmonia 2.6.0, Lucide 1.8.0 — is embedded as **webjars** via `components/resources/application-core` (report charts use Harmonia's own native `x-h-chart-*` SVG charts; the `chart.js` webjar was dropped with the AngularJS dashboard shell) (incl. Pinecone Router — `org.webjars.npm:pinecone-router`, served version-less at `/webjars/pinecone-router/dist/router.min.js`; it was vendored until the 7.5.2 webjar existed). Developed on PR [#6078](https://github.com/eclipse-dirigible/dirigible/pull/6078).
@@ -238,7 +269,7 @@ The runtime UI stack for generated applications: they render as a self-contained
 
 The loop: chat → `POST /services/ide/intent/agent` → **re-validate the proposal client-side through `POST /parse`** → auto-apply (no diff/Accept — the chat text is the narration) → the canvas redraws. **The agent answers 200 even when its proposal still fails validation** (the server's two repair rounds were exhausted, signalled only as trailing prose in `reply`), so the client-side re-validation is load-bearing, not belt-and-braces — an invalid proposal is shown as issues and never reaches the buffer. Project and file management are hidden: the project id is a slug of the intent's `name`, created lazily on the first accepted proposal and never renamed; every accepted proposal is auto-saved, so a reload restores from disk. Chat history is persisted **server-side** per `(tenant, project, surface)` and restored on open (the agent endpoint is stateless, so the transcript is a record the platform keeps, not browser state); the store appends one turn at a time and a failed append is carried by the next turn rather than breaking the chat.
 
-**The one button** (`js/services/pipeline.js`, the `publish` store) runs save → **Problems baseline** → `/intent/generate` → replay `codeGenerations` sequentially → publisher → healthcheck poll + **Problems diff filtered to `/<project>`**. That diff is the only honest "published clean" signal — publishing is synchronous but reports nothing about what the synchronizers made of the artefacts, so a client-Java compile error or a failed CSVIM seed surfaces there and nowhere else. The success panel's "try it here" links are **discovered** (`platform-shells`, plus the app's own perspective path from `application-perspectives`) — never assembled from a guessed `gen/<model>` convention, which would 404 the moment a template changed its layout.
+**The one button** (`js/services/pipeline.js`, the `publish` store) runs save → **Problems baseline** → `/intent/generate` (which generates the models AND the code from them in that one call, reporting each recipe's outcome in `codeGenerations`) → publisher → healthcheck poll + **Problems diff filtered to `/<project>`**. That diff is the only honest "published clean" signal — publishing is synchronous but reports nothing about what the synchronizers made of the artefacts, so a client-Java compile error or a failed CSVIM seed surfaces there and nowhere else. The success panel's "try it here" links are **discovered** (`platform-shells`, plus the app's own perspective path from `application-perspectives`) — never assembled from a guessed `gen/<model>` convention, which would 404 the moment a template changed its layout.
 
 Gotchas this shell paid for (all confirmed by `IntentBuilderShellIT`):
 - **Never put an Alpine binding on `<i x-h-lucide>`.** The plugin REPLACES the `<i>` with the rendered svg, so a binding would be lost — it throws instead, and the uncaught throw **aborts Alpine's walk over everything below it** (the toolbar rendered, the whole split pane did not). Use an `<svg x-h-lucide>` placeholder for any `:data-lucide` / `:class` / `x-show`.

@@ -260,52 +260,35 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         $scope.$evalAsync(() => { $scope.state.isBusy = false; });
     };
 
-    // Run the model-to-code plan from the response (the templates + parameters registered in the
-    // <intent>.settings), one generate-from-template call per generated model, sequentially.
-    const runCodeGenerations = (location, plan, written, scrubbed) => {
-        let index = 0;
-        const next = () => {
-            if (index >= plan.length) {
-                finishGenerate(location, written, scrubbed, plan.length);
-                return;
-            }
-            const entry = plan[index++];
-            dialogHub.showBusyDialog(`Generating code (${index}/${plan.length}): ${entry.path}`);
-            const url = `/services/js/service-generate/generate.mjs/model/${encodeURIComponent(location.workspace)}/${encodeURIComponent(location.project)}?path=${encodeURIComponent(entry.path)}`;
-            $http.post(url, { template: entry.templateId, parameters: entry.parameters || {} })
-                 .then(next, (response) => {
-                     console.error(response);
-                     dialogHub.closeBusyDialog();
-                     $scope.$evalAsync(() => { $scope.state.isBusy = false; });
-                     dialogHub.postMessage({ topic: 'projects.tree.refresh', data: { partial: true, project: location.project, workspace: location.workspace } });
-                     dialogHub.showAlert({
-                         title: 'Failed to generate code',
-                         message: `Models were generated, but generating code from '${entry.path}' failed. See the console for details.`,
-                         type: AlertTypes.Error,
-                         preformatted: false,
-                     });
-                 });
-        };
-        next();
+    // Report the model-to-code generations the server ran (the templates + parameters registered in
+    // the <intent>.settings). Generate is one call now - the models and the code are produced in the
+    // same request - so this only reads the outcome each entry carries.
+    const reportCodeGenerations = (location, plan, written, scrubbed) => {
+        const failed = plan.filter((entry) => entry.generated === false);
+        finishGenerate(location, written, scrubbed, plan.length - failed.length);
+        if (failed.length) {
+            const details = failed.map((entry) => `${entry.path}: ${entry.error || 'unknown error'}`).join('\n');
+            dialogHub.showAlert({
+                title: 'Failed to generate code',
+                message: `Models were generated, but generating code failed for:\n\n${details}`,
+                type: AlertTypes.Error,
+                preformatted: true,
+            });
+        }
     };
 
     $scope.generate = () => {
         const location = fileLocation();
         $scope.state.isBusy = true;
-        dialogHub.showBusyDialog('Generating model files');
+        dialogHub.showBusyDialog('Generating model files and code');
         $http.post(`${GENERATE_URL}?workspace=${encodeURIComponent(location.workspace)}&project=${encodeURIComponent(location.project)}&path=${encodeURIComponent(location.path)}`)
              .then((response) => {
                  $scope.issues = []; // a successful generate clears any pinned cross-model issue from a prior attempt
                  $scope.warnings = response.data.warnings || [];
                  const written = (response.data.written || []).length;
                  const scrubbed = (response.data.scrubbed || []).length;
-                 const plan = response.data.codeGenerations || [];
-                 if (plan.length) {
-                     // Models are written; now chain the model-to-code generation per the .settings recipe.
-                     runCodeGenerations(location, plan, written, scrubbed);
-                 } else {
-                     finishGenerate(location, written, scrubbed, 0);
-                 }
+                 // The server generated the code as part of this call; each entry reports its outcome.
+                 reportCodeGenerations(location, response.data.codeGenerations || [], written, scrubbed);
              }, (response) => {
                  console.error(response);
                  dialogHub.closeBusyDialog();

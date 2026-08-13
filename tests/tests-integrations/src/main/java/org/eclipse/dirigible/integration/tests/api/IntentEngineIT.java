@@ -1636,7 +1636,7 @@ class IntentEngineIT extends IntegrationTest {
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body(reportPayload)
                                                  .when()
-                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
+                                                 .post("/services/ide/generate/model/" + WORKSPACE + "/" + PROJECT
                                                          + "?path=OrdersByMonth.report")
                                                  .then()
                                                  .statusCode(201));
@@ -2025,7 +2025,7 @@ class IntentEngineIT extends IntegrationTest {
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body(payload)
                                                  .when()
-                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
+                                                 .post("/services/ide/generate/model/" + WORKSPACE + "/" + PROJECT
                                                          + "?path=OrdersByCustomer.report")
                                                  .then()
                                                  .statusCode(201));
@@ -2337,8 +2337,7 @@ class IntentEngineIT extends IntegrationTest {
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body(payload)
                                                  .when()
-                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
-                                                         + "?path=" + modelFile)
+                                                 .post("/services/ide/generate/model/" + WORKSPACE + "/" + PROJECT + "?path=" + modelFile)
                                                  .then()
                                                  .statusCode(201));
     }

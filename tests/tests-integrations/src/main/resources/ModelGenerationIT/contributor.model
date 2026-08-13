@@ -76,7 +76,7 @@
                 ],
                 "dataName": "BOOK_EXT",
                 "extensionReferencedEntity": "Book",
-                "extensionReferencedModel": "parity",
+                "extensionReferencedModel": "generation",
                 "name": "BookExtension",
                 "perspectiveName": "Books",
                 "type": "EXTENSION"

@@ -4,15 +4,6 @@
  * Do not modify the content as it may be re-generated again.
  */
 import * as daoTemplateManager from "template-application-dao-java/template/template";
-import * as generateUtils from "service-generate/template/generateUtils";
-import * as parameterUtils from "service-generate/template/parameterUtils";
-
-export function generate(model, parameters) {
-    model = JSON.parse(model).model;
-    const templateSources = getTemplate(parameters).sources;
-    parameterUtils.process(model, parameters)
-    return generateUtils.generateFiles(model, parameters, templateSources);
-};
 
 export function getTemplate(parameters) {
     const daoTemplate = daoTemplateManager.getTemplate(parameters);

@@ -18,7 +18,7 @@ class IntentNamingTest {
 
     @Test
     void javaModuleMirrorsTheTemplateEngineSanitizer() {
-        // Must produce exactly what parameterUtils.js sanitizeJavaIdentifier produces for the same
+        // Must produce exactly what NamingHelper.sanitizeJavaIdentifier produces for the same
         // name - the BPMN handler FQNs / endpoint URLs (producer) and the events template's package
         // line (consumer) only match if both sides sanitize identically.
         assertEquals("sales_invoices", IntentNaming.javaModule(named("sales-invoices")));

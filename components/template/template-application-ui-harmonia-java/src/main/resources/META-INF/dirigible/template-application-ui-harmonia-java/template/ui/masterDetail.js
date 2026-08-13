@@ -21,7 +21,7 @@
  *
  * The detail list is filtered to its master via the generated controller's
  * `?<masterEntityId>=<id>` query (masterEntityId = the FK property; masterEntity = the master
- * entity name — both set by parameterUtils for MANAGE_DETAILS/LIST_DETAILS entities).
+ * entity name — both derived by ModelParameterProcessor for MANAGE_DETAILS/LIST_DETAILS entities).
  */
 export function getSources(parameters) {
     // A master gets: the master page (list + detail orchestration) AND the manage form

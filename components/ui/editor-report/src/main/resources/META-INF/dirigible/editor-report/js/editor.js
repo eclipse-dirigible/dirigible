@@ -114,7 +114,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	function getTranslationId(str) {
 		return `${str.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;
 	}
-	// Same migration happens in generateUtils.js
+	// The generation pipeline migrates an old report the same way (Java ModelTranslations)
 	function migrateReport(report) {
 		if (!report.hasOwnProperty('tId')) {
 			report['tId'] = getTranslationId(report.alias);

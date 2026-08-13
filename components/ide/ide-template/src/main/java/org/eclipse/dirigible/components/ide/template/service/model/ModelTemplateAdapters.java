@@ -32,10 +32,7 @@ import static org.eclipse.dirigible.components.ide.template.service.model.ModelV
  * parameters its sources reference - is per-template knowledge, and this is where it lives.
  *
  * <p>
- * {@code template-mapping-java} is deliberately not handled here. Unlike the others, its
- * preparation is a mapping compiler rather than marshalling - it derives Java expressions from the
- * mapping's columns - and porting it is its own piece of work. Asking for it here fails loudly
- * instead of generating something incomplete.
+ * A template the pipeline does not know is refused by name rather than generated incompletely.
  */
 final class ModelTemplateAdapters {
 
@@ -68,7 +65,8 @@ final class ModelTemplateAdapters {
             "template-application-events-java/template/template.js", ModelTemplateAdapters::glue, //
             "template-application-ui-harmonia-java/template/template-report-file.js", ModelTemplateAdapters::report, //
             "template-form-builder-harmonia/template/template.js", (modelText, parameters) -> form(modelText), //
-            "template-mapping-javascript/template/template.js", (modelText, parameters) -> mapping(modelText));
+            "template-mapping-javascript/template/template.js", (modelText, parameters) -> mapping(modelText), //
+            "template-mapping-java/template/template.js", ModelTemplateAdapters::javaMapping);
 
     /**
      * Prepares a model for a template.
@@ -301,6 +299,20 @@ final class ModelTemplateAdapters {
         Map<String, Object> model = new LinkedHashMap<>();
         model.put("mapping", modelText);
         return new PreparedModel(model, false);
+    }
+
+    /**
+     * Prepares a mapping for the client-Java mapper, whose sources render the compiled column
+     * expressions rather than the mapping file.
+     *
+     * @param modelText the raw model file
+     * @param parameters the generation parameters, mutated with the mapper's package and class name
+     * @return the prepared model
+     */
+    private static PreparedModel javaMapping(String modelText, Map<String, Object> parameters) {
+        parameters.put("javaGenFolderName", NamingHelper.sanitizeJavaIdentifier(str(parameters, "genFolderName")));
+        parameters.put("mapperClassName", MappingCompiler.className(str(parameters, "fileName")));
+        return new PreparedModel(MappingCompiler.compile(modelText), false);
     }
 
     /**

@@ -3,17 +3,6 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-import * as generateUtils from "service-generate/template/generateUtils";
-
-export function generate(model, parameters) {
-    const templateModel = JSON.parse(model);
-    const templateSources = getTemplate(parameters).sources;
-    // The form's `code` is the body of the neutral formController(ctx) — indent it for embedding.
-    if (templateModel.code) {
-        templateModel.code = templateModel.code.split("\n").map(e => `    ${e}`).join('\n');
-    }
-    return generateUtils.generateGeneric(templateModel, parameters, templateSources);
-};
 
 export function getTemplate(parameters) {
     return {

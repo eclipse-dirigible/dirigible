@@ -3,19 +3,6 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-import * as generateUtils from "service-generate/template/generateUtils";
-import { sanitizeJavaIdentifier } from "service-generate/template/parameterUtils";
-
-export function generate(model, parameters) {
-    // The .glue file is { triggers: [...], resolvers: [...] } - no entity model. generateUtils
-    // filters model.entities up front, so give it an empty list; the gen package root comes from the
-    // glue file's base name (same as the full-stack gen folder).
-    const glue = JSON.parse(model);
-    glue.entities = glue.entities || [];
-    parameters.javaGenFolderName = sanitizeJavaIdentifier(parameters.genFolderName);
-    let templateSources = getTemplate(parameters).sources;
-    return generateUtils.generateFiles(glue, parameters, templateSources);
-};
 
 export function getTemplate(parameters) {
     return {

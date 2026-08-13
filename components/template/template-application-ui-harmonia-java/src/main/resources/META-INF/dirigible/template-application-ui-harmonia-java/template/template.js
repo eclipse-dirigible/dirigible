@@ -6,37 +6,6 @@
 import * as schemaTemplateManager from "template-application-schema/template/template";
 import * as restTemplateManager from "template-application-rest-java/template/template";
 import * as uiTemplate from "template-application-ui-harmonia-java/template/ui/template";
-import * as generateUtils from "service-generate/template/generateUtils";
-import * as parameterUtils from "service-generate/template/parameterUtils";
-
-export function generate(model, parameters) {
-    model = JSON.parse(model).model;
-    let templateSources = getTemplate(parameters).sources;
-    parameters.javaRuntime = true;
-    parameterUtils.process(model, parameters)
-    // App caption for the shell (title + sidebar header): prefer the model-level title/description
-    // (the intent's humanised name + description) over the bare project name.
-    parameters.appTitle = (model.title && String(model.title).trim()) ? model.title : parameters.projectName;
-    parameters.appDescription = model.description || '';
-    // Brand icon (a Lucide icon name) for the shell header: an explicit generate-time parameter wins,
-    // else the model-level icon (the intent's `icon`), else a neutral default.
-    parameters.appIcon = (parameters.appIcon && String(parameters.appIcon).trim()) ? String(parameters.appIcon).trim()
-        : ((model.icon && String(model.icon).trim()) ? String(model.icon).trim() : 'blocks');
-    // Data-language codes the app offers (the intent's `languages:`, carried on the .model root).
-    // Rendered into config.js as a JSON array; the shell's Region & Language setting lists them.
-    parameters.appLanguages = JSON.stringify(Array.isArray(model.languages) && model.languages.length ? model.languages : ['en']);
-    // Custom dashboard widgets (top-level intent `widgets:` — REST KPIs and embedded pages) ride the
-    // .model root and are baked into the dashboard page directly.
-    parameters.customWidgets = model.widgets || [];
-    // BPM user-task translation keys: the .model root `processTaskLabels` maps the authored step
-    // name to the humanized runtime task name ({ managerReview: "Manager Review" }); config.js gets
-    // the REVERSE map so the views resolve an inbox task's name to its catalog key by exact match
-    // ({"Manager Review": "managerReview"}). The task set is part of the process definition, so
-    // everything is known here at generation time - no runtime key derivation.
-    parameters.processTaskKeys = JSON.stringify(
-        Object.fromEntries(Object.entries(model.processTaskLabels || {}).map(([key, label]) => [label, key])));
-    return generateUtils.generateFiles(model, parameters, templateSources);
-};
 
 export function getTemplate(parameters) {
     // The database schema (.table/.schema artefacts) is REQUIRED: it is what actually creates the

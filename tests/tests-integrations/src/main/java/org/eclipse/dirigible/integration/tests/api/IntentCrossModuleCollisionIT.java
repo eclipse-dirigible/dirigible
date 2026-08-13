@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.api;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -20,7 +21,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.google.gson.Gson;
 
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -178,18 +178,11 @@ class IntentCrossModuleCollisionIT extends IntegrationTest {
                                                           .extract()
                                                           .jsonPath()
                                                           .getList("codeGenerations")));
+        // The intent engine runs the model-to-code recipes itself, in the same call: assert each one
+        // succeeded instead of replaying them from here.
         for (Map<String, Object> codeGeneration : plan.get()) {
-            String template = String.valueOf(codeGeneration.get("templateId"));
-            String modelPath = String.valueOf(codeGeneration.get("path"));
-            String parameters = new Gson().toJson(codeGeneration.get("parameters"));
-            String payload = "{\"template\":\"" + template + "\",\"parameters\":" + parameters + "}";
-            restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                     .body(payload)
-                                                     .when()
-                                                     .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + project
-                                                             + "?path=" + modelPath)
-                                                     .then()
-                                                     .statusCode(201));
+            assertEquals(Boolean.TRUE, codeGeneration.get("generated"),
+                    "generating code from " + codeGeneration.get("path") + " failed: " + codeGeneration.get("error"));
         }
     }
 
