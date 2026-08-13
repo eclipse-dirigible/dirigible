@@ -63,12 +63,39 @@ runs unchanged. New forms can still be authored directly against the neutral `ct
   input-time, input-color, button, and one level of `container-hbox` / `container-vbox`.
 - **Fallback:** any other `controlId` (image, input-documents, input-combobox/select/radio
   with feeds, table, stepIndicator, progress) renders as a labelled text input with a TODO.
-- **Assets (self-contained):** the page loads only `form.js` + the Harmonia/Alpine/Lucide
-  webjars. `form.js` carries its own minimal fetch client (`harmoniaHttp`), so the form does
-  **not** depend on the SPA shell's `window.App`. This matters because a BPM task form is
-  opened standalone (an iframe/dialog with `?taskId=&processInstanceId=`), where the shell
+- **Assets (self-contained):** the page loads `form.js` + the Harmonia/Alpine/Lucide webjars,
+  plus the two shared shell services it reuses by **absolute** URL (`services/format.js` and
+  `services/i18n.js`). `form.js` carries its own minimal fetch client (`harmoniaHttp`), so the
+  form does **not** depend on the SPA shell's `window.App`. This matters because a BPM task form
+  is opened standalone (an iframe/dialog with `?taskId=&processInstanceId=`), where the shell
   assets are not present at a predictable relative path (an earlier `../../js/...` reference
   404'd and left `App` undefined).
+
+## Labels come from the form's own catalog
+
+The same generation that renders the page emits its translation catalog
+(`i18n/en-US/<form>.form.json`, keyed by the form's `<tprefix>`), and the page consumes it: the
+title, the field labels, the button captions and the status steps all bind through
+`T('<project>:<tprefix>.t.<id>', '<English literal>')`, and the two submit outcome messages
+through the catalog's `dialogs` section. Everything is resolved at generation time — the
+translation id was assigned to the model by the catalog-emitting pass, so nothing is derived
+in the browser — and an untranslated key degrades to the baked English literal.
+
+Two things a change here must preserve:
+
+- **The page is standalone, so it bootstraps its own catalog namespace.** `i18n.js` reads
+  `App.config.projectName`, which the SPA shell would normally provide; the form (like the
+  standalone report page) sets it in a one-line inline script before loading the translator.
+  Without it only the platform `application-core` chrome catalog is fetched and every
+  module-authored label silently stays English — which is exactly the bug
+  ([#6692](https://github.com/eclipse-dirigible/dirigible/issues/6692)) this replaced.
+- **A status step's `label` stays untranslated; its `title` is the translated one.** The active
+  step is found by matching the record's status value against `label`, so translating that
+  would leave every step inactive.
+
+An authored label may contain an apostrophe, which would close the JS string literal the `T()`
+call sits in and break the whole Alpine expression, so both the interpolated literal **and the
+key derived from it** are escaped (`$SQ`/`$ESCSQ` in `index.html.template`).
 
 ## Follow-ups
 - Feed-driven widgets (combobox/select/radio with `feeds`), documents, table, stepIndicator.
