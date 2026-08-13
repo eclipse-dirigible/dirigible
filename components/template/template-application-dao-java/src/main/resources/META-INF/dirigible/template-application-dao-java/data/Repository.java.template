@@ -1,6 +1,10 @@
 package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
+#set($preservedOnUpdate = [])
 #foreach ($property in $properties)
+    #if($property.dataPrimaryKey)
+        #set($pkPropertyName = $property.name)
+    #end
     #if($property.isCalculatedProperty && ($property.calculatedPropertyExpressionCreate || $property.calculatedActionOnCreate))
         #set($haveCalculatedPropertyOnCreate = "true")
     #end
@@ -12,6 +16,16 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
     #end
     #if($property.isCalculatedProperty && ($property.calculatedActionOnCreate || $property.calculatedActionOnUpdate))
         #set($haveCalculatedPropertyAction = "true")
+    #end
+    ## System-owned columns a user update must never take from the payload (consumed by update()):
+    ## platform-managed read-only fields (an author's readOnly, roll-up targets, the document number
+    ## and uuid) and aggregate footer fields (an invoice's Net/Total/Paid). An aggregate that is
+    ## recomputed on update (an expressionUpdate such as Balance) is exempt here - update() reassigns
+    ## it AFTER recalculate(), from the resummed aggregates and the preserved values. A calculated
+    ## create-only field that stays user-editable (a defaulted Currency relation) carries neither
+    ## flag, so a user's edit of it is respected.
+    #if(!$property.dataPrimaryKey && ($property.isReadOnlyProperty || ($property.aggregate && !$property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)))
+        #set($ignore = $preservedOnUpdate.add($property))
     #end
 #end
 ## Decimal places of a calculated property: its own scale, else 2 for floating-point types, else 0.
@@ -239,6 +253,21 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     public ${name}Entity update(${name}Entity entity) {
 #rollupGuardCheck()
 #aggregateGuardCheck()
+#if($preservedOnUpdate.size() > 0)
+        // System-owned fields survive a partial payload: a caller's update carries only the fields
+        // its form edits, and a value it leaves null must not erase what the write path computed -
+        // the roll-up/aggregate targets (an invoice's Paid, a timesheet's total hours) and the
+        // platform-managed identifiers (document number, uuid). The #6226/#6306 lost-update family,
+        // user-update edition: read the stored row once and take the system-owned values from THERE,
+        // never from the payload. System writers stay on the targeted primitives (updateProperty /
+        // updateProperties / updateDerived), so this preservation cannot fight a workflow write.
+        ${name}Entity existingRow = entity.${pkPropertyName} == null ? null : findById(entity.${pkPropertyName});
+        if (existingRow != null) {
+#foreach($property in $preservedOnUpdate)
+            entity.${property.name} = existingRow.${property.name};
+#end
+        }
+#end
 #if($aggregateKeys && $aggregateKeys.size() > 0)
         // Aggregate rekey: this entity groups an aggregate, so a change to one of its grouping keys
         // MOVES the row between tuples. The tuple it moves into is recomputed off the "-updated" event
@@ -252,7 +281,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($hasLabel)
         computeName(entity);
 #end
+#if($documentMaster)
+        recalculate(entity);
+#end
 #if($haveCalculatedPropertyOnUpdate)
+## The update-time recomputes run AFTER recalculate() and the preservation block above, so an
+## expression like Balance = Total - Paid reads the freshly resummed Total and the preserved Paid -
+## computing it from the incoming payload read nulls as zeros and persisted Balance 0 on a header
+## edit (the 2026-08-12 prod invoice corruption).
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedActionOnUpdate)
 #actionAssign($property $property.calculatedActionOnUpdate)
@@ -260,9 +296,6 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #calcAssign($property $property.calculatedPropertyExpressionUpdate)
 #end
 #end
-#end
-#if($documentMaster)
-        recalculate(entity);
 #end
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
