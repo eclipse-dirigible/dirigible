@@ -61,8 +61,11 @@ import org.springframework.beans.factory.annotation.Autowired;
  * 409), {@code postings} with {@code reverses} (post on a transition; red-storno reversal on void -
  * negated amounts, storno link, fail-soft), the {@code notify} block with {@code attach: print}
  * (send the document itself by e-mail - on a transition and on a process step; the fail-soft
- * contract), and the personal (my) surface ({@code identity}/{@code personal}/{@code sensitive}:
- * scoped reads, forced owner, stripped fields).
+ * contract), {@code calculatedActionOnCreate} on a to-one RELATION (the FK resolved server-side by
+ * a hand-written {@code custom/} action: assigned in the repository, and at runtime both defaulted
+ * when omitted and left alone when the caller supplied one), and the personal (my) surface
+ * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
+ * fields).
  */
 class IntentEmissionCoverageIT extends IntegrationTest {
 
@@ -107,6 +110,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: name, type: string,  required: true, length: 100 }
                 relations:
                   - { name: Parent, kind: manyToOne, to: Account }
+
+              # calculatedActionOnCreate on a to-one RELATION: the FK is resolved SERVER-SIDE at
+              # insert by a hand-written action, for the "default read off ANOTHER record" case no
+              # other hook covers (init: is a literal seed id; dependsOn is a UI-only cascade that
+              # never fires on a server-side create). Tariff carries a `base` flag the action looks
+              # the default up by - deliberately NOT the first row, so the assertion below cannot
+              # pass on an accidental default landing in the column.
+              - name: Tariff
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string,  required: true, length: 100 }
+                  - { name: base, type: boolean }
+
+              - name: Quote
+                imports: |
+                  import custom.QuoteTariffAction;
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 200 }
+                relations:
+                  - { name: Tariff, kind: manyToOne, to: Tariff, calculatedActionOnCreate: QuoteTariffAction }
 
               # Append-only (immutable: true): e.g. the snapshot stored when a document is sent -
               # user writes and deletes are rejected from the moment a record is created.
@@ -743,6 +767,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 rows:
                   - { id: 1, name: Admin, email: admin }
                   - { id: 2, name: Other, email: other@example.com }
+              # The base tariff is row 2, NOT row 1: a calculated FK that resolved to 1 could be a
+              # coincidence (a first row, a stray default), one that resolves to 2 can only be the
+              # action having run and matched on `base`.
+              - name: tariffs
+                entity: Tariff
+                rows:
+                  - { id: 1, name: Promotional, base: false }
+                  - { id: 2, name: Standard,    base: true }
               - name: claims
                 entity: Claim
                 rows:
@@ -793,10 +825,53 @@ class IntentEmissionCoverageIT extends IntegrationTest {
      */
     private static final String NUMBERS_JSON = "{\"series\": [{\"name\": \"Emission Receipt\", \"prefix\": \"ER-\", \"size\": 8}]}";
 
+    /**
+     * The hand-written half of a calculated action: the contract is that the developer authors the
+     * class under {@code custom/} (never {@code gen/}, which is wiped on regeneration) and the
+     * generated repository calls it. Written here as the fixture's own source so the IT exercises the
+     * REAL arrangement - an action resolved as a Spring bean that reads another table - rather than
+     * asserting a call to a class that does not exist. A generated repository referencing a missing
+     * class would fail the whole client-Java batch and with it every REST assertion in this gate.
+     *
+     * <p>
+     * Returning an already-set value unchanged is part of the documented contract, not defensive
+     * coding: the action runs on EVERY create, so without it a caller's explicit pick would be
+     * overwritten. Both directions are asserted at runtime.
+     */
+    private static final String TARIFF_ACTION_JAVA = """
+            package custom;
+
+            import java.util.List;
+
+            import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+            import org.eclipse.dirigible.sdk.component.Component;
+            import org.eclipse.dirigible.sdk.db.CalculatedField;
+
+            import gen.emission.data.quote.QuoteEntity;
+            import gen.emission.data.tariff.TariffEntity;
+            import gen.emission.data.tariff.TariffRepository;
+
+            @Component
+            public class QuoteTariffAction implements CalculatedField<Object, Integer> {
+
+                @Override
+                public Integer calculate(Object entity) {
+                    QuoteEntity quote = (QuoteEntity) entity;
+                    if (quote.Tariff != null) {
+                        return quote.Tariff;
+                    }
+                    List<TariffEntity> base = new TariffRepository().findAll(Criteria.create()
+                                                                                    .eq("Base", true));
+                    return base.isEmpty() ? null : base.get(0).Id;
+                }
+            }
+            """;
+
     @Test
     void generated_code_contains_every_feature_enforcement_and_the_published_app_enforces_it() {
         writeIntent(INTENT_YAML);
         writeProjectFile("emission.numbers", NUMBERS_JSON);
+        writeProjectFile("custom/QuoteTariffAction.java", TARIFF_ACTION_JAVA);
         // Drive model-to-code from the generate response's OWN plan (template + parameters per
         // entry) - the production path. Hardcoding empty parameters silently skips every
         // parameter-gated producer (e.g. javaRuntime gates the leafOnly repository class).
@@ -888,6 +963,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String receiptRepository = contentOf("gen/emission/data/receipt/ReceiptRepository.java");
         assertTrue(receiptRepository.contains("DocumentNumbers.next(\"Emission Receipt\")"),
                 "number: stampOn: create must emit the insert-time allocation from the named series into the repository");
+
+        // calculatedActionOnCreate on a to-one RELATION: the FK must be assigned from the action in the
+        // generated repository, exactly as for a field. This is the whole regression - a relation IS an
+        // ordinary property in the .model, but only FIELDS used to carry the calculated attributes into
+        // it, so the keyword parsed, validated and reached the .intent while the emitted repository
+        // contained no assignment at all: the create stored null with every pipeline step green.
+        // Asserting the .model attribute alone would NOT have caught it (that layer was fine), and
+        // asserting the runtime alone could pass on a coincidental default - hence all three layers,
+        // here and in assertRuntimeEnforcement.
+        String quoteRepository = contentOf("gen/emission/data/quote/QuoteRepository.java");
+        assertTrue(quoteRepository.contains("entity.Tariff = Beans.get(QuoteTariffAction.class).calculate(entity);"),
+                "calculatedActionOnCreate on a to-one relation must assign the FK from the action in the repository, got: "
+                        + quoteRepository);
+        assertTrue(quoteRepository.contains("import custom.QuoteTariffAction;"),
+                "the entity's imports: must be decoded into the generated repository so the action resolves by simple name");
+        assertTrue(contentOf("emission.model").contains("\"calculatedActionOnCreate\": \"QuoteTariffAction\""),
+                "the relation's calculated action must reach the .model property every downstream template reads");
 
         String entryRepository = contentOf("gen/emission/data/entry/EntryRepository.java");
         assertTrue(entryRepository.contains("Entry needs at least one line"),
@@ -1542,6 +1634,30 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("[0].Name", equalTo("Брой")));
+
+        // calculatedActionOnCreate on a to-one relation, end to end: a create that OMITS the FK comes
+        // back carrying the one the action resolved. Tariff 2 is the row flagged `base` - not the first
+        // row and not any default the column could otherwise acquire - so this can only pass if the
+        // action actually ran on the server. Before the relation carried the calculated attributes into
+        // the .model this returned null, silently.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Note\":\"defaulted\"}")
+                                                 .when()
+                                                 .post(API + "/quote/QuoteController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Tariff", equalTo(2)));
+
+        // The other half of the contract: the action runs on EVERY create, so it must return an
+        // already-set value unchanged - a caller's explicit pick always wins. Without this the feature
+        // would silently overwrite whatever the caller chose.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Note\":\"explicit\",\"Tariff\":1}")
+                                                 .when()
+                                                 .post(API + "/quote/QuoteController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Tariff", equalTo(1)));
 
         // First-class numbering end-to-end: publish provisioned the authored .numbers series for
         // the tenant, and the generated DAO stamps prefix + zero-padded sequence at insert -
