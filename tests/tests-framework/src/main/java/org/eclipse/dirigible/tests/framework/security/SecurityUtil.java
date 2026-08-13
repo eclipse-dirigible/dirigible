@@ -18,6 +18,8 @@ import org.eclipse.dirigible.components.tenants.service.UserService;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.springframework.stereotype.Component;
 
+import java.util.Optional;
+
 @Component
 public class SecurityUtil {
 
@@ -36,6 +38,33 @@ public class SecurityUtil {
 
         Role role = roleService.findByName(roleName);
         userService.assignUserRoles(user, role);
+    }
+
+    /**
+     * Creates the user (with the role) on first call and is a no-op afterwards. For tests whose class
+     * shares one Spring context across methods ({@code @DirtiesContext(AFTER_CLASS)}): the database
+     * outlives a test method there, so a repeated plain create would violate the unique user
+     * constraint.
+     */
+    public void ensureUserInDefaultTenant(String username, String password, String roleName) {
+        if (findUserInDefaultTenant(username).isEmpty()) {
+            createUserInDefaultTenant(username, password, roleName);
+        }
+    }
+
+    /** The role-less variant of {@link #ensureUserInDefaultTenant(String, String, String)}. */
+    public void ensureUserInDefaultTenant(String username, String password) {
+        if (findUserInDefaultTenant(username).isEmpty()) {
+            createUserInDefaultTenant(username, password);
+        }
+    }
+
+    private Optional<User> findUserInDefaultTenant(String username) {
+        DirigibleTestTenant defaultTenant = DirigibleTestTenant.createDefaultTenant();
+        String defaultTenantId = tenantService.findBySubdomain(defaultTenant.getSubdomain())
+                                              .get()
+                                              .getId();
+        return userService.findUserByUsernameAndTenantId(username, defaultTenantId);
     }
 
     public User createUserInDefaultTenant(String username, String password) {

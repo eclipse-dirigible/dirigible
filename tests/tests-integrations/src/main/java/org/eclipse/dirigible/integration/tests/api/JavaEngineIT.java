@@ -22,6 +22,7 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * End-to-end test for the engine-java module: drops {@code .java} sources directly under
@@ -33,6 +34,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * delete → compile-error. Each case verifies the synchronizer's CREATE/UPDATE/DELETE/FAILED
  * handling end-to-end through the HTTP boundary.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself, so the per-method
+// context reset inherited from IntegrationTest would only add ~10s of boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class JavaEngineIT extends IntegrationTest {
 
     /** Project segment used for all sources in this IT. */
