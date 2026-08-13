@@ -20,6 +20,7 @@ import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -44,6 +45,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Also covers the other half of the same finding: the re-import must be TRIGGERED when only the
  * referenced CSV changes, since the .csvim itself is a stable pointer that stays byte-identical.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself (or creates only
+// collision-free state), so the per-method context reset inherited from IntegrationTest would only
+// add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class CsvimReimportIT extends IntegrationTest {
 
     /** The project holding the synchronizer-path fixture. */

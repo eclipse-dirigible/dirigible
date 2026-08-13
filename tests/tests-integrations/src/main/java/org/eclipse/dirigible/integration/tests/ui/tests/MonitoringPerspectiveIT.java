@@ -18,6 +18,7 @@ import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * Smoke test for the Monitoring perspective. Verifies that:
@@ -35,6 +36,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * datasource set the runtime initializes by the time the click happens, so it is deliberately left
  * out.
  */
+// One Dirigible boot for the whole class: the methods are read-only or clean up after themselves,
+// so the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public class MonitoringPerspectiveIT extends UserInterfaceIntegrationTest {
 
     private static final String PERSPECTIVE_ID = "perspective-monitoring";

@@ -28,6 +28,7 @@ import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * A publish replaces a registry collection by deleting it and copying it back milliseconds later. A
@@ -39,6 +40,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * The pass must therefore defer its cleanup while the registry is being written, and still
  * reconcile a genuine deletion once the registry is quiet.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself (or is read-only), so
+// the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class SynchronizerCleanupRaceIT extends IntegrationTest {
 
     private static final String LOCATION = "/cleanup-race-it/Sample.java";
@@ -177,16 +181,15 @@ class SynchronizerCleanupRaceIT extends IntegrationTest {
 
     @AfterEach
     void removeSourcesFromRegistry() {
-        boolean removed = false;
         for (String path : List.of(REGISTRY_PATH, PROBE_REGISTRY_PATH,
                 IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PUBLISH_PROJECT + PUBLISH_SOURCE_PATH)) {
             if (repository.hasResource(path)) {
                 repository.removeResource(path);
-                removed = true;
             }
         }
-        if (removed) {
-            synchronizationProcessor.forceProcessSynchronizers();
-        }
+        // Unconditionally: the publish-bypass test unpublishes through the service without a sync, so
+        // no resource is left for the loop above to notice - but the registered JavaFile artefact for
+        // the vanished source still needs the cleanup pass, or every later rebuild bails and defers.
+        synchronizationProcessor.forceProcessSynchronizers();
     }
 }
