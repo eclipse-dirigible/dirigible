@@ -507,7 +507,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // one from this model's own composition/setting layout.
             base.put("parentPerspective", crossModelParent ? parentTarget.perspectiveName()
                     : IntentEntities.resolvePerspective(via.getTo(), compositionParents, model));
-            // Empty for a local parent - generateUtils then falls back to this project's gen folder.
+            // Empty for a local parent - the generation pipeline then falls back to this project's gen folder.
             base.put("parentModel", crossModelParent ? via.getModel() : "");
             base.put("parentCrossModel", crossModelParent);
             base.put("fkProperty", fkProperty);
@@ -539,7 +539,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // Recompute the value for the affected parent from the store on each child event.
             base.put("criteriaExpression", "Criteria.create().eq(\"" + fkProperty + "\", entity." + fkProperty + ")");
             // Handler name derives from the coalescing key (childEntity + parent-fk), NOT the roll-up name:
-            // generateUtils groups every roll-up sharing (childEntity, fkProperty, event) into one handler, so
+            // The generation pipeline groups every roll-up sharing (childEntity, fkProperty, event) into one
+            // handler, so
             // the name must be shared across the group. Two roll-ups on the same child+fk+event collapse into
             // this one class.
             String className = rollup.getEntity() + fkProperty;
@@ -559,7 +560,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * invoice open-amount fields, and the cross-model payment's project/perspective/topic (via
      * {@link CrossModelSupport}) so the two settlement templates (onPayment listener + onInvoice
      * delegate) can be rendered. Java-package sanitization happens in the {@code settlements} case of
-     * {@code generateUtils.js} (same as triggers), keeping this generator at logical names.
+     * the generation pipeline (same as triggers), keeping this generator at logical names.
      */
     private static List<Map<String, Object>> buildSettlements(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
@@ -2679,7 +2680,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("targetPerspective", load.targetPerspective());
             entry.put("fkProperty", load.fkProperty());
             // Cross-model recipient/placeholder: the owner's model alias + project drive the OWNER-package
-            // import in the generated listener/job (generateUtils picks the gen folder from these).
+            // import in the generated listener/job (the generation pipeline picks the gen folder from these).
             entry.put("crossModel", load.crossModel());
             entry.put("targetModel", load.targetModel());
             entry.put("targetProject", load.targetProject());

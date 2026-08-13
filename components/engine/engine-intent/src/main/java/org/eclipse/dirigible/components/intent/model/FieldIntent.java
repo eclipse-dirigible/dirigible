@@ -131,8 +131,8 @@ public class FieldIntent {
      *
      * <p>
      * Restricted to string-typed fields on purpose - on a numeric property {@code widgetPattern} is the
-     * DISPLAY format ({@code parameterUtils.js} reads it as {@code formatPattern}), so a regex there
-     * would silently corrupt how the number renders.
+     * DISPLAY format ({@code ModelParameterProcessor} reads it as {@code formatPattern}), so a regex
+     * there would silently corrupt how the number renders.
      */
     private String pattern;
 

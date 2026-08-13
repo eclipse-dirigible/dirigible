@@ -28,7 +28,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.google.gson.Gson;
 
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
@@ -872,9 +871,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         writeIntent(INTENT_YAML);
         writeProjectFile("emission.numbers", NUMBERS_JSON);
         writeProjectFile("custom/QuoteTariffAction.java", TARIFF_ACTION_JAVA);
-        // Drive model-to-code from the generate response's OWN plan (template + parameters per
-        // entry) - the production path. Hardcoding empty parameters silently skips every
-        // parameter-gated producer (e.g. javaRuntime gates the leafOnly repository class).
+        // Generate: the models AND the code from them, in one call - the production path. The engine
+        // runs each recipe with the template and parameters the project's .settings declare, so a
+        // parameter-gated producer (javaRuntime gates the leafOnly repository class, say) is exercised
+        // exactly as it is for a developer.
         AtomicReference<List<Map<String, Object>>> plan = new AtomicReference<>();
         restAssuredExecutor.execute(() -> plan.set(given().when()
                                                           .post(GENERATE_URL)
@@ -883,11 +883,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                           .extract()
                                                           .jsonPath()
                                                           .getList("codeGenerations")));
+        // The intent engine runs the model-to-code recipes itself, in the same call: assert each one
+        // succeeded instead of replaying them from here.
         for (Map<String, Object> codeGeneration : plan.get()) {
-            String template = String.valueOf(codeGeneration.get("templateId"));
-            String modelPath = String.valueOf(codeGeneration.get("path"));
-            String parameters = new Gson().toJson(codeGeneration.get("parameters"));
-            generateFromModel(template, modelPath, parameters);
+            assertEquals(Boolean.TRUE, codeGeneration.get("generated"),
+                    "generating code from " + codeGeneration.get("path") + " failed: " + codeGeneration.get("error"));
         }
 
         assertEmission();
@@ -2549,18 +2549,6 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         return new String(repository.getResource(PROJECT_PATH + "/" + fileName)
                                     .getContent(),
                 StandardCharsets.UTF_8);
-    }
-
-    /** Run a language template against a generated model through the real generation service. */
-    private void generateFromModel(String templateModule, String modelFile, String parametersJson) {
-        String payload = "{\"template\":\"" + templateModule + "\",\"parameters\":" + parametersJson + "}";
-        restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body(payload)
-                                                 .when()
-                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
-                                                         + "?path=" + modelFile)
-                                                 .then()
-                                                 .statusCode(201));
     }
 
     @AfterEach

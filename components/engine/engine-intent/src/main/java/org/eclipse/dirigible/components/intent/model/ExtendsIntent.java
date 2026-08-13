@@ -16,7 +16,7 @@ package org.eclipse.dirigible.components.intent.model;
  * in {@code uses:}; omit it to extend an entity in the same model). At generation the EDM generator
  * marks the entity {@code type=EXTENSION} with
  * {@code extensionReferencedModel}/{@code extensionReferencedEntity}, and the model-to-code layer
- * folds the fields into the base table (see {@code generateUtils.mergeExtensionEntities}).
+ * folds the fields into the base table (the generation pipeline's extension merge).
  */
 public class ExtendsIntent {
 

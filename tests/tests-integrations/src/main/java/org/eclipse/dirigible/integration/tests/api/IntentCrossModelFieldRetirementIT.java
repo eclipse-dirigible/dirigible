@@ -22,7 +22,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.google.gson.Gson;
 
 import io.restassured.path.json.JsonPath;
 
@@ -248,18 +247,11 @@ class IntentCrossModelFieldRetirementIT extends IntegrationTest {
             plan.set(response.getList("codeGenerations"));
             warnings.set(response.getList("warnings"));
         });
+        // The intent engine runs the model-to-code recipes itself, in the same call: assert each one
+        // succeeded instead of replaying them from here.
         for (Map<String, Object> codeGeneration : plan.get()) {
-            String template = String.valueOf(codeGeneration.get("templateId"));
-            String modelPath = String.valueOf(codeGeneration.get("path"));
-            String parameters = new Gson().toJson(codeGeneration.get("parameters"));
-            String payload = "{\"template\":\"" + template + "\",\"parameters\":" + parameters + "}";
-            restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                     .body(payload)
-                                                     .when()
-                                                     .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + project
-                                                             + "?path=" + modelPath)
-                                                     .then()
-                                                     .statusCode(201));
+            assertEquals(Boolean.TRUE, codeGeneration.get("generated"),
+                    "generating code from " + codeGeneration.get("path") + " failed: " + codeGeneration.get("error"));
         }
         return warnings.get() == null ? List.of() : warnings.get();
     }

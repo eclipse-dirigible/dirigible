@@ -247,7 +247,8 @@ public class ModelGenerationService {
                 siblingModelRoot = asMap(ModelJson.parseObject(new String(siblingModel.getContent(), StandardCharsets.UTF_8))
                                                   .get("model"));
             } catch (RuntimeException e) {
-                logger.debug("Skipping project [{}] while collecting entity extensions: its model does not parse", siblingName, e);
+                logger.debug("Skipping project [{}] while collecting entity extensions: its model does not parse",
+                        sanitizeForLog(siblingName), e);
                 continue;
             }
             if (siblingModelRoot == null) {
@@ -350,6 +351,21 @@ public class ModelGenerationService {
             throw new IOException("Project [" + project + "] does not exist in workspace [" + workspace + "].");
         }
         return projectObject;
+    }
+
+
+    /**
+     * Strip CR/LF (and stray control characters) from a value that arrives in a user-controlled URL
+     * segment before it reaches the log, so a crafted request cannot forge log entries.
+     *
+     * @param value the value
+     * @return the value, with anything that could break a log line replaced
+     */
+    private static String sanitizeForLog(String value) {
+        if (value == null) {
+            return "null";
+        }
+        return value.replaceAll("[\\r\\n\\t]", "_");
     }
 
 }

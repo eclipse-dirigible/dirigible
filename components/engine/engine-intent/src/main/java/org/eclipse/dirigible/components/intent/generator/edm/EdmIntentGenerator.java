@@ -170,7 +170,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 usesByAlias.put(uses.getModel(), uses);
             }
         }
-        // Cross-model targets become read-only PROJECTION entities (dedup by target name; parameterUtils
+        // Cross-model targets become read-only PROJECTION entities (dedup by target name;
+        // ModelParameterProcessor
         // links a consuming FK to its projection by matching relationshipEntityName == projection name).
         Map<String, Map<String, Object>> projectionEntities = new LinkedHashMap<>();
 
@@ -200,7 +201,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             boolean dependent = !setting && compositionParents.containsKey(name);
             // An EXTENSION entity contributes its fields to a base entity owned by another model; it
             // owns no table/UI of its own. It is marked type=EXTENSION with the base reference below;
-            // the model-to-code layer folds its fields into the base table (generateUtils merge). The
+            // the model-to-code layer folds its fields into the base table (the generation pipeline's extension
+            // merge). The
             // base model must be listed in uses: for the reference to resolve (unless same-model).
             boolean extension = entity.getExtend() != null && notBlank(entity.getExtend()
                                                                              .getEntity());
@@ -413,7 +415,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             // Custom Java imports for the generated entity Repository (e.g. a calculated-field action's
             // CalculatedField class). Base64-encoded to match the EDM editor's serialization, which the
-            // DAO template's parameterUtils decodes before emitting them into the import block.
+            // generation pipeline decodes before emitting them into the import block.
             if (notBlank(entity.getImports())) {
                 entityMap.put("importsCode", Base64.getEncoder()
                                                    .encodeToString(entity.getImports()
@@ -582,7 +584,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // Template-ready label parts (a List - .model twin only): literals interleaved with
                 // field / one-hop relation tokens, property names PascalCased to the generated model.
                 // A relation token's `relation` is the FK PROPERTY name; the DAO template loads the
-                // target through the repository parameterUtils derives for that FK.
+                // target through the repository ModelParameterProcessor derives for that FK.
                 entityMap.put("labelExpression", entity.getLabel());
                 entityMap.put("labelParts", buildLabelParts(entity, byName));
             }
@@ -1564,7 +1566,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("relationshipPersonal", "true");
         if (relation.isPersonalReadOnly()) {
             // The personal surface is see-only for the owner: the my controller's write methods
-            // 405 and the my pages drop New/Edit/Delete (parameterUtils -> the rest/UI templates).
+            // 405 and the my pages drop New/Edit/Delete (ModelParameterProcessor -> the rest/UI templates).
             p.put("relationshipPersonalReadOnly", "true");
         }
         p.put("relationshipIdentityProperty", targetIdentityProperty);
@@ -1778,9 +1780,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * table name and primary-key column so the {@code .schema} foreign key resolves to the owner's
      * table, and a blank {@code perspectiveName} so it never shows up in this app's navigation. The
      * {@code projectionReferencedModel} path is {@code /<project>/<model>.model} - the owner project
-     * plus its model file, which is all {@code parameterUtils} reads out of it (the owner project + gen
-     * folder). It deliberately carries NO workspace segment: generated model files are committed, so an
-     * environment detail in them would make the artefact depend on whose IDE produced it (#6423).
+     * plus its model file, which is all {@code ModelParameterProcessor} reads out of it (the owner
+     * project + gen folder). It deliberately carries NO workspace segment: generated model files are
+     * committed, so an environment detail in them would make the artefact depend on whose IDE produced
+     * it (#6423).
      */
     private static Map<String, Object> projectionEntity(UsesIntent uses, String targetEntity, CrossModelSupport.TargetInfo info) {
         String project = uses.resolveProject();
@@ -1801,7 +1804,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         e.put("menuLabel", IntentNaming.pluralize(IntentNaming.humanize(targetEntity)));
         e.put("menuIndex", "100");
         e.put("layoutType", "");
-        // No perspective: keeps the projection out of parameterUtils' perspective/navigation building.
+        // No perspective: keeps the projection out of the pipeline's perspective/navigation building.
         e.put("perspectiveName", "");
         e.put("perspectiveLabel", "");
         e.put("perspectiveHeader", "");

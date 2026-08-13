@@ -18,7 +18,7 @@
 ## or copies the value into this column. Emits nothing for an independent column.
 #macro(dependsOnMeta $property)#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl), dependsOn: { property: '${property.widgetDependsOnProperty}', #if($property.widgetDependsOnHeader)header: true, #{end}#if($property.widgetDependsOnValueFrom)valueFrom: '${property.widgetDependsOnValueFrom}', #{end}#if($property.widgetDependsOnValueBy)valueBy: { path: '${property.widgetDependsOnValueBy}', header: #if($property.widgetDependsOnValueByHeader)true#{else}false#end, #if($property.widgetDependsOnValueByUrl)url: '${property.widgetDependsOnValueByUrl}', #{end}cases: ${property.widgetDependsOnValueCases}#if($property.widgetDependsOnValueDefault), deflt: '${property.widgetDependsOnValueDefault}'#end }, #end#if($property.widgetDependsOnFilterBy)filterBy: '${property.widgetDependsOnFilterBy}', #{end}url: '${property.widgetDependsOnControllerUrl}' }#end#end
 ## Input-format regex (intent field `pattern:`): the item dialog binds it as the input's HTML pattern.
-## Pre-rendered as a JS literal by parameterUtils (a regex's backslashes must survive the string).
+## Pre-rendered as a JS literal by ModelParameterProcessor (a regex's backslashes must survive it).
 #macro(patternMeta $property)#if($property.widgetPatternJs), pattern: ${property.widgetPatternJs}#end#end
 ## Static option filter (intent `where:`): the item dialog's chooser narrows to matching rows; the
 ## table's label-resolution lookup stays on the full set so historical rows still resolve.

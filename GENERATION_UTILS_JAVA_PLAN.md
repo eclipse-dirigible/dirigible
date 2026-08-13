@@ -1,9 +1,13 @@
 # Plan: Migrate the Generation Utils to Java
 
-**Status:** assessed 2026-08-09 against master (post-14.17.0). **PR 1 implemented** on
-`feat/generation-utils-java` — the Java utils + the parity harness, both paths live, no consumer
-switched. PRs 2 and 3 not started. See §6 for what PR 1 actually landed and the two plan
-assumptions it corrected.
+**Status: DONE.** PR 1 (2026-08-09) landed the Java utils + the parity harness with both paths
+live; PRs 2 and 3 (2026-08-13) switched every consumer to the Java pipeline and deleted the
+JavaScript one. See §6 for what PR 1 landed and the two plan assumptions it corrected, and §7 for
+what PRs 2+3 did and the three places they departed from the plan.
+
+The generation path is now Java end to end. The one piece of JavaScript deliberately left is the
+template **descriptor** layer: `getTemplate()` in each template module, plus the read-only
+`service-template/api/templates.js` that lists them (§7.3).
 
 **Goal:** the template-generation pipeline (model → generated files) executes entirely in Java. The
 JS "generation utils" — `generateUtils.js`, `parameterUtils.js`, the `generate.mjs` endpoint, and
@@ -382,3 +386,55 @@ name. The harness seeds both - the Java side through `WorkspaceService`, the Jav
 - under one workspace name per case, because the workspace name is baked into the `.gen` descriptor
 and so has to match. It reads the JavaScript output straight out of the repository, since the
 workspace service would resolve the wrong user's copy.
+
+## 7. What PRs 2+3 landed, and where they departed from the plan
+
+### 7.1 The switch-over
+
+- **The endpoint** is `POST /services/ide/generate/model/{workspace}/{project}?path=<model>` on the
+  existing `GenerationEndpoint`, body `{template, parameters}` — the plan's `{*path}` was dropped in
+  favour of the `?path=` query the JavaScript endpoint used, so every caller was a base-URL swap and
+  nothing had to move the model path from the query into the URL. It answers `201` like its
+  predecessor, and maps an absent model / template, a template with no sources, an unsupported
+  template and a model a template cannot compile to `400` (they are all things the caller asked for
+  wrongly); anything else stays a `500`.
+- **The browser** goes through one place: the `GenerateService` provider now builds both its URLs
+  from `/services/ide/generate`, so editor-entity, editor-form-builder, editor-report and
+  view-projects followed with no change of their own.
+- **The intent Generate is one call.** `IntentGenerationService` runs the model-to-code recipes
+  itself, after writing the model files, and each `codeGenerations` entry comes back carrying its own
+  outcome (`generated`, plus `error` when it failed) instead of being a plan for the client to
+  replay. A failure is isolated to its entry: the models are already on disk, so a template that
+  cannot render is a partial result to report, not a reason to fail the whole Generate. The replay
+  loops in editor-intent and in the Builder's publish pipeline are gone; both now read the report.
+- **`template-mapping-java` is ported** (§6.1 left it as the one template the Java pipeline refused).
+  Its `generate()` was a compiler — criteria parsed into typed Java comparisons, value expressions
+  per source kind, the mapper class name — and it is now `MappingCompiler`, covered by
+  `MappingCompilerTest` plus a pipeline-level case in the generation IT. Without it, deleting the
+  JavaScript path would have silently taken `.mapping` generation with it.
+
+### 7.2 The deletion
+
+`generate.mjs`, `generateUtils.js` and `parameterUtils.js` are gone, and with them the `generate()`
+export of all nine template modules (their `getTemplate()` descriptors stay). `service-generate` now
+ships only the browser-side `generate.js` provider. Comments across the repo that pointed at the
+deleted files now name the Java classes that replaced them.
+
+**The parity harness became a regression harness.** `GenerationParityIT` compared the two pipelines
+byte for byte; with one pipeline left there is no oracle, so it is now `ModelGenerationIT` (fixtures
+under `ModelGenerationIT/`), asserting what the oracle used to protect: every template renders, the
+render is repeatable, the descriptor is produced and carries nothing an engine added to the parameter
+graph (the §6.4 finding, which would otherwise accumulate in a committed file), and the
+cross-project entity extension really is merged. A mapping case joined it with the compiler port.
+
+### 7.3 The one piece of JavaScript deliberately kept
+
+The plan's PR 3 offered two options for `service-template/api/templates.js` (port it, or keep it as
+the last read-only JS piece) and defaulted to porting. **Kept**, because the premise changed: §1.1
+keeps the template **descriptors** as JavaScript modules for now, and the Java pipeline reads them
+through `GenerationService.getTemplateMetadata`, which boots a JavaScript context per template. A
+Java list service over JavaScript descriptors would therefore not remove the GraalJS boot the plan
+wanted gone — it would add a second path to it. The list service goes when the descriptors do, which
+is the follow-up §1.1 already names. (Its dead near-duplicate in
+`platform-core/extension-services/templates.js` is still unreferenced, and still worth removing on
+its own.)

@@ -89,7 +89,7 @@ public final class IntentNaming {
 
     /**
      * The intent's sanitized Java module segment - the exact mirror of the template engine's
-     * {@code sanitizeJavaIdentifier} ({@code parameterUtils.js}): lower-cased, every character outside
+     * {@code NamingHelper.sanitizeJavaIdentifier}: lower-cased, every character outside
      * {@code [a-z0-9_]} replaced by an underscore, a leading digit prefixed with an underscore
      * ({@code sales-invoices} -> {@code sales_invoices}). Producer (this engine, which writes handler
      * FQNs into the {@code .bpmn} and endpoint URLs into extensions) and consumer (the events template,

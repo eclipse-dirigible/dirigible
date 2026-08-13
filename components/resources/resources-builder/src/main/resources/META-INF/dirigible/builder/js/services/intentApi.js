@@ -19,7 +19,6 @@
   const HEALTHCHECK = '/services/core/healthcheck';
   const SHELLS = '/services/js/platform-core/extension-services/shells.js?extensionPoints=platform-shells';
   const PERSPECTIVES = '/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-perspectives';
-  const CODE_GEN = '/services/js/service-generate/generate.mjs/model';
 
   // The agent endpoint makes up to three upstream model calls at 120s each (the first draft plus two
   // server-side repair rounds), so the worst case is around six minutes. Anything less and a legitimately
@@ -130,23 +129,17 @@
     },
 
     /**
-     * Generate the derived model files. Reads the intent FROM DISK, so the buffer must be saved first.
-     * Returns `{written, scrubbed, codeGenerations, warnings}`; throws with `issues` on 422.
+     * Generate the derived model files AND the code from them - one call, since the intent engine runs
+     * the model-to-code recipes itself. Reads the intent FROM DISK, so the buffer must be saved first.
+     * Returns `{written, scrubbed, codeGenerations, warnings}`, where each `codeGenerations` entry
+     * carries its own outcome (`generated`, plus `error` when it failed); throws with `issues` on 422.
      */
     async generate(project, path) {
       const url = `${INTENT_BASE}/generate?workspace=${seg(ws())}&project=${seg(project)}&path=${seg(path)}`;
-      const result = await call('POST', url, { timeoutMs: 5 * 60 * 1000 });
+      // One call now covers the models AND every model-to-code recipe, so it is allowed the time the
+      // whole chain used to have across its several calls.
+      const result = await call('POST', url, { timeoutMs: 10 * 60 * 1000 });
       return result.data || {};
-    },
-
-    /** Replay one model-to-code generation from a `codeGenerations` entry (the editor's Generate does the same). */
-    async generateCode(project, entry) {
-      const url = `${CODE_GEN}/${seg(ws())}/${seg(project)}?path=${seg(entry.path)}`;
-      await call('POST', url, {
-        body: JSON.stringify({ template: entry.templateId, parameters: entry.parameters || {} }),
-        contentType: 'application/json',
-        timeoutMs: 5 * 60 * 1000,
-      });
     },
 
     // ----- Conversation history -----------------------------------------------
