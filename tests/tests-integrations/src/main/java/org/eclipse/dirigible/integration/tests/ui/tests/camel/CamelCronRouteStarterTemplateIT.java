@@ -16,12 +16,14 @@ import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.framework.util.SynchronizationUtil;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.TimeUnit;
 
 import static org.awaitility.Awaitility.await;
 
+@Tag("camel")
 public class CamelCronRouteStarterTemplateIT extends UserInterfaceIntegrationTest {
 
     private static final String TEMPLATE_TITLE = "Cron Route Project Starter";

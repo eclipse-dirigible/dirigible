@@ -16,9 +16,13 @@ import org.eclipse.dirigible.tests.framework.ide.GitPerspective;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.framework.util.SynchronizationUtil;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+// "sample" (on top of the inherited "ui") routes the whole sample-project family into its own CI
+// shard - see the integration-tests matrix in .github/workflows/build.yml.
+@Tag("sample")
 abstract class SampleProjectRepositoryIT extends UserInterfaceIntegrationTest {
 
     @Autowired
