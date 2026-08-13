@@ -42,7 +42,7 @@ import org.openqa.selenium.By;
  * (a missing {@code ng-editor} platform-links category, or the config script not being loaded, both
  * leave the services green while the editor is dead). This test clones the
  * {@code dirigiblelabs/sample-intent-model} sample project (the same clone-a-real-repo pattern the
- * {@code SampleProjectRepositoryIT} subclasses use), opens its {@code app.intent}, and asserts:
+ * {@code SampleProjectsIT} subclasses use), opens its {@code app.intent}, and asserts:
  * <ul>
  * <li>the file is routed to the Intent Editor (the editor tab appears),</li>
  * <li>the AngularJS {@code intentEditor} module actually bootstrapped (its injector resolves -

@@ -189,9 +189,9 @@ browser-IDE developer sees what's wrong without reading the server log.
 
 - Platform: this repo, PR #6051.
 - Samples: `dirigiblelabs/sample-java-{entity,listener,job,websocket,extension}-decorator` — each shows the
-  styles above; the entity sample is the kitchen-sink. The `Java*DecoratorsSampleProjectIT` /
-  `Java*DecoratorSampleProjectIT` clone these repos' HEAD, so **merge order is load-bearing**: the
-  platform PR merges first; the sample-clone ITs are temporarily `@Disabled` until the sample PRs land
-  (the samples' old API doesn't compile against the new engine). Re-enable them after.
+  styles above; the entity sample is the kitchen-sink. `JavaSampleProjectsIT` clones all five repos'
+  HEAD into one workspace and publishes them together, so **merge order is load-bearing**: the
+  platform PR merges first; that IT is temporarily `@Disabled` until the sample PRs land (the samples'
+  old API doesn't compile against the new engine). Re-enable it after.
 - Docs: `dirigible-io/dirigible-io.github.io` — `/help/develop` (incl. a "Coming from Spring Boot"
   guide) and `/sdk`.

@@ -12,11 +12,14 @@ package org.eclipse.dirigible.integration.tests.ui.tests.sample;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 
+import java.util.List;
+
 import io.restassured.http.ContentType;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.tests.framework.security.SecurityUtil;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
@@ -33,8 +36,14 @@ import org.springframework.beans.factory.annotation.Autowired;
  *
  * <p>
  * Counterpart to {@code RemoteNativeAppIT} which exercises the {@code remote} kind.
+ *
+ * <p>
+ * Stays a family of its own rather than joining {@link TypeScriptSampleProjectsIT} or
+ * {@link JavaSampleProjectsIT}: it spawns and reaps a real OS process (an {@code npm install} on
+ * first run) and grants a role on the fly, so sharing its instance would make the other samples pay
+ * for that and would leave live processes around their verifications.
  */
-public class SampleLibraryLocalNativeAppIT extends SampleProjectRepositoryIT {
+public class SampleLibraryLocalNativeAppIT extends SampleProjectsIT {
 
     private static final String API_ROOT = "/services/native-apps-proxy/v1/library-native-app-nodejs/rest/api/v1";
 
@@ -65,16 +74,21 @@ public class SampleLibraryLocalNativeAppIT extends SampleProjectRepositoryIT {
         // first spawn, which dwarfs the platform's 30 s default ready timeout when node_modules has
         // to be fetched. Five minutes is comfortably above worst-case cold-cache install + tsc on
         // CI runners; the lazy-start filter polls every 200 ms so a fast warm run still wins early.
+        //
+        // Runs after the base class's clone-and-publish @BeforeAll, which is soon enough: the
+        // artefact declares `"mode": "lazy"`, and only a StartMode.ALWAYS app is spawned by the
+        // bootstrap, the monitor job or the synchronizer - this one waits for the first proxied
+        // request, which the test method below makes.
         DirigibleConfig.NATIVE_APP_READY_TIMEOUT_MS.setIntValue(5 * 60 * 1000);
     }
 
     @Override
-    protected String getRepositoryURL() {
-        return "https://github.com/dirigiblelabs/sample-library-local-native-app.git";
+    protected List<String> getRepositoryUrls() {
+        return List.of("https://github.com/dirigiblelabs/sample-library-local-native-app.git");
     }
 
-    @Override
-    protected void verifyProject() {
+    @Test
+    void localNativeApp() {
         // The default 'admin' user holds DEVELOPER + ADMINISTRATOR, which short-circuits the scope
         // check in ExposedPathFilter — so we can't use it to exercise the negative path. Create a
         // dedicated user with no privileged roles, then watch the proxy flip from 403 to 200/201
