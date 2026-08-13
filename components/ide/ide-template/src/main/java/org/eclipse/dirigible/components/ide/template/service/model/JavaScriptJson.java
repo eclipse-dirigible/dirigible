@@ -35,6 +35,12 @@ final class JavaScriptJson {
     private static final String INDENT = "  ";
 
     /**
+     * The magnitude below which a double is written in integer form. Well inside the exactly-integral
+     * range of both a double and a long, so that form can never lose information.
+     */
+    private static final double MAX_INTEGRAL = 1e15;
+
+    /**
      * Not instantiable.
      */
     private JavaScriptJson() {}
@@ -175,8 +181,11 @@ final class JavaScriptJson {
             out.append("null");
             return;
         }
-        if (value == Math.floor(value) && Math.abs(value) < 1e15) {
-            out.append((long) value);
+        if (value == Math.floor(value) && Math.abs(value) < MAX_INTEGRAL) {
+            // Math.round rather than a (long) cast: it says "the integral value" instead of relying on
+            // narrowing, and it saturates instead of wrapping should the guard above ever be relaxed.
+            // For an integral magnitude under MAX_INTEGRAL the two agree exactly.
+            out.append(Math.round(value));
             return;
         }
         out.append(number instanceof Float ? Float.toString(number.floatValue()) : Double.toString(value));

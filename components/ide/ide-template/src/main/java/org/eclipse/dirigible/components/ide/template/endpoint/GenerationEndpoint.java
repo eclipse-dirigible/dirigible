@@ -125,11 +125,26 @@ public class GenerationEndpoint {
             // A model or template that is not there, a template declaring no sources, an unsupported
             // template, a model the template cannot compile (an unparseable mapping criteria): all
             // things the caller asked for wrongly, reported rather than generated incompletely.
-            logger.warn("Failed to generate [{}] of project [{}] with template [{}]", path, project, parameters.getTemplate(), e);
+            logger.warn("Failed to generate [{}] of project [{}] with template [{}]", sanitizeForLog(path), sanitizeForLog(project),
+                    sanitizeForLog(parameters.getTemplate()), e);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         }
         return ResponseEntity.created(workspaceService.getURI(workspace, project, path))
                              .build();
+    }
+
+    /**
+     * Strip CR/LF (and stray control characters) from a value that arrives in a user-controlled URL
+     * segment before it reaches the log, so a crafted request cannot forge log entries.
+     *
+     * @param value the value
+     * @return the value, with anything that could break a log line replaced
+     */
+    private static String sanitizeForLog(String value) {
+        if (value == null) {
+            return "null";
+        }
+        return value.replaceAll("[\\r\\n\\t]", "_");
     }
 
 }

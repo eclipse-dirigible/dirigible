@@ -41,6 +41,9 @@ final class MappingCompiler {
     /** A numeric criteria operand. */
     private static final Pattern NUMERIC = Pattern.compile("^[+-]?[0-9]+(\\.[0-9]+)?$");
 
+    /** A scale authored as text. */
+    private static final Pattern DIGITS = Pattern.compile("^[0-9]{1,9}$");
+
     /** Everything that does not belong in a Java identifier. */
     private static final Pattern NON_IDENTIFIER = Pattern.compile("[^A-Za-z0-9]+");
 
@@ -211,12 +214,16 @@ final class MappingCompiler {
             }
             return DEFAULT_SCALE;
         }
+        // A scale authored as text: a plain digit run is the only form that means anything, and anything
+        // else - including a number too long to be one - falls back to the default rather than failing
+        // the whole generation over a decimal place.
         String text = str(column, "scale");
-        if (text != null && NUMERIC.matcher(text)
-                                   .matches()) {
-            double value = Double.parseDouble(text);
-            if (value >= 0 && value == Math.floor(value)) {
-                return (int) value;
+        if (text != null && DIGITS.matcher(text)
+                                  .matches()) {
+            try {
+                return Integer.parseInt(text);
+            } catch (NumberFormatException e) {
+                return DEFAULT_SCALE;
             }
         }
         return DEFAULT_SCALE;

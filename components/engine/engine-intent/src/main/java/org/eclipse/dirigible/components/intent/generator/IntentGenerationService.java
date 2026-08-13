@@ -168,7 +168,8 @@ public class IntentGenerationService {
                 modelGenerationService.generate(workspaceName, projectName, path, templateId, parameters);
                 entry.put("generated", Boolean.TRUE);
             } catch (IOException | RuntimeException e) {
-                LOGGER.error("Failed to generate code from [{}/{}] with template [{}]", projectName, path, templateId, e);
+                LOGGER.error("Failed to generate code from [{}/{}] with template [{}]", sanitizeForLog(projectName), sanitizeForLog(path),
+                        sanitizeForLog(templateId), e);
                 entry.put("generated", Boolean.FALSE);
                 entry.put("error", e.getMessage());
             }
@@ -257,4 +258,19 @@ public class IntentGenerationService {
         int dot = fileName.lastIndexOf('.');
         return dot >= 0 && INTENT_OWNED_EXTENSIONS.contains(fileName.substring(dot));
     }
+
+    /**
+     * Strip CR/LF (and stray control characters) from a value that arrives in a user-controlled URL
+     * segment before it reaches the log, so a crafted request cannot forge log entries.
+     *
+     * @param value the value
+     * @return the value, with anything that could break a log line replaced
+     */
+    private static String sanitizeForLog(String value) {
+        if (value == null) {
+            return "null";
+        }
+        return value.replaceAll("[\\r\\n\\t]", "_");
+    }
+
 }
