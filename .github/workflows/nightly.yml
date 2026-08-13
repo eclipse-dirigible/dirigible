@@ -1,9 +1,11 @@
 name: Nightly Integration Tests
 
 # The full Selenide UI integration suite (everything, incl. the sample-project clone/publish tests)
-# on both H2 and PostgreSQL. It is heavy (~1.5h per DB), so it does not run on every PR - PRs run the
-# fast "smoke-tests" job (see pull-request.yml). Runs on a nightly schedule and on demand; the same
-# full suite also runs on every push to master (see build.yml).
+# on both H2 and PostgreSQL. It is heavy (~2h of test time per DB), so it does not run on every PR -
+# PRs run the fast "smoke-tests" job (see pull-request.yml). Runs on a nightly schedule and on
+# demand; the same full suite also runs on every push to master (see build.yml). Like build.yml, the
+# suite is sharded into three tag-selected slices (api / ui / samples) that run in parallel, so the
+# wall-clock time is the slowest shard (~50 min), not the whole suite.
 on:
   schedule:
     - cron: '0 2 * * *'
@@ -16,6 +18,17 @@ concurrency:
 jobs:
   integration-tests-h2:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - name: api
+            groups: "!ui"
+          - name: ui
+            groups: "ui & !sample & !camel"
+          - name: samples
+            groups: "sample | camel"
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,14 +65,14 @@ jobs:
         run: ttyd --version
 
       - name: Integration tests
-        run: mvn clean install -P integration-tests
+        run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
 
       - name: Generate a random artifact name
         if: always()
         id: generate_name
         run: |
           TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-          echo "ARTIFACT_NAME=selenide-screenshots-h2-${TIMESTAMP}.zip" >> $GITHUB_ENV
+          echo "ARTIFACT_NAME=selenide-screenshots-h2-${{ matrix.shard.name }}-${TIMESTAMP}.zip" >> $GITHUB_ENV
 
       - name: Upload selenide screenshots
         uses: actions/upload-artifact@v4
@@ -71,6 +84,17 @@ jobs:
 
   integration-tests-postgresql:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - name: api
+            groups: "!ui"
+          - name: ui
+            groups: "ui & !sample & !camel"
+          - name: samples
+            groups: "sample | camel"
+    timeout-minutes: 90
     env:
       POSTGRES_DB: testdb
       POSTGRES_USER: testuser
@@ -125,7 +149,7 @@ jobs:
         run: ttyd --version
 
       - name: Integration tests
-        run: mvn clean install -P integration-tests
+        run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
         env:
           DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER: org.postgresql.Driver
           DIRIGIBLE_DATASOURCE_DEFAULT_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
@@ -137,7 +161,7 @@ jobs:
         id: generate_name
         run: |
           TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-          echo "ARTIFACT_NAME=selenide-screenshots-postgresql-${TIMESTAMP}.zip" >> $GITHUB_ENV
+          echo "ARTIFACT_NAME=selenide-screenshots-postgresql-${{ matrix.shard.name }}-${TIMESTAMP}.zip" >> $GITHUB_ENV
 
       - name: Upload selenide screenshots
         uses: actions/upload-artifact@v4

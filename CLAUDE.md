@@ -437,7 +437,7 @@ Treat `modules/commons/commons-config/src/main/java/org/eclipse/dirigible/common
 
 - `code-style`: `mvn -T 1C formatter:validate`
 - `tests` (ubuntu + windows matrix): `mvn clean install -P unit-tests`
-- `integration-tests-h2` / `-postgresql`: the **full** Selenide IT suite, `mvn clean install -P integration-tests` with the matching `DIRIGIBLE_DATASOURCE_DEFAULT_*` env vars (MSSQL is no longer a CI leg — removed in #6150)
+- `integration-tests-h2` / `-postgresql`: the **full** Selenide IT suite, `mvn clean install -P integration-tests` with the matching `DIRIGIBLE_DATASOURCE_DEFAULT_*` env vars (MSSQL is no longer a CI leg — removed in #6150). Each DB leg is **sharded into three parallel matrix jobs** selected by tag expression — `api` (`!ui`), `ui` (`ui & !sample & !camel`), `samples` (`sample | camel`) — so the run's wall clock is the slowest shard (~50 min), not the whole ~2h suite. The shards partition the suite; keep them disjoint and complete when adding tags.
 - `build-deploy`: `mvn clean install -P quick-build` then Docker buildx multi-arch image push to `dirigiblelabs/dirigible`
 
 ### PR gate vs full suite (smoke / nightly split)
@@ -451,5 +451,6 @@ The full Selenide UI suite takes ~1.5h per DB, so it does **not** run on every P
 - Every browser-driven IT is `@Tag("ui")` - inherited from the `UserInterfaceIntegrationTest` base (and thus by `SampleProjectRepositoryIT` and all sample-project ITs). Do not tag these individually.
 - HTTP-level ITs (`extends IntegrationTest` directly) carry no tag, so they are always in the smoke set.
 - To force a specific UI IT to run on every PR, add `@Tag("smoke")` to that class (keep the list small - smoke must stay fast).
+- Shard-routing tags: `@Tag("sample")` sits on the `SampleProjectRepositoryIT` base (inherited by every sample-project IT); `@Tag("camel")` sits on each IT in `ui/tests/camel` (their `PredefinedProjectIT` base is shared with non-camel tests, so the base cannot carry it — tag new camel ITs individually). These route classes into the `samples` CI shard; everything else UI stays in the `ui` shard.
 
 `codeql.yml`, `release.yml` cover CodeQL and Maven Central release respectively.
