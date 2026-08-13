@@ -106,9 +106,17 @@ entities:
 **Rules:** PK integer; field `type` from the allowed list; relation `kind` from the allowed list;
 composition is opt-in.
 
-**Field attributes (faithfulness):** besides `required`, `primaryKey`, `generated`, `length` and
-`defaultValue`, a field may declare:
+**Field attributes (faithfulness):** besides `required`, `primaryKey`, `generated` and `length`, a
+field may declare:
 
+- `defaultValue: <value>` - the field's default, in three places at once: the column's **DB DEFAULT**
+  (a row inserted without the column gets it), the reason a `required` field's **presence check is
+  skipped** (the value is guaranteed), and the **seed for a new line in a document's item dialog** -
+  the dialog opens on the standard value instead of a blank one, which is what makes a one-click
+  affordance like **Fill Month** actually one click. An existing row is never re-defaulted, so a value
+  the user deliberately cleared stays cleared. The to-one relation analogue is `init:`.
+  `- { name: hours, type: decimal, defaultValue: 8 }` /
+  `- { name: billable, type: boolean, defaultValue: true }`.
 - `unique: true` - a UNIQUE constraint (e.g. a `uuid` business key or a code).
 - `major: false` - keep the field <b>off the entity list table</b> (it is still shown in forms and the
   record details pane). Defaults to `true` (every field is a list column). Use it to declutter the list

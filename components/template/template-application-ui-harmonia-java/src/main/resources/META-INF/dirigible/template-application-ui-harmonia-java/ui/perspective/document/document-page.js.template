@@ -996,7 +996,12 @@ document.addEventListener('alpine:init', () => {
           if (col.widget === 'DROPDOWN') v = String(v);
           else if (col.date) v = this.toDateInput(v, col.widget);
         }
-        draft[col.name] = v == null ? (col.widget === 'CHECKBOX' ? false : (col.widget === 'NUMBER' ? null : '')) : v;
+        // A NEW line takes the column's authored default (intent `defaultValue:`, emitted as col.def)
+        // so the dialog opens on the standard values instead of blank ones - what makes a one-click
+        // affordance like Fill Month actually one click. An EXISTING row keeps what is stored,
+        // including a value the user deliberately cleared: re-defaulting that would silently undo it.
+        const blank = col.widget === 'CHECKBOX' ? false : (col.widget === 'NUMBER' ? null : '');
+        draft[col.name] = v == null ? (!row && col.def !== undefined ? col.def : blank) : v;
       }
       if (row && row[pk] != null) draft[pk] = row[pk];
       if (preset) {
