@@ -13,12 +13,19 @@ import org.eclipse.dirigible.components.data.csvim.domain.CsvFile;
 import org.eclipse.dirigible.components.data.csvim.processor.CsvimProcessor;
 import org.eclipse.dirigible.components.data.sources.config.DefaultDataSourceName;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
+import org.eclipse.dirigible.repository.api.IRepository;
+import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.ResultSet;
+import java.sql.Statement;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -32,8 +39,67 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The assertions read the row's value rather than the statement: an equally wide CSV binds
  * correctly by accident, so a fixture with as many fields as the table has columns passes even when
  * the index arithmetic is wrong.
+ *
+ * <p>
+ * Also covers the other half of the same finding: the re-import must be TRIGGERED when only the
+ * referenced CSV changes, since the .csvim itself is a stable pointer that stays byte-identical.
  */
 class CsvimReimportIT extends IntegrationTest {
+
+    /** The project holding the synchronizer-path fixture. */
+    private static final String PROJECT = "csvim-csv-edit-it";
+
+    /** The table fixture path. */
+    private static final String TABLE_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/tables/city.table";
+
+    /** The CSV fixture path. */
+    private static final String CSV_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/data/cities.csv";
+
+    /** The CSVIM fixture path. */
+    private static final String CSVIM_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/data/cities.csvim";
+
+    /** The table fixture name. */
+    private static final String TABLE_NAME = "CSVIM_CSV_EDIT";
+
+    /** The table fixture source. */
+    private static final String TABLE_SOURCE = """
+            {
+                "name": "CSVIM_CSV_EDIT",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "type": "INTEGER",
+                        "primaryKey": true,
+                        "nullable": false,
+                        "name": "CITY_ID"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 40,
+                        "nullable": false,
+                        "name": "CITY_NAME"
+                    }
+                ]
+            }
+            """;
+
+    /** The CSVIM fixture source - a stable pointer that is NEVER touched after the initial import. */
+    private static final String CSVIM_SOURCE = """
+            {
+                "files": [
+                    {
+                        "table": "CSVIM_CSV_EDIT",
+                        "schema": "PUBLIC",
+                        "file": "/%s/data/cities.csv",
+                        "header": true,
+                        "useHeaderNames": true,
+                        "delimField": ",",
+                        "distinguishEmptyFromNull": true,
+                        "version": "1.0"
+                    }
+                ]
+            }
+            """.formatted(PROJECT);
 
     /** The default data source name. */
     @Autowired
@@ -47,6 +113,89 @@ class CsvimReimportIT extends IntegrationTest {
     /** The csvim processor. */
     @Autowired
     private CsvimProcessor csvimProcessor;
+
+    /** The repository. */
+    @Autowired
+    private IRepository repository;
+
+    /** The synchronization processor. */
+    @Autowired
+    private SynchronizationProcessor synchronizationProcessor;
+
+    /**
+     * Editing ONLY the referenced CSV must re-import - the .csvim is a stable pointer and does not
+     * change when a seed value does, so the change detection has to span the referenced files. The
+     * assertion reads the row's value after the second sync; a fixture that also touched the .csvim
+     * would pass while missing the bug entirely.
+     *
+     * @throws Exception the exception
+     */
+    @Test
+    void editingOnlyTheCsvTriggersReimport() throws Exception {
+        write(TABLE_PATH, TABLE_SOURCE);
+        write(CSV_PATH, "CITY_ID,CITY_NAME\n1,Sofia\n2,Plovdiv");
+        write(CSVIM_PATH, CSVIM_SOURCE);
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        assertEquals("Sofia", cityName(1), "The initial import did not seed the row");
+
+        // the ordinary editing path: the seed value changes, the .csvim stays byte-identical
+        write(CSV_PATH, "CITY_ID,CITY_NAME\n1,Varna\n2,Plovdiv");
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        assertEquals("Varna", cityName(1), "Editing only the CSV must re-import the changed value");
+    }
+
+    /**
+     * Reads the seeded row's name.
+     *
+     * @param id the city id
+     * @return the city name
+     * @throws Exception the exception
+     */
+    private String cityName(int id) throws Exception {
+        try (Connection connection = dataSourceManager.getDefaultDataSource()
+                                                      .getConnection();
+                Statement statement = connection.createStatement();
+                ResultSet rs = statement.executeQuery("SELECT \"CITY_NAME\" FROM \"" + TABLE_NAME + "\" WHERE \"CITY_ID\" = " + id)) {
+            assertTrue(rs.next(), "Row with CITY_ID = " + id + " is missing");
+            return rs.getString(1);
+        }
+    }
+
+    /**
+     * Writes a fixture resource.
+     *
+     * @param path the path
+     * @param source the source
+     */
+    private void write(String path, String source) {
+        repository.createResource(path, source.getBytes(StandardCharsets.UTF_8), false, "text/plain", true);
+    }
+
+    /**
+     * Cleanup the fixture.
+     *
+     * @throws Exception the exception
+     */
+    @AfterEach
+    void cleanup() throws Exception {
+        boolean fixtureUsed = false;
+        for (String path : List.of(CSVIM_PATH, CSV_PATH, TABLE_PATH)) {
+            if (repository.hasResource(path)) {
+                repository.removeResource(path);
+                fixtureUsed = true;
+            }
+        }
+        if (fixtureUsed) {
+            synchronizationProcessor.forceProcessSynchronizers();
+            try (Connection connection = dataSourceManager.getDefaultDataSource()
+                                                          .getConnection();
+                    Statement statement = connection.createStatement()) {
+                statement.execute("DROP TABLE IF EXISTS \"" + TABLE_NAME + "\"");
+            }
+        }
+    }
 
     /**
      * A changed value in a CSV that carries fewer columns than its table must be applied on re-import.

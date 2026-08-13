@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.data.csvim.synchronizer;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.text.ParseException;
@@ -150,6 +151,40 @@ public class CsvimSynchronizer extends MultitenantBaseSynchronizer<Csvim, Long> 
         } catch (Exception e) {
             logger.error("Failed to save CSVIM [{}], content: [{}]", csvim, new String(content), e);
             throw new ParseException(e.getMessage(), 0);
+        }
+    }
+
+    /**
+     * The referenced CSV files are read at import time but their bytes are part of what a CSVIM import
+     * produces, so they must take part in the change detection as well - otherwise editing only a CSV
+     * re-imports nothing, silently. Appends each referenced CSV's content to the CSVIM's own bytes. A
+     * CSV that does not exist (yet) contributes nothing, so its later appearance changes the checksum
+     * and triggers the import.
+     *
+     * @param location the definition location
+     * @param content the CSVIM definition content
+     * @return the content extended with the referenced CSV files' content
+     */
+    @Override
+    public byte[] checksumContent(String location, byte[] content) {
+        try {
+            Csvim csvim = JsonHelper.fromJson(new String(content, StandardCharsets.UTF_8), Csvim.class);
+            if (csvim == null || csvim.getFiles() == null || csvim.getFiles()
+                                                                  .isEmpty()) {
+                return content;
+            }
+            ByteArrayOutputStream extended = new ByteArrayOutputStream();
+            extended.write(content);
+            for (CsvFile csvFile : csvim.getFiles()) {
+                IResource resource = CsvimProcessor.getCsvResource(csvFile);
+                if (resource.exists()) {
+                    extended.write(resource.getContent());
+                }
+            }
+            return extended.toByteArray();
+        } catch (Exception e) {
+            logger.warn("Failed to extend the checksum of CSVIM [{}] with its referenced CSV files", location, e);
+            return content;
         }
     }
 
