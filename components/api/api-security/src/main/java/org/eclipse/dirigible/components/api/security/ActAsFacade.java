@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.api.security;
 
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.api.http.HttpSessionFacade;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.slf4j.Logger;
@@ -31,6 +32,12 @@ import org.slf4j.LoggerFactory;
  * <li>Only the personal-identity resolution and the Inbox assignee filter read the override.</li>
  * <li>The override lives in the server-side HTTP session, never in a client-supplied header, and
  * the entitlement is re-checked on EVERY read - a revoked role kills the override mid-session.</li>
+ * <li>The armed state EXPIRES on its own after {@link DirigibleConfig#ACT_AS_TTL_SECONDS} (30
+ * minutes by default). The window is absolute - it starts at arming and no activity renews it -
+ * because the failure mode this guards against is a state that is never exited: while armed, the
+ * personal surfaces and the Inbox's assignee query serve the acting identity's world instead of the
+ * real user's, and a forgotten override makes the real user's own tasks look like they were never
+ * raised.</li>
  * </ul>
  */
 public final class ActAsFacade {
@@ -39,6 +46,9 @@ public final class ActAsFacade {
 
     /** The HTTP-session attribute carrying the acting identity's username. */
     private static final String SESSION_ATTRIBUTE = "dirigible-act-as-user";
+
+    /** The HTTP-session attribute carrying the epoch-milliseconds the identity was armed at. */
+    private static final String SESSION_ATTRIBUTE_ARMED_AT = "dirigible-act-as-armed-at";
 
     private ActAsFacade() {}
 
@@ -52,9 +62,10 @@ public final class ActAsFacade {
     }
 
     /**
-     * The armed acting identity, or null when none is armed, the session is not valid, or the real user
-     * is not (or no longer) entitled. The entitlement re-check on every read is what makes a
-     * mid-session role revocation effective immediately.
+     * The armed acting identity, or null when none is armed, the session is not valid, the real user is
+     * not (or no longer) entitled, or the delegated-entry window has elapsed. The entitlement re-check
+     * on every read is what makes a mid-session role revocation effective immediately; the expiry check
+     * is what makes a forgotten arming harmless.
      *
      * @return the acting username or null
      */
@@ -63,7 +74,64 @@ public final class ActAsFacade {
             return null;
         }
         String acting = HttpSessionFacade.getAttribute(SESSION_ATTRIBUTE);
-        return acting == null || acting.isBlank() ? null : acting;
+        if (acting == null || acting.isBlank()) {
+            return null;
+        }
+        if (isExpired(HttpSessionFacade.getAttribute(SESSION_ATTRIBUTE_ARMED_AT), System.currentTimeMillis())) {
+            clear();
+            logger.info("Act-as EXPIRED: [{}] no longer acts as [{}] - the {}s delegated-entry window has elapsed", UserFacade.getName(),
+                    acting, ttlSeconds());
+            return null;
+        }
+        return acting;
+    }
+
+    /**
+     * When the currently armed state expires, or null when nothing is armed.
+     *
+     * @return the expiry as epoch milliseconds, or null
+     */
+    public static Long expiresAt() {
+        if (actingAs() == null) {
+            return null;
+        }
+        Long armedAt = armedAt(HttpSessionFacade.getAttribute(SESSION_ATTRIBUTE_ARMED_AT));
+        return armedAt == null ? null : armedAt + ttlSeconds() * 1000L;
+    }
+
+    /**
+     * Whether an arming stamped at the given attribute value has run out. Fails CLOSED: a missing or
+     * unparsable stamp is treated as expired, because an armed state we cannot date is an armed state
+     * we cannot trust to end.
+     *
+     * @param armedAtAttribute the raw session attribute value
+     * @param now the current epoch milliseconds
+     * @return true when the state must be dropped
+     */
+    static boolean isExpired(String armedAtAttribute, long now) {
+        Long armedAt = armedAt(armedAtAttribute);
+        return armedAt == null || now - armedAt >= ttlSeconds() * 1000L;
+    }
+
+    private static Long armedAt(String armedAtAttribute) {
+        if (armedAtAttribute == null || armedAtAttribute.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.valueOf(armedAtAttribute.trim());
+        } catch (NumberFormatException e) {
+            logger.warn("Act-as arming timestamp [{}] is not a number - treating the state as expired", armedAtAttribute, e);
+            return null;
+        }
+    }
+
+    private static int ttlSeconds() {
+        return DirigibleConfig.ACT_AS_TTL_SECONDS.getIntValue();
+    }
+
+    private static void clear() {
+        HttpSessionFacade.removeAttribute(SESSION_ATTRIBUTE);
+        HttpSessionFacade.removeAttribute(SESSION_ATTRIBUTE_ARMED_AT);
     }
 
     /**
@@ -95,7 +163,8 @@ public final class ActAsFacade {
         }
         String acting = username.trim();
         HttpSessionFacade.setAttribute(SESSION_ATTRIBUTE, acting);
-        logger.info("Act-as ARMED: [{}] now acts as [{}] for this session", UserFacade.getName(), acting);
+        HttpSessionFacade.setAttribute(SESSION_ATTRIBUTE_ARMED_AT, Long.toString(System.currentTimeMillis()));
+        logger.info("Act-as ARMED: [{}] now acts as [{}] for the next {}s", UserFacade.getName(), acting, ttlSeconds());
     }
 
     /** Disarms the acting identity for the current session. Audit-logged. */
@@ -104,7 +173,7 @@ public final class ActAsFacade {
             return;
         }
         String acting = HttpSessionFacade.getAttribute(SESSION_ATTRIBUTE);
-        HttpSessionFacade.removeAttribute(SESSION_ATTRIBUTE);
+        clear();
         if (acting != null && !acting.isBlank()) {
             logger.info("Act-as DISARMED: [{}] no longer acts as [{}]", UserFacade.getName(), acting);
         }

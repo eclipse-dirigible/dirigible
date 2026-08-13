@@ -31,8 +31,15 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_CORE + "actas")
 public class ActAsEndpoint extends BaseEndpoint {
 
-    /** The state the shells render from: may this user arm at all, and who is armed right now. */
-    public record ActAsState(boolean entitled, String actingAs) {
+    /**
+     * The state the shells render from: may this user arm at all, who is armed right now, and when that
+     * arming expires on its own (epoch milliseconds; null when nothing is armed).
+     */
+    public record ActAsState(boolean entitled, String actingAs, Long expiresAt) {
+
+        static ActAsState current() {
+            return new ActAsState(ActAsFacade.isEntitled(), ActAsFacade.actingAs(), ActAsFacade.expiresAt());
+        }
     }
 
     /** The arm request: the acting identity's username (e.g. the employee's e-mail). */
@@ -42,11 +49,11 @@ public class ActAsEndpoint extends BaseEndpoint {
     /**
      * The current session's act-as state.
      *
-     * @return entitled + the armed acting identity (null when none)
+     * @return entitled + the armed acting identity (null when none) + its expiry
      */
     @GetMapping
     public ResponseEntity<ActAsState> state() {
-        return ResponseEntity.ok(new ActAsState(ActAsFacade.isEntitled(), ActAsFacade.actingAs()));
+        return ResponseEntity.ok(ActAsState.current());
     }
 
     /**
@@ -64,7 +71,7 @@ public class ActAsEndpoint extends BaseEndpoint {
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
-        return ResponseEntity.ok(new ActAsState(ActAsFacade.isEntitled(), ActAsFacade.actingAs()));
+        return ResponseEntity.ok(ActAsState.current());
     }
 
     /**
@@ -75,6 +82,6 @@ public class ActAsEndpoint extends BaseEndpoint {
     @DeleteMapping
     public ResponseEntity<ActAsState> disarm() {
         ActAsFacade.disarm();
-        return ResponseEntity.ok(new ActAsState(ActAsFacade.isEntitled(), ActAsFacade.actingAs()));
+        return ResponseEntity.ok(ActAsState.current());
     }
 }

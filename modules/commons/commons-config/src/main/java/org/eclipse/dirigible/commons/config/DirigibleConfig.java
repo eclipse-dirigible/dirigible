@@ -171,7 +171,14 @@ public enum DirigibleConfig {
     INTENT_AI_MAX_TOKENS("DIRIGIBLE_INTENT_AI_MAX_TOKENS", "8192"),
 
     /** Anthropic API version header sent by the Intent assistant. */
-    INTENT_AI_VERSION("DIRIGIBLE_INTENT_AI_VERSION", "2023-06-01");
+    INTENT_AI_VERSION("DIRIGIBLE_INTENT_AI_VERSION", "2023-06-01"),
+
+    /**
+     * Seconds an armed act-as (delegated entry) state survives before it expires on its own. The window
+     * is absolute - it starts at arming and is never renewed by activity - so a state left armed and
+     * forgotten stops hiding the real identity's world on its own.
+     */
+    ACT_AS_TTL_SECONDS("DIRIGIBLE_ACT_AS_TTL_SECONDS", "1800");
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleConfig.class);
