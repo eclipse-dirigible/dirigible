@@ -172,6 +172,15 @@ public interface TaskService {
 
     List<Task> findTasks(PrincipalType type);
 
+    /**
+     * Counts the tenant's tasks assigned to the given user, whoever is asking - unlike
+     * {@link #findTasks(PrincipalType)}, which serves the caller's own (act-as aware) world.
+     *
+     * @param assignee the assignee to count for
+     * @return the number of tasks assigned to that user
+     */
+    long countTasksByAssignee(String assignee);
+
     void completeTask(String taskId, Map<String, Object> variables);
 
     List<IdentityLink> getTaskIdentityLinks(String taskId);

@@ -29,7 +29,8 @@
       "startShort": "Start",
       "bannerActing": "Acting as",
       "bannerNote": "entries are recorded in this person's name; the log keeps yours",
-      "exit": "Exit"
+      "exit": "Exit",
+      "bannerUntil": "until {{time}}"
     },
     "notifications": {
       "title": "Notifications",
@@ -57,7 +58,10 @@
       "mine": "Mine",
       "available": "Available",
       "assignedToMe": "Assigned to me",
-      "ref": "Ref {{key}}"
+      "ref": "Ref {{key}}",
+      "actAsHidden": "Acting as {{person}} — {{count}} of your own tasks are hidden",
+      "actAsServing": "Acting as {{person}} — this Inbox serves their tasks, not yours",
+      "noTasksActAsHint": "You are acting as {{person}} and this list is theirs. Exit to see your own tasks."
     },
     "documents": {
       "newFolder": "New folder",

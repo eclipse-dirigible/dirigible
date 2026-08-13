@@ -238,9 +238,14 @@
               <div x-h-menu-separator></div>
               <!-- Act as (delegated entry) - the Applications-shell entry point: arm the acting
                    identity here, then land in the My shell as that person (where the banner rules). -->
-              <template x-if="actAs.entitled">
+              <template x-if="actAs.entitled && !actAs.acting">
                 <li x-h-menu-item @click="actAsDialog = true">
                   <i role="img" x-h-lucide data-lucide="user-round-cog"></i> <span x-text="T('application-core:shell.actAs.enter', 'Enter data as...')"></span>
+                </li>
+              </template>
+              <template x-if="actAs.acting">
+                <li x-h-menu-item @click="disarmActAs()">
+                  <i role="img" x-h-lucide data-lucide="user-round-x"></i> <span x-text="T('application-core:shell.actAs.stop', 'Stop acting as') + ' ' + actAs.acting"></span>
                 </li>
               </template>
               <!-- Switch shells without the detour through Home: the same `platform-shells` list the
@@ -264,6 +269,25 @@
                 <i role="img" x-h-lucide data-lucide="log-out"></i> <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
               </li>
             </ul>
+          </div>
+
+          <!-- Act-as (delegated entry) banner: the armed identity follows the session into the
+               back office, so it is shown here too - loud, persistent, with the deadline it expires
+               at and a one-click exit. Its absence here is what let an arming be forgotten (#6694). -->
+          <div x-show="actAs.acting" x-cloak class="hbox items-center gap-2 px-3 py-1.5 text-sm"
+               style="background: var(--color-warning, #b45309); color: #fff;">
+            <i role="img" x-h-lucide data-lucide="user-round-cog"></i>
+            <span>
+              <span x-text="T('application-core:shell.actAs.bannerActing', 'Acting as')"></span>
+              <b x-text="actAs.acting"></b>
+              <span x-text="' - ' + T('application-core:shell.actAs.bannerNote', 'entries are recorded in this person\'s name; the log keeps yours')"></span>
+              <span x-show="actAsUntil()" x-text="' - ' + T('application-core:shell.actAs.bannerUntil', 'until {{time}}', { time: actAsUntil() })"></span>
+            </span>
+            <div class="flex-1"></div>
+            <button x-h-button data-size="sm" data-variant="outline" @click="disarmActAs()"
+                    style="border-color:#fff; color:#fff; background:transparent;">
+              <span x-text="T('application-core:shell.actAs.exit', 'Exit')"></span>
+            </button>
           </div>
 
           <!-- Built-in pages (incl. the Settings master-detail) render here via Pinecone; a hosted

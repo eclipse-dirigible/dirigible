@@ -428,6 +428,11 @@ public class BpmService {
                                   .findTasks(type);
     }
 
+    public long countTasksByAssignee(String assignee) {
+        return bpmProviderFlowable.getTaskService()
+                                  .countTasksByAssignee(assignee);
+    }
+
     public long processDefinitionsCount() {
         return bpmProviderFlowable.processDefinitionsCount();
     }

@@ -27,6 +27,12 @@ document.addEventListener('alpine:init', () => {
     _timer: null,
     _onMessage: null,
 
+    // Act-as (delegated entry): while armed, this Inbox serves the ACTING identity's assigned
+    // tasks, so the real user's own tasks are not in the list. Rendering that as a plain empty
+    // list is indistinguishable from "nothing to do" — a forgotten arming looked exactly like a
+    // broken process (#6694) — so the page states who is armed and how much it is hiding.
+    actAs: { acting: null, hiddenTasks: 0 },
+
     init() {
       // The store self-loads at startup; refresh on entry so the list is current.
       this.refresh();
@@ -78,7 +84,24 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    async loadActAs() {
+      try {
+        const state = await App.services.api.get('/services/inbox/act-as', { baseUrl: '' });
+        this.actAs = { acting: state.actingAs || null, hiddenTasks: state.hiddenTasks || 0 };
+      } catch (e) {
+        console.error('inbox: unable to load the act-as state', e);
+      }
+    },
+
+    // Exiting reloads: the whole shell (banner, personal pages, hosted apps) resolves under the
+    // armed identity, so a partial in-place update would leave half the UI acting as someone else.
+    async exitActAs() {
+      const res = await fetch('/services/core/actas', { method: 'DELETE', credentials: 'same-origin' });
+      if (res.ok) window.location.reload();
+    },
+
     async refresh() {
+      await this.loadActAs();
       await Alpine.store('processTasks').refresh();
       this.lastUpdated = new Date();
       // A completed task drops out of the list — clear a stale selection.
