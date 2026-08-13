@@ -15,6 +15,7 @@ import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.openqa.selenium.By;
 
@@ -35,6 +36,7 @@ import org.openqa.selenium.By;
  * This guards against regressions introduced by the {@code bpmn-editor-modernization} branch where
  * missing Angular module dependencies silently prevent the editor from bootstrapping.
  */
+@Disabled("Shallow editor-open smoke subsumed by BpmnEditorIT and BpmnEditorPropertyPopupIT, which both open the editor and go deeper; disabled to keep the integration-tests suite runtime under its CI cap")
 public class BpmnEditorLoadsIT extends UserInterfaceIntegrationTest {
 
     private static final String PROJECT_NAME = "BpmnEditorLoadsIT";

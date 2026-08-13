@@ -16,6 +16,7 @@ import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -35,6 +36,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * datasource set the runtime initializes by the time the click happens, so it is deliberately left
  * out.
  */
+@Disabled("Legacy AngularJS monitoring perspective; the shipped ops surface is covered by MonitoringShellIT; disabled to keep the integration-tests suite runtime under its CI cap")
 public class MonitoringPerspectiveIT extends UserInterfaceIntegrationTest {
 
     private static final String PERSPECTIVE_ID = "perspective-monitoring";

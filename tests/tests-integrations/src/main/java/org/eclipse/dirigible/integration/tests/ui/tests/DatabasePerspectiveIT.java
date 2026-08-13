@@ -18,12 +18,14 @@ import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.db.DBAsserter;
 import org.eclipse.dirigible.tests.framework.ide.DatabasePerspective;
 import org.eclipse.dirigible.tests.framework.util.SleepUtil;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.sql.SQLException;
 
 @Tag("smoke")
+@Disabled("Legacy AngularJS database perspective; the shipped surface is covered by DatabaseShellIT (SQL console journey); disabled to keep the integration-tests suite runtime under its CI cap")
 public class DatabasePerspectiveIT extends UserInterfaceIntegrationTest {
 
     private static final String TEST_TABLE_NAME = "STUDENT";
