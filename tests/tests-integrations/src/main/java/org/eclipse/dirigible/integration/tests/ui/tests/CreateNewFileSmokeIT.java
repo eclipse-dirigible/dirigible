@@ -13,15 +13,23 @@ import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 /**
- * The FULL new-file sweep: every {@link NewFileOption} creates its file and opens its editor. At
- * ~20 editors x (create dialog + editor bring-up) this is the single longest IT, so it runs in the
- * nightly/master {@code ui} shard only; the per-PR smoke gate runs {@link CreateNewFileSmokeIT},
- * which covers one representative option per heavyweight editor family.
+ * The per-PR slice of the new-file journey: one representative {@link NewFileOption} per
+ * heavyweight editor family - Monaco (TypeScript service), the BPMN modeler, the EDM modeler and
+ * the form builder - so a PR that breaks the create-file dialog or an editor bootstrap fails fast.
+ * The exhaustive sweep over every option stays in {@link CreateNewFileIT}, which runs in the
+ * nightly/master {@code ui} shard; keep this list short, the smoke gate pays for it on every PR.
  */
-public class CreateNewFileIT extends UserInterfaceIntegrationTest {
+@Tag("smoke")
+public class CreateNewFileSmokeIT extends UserInterfaceIntegrationTest {
+
+    private static final List<NewFileOption> REPRESENTATIVE_OPTIONS = List.of(NewFileOption.TYPESCRIPT_SERVICE,
+            NewFileOption.BUSINESS_PROCESS_MODEL, NewFileOption.ENTITY_DATA_MODEL, NewFileOption.FORM_DEFINITION);
 
     @Test
     void test() {
@@ -29,7 +37,7 @@ public class CreateNewFileIT extends UserInterfaceIntegrationTest {
         workbench.createNewProject(this.getClass()
                                        .getSimpleName());
 
-        for (NewFileOption newFileOption : NewFileOption.values()) {
+        for (NewFileOption newFileOption : REPRESENTATIVE_OPTIONS) {
             workbench.createFileInProject(this.getClass()
                                               .getSimpleName(),
                     newFileOption.getOptionName());

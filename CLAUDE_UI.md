@@ -467,7 +467,7 @@ angular.module('myApp', ['ngRoute', 'blimpKit', /* … */]);
 
    Definitive source: `/webjars/blimpkit__blimpkit/dist/css/themes/blimpkit-light.css` (and `-dark.css`). Both files define the same names with theme-appropriate values, so `var(--foreground)` is correct for either theme.
 
-3. **A `--sap*` legacy variable** only when nothing above expresses the need. The shim still ships via `theme-blimpkit/css/sap-variables-{light,dark,auto}.css` for backwards compatibility (`BpmnEditorLoadsIT` asserts `--sapBackgroundColor` is non-empty inside the iframe), but most existing references are migration debt, not a pattern to copy. If you write `var(--sapXxx)`, leave a comment that explains which BlimpKit variable you tried first and why it didn't work.
+3. **A `--sap*` legacy variable** only when nothing above expresses the need. The shim still ships via `theme-blimpkit/css/sap-variables-{light,dark,auto}.css` for backwards compatibility (`BpmnEditorIT`'s boot station asserts the theme variable is non-empty inside the iframe), but most existing references are migration debt, not a pattern to copy. If you write `var(--sapXxx)`, leave a comment that explains which BlimpKit variable you tried first and why it didn't work.
 
 **Theme-detection class.** `@media (prefers-color-scheme: dark)` is the **OS preference**, not the Dirigible theme. To target the theme the user picked, write `setTheme()` to add `body.dirigible-theme-{light,dark,auto}` and gate your CSS on that class. Reserve `prefers-color-scheme` for the `dirigible-theme-auto` fallback.
 
