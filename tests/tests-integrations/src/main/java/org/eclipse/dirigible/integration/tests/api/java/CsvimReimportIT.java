@@ -207,7 +207,7 @@ class CsvimReimportIT extends IntegrationTest {
         try (Connection connection = dataSourceManager.getDefaultDataSource()
                                                       .getConnection()) {
             connection.createStatement()
-                      .execute("CREATE TABLE CSV_REIMPORT (R1 INT PRIMARY KEY, R2 VARCHAR(20), R3 VARCHAR(20))");
+                      .execute("CREATE TABLE \"CSV_REIMPORT\" (\"R1\" INT PRIMARY KEY, \"R2\" VARCHAR(20), \"R3\" VARCHAR(20))");
             try {
                 csvimProcessor.setStrictMode(false);
                 CsvFile csvFile = new CsvFile(null, "CSV_REIMPORT", null, "import", true, true, ",", "\"", null, false, null);
@@ -218,18 +218,18 @@ class CsvimReimportIT extends IntegrationTest {
                 csvimProcessor.process(csvFile, "R1,R2\n1,r2_1_changed\n2,r2_2".getBytes(), defaultDataSourceName);
 
                 ResultSet rs = connection.createStatement()
-                                         .executeQuery("SELECT R2, R3 FROM CSV_REIMPORT WHERE R1 = 1");
+                                         .executeQuery("SELECT \"R2\", \"R3\" FROM \"CSV_REIMPORT\" WHERE \"R1\" = 1");
                 assertTrue(rs.next(), "Row with R1 = 1 is missing after the re-import");
                 assertEquals("r2_1_changed", rs.getString("R2"), "The changed value did not reach the row");
                 assertNull(rs.getString("R3"), "A column the CSV does not carry must be set to null, not to the record's id");
 
                 rs = connection.createStatement()
-                               .executeQuery("SELECT COUNT(*) FROM CSV_REIMPORT");
+                               .executeQuery("SELECT COUNT(*) FROM \"CSV_REIMPORT\"");
                 assertTrue(rs.next());
                 assertEquals(2, rs.getInt(1), "The re-import must update the existing rows, not add new ones");
             } finally {
                 connection.createStatement()
-                          .execute("DROP TABLE CSV_REIMPORT");
+                          .execute("DROP TABLE \"CSV_REIMPORT\"");
             }
         }
     }
@@ -244,7 +244,7 @@ class CsvimReimportIT extends IntegrationTest {
         try (Connection connection = dataSourceManager.getDefaultDataSource()
                                                       .getConnection()) {
             connection.createStatement()
-                      .execute("CREATE TABLE CSV_REIMPORT_NH (N1 INT PRIMARY KEY, N2 VARCHAR(20), N3 VARCHAR(20))");
+                      .execute("CREATE TABLE \"CSV_REIMPORT_NH\" (\"N1\" INT PRIMARY KEY, \"N2\" VARCHAR(20), \"N3\" VARCHAR(20))");
             try {
                 csvimProcessor.setStrictMode(false);
                 CsvFile csvFile = new CsvFile(null, "CSV_REIMPORT_NH", null, "import", false, false, ",", "\"", null, false, null);
@@ -254,18 +254,18 @@ class CsvimReimportIT extends IntegrationTest {
                 csvimProcessor.process(csvFile, "1,n2_1_changed\n2,n2_2".getBytes(), defaultDataSourceName);
 
                 ResultSet rs = connection.createStatement()
-                                         .executeQuery("SELECT N2, N3 FROM CSV_REIMPORT_NH WHERE N1 = 1");
+                                         .executeQuery("SELECT \"N2\", \"N3\" FROM \"CSV_REIMPORT_NH\" WHERE \"N1\" = 1");
                 assertTrue(rs.next(), "Row with N1 = 1 is missing after the re-import");
                 assertEquals("n2_1_changed", rs.getString("N2"), "The changed value did not reach the row");
                 assertNull(rs.getString("N3"), "A column the record does not reach must be bound as null");
 
                 rs = connection.createStatement()
-                               .executeQuery("SELECT COUNT(*) FROM CSV_REIMPORT_NH");
+                               .executeQuery("SELECT COUNT(*) FROM \"CSV_REIMPORT_NH\"");
                 assertTrue(rs.next());
                 assertEquals(2, rs.getInt(1), "The re-import must update the existing rows, not add new ones");
             } finally {
                 connection.createStatement()
-                          .execute("DROP TABLE CSV_REIMPORT_NH");
+                          .execute("DROP TABLE \"CSV_REIMPORT_NH\"");
             }
         }
     }
