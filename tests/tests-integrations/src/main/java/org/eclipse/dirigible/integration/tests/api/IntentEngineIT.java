@@ -2518,6 +2518,89 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void task_form_renders_its_labels_through_the_module_catalog() {
+        // A BPM task form is a standalone page (no SPA shell), which is why its content used to render
+        // in English while the shell pages around it were translated: it never loaded the translator and
+        // baked every label in as a literal. The catalog it needs is the one this same generation emits.
+        String yaml = """
+                name: invoices
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 50 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, required: true, length: 20 }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                processes:
+                  - name: InvoiceApproval
+                    trigger: { onCreate: Invoice }
+                    steps:
+                      - { name: approve, kind: userTask, args: { assignee: manager, form: ApproveInvoice } }
+                      - { name: decide, kind: decision, args: { if: "action == 'approve'", then: activate, else: cancel } }
+                      - { name: activate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: done } }
+                      - { name: cancel, kind: serviceTask, args: { setRelationField: Status, value: 3, next: end } }
+                      - { name: done, kind: end }
+                forms:
+                  - name: ApproveInvoice
+                    forEntity: Invoice
+                    fields: [number, total]
+                    actions: [approve, reject]
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: APPROVED }
+                      - { id: 3, name: CANCELLED }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-form-builder-harmonia/template/template.js", "ApproveInvoice.form");
+
+        // The catalog the translate action emits, keyed by the form's own prefix: every label is in it.
+        String catalog = contentOf("i18n/en-US/ApproveInvoice.form.json");
+        assertTrue(catalog.contains("\"ApproveInvoice-form\""), "the catalog should be keyed by the form translation prefix");
+        assertTrue(catalog.contains("\"Number\": \"Number\"") && catalog.contains("\"Total\": \"Total\""),
+                "the field labels should land in the catalog, got: " + catalog);
+        assertTrue(catalog.contains("\"Approve\": \"Approve\"") && catalog.contains("\"Reject\": \"Reject\""),
+                "the action button captions should land in the catalog, got: " + catalog);
+        assertTrue(catalog.contains("\"DRAFT\": \"DRAFT\"") && catalog.contains("\"APPROVED\": \"APPROVED\""),
+                "the status step labels should land in the catalog, got: " + catalog);
+
+        // ... and the generated page consumes it: the translator is loaded with this project's namespace
+        // bootstrapped (the page has no window.App to read it from), and every label binds through T()
+        // with the English literal as the fallback.
+        String index = contentOf("gen/ApproveInvoice/forms/ApproveInvoice/index.html");
+        assertTrue(index.contains("/services/web/application-core/shell/js/services/i18n.js"),
+                "the standalone form must load the shared translator");
+        assertTrue(index.contains("App.config.projectName = '" + PROJECT + "'"),
+                "the form must bootstrap its catalog namespace - i18n.js reads it at load");
+        String prefix = "T('" + PROJECT + ":ApproveInvoice-form.t.";
+        assertTrue(index.contains("tracking-tight\" x-text=\"" + prefix), "the form title should resolve through the catalog");
+        assertTrue(index.contains("x-text=\"" + prefix + "Number', 'Number')\""), "a field label should resolve through the catalog");
+        assertTrue(index.contains("x-text=\"" + prefix + "Approve', 'Approve')\""),
+                "an action button caption should resolve through the catalog");
+        // The step's `label` stays the untranslated seed name - it is what the record's status value is
+        // matched against - and the displayed `title` is the translated one.
+        assertTrue(index.contains("title: " + prefix + "DRAFT', 'DRAFT')"), "a status step should carry its translated title");
+        assertTrue(index.contains("{ label: 'DRAFT'"), "the step label must stay untranslated for the active-status match");
+        assertTrue(index.contains("x-text=\"step.title\""), "the step indicator should render the translated title");
+
+        String formJs = contentOf("gen/ApproveInvoice/forms/ApproveInvoice/form.js");
+        assertTrue(formJs.contains("T('" + PROJECT + ":ApproveInvoice-form.dialogs.successMsg'"),
+                "the submit outcome messages should resolve through the catalog");
+    }
+
+    @Test
     void settings_overrides_skip_generation_and_are_preserved() {
         writeIntent(INTENT_YAML);
         // First Generate scaffolds orders.settings (everything generate:true) and emits the form.
