@@ -31,12 +31,17 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * End-to-end test for the export representation of {@code GET /services/core/repository}: a
  * collection downloads as a zip of its content including its subfolders, a resource downloads as
  * the file itself, and the plain listing representation stays untouched.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself (or creates only
+// collision-free state), so the per-method context reset inherited from IntegrationTest would only
+// add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class RepositoryExportIT extends IntegrationTest {
 
     private static final String ENDPOINT = "/services/core/repository";

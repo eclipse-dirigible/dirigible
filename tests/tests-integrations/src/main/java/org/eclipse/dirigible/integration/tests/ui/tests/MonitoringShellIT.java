@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * Smoke test for the Monitoring shell. It asserts what only a real browser can: that the Harmonia +
@@ -24,6 +25,9 @@ import org.junit.jupiter.api.Test;
  * The page roots carry a stable id, so the assertions hold whether or not the instance happens to
  * have processes, jobs or queues deployed.
  */
+// One Dirigible boot for the whole class: the methods are read-only or clean up after themselves,
+// so the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public class MonitoringShellIT extends UserInterfaceIntegrationTest {
 
     private static final String MONITORING_PATH = "/services/web/monitoring/index.html";

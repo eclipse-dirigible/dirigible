@@ -16,6 +16,7 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 import java.nio.charset.StandardCharsets;
 
@@ -38,6 +39,9 @@ import static org.hamcrest.Matchers.*;
  * Files are written directly into the repository at the workspace path the endpoint resolves to for
  * the {@code admin} user — no browser or synchronizer required.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself (or is read-only), so
+// the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class BpmnModelApiIT extends IntegrationTest {
 
     private static final String USERNAME = "admin";

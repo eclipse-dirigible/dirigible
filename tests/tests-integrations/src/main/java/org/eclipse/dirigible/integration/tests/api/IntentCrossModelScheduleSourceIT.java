@@ -10,7 +10,9 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.lessThan;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -30,6 +32,7 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * Cross-model schedule SOURCE coverage: a schedule owned by the CONSUMER model iterates a source
@@ -51,6 +54,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * {@code .model} absent, and a mistyped {@code where} field - both drop the schedule with a warning
  * in the generate response (never a job that cannot compile).
  */
+// One Dirigible boot for the whole class: each method cleans up after itself (or is read-only), so
+// the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentCrossModelScheduleSourceIT extends IntegrationTest {
 
     private static final String WORKSPACE = "workspace";
@@ -315,10 +321,14 @@ class IntentCrossModelScheduleSourceIT extends IntegrationTest {
             restAssuredExecutor.execute(() -> given().when()
                                                      .delete("/services/ide/publisher/" + WORKSPACE + "/" + project)
                                                      .then()
-                                                     .statusCode(greaterThanOrEqualTo(200)));
+                                                     .statusCode(both(greaterThanOrEqualTo(200)).and(lessThan(300))));
             if (repository.hasCollection(projectPath(project))) {
                 repository.removeCollection(projectPath(project));
             }
         }
+        // The context (and its Quartz scheduler) now outlives the method: run the synchronizers so the
+        // JobSynchronizer's DELETE branch unschedules the published 5-second cron job - otherwise it
+        // keeps firing against unloaded gen classes for the rest of the class.
+        synchronizationProcessor.forceProcessSynchronizers();
     }
 }

@@ -25,6 +25,7 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * End-to-end test for the perspective aggregator
@@ -37,6 +38,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * now declare itself the default of its extension point and adopt both the un-matched and the
  * un-grouped perspectives; the platform point keeps its 'undefined-group' catch-all.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself (or is read-only), so
+// the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class PerspectiveGroupAggregationIT extends IntegrationTest {
 
     private static final String SERVICE = "/services/js/platform-core/extension-services/perspectives.js?extensionPoints=";

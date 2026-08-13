@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.openqa.selenium.By;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 import com.codeborne.selenide.Condition;
 import com.codeborne.selenide.Selenide;
@@ -53,6 +54,9 @@ import com.sun.net.httpserver.HttpServer;
  * client-side re-validation, the auto-apply, the hidden persistence, and every step of the publish
  * pipeline (generate models, generate code, publish, verify against the Problems feed).
  */
+// One Dirigible boot for the whole class: the methods are read-only or clean up after themselves,
+// so the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public class IntentBuilderShellIT extends UserInterfaceIntegrationTest {
 
     private static final String BUILDER_PATH = "/services/web/builder/index.html";

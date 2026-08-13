@@ -22,6 +22,7 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * End-to-end test for the Java Camel handler integration: drops a {@code .java} class implementing
@@ -35,6 +36,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * proves a recompiled handler is picked up without a server restart (the {@code .camel} route is
  * untouched between runs). Counterpart of {@code JavaBpmnIT} for the Camel engine.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself (or is read-only), so
+// the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class JavaCamelIT extends IntegrationTest {
 
     private static final String PROJECT = "java-camel-it";

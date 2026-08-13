@@ -16,6 +16,7 @@ import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -24,6 +25,10 @@ import java.sql.SQLException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 
+// One Dirigible boot for the whole class: each method cleans up after itself (or creates only
+// collision-free state), so the per-method context reset inherited from IntegrationTest would only
+// add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public class CsvProcessorIT extends IntegrationTest {
 
     /** The default data source name. */

@@ -13,6 +13,7 @@ import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * Smoke test for the Database shell. It asserts what only a real browser can: that the Harmonia +
@@ -25,6 +26,9 @@ import org.junit.jupiter.api.Test;
  * The page roots carry a stable id, so the assertions do not depend on what the instance happens to
  * have deployed. The one thing that IS depended on is DefaultDB, which every instance has.
  */
+// One Dirigible boot for the whole class: the methods are read-only or clean up after themselves,
+// so the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public class DatabaseShellIT extends UserInterfaceIntegrationTest {
 
     private static final String DATABASE_PATH = "/services/web/database/index.html";

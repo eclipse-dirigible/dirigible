@@ -14,6 +14,7 @@ import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
 import org.eclipse.dirigible.components.api.messaging.TimeoutException;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.util.SleepUtil;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
@@ -21,7 +22,11 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
+import org.springframework.test.annotation.DirtiesContext;
 
+// One Dirigible boot for the whole class: each method cleans up after itself (or is read-only), so
+// the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public class MessagingFacadeIT extends IntegrationTest {
 
     private static final String TEST_MESSAGE = "Test message";
@@ -32,6 +37,21 @@ public class MessagingFacadeIT extends IntegrationTest {
     class QueueTest {
         private static final String QUEUE = "my-test-queue";
         private static final long TIMEOUT_MILLIS = 500L;
+
+        /**
+         * The broker's JDBC store now outlives a test method, so a message a prior method left behind would
+         * break the FIFO and receive-timeout assertions - drain until the queue answers empty.
+         */
+        @BeforeEach
+        void drainQueue() {
+            while (true) {
+                try {
+                    MessagingFacade.receiveFromQueue(QUEUE, 50);
+                } catch (TimeoutException emptyQueue) {
+                    return;
+                }
+            }
+        }
 
         @Test
         void testSendReceiveOneMessage() {

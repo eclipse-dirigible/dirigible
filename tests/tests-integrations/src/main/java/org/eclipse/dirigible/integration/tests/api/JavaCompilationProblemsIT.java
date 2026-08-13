@@ -25,12 +25,16 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * Verifies that a client-Java compile failure surfaces as a Problems-view entry (category
  * {@code Compilation}, with the failing line) and that fixing or removing the source clears it.
  * HTTP-only against the Problems endpoint - no Selenide.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself (or is read-only), so
+// the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class JavaCompilationProblemsIT extends IntegrationTest {
 
     private static final String PROJECT = "java-problems-it";
