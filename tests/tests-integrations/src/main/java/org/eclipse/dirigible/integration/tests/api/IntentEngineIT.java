@@ -30,6 +30,7 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * End-to-end test for the intent editor services: {@code POST /services/ide/intent/parse} (the
@@ -42,6 +43,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * workspace, exactly as the editor's Generate button does it. HTTP-only - no Selenide, no Chrome,
  * no synchronization cycles.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself, so the per-method
+// context reset inherited from IntegrationTest would only add ~10s of boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentEngineIT extends IntegrationTest {
 
     private static final String PROJECT = "intent-test";

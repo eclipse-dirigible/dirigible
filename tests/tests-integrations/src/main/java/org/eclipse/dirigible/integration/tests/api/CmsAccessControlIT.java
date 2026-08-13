@@ -20,9 +20,11 @@ import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.framework.security.SecurityUtil;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 import io.restassured.http.ContentType;
 
@@ -35,6 +37,9 @@ import io.restassured.http.ContentType;
  * listing (the resolver it used matched an exact path only); and grants lived in a global table
  * while the content they guard is per tenant.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself, so the per-method
+// context reset inherited from IntegrationTest would only add ~10s of boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class CmsAccessControlIT extends IntegrationTest {
 
     private static final String DOCUMENTS = "/services/documents";
@@ -59,13 +64,23 @@ class CmsAccessControlIT extends IntegrationTest {
     private SecurityUtil securityUtil;
 
     /**
-     * The base class dirties the Spring context after every test method, so each test starts from a
-     * clean database - the users are created per test and nothing needs tearing down.
+     * The class shares one Spring context (and thus one database) across its methods, so the users are
+     * created once and the grants each test leaves behind are revoked in {@link #revokeGrants()}.
      */
     @BeforeEach
     void createUsers() {
-        securityUtil.createUserInDefaultTenant(ADMIN, PASSWORD, Roles.RoleNames.ADMINISTRATOR);
-        securityUtil.createUserInDefaultTenant(PLAIN, PASSWORD);
+        securityUtil.ensureUserInDefaultTenant(ADMIN, PASSWORD, Roles.RoleNames.ADMINISTRATOR);
+        securityUtil.ensureUserInDefaultTenant(PLAIN, PASSWORD);
+    }
+
+    /**
+     * A leaked grant would break the "open by default - no rule exists" premise the other tests start
+     * from. {@code revoke} is best-effort (it asserts no status), so this is a no-op when the test
+     * already revoked or never granted.
+     */
+    @AfterEach
+    void revokeGrants() {
+        restAssuredExecutor.execute(() -> revoke(FOLDER_PATH, "READ", GRANTED_ROLE), ADMIN, PASSWORD);
     }
 
     @Test

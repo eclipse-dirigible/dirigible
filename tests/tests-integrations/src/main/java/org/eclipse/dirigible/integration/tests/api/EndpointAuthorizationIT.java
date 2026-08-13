@@ -18,6 +18,7 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.framework.security.SecurityUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * End-to-end proof that the {@code @RolesAllowed} annotations guarding the platform's endpoints are
@@ -30,6 +31,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * the annotations silently stopped guarding anything - the administrative surfaces below were open
  * to any authenticated user, with no error anywhere. This test locks the enforcement in place.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself, so the per-method
+// context reset inherited from IntegrationTest would only add ~10s of boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class EndpointAuthorizationIT extends IntegrationTest {
 
     private static final String PLAIN_USER = "endpoint-authz-it-user";
@@ -59,7 +63,7 @@ class EndpointAuthorizationIT extends IntegrationTest {
 
     @Test
     void privileged_endpoints_reject_an_authenticated_user_without_a_platform_role() {
-        securityUtil.createUserInDefaultTenant(PLAIN_USER, PASSWORD);
+        securityUtil.ensureUserInDefaultTenant(PLAIN_USER, PASSWORD);
 
         for (String endpoint : PRIVILEGED_ENDPOINTS) {
             restAssuredExecutor.execute(() -> given().when()
@@ -72,7 +76,7 @@ class EndpointAuthorizationIT extends IntegrationTest {
 
     @Test
     void privileged_endpoints_admit_an_administrator() {
-        securityUtil.createUserInDefaultTenant(ADMIN_USER, PASSWORD, Roles.RoleNames.ADMINISTRATOR);
+        securityUtil.ensureUserInDefaultTenant(ADMIN_USER, PASSWORD, Roles.RoleNames.ADMINISTRATOR);
 
         restAssuredExecutor.execute(() -> given().when()
                                                  .get("/services/core/configurations")
@@ -88,7 +92,7 @@ class EndpointAuthorizationIT extends IntegrationTest {
      */
     @Test
     void database_exports_are_not_readable_without_an_administrative_role() {
-        securityUtil.createUserInDefaultTenant(PLAIN_USER, PASSWORD);
+        securityUtil.ensureUserInDefaultTenant(PLAIN_USER, PASSWORD);
 
         // the anonymous CMS mapping is gone entirely, so the path resolves to no handler at all
         given().when()
@@ -104,7 +108,7 @@ class EndpointAuthorizationIT extends IntegrationTest {
 
         // ... and the roles that MAY read an export still get past the guard (the export download in
         // the IDE shell must keep working - this request only fails later, on the missing document)
-        securityUtil.createUserInDefaultTenant(ADMIN_USER, PASSWORD, Roles.RoleNames.ADMINISTRATOR);
+        securityUtil.ensureUserInDefaultTenant(ADMIN_USER, PASSWORD, Roles.RoleNames.ADMINISTRATOR);
         restAssuredExecutor.execute(() -> given().when()
                                                  .get("/services/cms/__EXPORTS/dump.zip")
                                                  .then()
@@ -120,7 +124,7 @@ class EndpointAuthorizationIT extends IntegrationTest {
      */
     @Test
     void data_transfer_is_not_drivable_without_a_platform_role() {
-        securityUtil.createUserInDefaultTenant(PLAIN_USER, PASSWORD);
+        securityUtil.ensureUserInDefaultTenant(PLAIN_USER, PASSWORD);
 
         restAssuredExecutor.execute(() -> given().when()
                                                  .get("/websockets/data/transfer")
@@ -135,7 +139,7 @@ class EndpointAuthorizationIT extends IntegrationTest {
      */
     @Test
     void task_variables_are_not_readable_for_a_foreign_task() {
-        securityUtil.createUserInDefaultTenant(PLAIN_USER, PASSWORD);
+        securityUtil.ensureUserInDefaultTenant(PLAIN_USER, PASSWORD);
 
         restAssuredExecutor.execute(() -> given().when()
                                                  .get("/services/inbox/tasks/1234567890/variables")

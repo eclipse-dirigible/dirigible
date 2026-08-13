@@ -37,6 +37,7 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * End-to-end test for the persisted AI conversations behind the Builder and the Intent Editor -
@@ -49,6 +50,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * each surface keeps its own, every message carries its author and its time, and one tenant's
  * history is unreachable from another. HTTP-only, no Chrome, no synchronization cycles.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself, so the per-method
+// context reset inherited from IntegrationTest would only add ~10s of boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentConversationIT extends IntegrationTest {
 
     private static final String BASE_URL = "/services/ide/intent/conversations";
