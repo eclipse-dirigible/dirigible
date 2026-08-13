@@ -12,9 +12,11 @@ package org.eclipse.dirigible.integration.tests.ui.tests.camel;
 import org.eclipse.dirigible.tests.base.PredefinedProjectIT;
 import org.eclipse.dirigible.tests.base.TestProject;
 import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 
 @Disabled("Disabled until transaction logic is implemented")
+@Tag("camel")
 public class CamelTransactionsRollbackIT extends PredefinedProjectIT {
 
     @Autowired

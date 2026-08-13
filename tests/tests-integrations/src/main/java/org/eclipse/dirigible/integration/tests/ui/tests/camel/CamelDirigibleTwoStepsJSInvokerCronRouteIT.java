@@ -11,8 +11,10 @@ package org.eclipse.dirigible.integration.tests.ui.tests.camel;
 
 import org.eclipse.dirigible.tests.base.PredefinedProjectIT;
 import org.eclipse.dirigible.tests.base.TestProject;
+import org.junit.jupiter.api.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 
+@Tag("camel")
 public class CamelDirigibleTwoStepsJSInvokerCronRouteIT extends PredefinedProjectIT {
 
     @Autowired

@@ -49,14 +49,14 @@ public class CsvProcessorIT extends IntegrationTest {
         try (Connection connection = dataSourceManager.getDefaultDataSource()
                                                       .getConnection()) {
             connection.createStatement()
-                      .execute("CREATE TABLE CSV_A (A1 INT PRIMARY KEY, A2 VARCHAR(20), A3 VARCHAR(20))");
+                      .execute("CREATE TABLE \"CSV_A\" (\"A1\" INT PRIMARY KEY, \"A2\" VARCHAR(20), \"A3\" VARCHAR(20))");
             try {
                 csvimProcessor.setStrictMode(true);
                 byte[] content = "A1,A2,A3\n1,a2_1,a3_1\n2,a2_2,a3_2".getBytes();
                 CsvFile csvFile = new CsvFile(null, "CSV_A", null, "import", true, true, ",", "\"", null, false, null);
                 csvimProcessor.process(csvFile, content, defaultDataSourceName);
                 ResultSet rs = connection.createStatement()
-                                         .executeQuery("SELECT COUNT(*) FROM CSV_A");
+                                         .executeQuery("SELECT COUNT(*) FROM \"CSV_A\"");
                 if (rs.next()) {
                     int c = rs.getInt(1);
                     assertEquals(2, c, "No data has been imported from CSV file CSV_A.csv");
@@ -67,7 +67,7 @@ public class CsvProcessorIT extends IntegrationTest {
                 fail(e.getMessage(), e);
             } finally {
                 connection.createStatement()
-                          .execute("DROP TABLE CSV_A");
+                          .execute("DROP TABLE \"CSV_A\"");
             }
 
         }
@@ -83,7 +83,7 @@ public class CsvProcessorIT extends IntegrationTest {
         try (Connection connection = dataSourceManager.getDefaultDataSource()
                                                       .getConnection()) {
             connection.createStatement()
-                      .execute("CREATE TABLE CSV_A (A1 INT PRIMARY KEY, A2 VARCHAR(20), A3 VARCHAR(20))");
+                      .execute("CREATE TABLE \"CSV_A\" (\"A1\" INT PRIMARY KEY, \"A2\" VARCHAR(20), \"A3\" VARCHAR(20))");
             try {
                 csvimProcessor.setStrictMode(true);
                 byte[] content = "A1,A2\n1,a2_1\n2,a2_2".getBytes();
@@ -94,7 +94,7 @@ public class CsvProcessorIT extends IntegrationTest {
                     //
                 }
                 ResultSet rs = connection.createStatement()
-                                         .executeQuery("SELECT COUNT(*) FROM CSV_A");
+                                         .executeQuery("SELECT COUNT(*) FROM \"CSV_A\"");
                 if (rs.next()) {
                     int c = rs.getInt(1);
                     assertEquals(0, c, "Data has been imported from CSV file CSV_A.csv in a strict mode and wrong CSV file");
@@ -103,7 +103,7 @@ public class CsvProcessorIT extends IntegrationTest {
                 fail(e.getMessage(), e);
             } finally {
                 connection.createStatement()
-                          .execute("DROP TABLE CSV_A");
+                          .execute("DROP TABLE \"CSV_A\"");
             }
 
         }
@@ -119,7 +119,7 @@ public class CsvProcessorIT extends IntegrationTest {
         try (Connection connection = dataSourceManager.getDefaultDataSource()
                                                       .getConnection()) {
             connection.createStatement()
-                      .execute("CREATE TABLE CSV_A (A1 INT PRIMARY KEY, A2 VARCHAR(20), A3 VARCHAR(20))");
+                      .execute("CREATE TABLE \"CSV_A\" (\"A1\" INT PRIMARY KEY, \"A2\" VARCHAR(20), \"A3\" VARCHAR(20))");
             try {
                 csvimProcessor.setStrictMode(false);
                 byte[] content = "A1,A2\n1,a2_1\n2,a2_2".getBytes();
@@ -130,7 +130,7 @@ public class CsvProcessorIT extends IntegrationTest {
                     //
                 }
                 ResultSet rs = connection.createStatement()
-                                         .executeQuery("SELECT COUNT(*) FROM CSV_A");
+                                         .executeQuery("SELECT COUNT(*) FROM \"CSV_A\"");
                 if (rs.next()) {
                     int c = rs.getInt(1);
                     assertEquals(2, c, "No data has been imported from CSV file CSV_A.csv");
@@ -141,7 +141,7 @@ public class CsvProcessorIT extends IntegrationTest {
                 fail(e.getMessage(), e);
             } finally {
                 connection.createStatement()
-                          .execute("DROP TABLE CSV_A");
+                          .execute("DROP TABLE \"CSV_A\"");
             }
 
         }
@@ -157,7 +157,7 @@ public class CsvProcessorIT extends IntegrationTest {
         try (Connection connection = dataSourceManager.getDefaultDataSource()
                                                       .getConnection()) {
             connection.createStatement()
-                      .execute("CREATE TABLE CSV_A (A1 INT PRIMARY KEY, A2 VARCHAR(20), A3 VARCHAR(20))");
+                      .execute("CREATE TABLE \"CSV_A\" (\"A1\" INT PRIMARY KEY, \"A2\" VARCHAR(20), \"A3\" VARCHAR(20))");
             try {
                 csvimProcessor.setStrictMode(false);
                 byte[] content = "A1,A3,A2,A4\n1,a3_1,a2_1,a4_1\n2,a3_2,a2_3,a4_1".getBytes();
@@ -168,13 +168,13 @@ public class CsvProcessorIT extends IntegrationTest {
                     //
                 }
                 ResultSet rs = connection.createStatement()
-                                         .executeQuery("SELECT COUNT(*) FROM CSV_A");
+                                         .executeQuery("SELECT COUNT(*) FROM \"CSV_A\"");
                 if (rs.next()) {
                     int c = rs.getInt(1);
                     assertEquals(2, c, "No data has been imported from CSV file CSV_A.csv");
 
                     rs = connection.createStatement()
-                                   .executeQuery("SELECT * FROM CSV_A");
+                                   .executeQuery("SELECT * FROM \"CSV_A\"");
                     if (rs.next()) {
                         assertEquals("a2_1", rs.getString("A2"));
                         assertEquals("a3_1", rs.getString("A3"));
@@ -186,7 +186,7 @@ public class CsvProcessorIT extends IntegrationTest {
                 fail(e.getMessage(), e);
             } finally {
                 connection.createStatement()
-                          .execute("DROP TABLE CSV_A");
+                          .execute("DROP TABLE \"CSV_A\"");
             }
 
         }

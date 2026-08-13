@@ -160,11 +160,29 @@ jobs:
         if: runner.os == 'Linux'
         run: mvn test -P testcontainers
 
+  # The full IT suite is split ("sharded") into three disjoint slices selected by JUnit 5 tags, so
+  # the wall-clock time of a run is the slowest shard (~50 min) instead of the whole suite (~2h+):
+  #   api     - every HTTP-level IT (untagged, i.e. everything not tagged "ui")
+  #   ui      - the browser-driven ITs except the sample-project and camel families
+  #   samples - the sample-project clone/publish ITs ("sample") + the camel route ITs ("camel")
+  # The shards partition the suite: api + ui + samples = the complete IT set. A new untagged IT
+  # lands in "api"; a new UI IT (extends UserInterfaceIntegrationTest) lands in "ui" unless it is
+  # explicitly tagged "sample" or "camel".
   integration-tests-h2:
     runs-on: ubuntu-latest
-    # A green full IT run takes ~1h30m; a heap-exhausted JVM used to thrash for 4h+ before anyone
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - name: api
+            groups: "!ui"
+          - name: ui
+            groups: "ui & !sample & !camel"
+          - name: samples
+            groups: "sample | camel"
+    # A green shard takes ~50 min; a heap-exhausted JVM used to thrash for 4h+ before anyone
     # noticed. Cap the job well above the healthy time so hangs fail fast instead of burning runners.
-    timeout-minutes: 150
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -201,14 +219,14 @@ jobs:
         run: ttyd --version
 
       - name: Integration tests
-        run: mvn clean install -P integration-tests
+        run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
 
       - name: Generate a random artifact name
         if: always()
         id: generate_name
         run: |
           TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-          echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
+          echo "ARTIFACT_NAME=selenide-screenshots-h2-${{ matrix.shard.name }}-${TIMESTAMP}.zip" >> $GITHUB_ENV
 
       - name: Upload selenide screenshots
         uses: actions/upload-artifact@v4
@@ -220,8 +238,18 @@ jobs:
 
   integration-tests-postgresql:
     runs-on: ubuntu-latest
-    # Same rationale as integration-tests-h2: green run ~1h30m, cap runaway JVMs.
-    timeout-minutes: 150
+    # Same sharding + timeout rationale as integration-tests-h2.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - name: api
+            groups: "!ui"
+          - name: ui
+            groups: "ui & !sample & !camel"
+          - name: samples
+            groups: "sample | camel"
+    timeout-minutes: 90
     env:
       POSTGRES_DB: testdb
       POSTGRES_USER: testuser
@@ -276,7 +304,7 @@ jobs:
         run: ttyd --version
 
       - name: Integration tests
-        run: mvn clean install -P integration-tests
+        run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
         env:
           DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER: org.postgresql.Driver
           DIRIGIBLE_DATASOURCE_DEFAULT_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
@@ -288,7 +316,7 @@ jobs:
         id: generate_name
         run: |
           TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-          echo "ARTIFACT_NAME=selenide-screenshots-${TIMESTAMP}.zip" >> $GITHUB_ENV
+          echo "ARTIFACT_NAME=selenide-screenshots-postgresql-${{ matrix.shard.name }}-${TIMESTAMP}.zip" >> $GITHUB_ENV
 
       - name: Upload selenide screenshots
         uses: actions/upload-artifact@v4

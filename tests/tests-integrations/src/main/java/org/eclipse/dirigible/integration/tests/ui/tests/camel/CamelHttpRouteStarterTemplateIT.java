@@ -14,12 +14,14 @@ import org.eclipse.dirigible.tests.framework.ide.WelcomeView;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.framework.util.SynchronizationUtil;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 
+@Tag("camel")
 public class CamelHttpRouteStarterTemplateIT extends UserInterfaceIntegrationTest {
 
     private static final String TEMPLATE_TITLE = "HTTP Route Project Starter";
