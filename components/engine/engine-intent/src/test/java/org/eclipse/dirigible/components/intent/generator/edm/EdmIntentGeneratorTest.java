@@ -1626,4 +1626,51 @@ class EdmIntentGeneratorTest {
         assertEquals("TEXTBOX", propertyByName(contact, "Note").get("widgetType"));
         assertNull(propertyByName(contact, "Note").get("widgetPattern"));
     }
+
+    /**
+     * A child collection that does not freeze with its master carries the marker the detail
+     * registration reads; every other entity keeps byte-identical output (the attribute is emitted only
+     * when declared false).
+     */
+    @Test
+    void locksWithMasterFalseMarksTheChildThatOutlivesItsMastersLock() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Invoice
+                    function: Document
+                    immutableWhen: "Status == 3"
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, length: 50 }
+                  - name: InvoiceItem
+                    function: DocumentItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                  - name: InvoiceAllocation
+                    locksWithMaster: false
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(parsed, "sales");
+        List<Map<String, Object>> entities = entities(model);
+
+        assertEquals("false", entityByName(entities, "InvoiceAllocation").get("locksWithMaster"));
+        // The document's own line items keep freezing with it - that is what immutability is for.
+        assertNull(entityByName(entities, "InvoiceItem").get("locksWithMaster"));
+        assertNull(entityByName(entities, "Invoice").get("locksWithMaster"));
+    }
 }

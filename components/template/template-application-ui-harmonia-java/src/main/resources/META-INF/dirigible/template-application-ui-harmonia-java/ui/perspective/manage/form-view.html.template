@@ -230,7 +230,7 @@
         <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id)" x-h-card>
           <div x-h-card-header>
             <h3 x-h-card-title x-text="d.label"></h3>
-            <div x-h-card-action x-show="!isPreview && !def.files">
+            <div x-h-card-action x-show="(!isPreview || def.locksWithMaster === false) && !def.files">
               <button type="button" x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" x-h-lucide data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
             </div>
           </div>
@@ -302,7 +302,7 @@
                     <template x-for="col in def.columns" :key="col.name">
                       <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label || col.name)"></th>
                     </template>
-                    <th x-h-table-head scope="col" x-show="!isPreview"></th>
+                    <th x-h-table-head scope="col" x-show="!isPreview || def.locksWithMaster === false"></th>
                   </tr>
                 </thead>
                 <tbody x-h-table-body>
@@ -316,7 +316,7 @@
                           </template>
                         </td>
                       </template>
-                      <td x-h-table-cell data-row-actions x-show="!isPreview">
+                      <td x-h-table-cell data-row-actions x-show="!isPreview || def.locksWithMaster === false">
                         <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" x-h-lucide data-lucide="ellipsis"></i></button>
                         <ul x-h-menu data-align="bottom-end">
                           <li x-h-menu-item @click="previewRow(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>

@@ -332,7 +332,7 @@
       <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id)" x-h-card class="w-full">
         <div x-h-card-header>
           <h3 x-h-card-title x-text="T(d.tkey, d.label)"></h3>
-          <div x-h-card-action x-show="masterId && !isPreview && !def.files">
+          <div x-h-card-action x-show="masterId && (!isPreview || def.locksWithMaster === false) && !def.files">
             <button x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" x-h-lucide data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
           </div>
         </div>
@@ -404,7 +404,7 @@
                   <template x-for="col in def.columns" :key="col.name">
                     <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label || col.name)"></th>
                   </template>
-                  <th x-h-table-head scope="col" x-show="!isPreview"></th>
+                  <th x-h-table-head scope="col" x-show="!isPreview || def.locksWithMaster === false"></th>
                 </tr>
               </thead>
               <tbody x-h-table-body>
@@ -418,7 +418,7 @@
                         </template>
                       </td>
                     </template>
-                    <td x-h-table-cell data-row-actions x-show="!isPreview">
+                    <td x-h-table-cell data-row-actions x-show="!isPreview || def.locksWithMaster === false">
                       <button x-h-button data-variant="transparent" data-size="sm" aria-label="Delete" @click="askDelete(row)"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
                     </td>
                   </tr>
