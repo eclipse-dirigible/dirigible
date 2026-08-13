@@ -57,6 +57,13 @@ App.registerDetail('${masterEntity}', {
   // Read-only (a generated Snapshot child) shows download only. See detailPanel `files`.
   files: { readOnly: #if($attachmentReadOnly)true#{else}false#end },
 #end
+#if($locksWithMaster == "false")
+  // This collection does NOT freeze with its master (intent `locksWithMaster: false`): the master's
+  // immutability locks the document's own content, while these rows go on being recorded against it
+  // (an issued invoice's payment allocations). The master's read-only mode therefore does not hide
+  // this panel's Add / row actions. The server always allowed it - the child has its own controller.
+  locksWithMaster: false,
+#end
   columns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.name != $masterEntityId)

@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.parser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -2298,5 +2299,92 @@ class IntentParserTest {
                      .stream()
                      .anyMatch(i -> i.contains("next [nowhere] is not a declared step or `end`")),
                 "expected an unknown-next issue, got: " + ex.getIssues());
+    }
+
+    /**
+     * `locksWithMaster: false` only means something on a composition child - a top-level entity has no
+     * master whose lock it could outlive, so the declaration is rejected instead of silently ignored.
+     */
+    @Test
+    void locksWithMasterIsRejectedOnAnEntityThatIsNotACompositionChild() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Invoice
+                    immutableWhen: "Status == 3"
+                    locksWithMaster: false
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("not a composition child")),
+                "a non-child locksWithMaster should be rejected, got: " + ex.getIssues());
+    }
+
+    /**
+     * A master that never locks makes the declaration inert. That is the
+     * authored-but-silently-unconsumed failure mode, so it fails at authoring time rather than in
+     * production.
+     */
+    @Test
+    void locksWithMasterIsRejectedWhenTheMasterNeverLocks() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: InvoiceAllocation
+                    locksWithMaster: false
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("never locks")),
+                "an inert locksWithMaster should be rejected, got: " + ex.getIssues());
+    }
+
+    /** The valid shape parses: a composition child of a master that does lock. */
+    @Test
+    void locksWithMasterParsesOnACompositionChildOfALockingMaster() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Invoice
+                    immutableWhen: "Status == 3"
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: InvoiceAllocation
+                    locksWithMaster: false
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        assertFalse(model.getEntities()
+                         .stream()
+                         .filter(e -> "InvoiceAllocation".equals(e.getName()))
+                         .findFirst()
+                         .orElseThrow()
+                         .locksWithMaster());
     }
 }

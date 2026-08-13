@@ -403,6 +403,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     entityMap.put("attachmentReadOnly", "true");
                 }
             }
+            // A child collection that does NOT freeze with its master. The master's immutability locks
+            // the document's own content; this child is a different entity with its own controller,
+            // which already accepts the writes - only the generated UI was extending the master's lock
+            // over it. Emitted (and consumed by the detail registration) only when false, so a model
+            // that says nothing keeps byte-identical output.
+            if (!entity.locksWithMaster()) {
+                entityMap.put("locksWithMaster", "false");
+            }
             // Custom Java imports for the generated entity Repository (e.g. a calculated-field action's
             // CalculatedField class). Base64-encoded to match the EDM editor's serialization, which the
             // DAO template's parameterUtils decodes before emitting them into the import block.

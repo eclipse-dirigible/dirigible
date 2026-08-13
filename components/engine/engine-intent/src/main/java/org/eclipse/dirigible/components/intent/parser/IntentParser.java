@@ -247,6 +247,7 @@ public final class IntentParser {
                 }
             }
             validateSnapshotLanguage(entity, model, compositionParent, issues);
+            validateLocksWithMaster(entity, model, compositionParent, issues);
             for (FieldIntent field : entity.getFields()) {
                 String ff = field.getFunction();
                 if (ff != null && !ff.isBlank() && !FIELD_FUNCTIONS.contains(ff.trim()
@@ -1417,6 +1418,35 @@ public final class IntentParser {
      * document whose copy is minted) - mutually exclusive, meaningless anywhere else. Absent both, the
      * mint falls back to the first entry of the tenant-resolved application language set at run time.
      */
+    /**
+     * Validate {@code locksWithMaster: false} - the declaration that a child collection does NOT freeze
+     * when its master becomes immutable (the settlement case: an issued invoice's lines are frozen, its
+     * payment allocations are not). It is only meaningful on a composition child OF a master that
+     * actually locks, so both are required rather than silently ignored: an inert declaration reads as
+     * a working one, and the author only finds out when the affordance is still missing in production.
+     */
+    private static void validateLocksWithMaster(EntityIntent entity, IntentModel model, Map<String, String> compositionParent,
+            List<String> issues) {
+        if (entity.locksWithMaster()) {
+            return;
+        }
+        String name = entity.getName();
+        String master = compositionParent.get(name);
+        if (master == null) {
+            issues.add("entity [" + name + "] declares locksWithMaster: false but is not a composition child"
+                    + " - only a child collection can outlive its master's lock");
+            return;
+        }
+        EntityIntent parent = entityByName(model, master);
+        boolean masterLocks = parent == null || Boolean.TRUE.equals(parent.getImmutable())
+                || (parent.getImmutableWhen() != null && !parent.getImmutableWhen()
+                                                                .isBlank());
+        if (!masterLocks) {
+            issues.add("entity [" + name + "] declares locksWithMaster: false but its master [" + master
+                    + "] never locks (no immutableWhen / immutable) - the declaration would have no effect");
+        }
+    }
+
     private static void validateSnapshotLanguage(EntityIntent entity, IntentModel model, Map<String, String> compositionParent,
             List<String> issues) {
         boolean hasLanguage = entity.getLanguage() != null && !entity.getLanguage()

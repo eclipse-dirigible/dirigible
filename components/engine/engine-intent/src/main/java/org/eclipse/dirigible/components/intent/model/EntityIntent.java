@@ -150,6 +150,15 @@ public class EntityIntent {
      */
     private Boolean immutable;
     /**
+     * Whether this composition child freezes together with its master ({@code locksWithMaster}, default
+     * true). A master's {@code immutableWhen} locks the document's own CONTENT; it says nothing about a
+     * child collection that is a different entity with its own controller and its own rules. Declaring
+     * {@code locksWithMaster: false} keeps this collection's user-write affordances alive while the
+     * master is locked - the settlement case: an issued invoice's lines are frozen, but the payment
+     * allocations against it go on being recorded for months.
+     */
+    private Boolean locksWithMaster;
+    /**
      * Optional hierarchy declaration: names this entity's to-one SELF-relation that forms the tree edge
      * (e.g. {@code hierarchy: Parent} on a chart-of-accounts Account). The generated list renders as a
      * tree, relations targeting this entity get a hierarchy-aware picker, and {@code leafOnly}
@@ -482,6 +491,22 @@ public class EntityIntent {
 
     public Boolean getDuplicable() {
         return duplicable;
+    }
+
+    /**
+     * Whether this child collection freezes when its master becomes immutable. Defaults to TRUE, so an
+     * entity that says nothing keeps the behaviour it has always had.
+     */
+    public boolean locksWithMaster() {
+        return !Boolean.FALSE.equals(locksWithMaster);
+    }
+
+    public Boolean getLocksWithMaster() {
+        return locksWithMaster;
+    }
+
+    public void setLocksWithMaster(Boolean locksWithMaster) {
+        this.locksWithMaster = locksWithMaster;
     }
 
     public void setDuplicable(Boolean duplicable) {

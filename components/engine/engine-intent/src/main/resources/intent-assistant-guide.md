@@ -227,6 +227,18 @@ field may declare:
   snapshot entity (e.g. the frozen copy stored when an invoice is SENT): written once by the flow,
   never editable. System writes through the repository stay possible. Mutually exclusive with
   `immutableWhen` (always-immutable subsumes any status scope); needs no EntityStatus relation.
+- `locksWithMaster: false` (entity-level, on a **composition child**) - **this collection does not
+  freeze with its master**. A master's immutability locks the document's own CONTENT; a child
+  collection is a different entity with its own controller and its own rules, and the generated UI
+  used to extend the master's lock over it - hiding Add and the row actions on every child panel of
+  a locked document. Declare it on the child that must go on being recorded: the canonical case is
+  **payment allocations**, where an issued invoice's lines are frozen but money keeps arriving
+  against it for months (settlement is a different lifecycle from content). The server already
+  permitted these writes - only the affordance was missing. Applies to a child rendered as its own
+  **panel**; a document's own line items are the document (they stay locked, and the flag would be
+  inert there). Requires a composition parent that actually declares `immutableWhen` / `immutable` -
+  both are validated, so an inert declaration fails at authoring time instead of quietly doing
+  nothing.
 - `hierarchy: <RelationName>` (entity-level) - **tree entities**: names the entity's own optional
   to-one SELF-relation forming the tree edge (`hierarchy: Parent` with
   `- { name: Parent, kind: manyToOne, to: <SameEntity> }`). The generated list renders as an
