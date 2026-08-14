@@ -90,6 +90,9 @@ export class Scheduler {
     /**
      * Triggers the immediate execution of a job.
      *
+     * Only the parameters the job artefact declares may be passed - anything else is rejected.
+     * The values are visible as configurations to the job body for the duration of the run only.
+     *
      * @param name The name of the job to trigger.
      * @param parameters Optional key-value object of parameters to pass to the job execution.
      */
@@ -289,6 +292,9 @@ class Job {
 
     /**
      * Triggers the immediate execution of this job instance.
+     *
+     * Only the parameters the job artefact declares may be passed - anything else is rejected.
+     * The values are visible as configurations to the job body for the duration of the run only.
      *
      * @param parameters Optional key-value object of parameters to pass to the job execution.
      */

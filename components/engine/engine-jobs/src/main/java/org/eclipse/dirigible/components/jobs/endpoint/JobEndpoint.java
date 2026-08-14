@@ -30,6 +30,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,6 +40,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import io.swagger.v3.oas.annotations.Parameter;
 
@@ -171,7 +173,8 @@ public class JobEndpoint extends BaseEndpoint {
     }
 
     /**
-     * Trigger job.
+     * Trigger job. Only the parameters the job artefact declares may be passed - anything else is
+     * rejected as a bad request rather than applied to the platform configuration (dirigible #6729).
      *
      * @param job the job
      * @param parameters the parameters
@@ -186,7 +189,12 @@ public class JobEndpoint extends BaseEndpoint {
         for (NameValuePair pair : parameters) {
             parametersMap.put(pair.getName(), pair.getValue());
         }
-        return ResponseEntity.ok(jobService.trigger(job, parametersMap));
+        try {
+            return ResponseEntity.ok(jobService.trigger(job, parametersMap));
+        } catch (IllegalArgumentException ex) {
+            // An unknown job name or an undeclared parameter - the caller's mistake, not the server's.
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        }
     }
 
     /**
