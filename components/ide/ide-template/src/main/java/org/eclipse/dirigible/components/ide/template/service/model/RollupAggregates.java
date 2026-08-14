@@ -107,9 +107,14 @@ final class RollupAggregates {
      */
     private static String renderSum(Map<String, Object> rollup, String countField) {
         String sumField = str(rollup, "sumField");
-        String capacityField = str(rollup, "capacityField");
-        String balanceField = str(rollup, "balanceField");
-        String statusField = str(rollup, "statusField");
+        // Emptiness, not nullness: the intent glue writes "" for an unused optional field
+        // (GlueIntentGenerator), and the JavaScript this was ported from tested truthiness - so a null
+        // check let "" through and emitted `parent. == null ? ...`, which does not compile. That broke
+        // the WHOLE client-Java batch (one javac task per generation), so every controller in the app
+        // 404-ed, not just the roll-up.
+        String capacityField = strOrEmpty(rollup, "capacityField");
+        String balanceField = strOrEmpty(rollup, "balanceField");
+        String statusField = strOrEmpty(rollup, "statusField");
         StringBuilder out = new StringBuilder(512);
         out.append("        {\n");
         out.append("            java.math.BigDecimal sum = java.math.BigDecimal.ZERO;\n");
@@ -135,13 +140,13 @@ final class RollupAggregates {
            .append("\", parent.")
            .append(countField)
            .append(");\n");
-        if (capacityField != null) {
+        if (!capacityField.isEmpty()) {
             out.append("                java.math.BigDecimal capacity = parent.")
                .append(capacityField)
                .append(" == null ? java.math.BigDecimal.ZERO : parent.")
                .append(capacityField)
                .append(";\n");
-            if (balanceField != null) {
+            if (!balanceField.isEmpty()) {
                 out.append("                parent.")
                    .append(balanceField)
                    .append(" = capacity.subtract(sum);\n");
@@ -151,7 +156,7 @@ final class RollupAggregates {
                    .append(balanceField)
                    .append(");\n");
             }
-            if (statusField != null) {
+            if (!statusField.isEmpty()) {
                 out.append("                if (sum.signum() > 0) {\n");
                 out.append("                    parent.")
                    .append(statusField)
