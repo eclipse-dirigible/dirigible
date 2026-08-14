@@ -62,7 +62,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * (send the document itself by e-mail - on a transition and on a process step; the fail-soft
  * contract), {@code calculatedActionOnCreate} on a to-one RELATION (the FK resolved server-side by
  * a hand-written {@code custom/} action: assigned in the repository, and at runtime both defaulted
- * when omitted and left alone when the caller supplied one), and the personal (my) surface
+ * when omitted and left alone when the caller supplied one), the event-driven {@code generates}
+ * (posting the source mints the whole document with nobody clicking, and a click afterwards returns
+ * that same document - the at-most-once back-reference guard), and the personal (my) surface
  * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
  * fields).
  */
@@ -335,6 +337,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: date,      type: date, required: true }
                 relations:
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1, required: true }
+                  # The event-driven create-from's back-reference (#6711): what makes minting the
+                  # voucher at-most-once, and the only way the generated code recognizes its own output.
+                  - { name: Slip, kind: manyToOne, to: Slip }
               - name: VoucherLine
                 function: DocumentItem
                 fields:
@@ -346,11 +351,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
               # Source of the computed create-from below (#6555): a Voucher is generated from a Slip
               # with ONE synthetic line whose cells are expressions over the Slip (not a 1:1 mirror).
+              # It carries a status lifecycle so the SAME create-from can also be fired by a
+              # transition of the Slip instead of a click (#6711).
               - name: Slip
                 fields:
                   - { name: id,    type: integer, primaryKey: true, generated: true }
                   - { name: label, type: string }
                   - { name: total, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
 
               # documentItemsLayout: chat - the document master's line-items child renders as a
               # conversation thread (x-h-chat bubbles + a composer) instead of the editable table;
@@ -698,6 +707,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 setStatus: 3
                 label: Cancel
                 icon: ban
+              # The transition the event-driven create-from below listens for (#6711): posting the slip
+              # is what mints the voucher - the test never calls the create-from to get one.
+              - name: PostSlip
+                forEntity: Slip
+                from: [DRAFT]
+                setStatus: POSTED
+                label: Post
+                icon: check
               # send-document: the transition mails AFTER the flip commits, with the bill's own print
               # rendered to PDF and attached. The recipient is a LITERAL so the runtime always gets past
               # the recipient check and actually attempts the attachment - which cannot succeed on this
@@ -748,10 +765,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             # synthetic line from EXPRESSIONS over the source Slip - a Calc amount, a {} interpolated
             # string, and a when guard - instead of mirroring a source child 1:1. The target items child
             # (VoucherLine) is resolved automatically. Enforcement lives in the generated Generate.java.
+            #
+            # It is ALSO event-driven (#6711): posting a Slip mints the Voucher with nobody clicking,
+            # while `button: true` keeps the click as the second trigger - so both halves must share one
+            # at-most-once guard (the Voucher.Slip back-reference the map writes). The status is named,
+            # not numbered.
             generates:
               - name: voucher-from-slip
                 from: Slip
                 to: Voucher
+                event: { onTransition: Slip, when: "Status == POSTED" }
+                button: true
+                map:
+                  Slip: id
                 defaults:
                   refNumber: "AUTO"
                   date: now
@@ -1614,6 +1640,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "an item-line when cell must emit a null-safe Calc row guard");
         assertTrue(generate.contains("VoucherLineEntity item") && generate.contains("item.Voucher = saved.Id;"),
                 "the computed line must write into the auto-resolved target items child and re-point it at the saved master");
+
+        // generates event: (#6711): the create-from also runs by itself. The listener binds the SOURCE's
+        // -transitioned topic (the channel every status write publishes), guards on the status, and
+        // delegates to the SAME create-from the button calls - it must not carry a mapping of its own, or
+        // the two triggers would drift. `button: true` keeps the endpoint as the second trigger.
+        String generateOnEvent = contentOf("gen/events/emission/VoucherFromSlipGenerateOnEvent.java");
+        assertTrue(generateOnEvent.contains("implements MessageHandler"), "the event-driven create-from must be a message handler");
+        assertTrue(generateOnEvent.contains("-Slip-transitioned"),
+                "an onTransition create-from must bind the source's -transitioned topic");
+        assertTrue(generateOnEvent.contains("source.Status != 2"), "the listener must guard on the status the seeded name resolved to");
+        assertTrue(generateOnEvent.contains("new VoucherFromSlipGenerate().create("),
+                "the listener must delegate to the create-from rather than re-implement the mapping");
+        assertFalse(generateOnEvent.contains("VoucherLineEntity"), "the listener must carry no mapping of its own");
+        assertTrue(generate.contains("@Post(\"/run\")"), "button: true must keep the endpoint alongside the event trigger");
+        // The at-most-once guard lives in the create-from, so BOTH triggers get it.
+        assertTrue(generate.contains(".eq(\"Slip\", sourceId)") && generate.contains("return existing.get(0);"),
+                "an event-driven create-from must return the document already back-referencing the source");
     }
 
     /** Layer 2 (the outermost): the published app enforces the features over REST. */
@@ -1759,6 +1802,71 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             assertEquals(42.0f, lines.getFloat(matching + ".Amount[0]"), 0.001f);
             // note = "Slip " + the source's label, via {} interpolation.
             assertEquals("Slip March", lines.getString(matching + ".Note[0]"));
+        });
+
+        // generates event: (#6711) at the outermost layer, and the capability that did not exist:
+        // NOBODY calls the create-from here. A second Slip is posted through its transition, and the
+        // Voucher has to appear by itself - with its computed line, so the whole create-from ran and not
+        // just an empty header.
+        AtomicInteger postedSlip = new AtomicInteger();
+        restAssuredExecutor.execute(() -> postedSlip.set(given().contentType("application/json")
+                                                                .body("{\"Label\":\"April\",\"Total\":7}")
+                                                                .when()
+                                                                .post(API + "/slip/SlipController")
+                                                                .then()
+                                                                .statusCode(200)
+                                                                .extract()
+                                                                .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + postedSlip.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/PostSlipTransition/run")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(2)));
+        AtomicInteger autoVoucherId = new AtomicInteger();
+        // The listener runs asynchronously off the -transitioned topic, so retry until it lands.
+        restAssuredExecutor.execute(() -> {
+            String matching = "findAll { it.Slip == " + postedSlip.get() + " }";
+            io.restassured.path.json.JsonPath vouchers = given().when()
+                                                                .get(API + "/voucher/VoucherController")
+                                                                .then()
+                                                                .statusCode(200)
+                                                                .extract()
+                                                                .jsonPath();
+            assertEquals(1, vouchers.getList(matching)
+                                    .size(),
+                    "posting the slip must mint exactly one voucher back-referencing it");
+            autoVoucherId.set(vouchers.getInt(matching + ".Id[0]"));
+        }, 60);
+        restAssuredExecutor.execute(() -> {
+            String matching = "findAll { it.Voucher == " + autoVoucherId.get() + " }";
+            io.restassured.path.json.JsonPath lines = given().when()
+                                                             .get(API + "/voucher/VoucherLineController")
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .jsonPath();
+            assertEquals(1, lines.getList(matching)
+                                 .size(),
+                    "the event-driven create-from must run the WHOLE create-from, computed line included");
+            assertEquals(14.0f, lines.getFloat(matching + ".Amount[0]"), 0.001f);
+        }, 60);
+        // At-most-once, across both triggers: clicking the button for a slip the event already generated
+        // for hands back the SAME voucher instead of minting a second one. Without the back-reference
+        // guard an event redelivery would do the same damage silently.
+        restAssuredExecutor.execute(() -> {
+            String voucher = given().contentType("application/json")
+                                    .body("{\"id\":" + postedSlip.get() + "}")
+                                    .when()
+                                    .post("/services/java/" + PROJECT + "/gen/events/emission/VoucherFromSlipGenerate/run")
+                                    .then()
+                                    .statusCode(200)
+                                    .extract()
+                                    .asString();
+            assertEquals(autoVoucherId.get(), io.restassured.path.json.JsonPath.from(voucher)
+                                                                               .getInt("Id"),
+                    "a click after the event must return the existing voucher, not a second one");
         });
 
         // #6336 pattern: a malformed e-mail must be rejected by the generated controller, and a

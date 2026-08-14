@@ -69,6 +69,13 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
                 LOGGER.warn("Skipping generates action with no name");
                 continue;
             }
+            if (!g.hasButton()) {
+                // Event-driven only (issue #6711): the create-from runs by itself, so there is no button
+                // to contribute - and contributing one anyway would offer the user a click that only
+                // re-reads the document the event already created.
+                LOGGER.debug("Generates action [{}] is event-driven with no button - contributing no client action", name);
+                continue;
+            }
             String fileBase = name + "-generate-action";
             String modulePath = project + "/" + fileBase + ".js";
             // The button renders on the SOURCE entity's view, so it must be contributed to the

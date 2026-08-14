@@ -81,6 +81,7 @@ final class StatusSymbolResolver {
         resolver.rewriteTransitions(root);
         resolver.rewriteProcesses(root);
         resolver.rewritePostings(root);
+        resolver.rewriteGenerates(root);
         resolver.rewriteReports(root);
         if (!resolver.issues.isEmpty()) {
             throw new IntentValidationException(resolver.issues);
@@ -225,6 +226,24 @@ final class StatusSymbolResolver {
             // A cross-model source's nomenclature is seeded in its own model; name it as such rather
             // than reporting the entity as unknown.
             Target status = text(event, "model") != null ? new Target(source, text(event, "model")) : statusOf(source);
+            put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(source), status, subject));
+        }
+    }
+
+    /**
+     * An event-driven create-from (issue #6711) guards on the SOURCE's status exactly as a posting
+     * does; the source is {@code from:}, owned by {@code fromUses:} when it is not local.
+     */
+    private void rewriteGenerates(Map<?, ?> root) {
+        for (Object node : asList(root.get("generates"))) {
+            Map<?, ?> generate = asMap(node);
+            Map<?, ?> event = asMap(generate == null ? null : generate.get("event"));
+            if (event == null || event.get("when") == null) {
+                continue;
+            }
+            String source = text(generate, "from");
+            String subject = "generates [" + text(generate, "name") + "] event when";
+            Target status = text(generate, "fromUses") != null ? new Target(source, text(generate, "fromUses")) : statusOf(source);
             put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(source), status, subject));
         }
     }

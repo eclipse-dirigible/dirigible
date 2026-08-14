@@ -2041,10 +2041,12 @@ class IntentEngineIT extends IntegrationTest {
         generateFromModel("template-application-events-java/template/template.js", "proforma.glue");
         String generate = contentOf("gen/events/proforma/InvoiceFromProformaGenerate.java");
         // The completion hook flips the source status via the targeted single-column primitive...
-        assertTrue(generate.contains("updateProperty(req.id, \"Status\", 3)"),
+        // (the create-from's body is a create(Integer sourceId) method both the button endpoint and an
+        // event trigger call - hence sourceId rather than the posted request's id, since #6711.)
+        assertTrue(generate.contains("updateProperty(sourceId, \"Status\", 3)"),
                 "the source status must be flipped with the targeted updateProperty write");
         // ...and reloads before publishing so the -transitioned payload is the committed row...
-        assertTrue(generate.contains("findById(req.id)"), "it should reload the source for the -transitioned payload");
+        assertTrue(generate.contains("findById(sourceId)"), "it should reload the source for the -transitioned payload");
         assertTrue(generate.contains("-transitioned"), "it should publish the source's -transitioned channel");
         // ...NOT the full-row merge that would revert a concurrent write to the source row (the actual
         // call pattern; an explanatory code comment naming it is expected and must not trip this).

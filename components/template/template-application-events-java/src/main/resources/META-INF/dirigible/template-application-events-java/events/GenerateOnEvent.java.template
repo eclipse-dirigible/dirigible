@@ -1,0 +1,54 @@
+package gen.events.${javaGenFolderName};
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+/**
+ * Event-driven create-from ${name}: when a ${fromEntity}#if($isCreate) is created#{else} transitions into status ${guardValue}#end, the
+ * ${toEntity} is created from it - with no one clicking anything.
+ *
+ * Generated from the intent generates block's `event:` (issue #6711) - do not edit; it is re-generated
+ * with the application.
+ *
+ * Contract:
+ * - binds the #if($isCreate)source's create topic (the platform publishes creates unsuffixed)#{else}source's -transitioned topic - the channel every status write publishes,
+ *   which -updated reactions never see, so there are no loops#end;
+ * - RE-LOADS the source by id before the guard, because the event payload is as-of the event and lacks
+ *   later-step data such as a stamped document number;
+ * - delegates to ${className}Generate, the SAME create-from a button would call, so the mapping, the
+ *   items and the sourceStatus completion hook cannot diverge between the two triggers;
+ * - at-most-once through the ${backRefProperty} back-reference (the guard lives in that create-from):
+ *   a redelivery returns the document that already exists instead of minting a second one.
+ */
+@Component("${javaGenFolderName}_${className}GenerateOnEvent")
+public class ${className}GenerateOnEvent implements MessageHandler {
+
+    @Override
+    public String destination() {
+        return "${fromProjectName}-${fromPerspective}-${fromEntity}#if(!$isCreate)-transitioned#end";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity payload =
+                Json.parse(message, gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity.class);
+        if (payload == null || payload.${fromPk} == null) {
+            return;
+        }
+#if($guardProperty != "")
+        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
+                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(payload.${fromPk});
+        if (source == null || source.${guardProperty} == null || source.${guardProperty} != ${guardValue}) {
+            return;
+        }
+#end
+        new ${className}Generate().create(payload.${fromPk});
+    }
+}

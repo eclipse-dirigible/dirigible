@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.parser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -21,6 +22,36 @@ import org.junit.jupiter.api.Test;
  * Parse + validation coverage for the {@code generates} (create-from) block.
  */
 class GeneratesIntentTest {
+
+    /**
+     * The declarations-from-fines shape of issue #6711, up to the {@code generates} entry's own keys.
+     */
+    private static final String GENERATES_EVENT_HEAD = """
+            name: fines
+            entities:
+              - name: FineStatus
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Fine
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string }
+                relations:
+                  - { name: Status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+              - name: Declaration
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string }
+                relations:
+                  - { name: Fine, kind: manyToOne, to: Fine }
+            generates:
+              - name: declaration-from-fine
+                from: Fine
+                to: Declaration
+                forEntity: Fine
+            """;
 
     private static final String SAME_MODEL = """
             name: sales
@@ -496,5 +527,98 @@ class GeneratesIntentTest {
                      .stream()
                      .anyMatch(i -> i.contains("add a fromUses: alias if the source lives in another model")),
                 "got: " + ex.getIssues());
+    }
+
+    /**
+     * The {@code generates} event trigger (issue #6711). The source is declared once, by {@code from:}
+     * - the event says WHEN, never what, so a second entity name there is a mistake rather than a
+     * second source. Same for the owning model: {@code fromUses:} declares it.
+     */
+    @Test
+    void generatesEventIsRejectedWhenItNamesAnotherSourceOrRepeatsTheModel() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_EVENT_HEAD + """
+                    event: { onTransition: Declaration, model: fines, when: "Status == 2" }
+                    map: { Fine: id }
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("is not the from entity")),
+                "an event naming another entity should be rejected, got: " + ex.getIssues());
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("must not declare model:")),
+                "an event repeating the owning model should be rejected, got: " + ex.getIssues());
+    }
+
+    /** An {@code onTransition} without a status guard would fire on every write of the source. */
+    @Test
+    void generatesOnTransitionRequiresTheStatusGuard() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_EVENT_HEAD + """
+                    event: { onTransition: Fine }
+                    map: { Fine: id }
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("event requires `when:")),
+                "an unguarded onTransition should be rejected, got: " + ex.getIssues());
+    }
+
+    /**
+     * Without the back-reference an event redelivery mints a second document, so the missing map entry
+     * is an authoring error - reported with the fix in the message.
+     */
+    @Test
+    void anEventDrivenGeneratesRequiresTheBackReferenceInItsMap() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_EVENT_HEAD + """
+                    event: { onTransition: Fine, when: "Status == 2" }
+                    map: { Note: note }
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("at-most-once guard")),
+                "a missing back-reference should be rejected, got: " + ex.getIssues());
+    }
+
+    /** {@code button: false} with no event leaves the create-from with no trigger at all. */
+    @Test
+    void buttonFalseWithoutAnEventIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_EVENT_HEAD + """
+                    button: false
+                    map: { Fine: id }
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("would generate nothing")),
+                "a create-from with neither trigger should be rejected, got: " + ex.getIssues());
+    }
+
+    /** The valid shape parses, and the event-driven entry drops its button by default. */
+    @Test
+    void anEventDrivenGeneratesParsesAndDropsItsButton() {
+        IntentModel model = IntentParser.parse(GENERATES_EVENT_HEAD + """
+                    event: { onTransition: Fine, when: "Status == 2" }
+                    map: { Fine: id }
+                """);
+        assertTrue(model.getGenerates()
+                        .get(0)
+                        .isEventDriven());
+        assertFalse(model.getGenerates()
+                         .get(0)
+                         .hasButton(),
+                "declaring an event is how an author says nobody has to click");
+    }
+
+    /** A create-from with no event keeps its button - the shape every existing intent carries. */
+    @Test
+    void aCreateFromWithoutAnEventKeepsItsButton() {
+        IntentModel model = IntentParser.parse(GENERATES_EVENT_HEAD + """
+                    map: { Fine: id }
+                """);
+        assertFalse(model.getGenerates()
+                         .get(0)
+                         .isEventDriven());
+        assertTrue(model.getGenerates()
+                        .get(0)
+                        .hasButton());
     }
 }
