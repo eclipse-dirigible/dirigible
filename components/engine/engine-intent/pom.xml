@@ -31,6 +31,11 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-ide-workspace</artifactId>
 		</dependency>
+		<!-- The Workbench assistant validates a proposed custom/ class by really compiling it -->
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-engine-java</artifactId>
+		</dependency>
 		<!-- Generate runs the model-to-code plan in-process, through the generation pipeline -->
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>

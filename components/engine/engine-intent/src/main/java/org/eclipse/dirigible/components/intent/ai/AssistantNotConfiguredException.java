@@ -7,17 +7,22 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.intent.agent;
+package org.eclipse.dirigible.components.intent.ai;
 
 /**
- * Raised when the Intent AI assistant is invoked but no API key is configured. The editor surfaces
- * this as a hint to set {@code DIRIGIBLE_INTENT_AI_API_KEY} rather than as an error.
+ * Raised when an AI assistant is invoked but no API key is configured. Clients surface this as a
+ * hint to set {@code DIRIGIBLE_INTENT_AI_API_KEY} rather than as an error.
  */
-class IntentAgentNotConfiguredException extends RuntimeException {
+public class AssistantNotConfiguredException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
-    IntentAgentNotConfiguredException(String message) {
+    /**
+     * Instantiates the exception.
+     *
+     * @param message the message
+     */
+    public AssistantNotConfiguredException(String message) {
         super(message);
     }
 }

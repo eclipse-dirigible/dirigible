@@ -11,6 +11,8 @@ package org.eclipse.dirigible.components.intent.agent;
 
 import java.util.List;
 
+import org.eclipse.dirigible.components.intent.ai.ChatTurn;
+
 /**
  * A single assistant turn requested by the Intent Editor.
  *
@@ -18,5 +20,5 @@ import java.util.List;
  * @param message the developer's new message
  * @param history the prior plain-text transcript, oldest first (no tool calls are replayed)
  */
-record AgentRequest(String yaml, String message, List<AgentTurn> history) {
+record AgentRequest(String yaml, String message, List<ChatTurn> history) {
 }

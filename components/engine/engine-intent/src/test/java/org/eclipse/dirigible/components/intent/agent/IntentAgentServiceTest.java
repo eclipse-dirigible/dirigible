@@ -18,10 +18,10 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 
-import org.eclipse.dirigible.commons.config.Configuration;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.eclipse.dirigible.components.intent.ai.ModelClient;
 import org.junit.jupiter.api.Test;
+
+import com.google.gson.JsonObject;
 
 /**
  * The validate-and-repair loop: a proposed intent is validated with the real
@@ -30,8 +30,6 @@ import org.junit.jupiter.api.Test;
  * scripted - no network.
  */
 class IntentAgentServiceTest {
-
-    private static final String API_KEY_ENV = "DIRIGIBLE_INTENT_AI_API_KEY";
 
     private static final String VALID_YAML = """
             name: lib
@@ -49,19 +47,9 @@ class IntentAgentServiceTest {
               - { name: Review, forEntity: Member, fields: [name], editable: [notes], actions: [approve] }
             """;
 
-    @BeforeAll
-    static void configureApiKey() {
-        Configuration.set(API_KEY_ENV, "test-key");
-    }
-
-    @AfterAll
-    static void removeApiKey() {
-        Configuration.remove(API_KEY_ENV);
-    }
-
     @Test
     void aValidFirstProposalIsReturnedWithoutARepairRound() {
-        ScriptedAgentService service = new ScriptedAgentService(new AgentReply("Added notes.", VALID_YAML));
+        ScriptedAgentService service = new ScriptedAgentService(proposal("Added notes.", VALID_YAML));
 
         AgentReply reply = service.chat(request());
 
@@ -72,7 +60,7 @@ class IntentAgentServiceTest {
 
     @Test
     void aPlainTextReplyIsReturnedWithoutValidation() {
-        ScriptedAgentService service = new ScriptedAgentService(new AgentReply("Which entity do you mean?", null));
+        ScriptedAgentService service = new ScriptedAgentService(new ModelClient.ModelReply("Which entity do you mean?", null));
 
         AgentReply reply = service.chat(request());
 
@@ -82,8 +70,7 @@ class IntentAgentServiceTest {
 
     @Test
     void anInvalidProposalIsSentBackWithTheIssuesForCorrection() {
-        ScriptedAgentService service =
-                new ScriptedAgentService(new AgentReply("First try.", INVALID_YAML), new AgentReply("Fixed.", VALID_YAML));
+        ScriptedAgentService service = new ScriptedAgentService(proposal("First try.", INVALID_YAML), proposal("Fixed.", VALID_YAML));
 
         AgentReply reply = service.chat(request());
 
@@ -106,8 +93,8 @@ class IntentAgentServiceTest {
 
     @Test
     void repairRoundsAreBoundedAndTheOutstandingIssuesAreSurfaced() {
-        ScriptedAgentService service = new ScriptedAgentService(new AgentReply("Try 1.", INVALID_YAML),
-                new AgentReply("Try 2.", INVALID_YAML), new AgentReply("Try 3.", INVALID_YAML));
+        ScriptedAgentService service = new ScriptedAgentService(proposal("Try 1.", INVALID_YAML), proposal("Try 2.", INVALID_YAML),
+                proposal("Try 3.", INVALID_YAML));
 
         AgentReply reply = service.chat(request());
 
@@ -118,6 +105,13 @@ class IntentAgentServiceTest {
                 "the outstanding issues are appended to the reply text");
     }
 
+    private static ModelClient.ModelReply proposal(String text, String yaml) {
+        JsonObject input = new JsonObject();
+        input.addProperty("explanation", text);
+        input.addProperty("yaml", yaml);
+        return new ModelClient.ModelReply(text, input);
+    }
+
     private static AgentRequest request() {
         return new AgentRequest("name: lib\n", "Add a notes field", List.of());
     }
@@ -125,15 +119,16 @@ class IntentAgentServiceTest {
     /** Overrides the upstream call with a scripted sequence of replies, recording each call's turns. */
     private static final class ScriptedAgentService extends IntentAgentService {
 
-        private final Deque<AgentReply> replies;
+        private final Deque<ModelClient.ModelReply> replies;
         private final List<List<Map<String, Object>>> calls = new ArrayList<>();
 
-        private ScriptedAgentService(AgentReply... scripted) {
+        private ScriptedAgentService(ModelClient.ModelReply... scripted) {
+            super(new ModelClient());
             this.replies = new ArrayDeque<>(List.of(scripted));
         }
 
         @Override
-        AgentReply callModel(String apiKey, String baseUrl, List<Map<String, Object>> messages) {
+        ModelClient.ModelReply callModel(List<Map<String, Object>> messages) {
             calls.add(List.copyOf(messages));
             return replies.pop();
         }
