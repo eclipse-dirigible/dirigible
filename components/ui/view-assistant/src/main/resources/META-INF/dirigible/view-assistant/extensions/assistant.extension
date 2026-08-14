@@ -1,0 +1,5 @@
+{
+    "module": "view-assistant/configs/assistant-view.js",
+    "extensionPoint": "platform-views",
+    "description": "AI Assistant View"
+}
