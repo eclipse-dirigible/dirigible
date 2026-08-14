@@ -1439,6 +1439,55 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void calculated_action_stub_is_scaffolded_under_custom_and_preserved() {
+        // A calculatedAction names a class the generated repository will call. Until it exists the
+        // whole client-Java batch fails to compile - one declared boundary taking every module's beans
+        // down - so Generate hands the developer the file, exactly as a bare service task does.
+        writeIntent("""
+                name: orders
+                entities:
+                  - name: Order
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, calculatedActionOnCreate: OrderNumberAction }
+                      - { name: score,  type: integer, calculatedActionOnUpdate: shared.rating.ScoreAction }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        assertTrue(resource("custom/OrderNumberAction.java").exists(), "a named calculated action should scaffold a custom/ Java stub");
+        String stub = contentOf("custom/OrderNumberAction.java");
+        assertTrue(stub.contains("package custom;") && stub.contains("class OrderNumberAction implements CalculatedField<Object, String>"),
+                "the stub should implement the SDK contract, returning the field's type");
+        assertTrue(stub.contains("Order.number"), "the stub should say which field it computes");
+        assertFalse(stub.contains("System.out") || stub.contains("System.err"), "the scaffolded stub must never print to stdout/stderr");
+
+        // An action in somebody else's package is somebody else's compilation unit - scaffolding it
+        // here would collide on the binary name and fail the whole registry-wide batch.
+        assertFalse(resource("custom/ScoreAction.java").exists(), "an action outside custom/ must not be scaffolded");
+        assertFalse(resource("custom/shared/rating/ScoreAction.java").exists(), "an action outside custom/ must not be scaffolded");
+
+        // The developer implements it; regeneration must NOT overwrite it.
+        writeProjectFile("custom/OrderNumberAction.java", """
+                package custom;
+                import org.eclipse.dirigible.sdk.component.Component;
+                import org.eclipse.dirigible.sdk.db.CalculatedField;
+                @Component
+                public class OrderNumberAction implements CalculatedField<Object, String> {
+                    public String calculate(Object entity) { return "MY IMPLEMENTATION"; }
+                }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        assertTrue(contentOf("custom/OrderNumberAction.java").contains("MY IMPLEMENTATION"),
+                "the developer's calculated action must be preserved across regeneration");
+    }
+
+    @Test
     void service_task_handler_stub_is_scaffolded_under_custom_and_preserved() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()

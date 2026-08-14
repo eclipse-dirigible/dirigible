@@ -21,6 +21,7 @@ import java.util.Map;
 import org.eclipse.dirigible.components.intent.ai.ModelClient;
 import org.junit.jupiter.api.Test;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 /**
@@ -103,6 +104,49 @@ class IntentAgentServiceTest {
         assertTrue(reply.reply()
                         .contains("still fails intent validation"),
                 "the outstanding issues are appended to the reply text");
+    }
+
+    @Test
+    void reportedBoundariesReachTheEditorAsStructure() {
+        // The honesty contract: a requirement the DSL cannot express arrives as data the editor can
+        // render distinctly and the developer can forward - never buried in prose that reads like the
+        // rest of the answer.
+        JsonObject input = new JsonObject();
+        input.addProperty("explanation", "Modelled the fine; the driver lookup is not expressible.");
+        input.addProperty("yaml", VALID_YAML);
+        JsonArray boundaries = new JsonArray();
+        JsonObject boundary = new JsonObject();
+        boundary.addProperty("requirement", "automatically identify the driver from the validity register");
+        boundary.addProperty("explanation", "a period lookup with a matching rule is an algorithm, not a model");
+        boundary.addProperty("extensionKind", "delegate");
+        boundary.addProperty("suggestedClass", "IdentifyDriver");
+        boundaries.add(boundary);
+        JsonObject malformed = new JsonObject();
+        malformed.addProperty("explanation", "no requirement named");
+        boundaries.add(malformed);
+        input.add("boundaries", boundaries);
+
+        ScriptedAgentService service = new ScriptedAgentService(new ModelClient.ModelReply("Here you go.", input));
+
+        AgentReply reply = service.chat(request());
+
+        assertEquals(1, reply.boundaries()
+                             .size(),
+                "a malformed entry is dropped rather than failing the turn");
+        AgentBoundary reported = reply.boundaries()
+                                      .get(0);
+        assertEquals("automatically identify the driver from the validity register", reported.requirement());
+        assertEquals("delegate", reported.extensionKind());
+        assertEquals("IdentifyDriver", reported.suggestedClass());
+    }
+
+    @Test
+    void aProposalWithoutBoundariesReportsNone() {
+        ScriptedAgentService service = new ScriptedAgentService(proposal("Added notes.", VALID_YAML));
+
+        assertTrue(service.chat(request())
+                          .boundaries()
+                          .isEmpty());
     }
 
     private static ModelClient.ModelReply proposal(String text, String yaml) {

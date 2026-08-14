@@ -123,6 +123,18 @@
                 background: var(--sapErrorBackground, #ffeaf4);
                 color: var(--sapNegativeTextColor, #aa0808);
             }
+            /* A requirement the intent could not express. Deliberately unlike the assistant's prose:
+               it is the part of the answer the developer still has to act on. */
+            .intent-chat-msg.boundary {
+                align-self: stretch;
+                max-width: 100%;
+                background: var(--sapWarningBackground, #fff8e5);
+                color: var(--sapTextColor, #1d2d3e);
+                border-left: 3px solid var(--sapCriticalColor, #e9730c);
+            }
+            .intent-chat-boundary-action {
+                margin-top: 4px;
+            }
             .intent-chat-empty {
                 color: var(--sapNeutralTextColor, #6a6d70);
                 font-style: italic;
@@ -245,7 +257,7 @@
                     <div class="intent-chat-empty" ng-if="!chat.messages.length">
                         Ask the assistant to change the intent in plain language &mdash; e.g. &ldquo;add a <em>country</em> field to Customer&rdquo;. It proposes a diff you can accept into the editor.
                     </div>
-                    <div ng-repeat="m in chat.messages" class="intent-chat-msg {{m.role}}">{{m.text}}</div>
+                    <div ng-repeat="m in chat.messages" class="intent-chat-msg {{m.role}}">{{m.text}}<div class="intent-chat-boundary-action" ng-if="m.file"><bk-button state="transparent" glyph="sap-icon--source-code" label="Open {{m.file}}" title="Open the hand-written class" ng-click="openBoundaryFile(m.file)"></bk-button></div></div>
                     <div class="intent-chat-msg assistant" ng-if="chat.busy">Thinking&hellip;</div>
                 </div>
                 <div class="intent-chat-proposal" ng-if="chat.proposalPending">
