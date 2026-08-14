@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.intent.agent;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,9 @@ import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
 /**
  * Bridges the Intent Editor's AI assistant to the model.
@@ -63,7 +67,7 @@ class IntentAgentService {
     private static final String SYSTEM_PROMPT = AssistantGuide.load("/intent-assistant-guide.md");
 
     private static final ModelClient.ToolSpec TOOL = new ModelClient.ToolSpec(TOOL_NAME,
-            "Propose a complete, updated app.intent YAML for the developer to review as a diff.", ModelClient.stringSchema(properties()));
+            "Propose a complete, updated app.intent YAML for the developer to review as a diff.", inputSchema());
 
     private final ModelClient modelClient;
 
@@ -71,11 +75,35 @@ class IntentAgentService {
         this.modelClient = modelClient;
     }
 
-    private static Map<String, String> properties() {
-        Map<String, String> properties = new LinkedHashMap<>();
-        properties.put("explanation", "A short, plain explanation of what changed and why.");
-        properties.put("yaml", "The COMPLETE updated app.intent YAML document.");
-        return properties;
+    /**
+     * The proposal's shape. {@code boundaries} is the structured half of the honesty contract: a
+     * requirement the DSL cannot express must arrive as data the editor can render distinctly and the
+     * developer can forward verbatim, not buried in prose that reads like the rest of the answer.
+     */
+    private static Map<String, Object> inputSchema() {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("explanation", Map.of("type", "string", "description", "A short, plain explanation of what changed and why."));
+        properties.put("yaml", Map.of("type", "string", "description", "The COMPLETE updated app.intent YAML document."));
+        properties.put("boundaries",
+                Map.of("type", "array", "description",
+                        "Every requirement this proposal could NOT express in the intent - one entry each, "
+                                + "including ones the proposal omits entirely. Empty when the request fit inside the DSL.",
+                        "items", boundaryItemSchema()));
+        return Map.of("type", "object", "properties", properties, "required", List.of("explanation", "yaml"));
+    }
+
+    private static Map<String, Object> boundaryItemSchema() {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("requirement", Map.of("type", "string", "description", "The developer's requirement, in their own words."));
+        properties.put("explanation",
+                Map.of("type", "string", "description", "Why the intent layer does not express it, and what this proposal does instead."));
+        properties.put("extensionKind",
+                Map.of("type", "string", "description",
+                        "The extension point that carries it: calculatedAction, delegate, camelRoute, printTemplate, "
+                                + "customPage, widget - or none when the proposal simply omits it."));
+        properties.put("suggestedClass", Map.of("type", "string", "description",
+                "The class the developer will hand-write, when the extension point is a Java one."));
+        return Map.of("type", "object", "properties", properties, "required", List.of("requirement", "explanation", "extensionKind"));
     }
 
     /**
@@ -106,7 +134,41 @@ class IntentAgentService {
                     .isEmpty()) {
             reply += "\n\nNote: this proposal still fails intent validation:\n" + ProposalRepairLoop.bulleted(outcome.issues());
         }
-        return new AgentReply(reply, outcome.proposal());
+        return new AgentReply(reply, outcome.proposal(), boundaries(outcome.reply()));
+    }
+
+    /**
+     * The reported boundaries, in the order the model listed them. A malformed entry is dropped rather
+     * than failing the turn - a proposal the developer can still read beats a 500 over a reporting
+     * field.
+     */
+    private static List<AgentBoundary> boundaries(ModelClient.ModelReply reply) {
+        JsonObject input = reply.toolInput();
+        if (input == null || !input.has("boundaries") || !input.get("boundaries")
+                                                               .isJsonArray()) {
+            return List.of();
+        }
+        List<AgentBoundary> boundaries = new ArrayList<>();
+        for (JsonElement element : input.getAsJsonArray("boundaries")) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject entry = element.getAsJsonObject();
+            String requirement = member(entry, "requirement");
+            if (StringUtils.isBlank(requirement)) {
+                continue;
+            }
+            boundaries.add(new AgentBoundary(requirement, member(entry, "explanation"), member(entry, "extensionKind"),
+                    member(entry, "suggestedClass")));
+        }
+        return boundaries;
+    }
+
+    private static String member(JsonObject entry, String name) {
+        return entry.has(name) && !entry.get(name)
+                                        .isJsonNull() ? entry.get(name)
+                                                             .getAsString()
+                                                : null;
     }
 
     /**

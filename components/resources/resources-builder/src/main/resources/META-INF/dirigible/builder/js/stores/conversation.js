@@ -169,9 +169,34 @@ document.addEventListener('alpine:init', () => {
           this.turns.push({ role: 'assistant', content: reply.reply });
         }
 
+        // What the model could NOT express, said separately from what it did. As part of the reply
+        // prose this reads like the rest of the answer and is skimmed past - which is how a "the
+        // system identifies the driver" requirement became "an officer identifies the driver" with
+        // nobody noticing. It is stored as its own message, so it is in the record too.
+        this.reportBoundaries(reply.boundaries);
+
         if (reply.proposedYaml) await this.adopt(reply.proposedYaml);
       } finally {
         await this.flush();
+      }
+    },
+
+    /**
+     * Render each reported boundary as its own message: the requirement, why the model of the
+     * application does not carry it, and what has to be hand-written instead. The text is deliberately
+     * self-contained so it can be forwarded verbatim - a boundary somebody actually hit is the only
+     * reliable signal of which missing capability is worth building.
+     */
+    reportBoundaries(boundaries) {
+      for (const boundary of boundaries || []) {
+        if (!boundary || !boundary.requirement) continue;
+        const lines = ['Not expressible in the model: ' + boundary.requirement];
+        if (boundary.explanation) lines.push(boundary.explanation);
+        if (boundary.extensionKind && boundary.extensionKind !== 'none') {
+          lines.push('Carried by: ' + boundary.extensionKind
+            + (boundary.suggestedClass ? ' (' + boundary.suggestedClass + ', to be written by hand)' : ''));
+        }
+        this.say('boundary', lines.join('\n'));
       }
     },
 
