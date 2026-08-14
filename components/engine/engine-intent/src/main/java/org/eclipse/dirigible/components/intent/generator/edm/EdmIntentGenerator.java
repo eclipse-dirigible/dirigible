@@ -709,8 +709,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
         }
         for (GeneratesIntent generates : model.getGenerates()) {
+            // An event-driven create-from with no button contributes no action, so it needs no label -
+            // a catalog entry for it would be a translation nothing ever renders.
             if (generates.getName() != null && !generates.getName()
-                                                         .isBlank()) {
+                                                         .isBlank()
+                    && generates.hasButton()) {
                 labels.put(generates.getName(), IntentNaming.customActionLabel(generates.getName(), generates.getLabel()));
             }
         }

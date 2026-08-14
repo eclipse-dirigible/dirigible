@@ -1145,7 +1145,8 @@ problem is logged and the transition still succeeds.
 
 **Use when:** a record should spawn a new record of another type - often a document in another model:
 generate a `SalesInvoice` from a `ProjectTimesheet`, an `Order` from a `Quote`. It adds a button on the
-source view that, on click, clones the selected record on the server and toasts the result.
+source view that, on click, clones the selected record on the server and toasts the result - or, with
+`event:` (below), it runs by itself when the source reaches a state.
 
 ```yaml
 generates:
@@ -1263,6 +1264,45 @@ to the app's `<project>-custom-action` point, carrying an `endpoint`) and a serv
 `@Controller` (`<ClassName>Generate`, via the `.glue` file) served at
 `/services/java/<project>/gen/events/<module>/<ClassName>Generate/run`. The shared `customActions` store POSTs
 the selected id to that endpoint and toasts the created record (no page dialog).
+
+**`event:` - mint the document automatically, with nobody clicking.** When the follow-up document must
+be created the moment the source reaches a state - a fine whose responsible person has just been
+identified must produce a declaration document - declare the trigger instead of relying on someone to
+press the button:
+
+```yaml
+generates:
+  - name: declaration-from-fine
+    from: Fine
+    to: Declaration
+    event: { onTransition: Fine, when: "Status == IDENTIFIED" }   # or { onCreate: Fine }
+    map:
+      Fine: id                   # REQUIRED with an event: the back-reference, i.e. the guard
+      Vehicle: Vehicle
+      Driver: Driver
+    defaults:
+      declaredAt: now
+    items:                       # a whole DOCUMENT - header AND items, unlike `posts`
+      - name: "Fine {number}"
+        amount: Amount
+```
+
+- Exactly one of `onTransition` (a status write - a `when: "<StatusRelation> == <status>"` guard is
+  **mandatory**, status by seeded NAME or id) or `onCreate` (the source's insert - the guard is optional,
+  for a source with no status lifecycle). The entity named there must be the SAME one `from:` declares:
+  the event says WHEN, `from:`/`fromUses:` say what and where. Never repeat the model as `model:`.
+- **`map:` must copy the source's `id` onto the target's to-one back to the source.** That
+  back-reference is the at-most-once guard: before creating anything the create-from looks for a target
+  that already back-references this source and returns it instead, so an event redelivery - or a click
+  afterwards - is a no-op rather than a duplicate document. Authoring an event without it is rejected.
+- **The button is dropped by default** (declaring an event is how you say nobody has to click). Add
+  `button: true` to keep both triggers; the button then shares the same at-most-once guard.
+- `sourceStatus:` composes normally (the flip happens after the target exists, and cannot re-trigger the
+  create-from because the guard has already claimed the source).
+- Use this over `posts` when the result is a **document with line items**: `posts` writes flat mapped
+  rows and cannot reference the freshly created header. Use it over a `generates` button plus a `wait`
+  step when the step would be waiting for a human to remember to click - an unclicked record parks its
+  process instance forever.
 
 ### reports - read-only aggregations
 
@@ -1924,6 +1964,7 @@ payment's unallocated balance; entity writes go only through the generated repos
 - "a button on X's view that opens a custom page / action" -> **actions**
 - "void / cancel / close / reopen a finished document (a guarded manual status change, per record)" -> **transitions**
 - "create a Y from an X / generate an invoice from a timesheet / turn a quote into an order" (on a button, per selected record) -> **generates**
+- "when X is approved/identified/closed, create the Y document from it automatically (no click)" -> **generates** with `event:`
 - "a list / dashboard / count of X by Y" -> **reports**
 - "who can do what" -> **permissions**
 - "preload these values" -> **seeds**

@@ -3951,6 +3951,7 @@ public final class IntentParser {
             if (!"entity".equals(scope) && !"page".equals(scope)) {
                 issues.add("generates [" + name + "] has invalid scope [" + scope + "] (expected 'entity' or 'page')");
             }
+            validateGeneratesEvent(g, name, source, crossModelSource, issues);
             validateMapSource(source, g.getMap(), "generates [" + name + "]", "map", issues);
             if (g.getItems() != null) {
                 GeneratesItemsIntent items = g.getItems();
@@ -3973,6 +3974,65 @@ public final class IntentParser {
                 validateMapSource(itemSource, items.getMap(), "generates [" + name + "]", "items map", issues);
             }
             validateGeneratesItemLines(g, name, source, byName, crossModel, issues);
+        }
+    }
+
+    /**
+     * Validate the optional {@code event} trigger of a create-from (issue #6711): exactly one of
+     * {@code onTransition} (a status write - the {@code when} status guard is mandatory) or
+     * {@code onCreate} (the source's insert - the guard is optional), naming the SAME entity
+     * {@code from} declares; the owning model is never repeated here, {@code fromUses} declares it. An
+     * event-driven create-from is at-most-once, and the guard is the target's back-reference to the
+     * source - so the {@code map} must copy the source's primary key onto it. Without an event,
+     * {@code button: false} is rejected: a create-from with neither trigger generates nothing at all.
+     */
+    private static void validateGeneratesEvent(GeneratesIntent g, String name, EntityIntent source, boolean crossModelSource,
+            List<String> issues) {
+        String subject = "generates [" + name + "]";
+        if (!g.isEventDriven()) {
+            if (Boolean.FALSE.equals(g.getButton())) {
+                issues.add(subject + " declares button: false and no event: - it would generate nothing;"
+                        + " add `event: { onTransition: <SourceEntity>, when: \"<Property> == <status> }` or drop button: false");
+            }
+            return;
+        }
+        Map<String, Object> event = g.getEvent();
+        if (event.get("model") != null) {
+            issues.add(subject + " event must not declare model: - the source and its owning model are declared by from:/fromUses:");
+        }
+        Object onTransition = event.get("onTransition");
+        Object onCreate = event.get("onCreate");
+        if (onTransition == null && onCreate == null) {
+            issues.add(subject + " event requires `onTransition: " + g.getFrom() + "` (a status write) or `onCreate: " + g.getFrom()
+                    + "` (the source's insert)");
+        } else if (onTransition != null && onCreate != null) {
+            issues.add(subject + " event declares both onTransition and onCreate - exactly one trigger is allowed");
+        } else {
+            String declared = String.valueOf(onTransition != null ? onTransition : onCreate)
+                                    .trim();
+            if (g.getFrom() != null && !g.getFrom()
+                                         .isBlank()
+                    && !declared.equals(g.getFrom())) {
+                issues.add(subject + " event source [" + declared + "] is not the from entity [" + g.getFrom()
+                        + "] - a create-from reads the source from:, the event only says when");
+            }
+            Object when = event.get("when");
+            if (onTransition != null && (when == null || !String.valueOf(when)
+                                                                .matches("\\s*\\w+\\s*==\\s*\\d+\\s*"))) {
+                issues.add(subject + " event requires `when: \"<Property> == <status seed id or name>\"`");
+            } else if (when != null && !String.valueOf(when)
+                                              .matches("\\s*\\w+\\s*==\\s*\\d+\\s*")) {
+                issues.add(subject + " event when [" + when + "] must be `<Property> == <status seed id or name>`");
+            }
+        }
+        // The at-most-once guard: the target's own to-one back to the source, written from the source's
+        // primary key. A cross-model source's key field is read from the owner .model at generation
+        // time, so only the local case is checkable here - the glue generator fails loudly for the rest.
+        if (!crossModelSource && source != null && !g.getMap()
+                                                     .containsValue(seedIdField(source))) {
+            issues.add(subject + " is event-driven, so its map must copy the source's [" + seedIdField(source)
+                    + "] onto the target's back-reference to it (e.g. `map: { " + g.getFrom() + ": " + seedIdField(source)
+                    + " }`) - that back-reference is the at-most-once guard against an event redelivery");
         }
     }
 

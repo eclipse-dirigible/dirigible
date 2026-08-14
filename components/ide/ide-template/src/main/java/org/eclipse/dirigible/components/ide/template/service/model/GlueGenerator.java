@@ -43,9 +43,10 @@ import static org.eclipse.dirigible.components.ide.template.service.model.ModelV
 class GlueGenerator {
 
     /** The names of the collections this generator handles. */
-    private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "timerLoaders", "waits", "aborts",
-            "setters", "writers", "notifications", "schedules", "integrations", "inbound", "rollups", "expansions", "settlements",
-            "generates", "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering");
+    private static final List<String> COLLECTIONS =
+            List.of("triggers", "resolvers", "fieldLoaders", "timerLoaders", "waits", "aborts", "setters", "writers", "notifications",
+                    "schedules", "integrations", "inbound", "rollups", "expansions", "settlements", "generates", "generateEvents",
+                    "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -97,7 +98,10 @@ class GlueGenerator {
             case "inbound" -> each(collection, source, content, model, parameters, GlueGenerator::bindInbound);
             case "expansions" -> each(collection, source, content, model, parameters, GlueGenerator::bindExpansion);
             case "settlements" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlement);
-            case "generates" -> each(collection, source, content, model, parameters, GlueGenerator::bindGenerate);
+            // Both collections carry the SAME create-from descriptors (generateEvents is the
+            // event-driven subset), so they share one binding - the listener and the create-from it
+            // calls cannot be rendered from divergent data.
+            case "generates", "generateEvents" -> each(collection, source, content, model, parameters, GlueGenerator::bindGenerate);
             case "transitions" -> each(collection, source, content, model, parameters, GlueGenerator::bindTransition);
             case "sends" -> each(collection, source, content, model, parameters, GlueGenerator::bindSend);
             case "posts" -> each(collection, source, content, model, parameters, GlueGenerator::bindPost);
@@ -441,7 +445,10 @@ class GlueGenerator {
     private static void bindGenerate(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "fromEntity", "toEntity", "toPk", "fieldAssignments", "hasItems", "hasItemLines",
                 "itemLines", "fromItemEntity", "toItemEntity", "srcFkProperty", "toFkProperty", "itemFieldAssignments", "fromPerspective",
-                "sourceStatusProperty", "sourceStatusValue");
+                "sourceStatusProperty", "sourceStatusValue",
+                // The event half (issue #6711): the trigger kind, the status guard and the back-reference
+                // the at-most-once check reads, plus whether a button is contributed at all.
+                "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "backRefProperty");
         context.put("fromJavaPerspective", sanitize(item, "fromPerspective"));
         // The SOURCE's gen folder / owning project: this project unless the source belongs to another
         // model (intent `fromUses:`). That is what lets a create-from be authored on the module owning

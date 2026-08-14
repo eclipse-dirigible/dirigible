@@ -136,6 +136,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("expansions", expansions);
         glue.put("settlements", settlements);
         glue.put("generates", generates);
+        // The event-driven subset (issue #6711) - the SAME descriptors, filtered, so the listener and
+        // the create-from it calls can never be built from divergent data. A create-from with no event
+        // must contribute no listener, which is why this is a collection of its own rather than a flag
+        // the listener template branches on (one file per entry is the collection contract).
+        glue.put("generateEvents", generates.stream()
+                                            .filter(entry -> Boolean.TRUE.equals(entry.get("hasEvent")))
+                                            .toList());
         glue.put("transitions", transitions);
         glue.put("sends", sends);
         glue.put("postings", postings);
@@ -632,6 +639,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * through the <b>target's</b> generated repository so its create-time logic (numbering, status
      * init) fires. The matching client button is emitted separately by the
      * {@code GeneratesIntentGenerator}.
+     *
+     * <p>
+     * An entry declaring an {@code event} (issue #6711) additionally lands in the
+     * {@code generateEvents} collection, whose template renders the listener that calls the same
+     * create-from - see {@link #putGeneratesEvent}.
      */
     private static List<Map<String, Object>> buildGenerates(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
@@ -666,6 +678,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             String toPk = target != null ? target.keyField() : IntentEntities.keyFieldName(byName.get(g.getTo()));
             String fromPerspective = sourceInfo != null ? sourceInfo.perspectiveName()
                     : IntentEntities.resolvePerspective(g.getFrom(), compositionParents, model);
+            String fromPk = sourceInfo != null ? sourceInfo.keyField() : IntentEntities.keyFieldName(source);
 
             Map<String, Object> e = new LinkedHashMap<>();
             e.put("name", g.getName());
@@ -673,6 +686,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("crossModel", crossModel);
             e.put("fromEntity", g.getFrom());
             e.put("fromPerspective", fromPerspective);
+            e.put("fromPk", fromPk);
+            // The NEGATIVE of "has a button" on purpose: the template gates the @Controller half on
+            // !$eventOnly, so a .glue written before this key existed keeps rendering the endpoint it
+            // always did (a regeneration from an older glue file must not silently drop the button).
+            e.put("eventOnly", !g.hasButton());
+            putGeneratesEvent(g, e, fromPk);
             // Cross-model source: the gen folder and the project that owns the source's topics/views.
             e.put("crossModelSource", crossModelSource);
             e.put("fromModel", crossModelSource ? g.getFromUses() : "");
@@ -808,6 +827,66 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * The event half of a create-from (issue #6711), pre-rendered onto its glue entry: the trigger kind
+     * (an {@code onCreate} binds the source's bare create topic, an {@code onTransition} its
+     * {@code -transitioned} topic), the status guard as a property/value pair evaluated against the
+     * RE-LOADED source, and the back-reference the at-most-once guard reads.
+     *
+     * <p>
+     * The back-reference is DERIVED from the {@code map} entry that copies the source's primary key
+     * rather than declared a second time: the mapping already says which target property points back at
+     * the source, and two ways to say it could only drift. A missing one fails loudly here because
+     * without it the create-from has no way to recognize its own output, so an event redelivery would
+     * mint a duplicate document (the parser catches the local case earlier, with the fix in the
+     * message).
+     *
+     * @param g the create-from
+     * @param e the glue entry being built
+     * @param fromPk the source's primary-key property name
+     */
+    private static void putGeneratesEvent(GeneratesIntent g, Map<String, Object> e, String fromPk) {
+        e.put("hasEvent", g.isEventDriven());
+        if (!g.isEventDriven()) {
+            e.put("isCreate", false);
+            e.put("guardProperty", "");
+            e.put("guardValue", "");
+            e.put("backRefProperty", "");
+            return;
+        }
+        boolean isCreate = g.getEvent()
+                            .get("onCreate") != null;
+        e.put("isCreate", isCreate);
+        String guardProperty = "";
+        String guardValue = "";
+        Object whenValue = g.getEvent()
+                            .get("when");
+        if (whenValue != null) {
+            java.util.regex.Matcher when = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*==\\s*(\\d+)\\s*")
+                                                                  .matcher(String.valueOf(whenValue));
+            if (when.matches()) {
+                guardProperty = IntentNaming.pascalCase(when.group(1));
+                guardValue = when.group(2);
+            }
+        }
+        e.put("guardProperty", guardProperty);
+        e.put("guardValue", guardValue);
+        String backReference = "";
+        for (Map.Entry<String, String> mapping : g.getMap()
+                                                  .entrySet()) {
+            if (fromPk.equals(IntentNaming.pascalCase(mapping.getValue()))) {
+                backReference = IntentNaming.pascalCase(mapping.getKey());
+            }
+        }
+        if (backReference.isEmpty()) {
+            throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(List.of("generates [" + g.getName()
+                    + "] is event-driven but its map copies no source key onto a back-reference: add the target's to-one back to ["
+                    + g.getFrom() + "] to the map (the source's [" + fromPk
+                    + "] as its value) - it is the at-most-once guard against an event redelivery"));
+        }
+        e.put("backRefProperty", backReference);
     }
 
     /**

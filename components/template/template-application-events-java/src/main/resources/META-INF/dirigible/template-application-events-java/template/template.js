@@ -151,6 +151,15 @@ export function getTemplate(parameters) {
                 collection: "generates"
             },
             {
+                // The event-driven subset of `generates` (issue #6711): the listener that calls the
+                // create-from above when the source reaches its state, so no one has to click.
+                location: "/template-application-events-java/events/GenerateOnEvent.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}GenerateOnEvent.java",
+                engine: "velocity",
+                collection: "generateEvents"
+            },
+            {
                 location: "/template-application-events-java/events/Transition.java.template",
                 action: "generate",
                 rename: "gen/events/{{javaGenFolderName}}/{{className}}Transition.java",
