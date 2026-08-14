@@ -55,6 +55,7 @@ class IntentEngineIT extends IntegrationTest {
     private static final String GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
     private static final String AGENT_URL = "/services/ide/intent/agent";
+    private static final String ASSIST_URL = "/services/ide/intent/assist";
 
     private static final String INTENT_YAML = """
             name: orders
@@ -298,6 +299,40 @@ class IntentEngineIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("configured", equalTo(false)));
+    }
+
+    @Test
+    void assist_refuses_a_path_it_does_not_own() {
+        // The Workbench assistant helps with the project's HAND-WRITTEN Java. A file under gen/ is the
+        // template engine's output and is wiped on the next generation, so a proposal there could only
+        // be lost - and a non-Java file is not its business at all. Both are refused before anything
+        // else happens, so neither costs a workspace lookup or an upstream call.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(assistBody("gen/orders/data/OrderEntity.java"))
+                                                 .when()
+                                                 .post(ASSIST_URL)
+                                                 .then()
+                                                 .statusCode(400));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(assistBody("app.intent"))
+                                                 .when()
+                                                 .post(ASSIST_URL)
+                                                 .then()
+                                                 .statusCode(400));
+    }
+
+    @Test
+    void assist_reports_when_not_configured() {
+        // Same contract as the intent agent's 412: no DIRIGIBLE_INTENT_AI_API_KEY is set in the test
+        // environment, so a well-formed request for a custom/ class must say the assistant is
+        // unavailable rather than attempting an upstream call. Network-free.
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(assistBody("custom/OrderNumber.java"))
+                                                 .when()
+                                                 .post(ASSIST_URL)
+                                                 .then()
+                                                 .statusCode(412));
     }
 
     @Test
@@ -2301,6 +2336,12 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("warnings", hasItem(containsString("neither declares `scope:` nor filters"))));
         assertFalse(contentOf("Revenue.report").contains("WHERE"), "with nothing to resolve, the query stays exactly as authored");
+    }
+
+    /** A well-formed Workbench-assistant request for one file of the test project. */
+    private static String assistBody(String path) {
+        return "{\"workspace\":\"" + WORKSPACE + "\",\"project\":\"" + PROJECT + "\",\"path\":\"" + path
+                + "\",\"source\":\"package custom;\\n\",\"message\":\"implement it\",\"history\":[]}";
     }
 
     private void writeIntent(String yaml) {

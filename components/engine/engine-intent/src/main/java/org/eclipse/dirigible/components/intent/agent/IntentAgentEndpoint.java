@@ -12,6 +12,8 @@ package org.eclipse.dirigible.components.intent.agent;
 import jakarta.annotation.security.RolesAllowed;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
+import org.eclipse.dirigible.components.intent.ai.AssistantNotConfiguredException;
+import org.eclipse.dirigible.components.intent.ai.AssistantUpstreamException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -58,9 +60,9 @@ class IntentAgentEndpoint {
     ResponseEntity<AgentReply> agent(@RequestBody AgentRequest request) {
         try {
             return ResponseEntity.ok(agentService.chat(request));
-        } catch (IntentAgentNotConfiguredException ex) {
+        } catch (AssistantNotConfiguredException ex) {
             throw new ResponseStatusException(HttpStatus.PRECONDITION_FAILED, ex.getMessage(), ex);
-        } catch (IntentAgentException ex) {
+        } catch (AssistantUpstreamException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, ex.getMessage(), ex);
         }
     }

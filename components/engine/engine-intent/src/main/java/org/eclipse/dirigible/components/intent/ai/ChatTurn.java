@@ -7,13 +7,14 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.intent.agent;
+package org.eclipse.dirigible.components.intent.ai;
 
 /**
- * One prior message in the assistant transcript.
+ * One prior message in an assistant transcript, as the browser replays it. Shared by every
+ * assistant surface so a client speaks one shape regardless of which endpoint it talks to.
  *
  * @param role {@code user} or {@code assistant}
  * @param content the plain-text message content
  */
-record AgentTurn(String role, String content) {
+public record ChatTurn(String role, String content) {
 }
