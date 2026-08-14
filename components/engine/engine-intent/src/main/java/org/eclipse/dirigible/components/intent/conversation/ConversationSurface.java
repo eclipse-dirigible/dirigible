@@ -25,7 +25,9 @@ public enum ConversationSurface {
     /** The Builder shell at {@code /services/web/builder/}. */
     BUILDER("builder"),
     /** The Intent Editor's chat pane in the Web IDE. */
-    INTENT_EDITOR("intent-editor");
+    INTENT_EDITOR("intent-editor"),
+    /** The Workbench's Assistant view, one conversation per hand-written Java file. */
+    WORKBENCH("workbench");
 
     /** The wire name. */
     private final String wireName;

@@ -913,6 +913,21 @@ class DirigibleEditor {
             },
         });
 
+        // Hand this editor's CURRENT buffer - unsaved edits included - to whoever asked for it. The
+        // Workbench assistant reasons about the file the developer is looking at, not the copy on disk,
+        // and a buffer that lives in this iframe is reachable no other way.
+        themingHub.addMessageListener({
+            topic: 'editor.content.request',
+            handler: (msg) => {
+                const { path, replyTopic } = msg || {};
+                if (!path || !replyTopic || path !== editorParameters.resourcePath) return;
+                themingHub.postMessage({
+                    topic: replyTopic,
+                    data: { path: path, content: editor.getModel().getValue(), dirty: DirigibleEditor.dirty },
+                });
+            },
+        });
+
         // Restore breakpoint glyphs from the debug view's persisted state
         themingHub.addMessageListener({
             topic: 'java.debug.breakpoints',

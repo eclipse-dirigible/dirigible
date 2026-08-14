@@ -1,0 +1,187 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="assistant" ng-controller="AssistantController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-assistant/configs/assistant-view.js"></script>
+        <meta name="platform-links" category="ng-view">
+        <link type="text/css" rel="stylesheet" href="/webjars/monaco-editor/min/vs/editor/editor.main.css">
+        <script type="text/javascript" src="/webjars/monaco-editor/min/vs/loader.js"></script>
+        <script type="text/javascript" src="js/assistant.js"></script>
+        <style>
+            .as-pane {
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+                background: var(--sapBackgroundColor, #fff);
+            }
+
+            .as-target {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 8px;
+                border-bottom: 1px solid var(--sapList_BorderColor, #e5e5e5);
+                font-size: 12px;
+                color: var(--sapNeutralTextColor, #6a6d70);
+            }
+
+            .as-target-file {
+                flex: 1;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                direction: rtl;
+                text-align: left;
+                color: var(--sapTextColor, #1d2d3e);
+            }
+
+            .as-messages {
+                flex: 1;
+                overflow-y: auto;
+                padding: 8px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .as-msg {
+                padding: 6px 10px;
+                border-radius: 8px;
+                font-size: 13px;
+                white-space: pre-wrap;
+                word-break: break-word;
+                max-width: 92%;
+            }
+
+            .as-msg.user {
+                align-self: flex-end;
+                background: var(--sapButton_Emphasized_Background, #0a6ed1);
+                color: var(--sapButton_Emphasized_TextColor, #fff);
+            }
+
+            .as-msg.assistant,
+            .as-msg.note {
+                align-self: flex-start;
+                background: var(--sapList_Background, #f4f4f4);
+                color: var(--sapTextColor, #1d2d3e);
+            }
+
+            .as-msg.error {
+                align-self: stretch;
+                background: var(--sapErrorBackground, #ffeaf4);
+                color: var(--sapNegativeTextColor, #aa0808);
+            }
+
+            .as-empty {
+                color: var(--sapNeutralTextColor, #6a6d70);
+                font-style: italic;
+                font-size: 13px;
+                padding: 8px;
+            }
+
+            .as-proposal {
+                border-top: 1px solid var(--sapList_BorderColor, #e5e5e5);
+                display: flex;
+                flex-direction: column;
+            }
+
+            .as-diff {
+                height: 260px;
+                min-height: 260px;
+            }
+
+            .as-diagnostics {
+                margin: 0;
+                padding: 6px 8px 6px 24px;
+                max-height: 96px;
+                overflow-y: auto;
+                font-size: 12px;
+                color: var(--sapNegativeTextColor, #aa0808);
+                background: var(--sapErrorBackground, #ffeaf4);
+            }
+
+            .as-proposal-bar {
+                display: flex;
+                gap: 8px;
+                padding: 6px 8px;
+                align-items: center;
+            }
+
+            .as-proposal-bar .as-proposal-label {
+                flex: 1;
+                font-size: 12px;
+                color: var(--sapNeutralTextColor, #6a6d70);
+            }
+
+            .as-input {
+                display: flex;
+                gap: 6px;
+                padding: 8px;
+                border-top: 1px solid var(--sapList_BorderColor, #e5e5e5);
+            }
+
+            .as-input bk-textarea {
+                flex: 1;
+            }
+        </style>
+    </head>
+
+    <body class="bk-vbox">
+        <div class="as-pane">
+            <div class="as-target">
+                <span class="as-target-file" ng-if="target" title="{{target.workspace}}/{{target.label}}">{{target.label}}</span>
+                <span class="as-target-file" ng-if="!target">No file selected</span>
+                <bk-button state="transparent" glyph="sap-icon--refresh" title="Re-check which file is open" aria-label="Re-check which file is open" ng-click="retrack()"></bk-button>
+            </div>
+
+            <div class="as-messages" id="as-messages">
+                <div class="as-empty" ng-if="!target">
+                    Open a hand-written Java file &mdash; the calculated-field actions and process delegates the model points at, under <code>custom/</code> &mdash; and the assistant will help you implement it.
+                    <div ng-if="unsupported">{{unsupported}}</div>
+                </div>
+                <div class="as-empty" ng-if="target && !chat.messages.length">
+                    Ask for a change to <strong>{{target.path}}</strong> in plain language. The assistant proposes the complete file, compiles it against the project first, and shows you a diff.
+                </div>
+                <div ng-repeat="m in chat.messages" class="as-msg {{m.role}}">{{m.text}}</div>
+                <div class="as-msg assistant" ng-if="chat.busy">Thinking&hellip;</div>
+            </div>
+
+            <div class="as-proposal" ng-if="chat.proposalPending">
+                <div class="as-diff" id="as-diff"></div>
+                <ul class="as-diagnostics" ng-if="diagnostics.length">
+                    <li ng-repeat="d in diagnostics">{{d.line > 0 ? 'Line ' + d.line + ': ' : ''}}{{d.message}}</li>
+                </ul>
+                <div class="as-proposal-bar">
+                    <span class="as-proposal-label">Proposed change</span>
+                    <bk-button state="emphasized" glyph="sap-icon--accept" label="Accept" title="Write the proposal to the file" ng-click="acceptProposal()"></bk-button>
+                    <bk-button state="transparent" glyph="sap-icon--decline" label="Reject" title="Discard the proposal" ng-click="rejectProposal()"></bk-button>
+                </div>
+            </div>
+
+            <div class="as-input">
+                <bk-textarea placeholder="Describe what this class should do..." ng-model="chat.input" ng-keydown="onChatKey($event)" ng-disabled="chat.busy || !target"></bk-textarea>
+                <bk-button state="emphasized" glyph="sap-icon--paper-plane" title="Send" aria-label="Send" ng-click="send()" ng-disabled="chat.busy || !chat.input || !target"></bk-button>
+            </div>
+        </div>
+        <theme></theme>
+    </body>
+
+</html>
