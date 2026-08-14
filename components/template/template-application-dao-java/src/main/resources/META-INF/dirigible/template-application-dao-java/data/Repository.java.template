@@ -131,7 +131,7 @@ import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.sdk.messaging.Producer;
 import org.eclipse.dirigible.sdk.utils.Json;
-#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0))
+#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges)
 import org.eclipse.dirigible.sdk.db.ValidationException;
 #end
 #if($multilingual == "true")
@@ -193,6 +193,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
+#if($lifecycleInitialStatus)
+        enforceLifecycleStart(entity.${lifecycleStatusProperty});
+#end
 #rollupGuardCheck()
 #aggregateGuardCheck()
 #if($hasLabel)
@@ -251,6 +254,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public ${name}Entity update(${name}Entity entity) {
+#if($lifecycleEdges)
+        enforceLifecycle(entity);
+#end
 #rollupGuardCheck()
 #aggregateGuardCheck()
 #if($preservedOnUpdate.size() > 0)
@@ -325,6 +331,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * re-fire onUpdate reactions (notifications, roll-ups, integrations) for a change the user never made.
      */
     public ${name}Entity updateWithoutEvent(${name}Entity entity) {
+#if($lifecycleEdges)
+        // A system write is still a status write: the state machine is the ONE place the legal moves
+        // are declared, so a workflow setter or glue action gets the same answer a user form gets.
+        enforceLifecycle(entity);
+#end
 #if($hasLabel)
         // Workflow writes change label inputs too (e.g. the stamped document number) - keep the
         // stored display name current on the system path as well.
@@ -337,7 +348,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
         return super.update(entity);
     }
-#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel)
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges)
 
     /**
      * Targeted single-column write with the document semantics preserved: routed through
@@ -364,6 +375,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         }
         ${name}Entity entity = findOne(id).orElse(null);
         if (entity != null) {
+#if($lifecycleEdges)
+            // The status as it stands BEFORE the targeted write - a transition button, a workflow
+            // setter and a glue action all arrive here, and all of them are moves in the state machine.
+            Object lifecyclePrevious = entity.${lifecycleStatusProperty};
+#end
             values = new java.util.LinkedHashMap<>(values);
             for (java.util.Map.Entry<String, Object> value : values.entrySet()) {
                 try {
@@ -381,6 +397,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             if (entity.Name == null ? nameBefore != null : !entity.Name.equals(nameBefore)) {
                 values.put("Name", entity.Name);
             }
+#end
+#if($lifecycleEdges)
+            enforceLifecycleMove(lifecyclePrevious, entity.${lifecycleStatusProperty});
 #end
 #if($documentChecks && $documentChecks.size() > 0)
             // The workflow transition (the setter flipping the status to POSTED) comes through here -
@@ -419,6 +438,91 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         return count;
     }
 
+#if($lifecycleEdges)
+    /**
+     * The declarative state machine (intent {@code lifecycle:}): the WHOLE set of legal status edges,
+     * as {@code 1&gt;2} source-to-target id pairs.
+     *
+     * <p>
+     * It is enforced HERE, in the repository, because this is the one place every status write passes
+     * through whoever performs it - a user form, a workflow setter, a transition button, a glue action,
+     * a custom controller. Guarding only the {@code transitions:} buttons would leave every other
+     * writer free to jump a record from any status to any other, which is precisely the hole the
+     * declaration closes.
+     */
+    private static final java.util.Set<String> LIFECYCLE_EDGES =
+            new java.util.HashSet<>(java.util.Arrays.asList("${lifecycleEdges}".split(",")));
+
+    /** Seeded status names, so a rejection names statuses instead of quoting positional ids. */
+    private static final java.util.Map<String, String> LIFECYCLE_STATUS_NAMES = lifecycleStatusNames();
+
+    private static java.util.Map<String, String> lifecycleStatusNames() {
+        java.util.Map<String, String> names = new java.util.HashMap<>();
+#if($lifecycleStatusNames)
+        for (String seeded : "${lifecycleStatusNames}".split(",")) {
+            int separator = seeded.indexOf('=');
+            if (separator > 0) {
+                names.put(seeded.substring(0, separator), seeded.substring(separator + 1));
+            }
+        }
+#end
+        return names;
+    }
+
+    /** A status as a person reads it: its seeded name when it has one, else the bare id. */
+    private static String lifecycleLabel(Object status) {
+        String id = String.valueOf(status);
+        String name = LIFECYCLE_STATUS_NAMES.get(id);
+        return name == null ? id : name;
+    }
+
+    /**
+     * Validate the status move this write would make against the state machine, reading the stored row
+     * for the status the record is standing in.
+     */
+    private void enforceLifecycle(${name}Entity entity) {
+        if (entity.${pkPropertyName} == null) {
+            return; // no stored row yet - a create, which enforceLifecycleStart covers
+        }
+        ${name}Entity stored = findById(entity.${pkPropertyName});
+        if (stored != null) {
+            enforceLifecycleMove(stored.${lifecycleStatusProperty}, entity.${lifecycleStatusProperty});
+        }
+    }
+
+    /**
+     * Reject a status move the lifecycle does not declare. A write that leaves the status where it was
+     * is not a move; clearing the status is, and there is no edge to nowhere.
+     */
+    private void enforceLifecycleMove(Object previous, Object next) {
+        if (previous == null || (next != null && String.valueOf(previous)
+                                                       .equals(String.valueOf(next)))) {
+            return;
+        }
+        if (next == null) {
+            throw new ValidationException("This ${name} is " + lifecycleLabel(previous) + " and cannot be left without a status");
+        }
+        if (!LIFECYCLE_EDGES.contains(String.valueOf(previous) + ">" + String.valueOf(next))) {
+            throw new ValidationException("This ${name} cannot move from " + lifecycleLabel(previous) + " to "
+                    + lifecycleLabel(next) + " - that is not a step its lifecycle allows");
+        }
+    }
+#if($lifecycleInitialStatus)
+
+    /**
+     * A lifecycle with a declared start ({@code init:}) also fixes where a record may ENTER it: created
+     * anywhere else, a record would skip the graph entirely rather than travel it. The system's own
+     * create-time filing (an aggregate guard's {@code outcome: reject}) runs after this check, so it
+     * still files the record where the model says it belongs.
+     */
+    private void enforceLifecycleStart(Object status) {
+        if (status != null && !"${lifecycleInitialStatus}".equals(String.valueOf(status))) {
+            throw new ValidationException("A new ${name} starts at " + lifecycleLabel("${lifecycleInitialStatus}") + ", not at "
+                    + lifecycleLabel(status));
+        }
+    }
+#end
+#end
 #if($documentChecks && $documentChecks.size() > 0)
     /**
      * Declarative document checks (intent {@code checks:}): each runs when the document is persisted

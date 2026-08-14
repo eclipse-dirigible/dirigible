@@ -675,6 +675,46 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void lifecycleEmitsTheStateMachineTheRepositoryEnforces() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                    lifecycle:
+                      edges:
+                        - { from: DRAFT,  to: [POSTED, CANCELLED] }
+                        - { from: POSTED, to: [VOIDED] }
+                seeds:
+                  - name: entry-statuses
+                    entity: EntryStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: POSTED }
+                      - { id: 3, name: CANCELLED }
+                      - { id: 4, name: VOIDED }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
+        Map<String, Object> entry = entityByName(entities(model), "JournalEntry");
+        assertEquals("Status", entry.get("lifecycleStatusProperty"));
+        assertEquals("1>2,1>3,2>4", entry.get("lifecycleEdges"));
+        // The seeded names ride along so a rejection reads "cannot move from POSTED to DRAFT".
+        assertEquals("1=DRAFT,2=POSTED,3=CANCELLED,4=VOIDED", entry.get("lifecycleStatusNames"));
+        // With a declared start, a record cannot be CREATED mid-lifecycle either.
+        assertEquals("1", entry.get("lifecycleInitialStatus"));
+        // An entity without a lifecycle carries none of it.
+        assertNull(entityByName(entities(model), "EntryStatus").get("lifecycleEdges"));
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void guardCheckEmitsKeyedAggregateGuard() {
         String yaml = """

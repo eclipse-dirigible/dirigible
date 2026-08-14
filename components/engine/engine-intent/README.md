@@ -24,6 +24,7 @@ filters) are covered at the generation layer by `IntentEngineIT` and the parser 
 | [`function`](#function--presentation-role) | explicit presentation role (Document, Setting, ...) |
 | [`checks`](#checks--declarative-validations) | cross-field / cross-line validations |
 | [`immutableWhen` / `immutable`](#immutablewhen--immutable---user-write-immutability) | 409 on user writes in a status / append-only snapshots |
+| [`lifecycle`](#lifecycle---the-legal-status-graph) | the whole legal status graph, enforced on every status write |
 | [`hierarchy` / `leafOnly`](#hierarchy--leafonly--tree-entities) | tree entities, leaf-only references |
 | [`multilingual` / `languages`](#multilingual--translated-master-data) | `_LANG` tables + read-time translation overlay |
 | [calculated fields](#calculated-fields--actions) | server+UI-evaluated expressions, date functions, Java call-outs |
@@ -139,6 +140,29 @@ message).
 seed ids (terms joined with `||`). `immutable: true` is the unconditional append-only variant, mutually
 exclusive with `immutableWhen`. Workflow/system writes through the repository stay possible -
 corrections are flow-generated reversals, never edits.
+
+## lifecycle - the legal status graph
+
+```yaml
+- name: SalesInvoice
+  lifecycle:
+    edges:
+      - { from: DRAFT,  to: [ISSUED, CANCELLED] }
+      - { from: ISSUED, to: [PAID, VOIDED] }
+  relations:
+    - { name: status, kind: manyToOne, to: SalesInvoiceStatus, function: EntityStatus, init: DRAFT }
+```
+
+The whole set of legal status moves, declared once. One entry per SOURCE status; either side accepts
+a seeded status name or its id. The graph is always over the entity's `function: EntityStatus`
+relation (so it names no column), and the nomenclature must be seeded in this model.
+
+Enforced in the generated **repository** - the one choke point every status write passes through - so
+an unmodeled move is rejected with 400 wherever it came from: the REST update, the transition
+controller's targeted write, a workflow `setRelationField`, a hand-written action. With `init:`
+declared, a record must also be created in that status. At authoring time the graph is what
+`transitions:`, a status-setting workflow step and a check's rejection are validated against, so the
+buttons and the graph cannot disagree.
 
 ## hierarchy / leafOnly - tree entities
 

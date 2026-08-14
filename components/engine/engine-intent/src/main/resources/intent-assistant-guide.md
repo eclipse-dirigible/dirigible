@@ -279,6 +279,31 @@ field may declare:
   snapshot entity (e.g. the frozen copy stored when an invoice is SENT): written once by the flow,
   never editable. System writes through the repository stay possible. Mutually exclusive with
   `immutableWhen` (always-immutable subsumes any status scope); needs no EntityStatus relation.
+- `lifecycle: { edges: [ { from: <status>, to: [<status>, ...] }, ... ] }` (entity-level) - **the
+  declarative state machine**: the WHOLE set of legal status moves, declared once and enforced on
+  EVERY status write. Without it the status machinery is a set of point constructs - `init:` names
+  the start, a `transitions:` button guards the flips that go through THAT button, a workflow step
+  writes one, a `checks:` rejection files another - and nothing says which moves are legal at all, so
+  a workflow branch, a glue action or a plain REST call can jump a document from any status to any
+  other. Shape: one entry per SOURCE status, listing every status reachable from it; either side may
+  be the seeded status NAME or its id. The graph is always over the entity's
+  `function: EntityStatus` relation, so it names no column (an `on:` key is rejected - it would be
+  redundant, and YAML reads a bare `on` as the boolean `true`). The nomenclature must be seeded in
+  THIS model (a cross-model status entity is seeded in its owner model, and so is its lifecycle).
+  Canonical shape:
+    `lifecycle: { edges: [ { from: DRAFT, to: [ISSUED, CANCELLED] }, { from: ISSUED, to: [PAID, VOIDED] } ] }`
+  **Enforced in the generated repository** - the one choke point every writer passes through - so an
+  unmodeled move is rejected with **400** and a message naming both statuses, whether it came from
+  the REST update, the transition controller's targeted write, a workflow `setRelationField` or a
+  hand-written action; the record is left untouched. Where the status relation declares `init:`, a
+  record must also be CREATED in that status - entering the lifecycle anywhere else skips the graph
+  instead of travelling it. **At authoring time** the graph makes the other status sites agree with
+  it: each `from` of a `transitions:` entry must reach its `setStatus` along a declared edge (a
+  button is presentation over an edge), and a status written by a workflow step or forced by a
+  check's rejection must be one some edge reaches - so a reject path transiting through an approved
+  status fails when the intent is read, not in production. Composes with `stage:` (what a status
+  MEANS - draft/live/cancelled/void, which scopes reports) - the lifecycle says how a record may
+  MOVE.
 - `locksWithMaster: false` (entity-level, on a **composition child**) - **this collection does not
   freeze with its master**. A master's immutability locks the document's own CONTENT; a child
   collection is a different entity with its own controller and its own rules, and the generated UI
@@ -1119,7 +1144,9 @@ transitions:
 ```
 
 **Rules:** unique `name`; `forEntity` must be a declared entity with a `function: EntityStatus`
-relation (the column the transition writes); `from` is a non-empty list of positive seed ids;
+relation (the column the transition writes); when that entity declares a `lifecycle:`, every `from`
+status must reach `setStatus` along a declared edge (the button is presentation over the graph);
+`from` is a non-empty list of positive seed ids;
 `setStatus` is a positive seed id not contained in `from` (a transition must change the status). The
 optional `when` guard is a single `<Field> ==|!= <number>` comparison over an own field or to-one
 relation of the entity, evaluated server-side with the SDK `Calc` semantics (a `null` field reads as
@@ -1378,7 +1405,7 @@ is unclassified, Generate reports the aggregate as lifecycle-blind and the total
 
 #### Statuses may be named, not numbered
 
-Everywhere the intent names a status - `transitions[].from` / `setStatus`, a relation's `init:`, a
+Everywhere the intent names a status - `transitions[].from` / `setStatus`, a `lifecycle:` edge, a relation's `init:`, a
 `setRelationField` `value:`, `abortOn.status`, a check's `status`/`setStatus`, `immutableWhen`, a
 posting's `event.when`, a report's `filter` - use the **seeded name** instead of the id:
 

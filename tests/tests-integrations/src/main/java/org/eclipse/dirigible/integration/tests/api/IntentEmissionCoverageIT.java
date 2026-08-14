@@ -57,16 +57,18 @@ import org.springframework.beans.factory.annotation.Autowired;
  * (read-time overlay), seed rows carrying a RELATION column, aggregate totals, first-class
  * {@code number:} stamping from an authored {@code .numbers} series declaration,
  * {@code transitions} (the guarded on-demand status flip: allowed-status 200, wrong-status/guard
- * 409), {@code postings} with {@code reverses} (post on a transition; red-storno reversal on void -
- * negated amounts, storno link, fail-soft), the {@code notify} block with {@code attach: print}
- * (send the document itself by e-mail - on a transition and on a process step; the fail-soft
- * contract), {@code calculatedActionOnCreate} on a to-one RELATION (the FK resolved server-side by
- * a hand-written {@code custom/} action: assigned in the repository, and at runtime both defaulted
- * when omitted and left alone when the caller supplied one), the event-driven {@code generates}
- * (posting the source mints the whole document with nobody clicking, and a click afterwards returns
- * that same document - the at-most-once back-reference guard), and the personal (my) surface
- * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
- * fields).
+ * 409), {@code lifecycle} (the declarative state machine: the graph walked through its transitions,
+ * an unmodeled flip and a create filed mid-lifecycle both refused through the plain REST surface no
+ * transition guard covers), {@code postings} with {@code reverses} (post on a transition;
+ * red-storno reversal on void - negated amounts, storno link, fail-soft), the {@code notify} block
+ * with {@code attach: print} (send the document itself by e-mail - on a transition and on a process
+ * step; the fail-soft contract), {@code calculatedActionOnCreate} on a to-one RELATION (the FK
+ * resolved server-side by a hand-written {@code custom/} action: assigned in the repository, and at
+ * runtime both defaulted when omitted and left alone when the caller supplied one), the
+ * event-driven {@code generates} (posting the source mints the whole document with nobody clicking,
+ * and a click afterwards returns that same document - the at-most-once back-reference guard), and
+ * the personal (my) surface ({@code identity}/{@code personal}/{@code sensitive}: scoped reads,
+ * forced owner, stripped fields).
  */
 class IntentEmissionCoverageIT extends IntegrationTest {
 
@@ -165,7 +167,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
               # postings source: PostDoc flips it POSTED (posting fires), VoidDoc flips it
               # CANCELLED (the reverses posting fires - red storno).
+              #
+              # lifecycle: the WHOLE legal status graph, enforced by the repository on every status
+              # write - the two transitions above are exactly its two edges, and anything else (a
+              # REST write jumping DRAFT straight to CANCELLED, a create filed as POSTED) is refused
+              # whoever attempts it.
               - name: Doc
+                lifecycle:
+                  edges:
+                    - { from: DRAFT,  to: [POSTED] }
+                    - { from: POSTED, to: [CANCELLED] }
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: date,   type: date, required: true }
@@ -1471,6 +1482,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(transitionExtension.contains("-custom-action"),
                 "the transition button must contribute to the app's custom-action extension point");
 
+        // lifecycle: the state machine is compiled into the REPOSITORY - the one choke point every
+        // status write passes through - not into the transition controllers, which would leave every
+        // other writer (a REST update, a workflow setter, a glue action) free to jump anywhere.
+        String docRepository = contentOf("gen/emission/data/doc/DocRepository.java");
+        assertTrue(docRepository.contains("\"1>2,2>3\".split(\",\")"), "the lifecycle must emit the whole legal edge set");
+        assertTrue(docRepository.contains("1=DRAFT,2=POSTED,3=CANCELLED"),
+                "the seeded status names must ride along so a rejection names statuses, not positional ids");
+        assertTrue(docRepository.contains("enforceLifecycle(entity);"), "a full-row update must be validated against the graph");
+        assertTrue(docRepository.contains("enforceLifecycleMove(lifecyclePrevious, entity.Status);"),
+                "a targeted write (transition button, workflow setter) must be validated against the graph too");
+        assertTrue(docRepository.contains("enforceLifecycleStart(entity.Status);"),
+                "with a declared init, a record must not be created mid-lifecycle");
+
         // send a document by e-mail: the notify block, at two of its call sites.
         //
         // (1) On a TRANSITION - the mail goes out after the flip, with the record's own print
@@ -2156,6 +2180,39 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  // carries the SAME Party dimension, unnegated.
                                                  .body("findAll { it.Entry == " + reversalEntry.get() + " && it.Party == 1 }.size()",
                                                          equalTo(1)));
+
+        // lifecycle at the outermost layer: the two transitions above walked the graph (DRAFT ->
+        // POSTED -> CANCELLED) and both returned 200. What the declaration adds is everything ELSE
+        // being refused - through the plain REST surface, which no transition guard covers.
+        //
+        // (1) A move no edge declares: the voided Doc dragged back to DRAFT.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + doc.get() + ",\"Date\":\"2026-01-17\",\"Amount\":250,\"Status\":1}")
+                                                 .when()
+                                                 .put(API + "/doc/DocController/" + doc.get())
+                                                 .then()
+                                                 .statusCode(400));
+        // The record is untouched - a rejected move must not half-write.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/doc/DocController/" + doc.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(3)));
+        // (2) A move the graph DOES declare still goes through the same guard: an edit that leaves
+        // the status where it stands is not a move at all.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + doc.get() + ",\"Date\":\"2026-01-17\",\"Amount\":260,\"Status\":3}")
+                                                 .when()
+                                                 .put(API + "/doc/DocController/" + doc.get())
+                                                 .then()
+                                                 .statusCode(200));
+        // (3) Entering the lifecycle anywhere but at its declared start: a Doc filed as POSTED.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-19\",\"Amount\":10,\"Status\":2}")
+                                                 .when()
+                                                 .post(API + "/doc/DocController")
+                                                 .then()
+                                                 .statusCode(400));
 
         // postings onCreate (#6421): a booked Payment has no status lifecycle - its INSERT posts
         // the balanced Entry (async handler - poll), back-referenced through Entry.Payment.

@@ -154,6 +154,16 @@ final class StatusSymbolResolver {
             }
             Target status = statusOf(entityName);
             String statusRelation = statusRelationName(entityName);
+            // The declarative state machine: every node of the graph names a status.
+            for (Object edgeNode : asList(asMap(entity.get("lifecycle")) == null ? null : asMap(entity.get("lifecycle")).get("edges"))) {
+                Map<?, ?> edge = asMap(edgeNode);
+                if (edge == null) {
+                    continue;
+                }
+                String subject = "entity [" + entityName + "] lifecycle edge [" + text(edge, "from") + "]";
+                putResolved(edge, "from", status, subject + " from");
+                putResolvedList(edge, "to", status, subject + " to");
+            }
             if (entity.get("immutableWhen") != null) {
                 String rewritten = rewriteExpression(text(entity, "immutableWhen"), statusRelation, status,
                         "entity [" + entityName + "] immutableWhen");

@@ -12,6 +12,8 @@ package org.eclipse.dirigible.components.intent.parser;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -36,6 +38,8 @@ import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.GenerateChildIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.LabelExpression;
+import org.eclipse.dirigible.components.intent.model.LifecycleEdgeIntent;
+import org.eclipse.dirigible.components.intent.model.LifecycleIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
@@ -152,6 +156,7 @@ public final class IntentParser {
             return new IntentModel();
         }
         rejectRemovedNumberKeys(tree);
+        rejectLifecycleOn(tree);
         moveGeneratesItemLines(tree);
         // Statuses may be referenced by their seeded NAME; resolve them to ids on the raw tree so the
         // typed mapping, every validator and every generator keep seeing the integers they always saw.
@@ -205,6 +210,7 @@ public final class IntentParser {
         validateActions(model, entityNames, issues);
         validateGenerates(model, entityNames, usesAliases, issues);
         validateTransitions(model, entityNames, issues);
+        validateLifecycles(model, issues);
         validatePostings(model, usesAliases, issues);
         validateReports(model, entityNames, issues);
         validateWidgets(model, issues);
@@ -2700,6 +2706,34 @@ public final class IntentParser {
         mutable.remove("items");
     }
 
+    /**
+     * A {@code lifecycle:} block names no status column: the graph is always over the entity's
+     * {@code function: EntityStatus} relation. Rejecting an {@code on:} key is not pedantry - YAML 1.1
+     * resolves a bare {@code on} to the boolean {@code true}, so the key would arrive as {@code true}
+     * and bind to nothing at all. Authored in good faith, ignored in silence: exactly the class of
+     * failure this parser refuses to ship.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    private static void rejectLifecycleOn(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity) || !(entity.get("lifecycle") instanceof Map<?, ?> lifecycle)) {
+                continue;
+            }
+            if (lifecycle.containsKey("on") || lifecycle.containsKey(Boolean.TRUE)) {
+                issues.add("entity [" + entity.get("name")
+                        + "] lifecycle declares `on` - the graph is always over the entity's function: EntityStatus relation; remove it");
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
+        }
+    }
+
     private static void rejectRemovedNumberKeys(Object tree) {
         if (!(tree instanceof Map<?, ?> root)) {
             return;
@@ -3444,7 +3478,10 @@ public final class IntentParser {
                     if (value == null || value.isBlank()) {
                         issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setRelationField [" + setRelationField
                                 + "] must declare a value (the related record id)");
-                    } else if (!value.matches("-?\\d+")) {
+                    } else if (authoredId(value) == null) {
+                        // Digits alone are not enough: a run too long to be an int is no record id
+                        // either, and accepting it here would hand every consumer a number nothing can
+                        // hold.
                         issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setRelationField [" + setRelationField
                                 + "] value [" + value + "] must be an integer record id");
                     }
@@ -4421,6 +4458,212 @@ public final class IntentParser {
                 issues.add(subject + " has a computed item line with no cells");
             }
         }
+    }
+
+    /**
+     * The declarative state machine ({@code lifecycle:}) and everything that has to agree with it.
+     *
+     * <p>
+     * The graph itself must be well-formed: it is over the entity's {@code function: EntityStatus}
+     * relation, whose nomenclature must be seeded IN THIS MODEL (a cross-model status entity is seeded
+     * in its owner model, where its lifecycle belongs), one edge entry per source status, and every id
+     * on either side a seeded status.
+     *
+     * <p>
+     * Then every OTHER site that writes a status is checked against it, which is the point of declaring
+     * the graph: a {@code transitions:} button is presentation over an edge (each of its {@code from}
+     * statuses must actually reach its {@code setStatus}), and a status written by a workflow step
+     * ({@code setRelationField}) or forced by a {@code checks:} rejection must be a status the graph
+     * can enter at all. Catching these here is what stops a reject path transiting through an approved
+     * status - the class of bug the graph exists to make impossible.
+     */
+    private static void validateLifecycles(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            LifecycleIntent lifecycle = entity.getLifecycle();
+            if (lifecycle == null || entity.getName() == null) {
+                continue;
+            }
+            String subject = "entity [" + entity.getName() + "] lifecycle";
+            RelationIntent status = LifecycleStages.statusRelation(entity);
+            if (status == null) {
+                issues.add(subject + " requires the entity to declare a function: EntityStatus relation - the graph is over its statuses");
+                continue;
+            }
+            if (status.isCrossModel()) {
+                issues.add(subject + " is over [" + status.getModel() + ":" + status.getTo()
+                        + "], a nomenclature seeded in another model - declare the lifecycle there, on the entity that owns it");
+                continue;
+            }
+            Map<Integer, String> statuses = LifecycleStages.seededStatuses(model, status.getTo());
+            if (statuses.isEmpty()) {
+                issues.add(subject + " needs [" + status.getTo()
+                        + "] to be seeded in this model - the graph is validated against the seeded statuses");
+                continue;
+            }
+            Map<Integer, Set<Integer>> edges = validateLifecycleEdges(lifecycle, statuses, subject, issues);
+            String init = status.getInit();
+            Integer initStatus = authoredId(init);
+            if (init != null && !statuses.containsKey(initStatus)) {
+                issues.add(subject + " starts at init [" + init + "], which is not a seeded status of [" + status.getTo() + "] - known: "
+                        + statusNames(statuses));
+            }
+            Set<Integer> reachable = new LinkedHashSet<>();
+            for (Set<Integer> targets : edges.values()) {
+                reachable.addAll(targets);
+            }
+            validateTransitionsAgainstLifecycle(model, entity, edges, statuses, issues);
+            validateStatusWritesAgainstLifecycle(model, entity, status, reachable, statuses, issues);
+        }
+    }
+
+    /**
+     * The graph's own well-formedness: one entry per source status, every id seeded, no self-edge, no
+     * duplicate source.
+     *
+     * @return source status to the statuses it reaches
+     */
+    private static Map<Integer, Set<Integer>> validateLifecycleEdges(LifecycleIntent lifecycle, Map<Integer, String> statuses,
+            String subject, List<String> issues) {
+        Map<Integer, Set<Integer>> edges = new LinkedHashMap<>();
+        if (lifecycle.getEdges()
+                     .isEmpty()) {
+            issues.add(subject + " declares no edges - list the legal status moves, one entry per source status");
+            return edges;
+        }
+        for (LifecycleEdgeIntent edge : lifecycle.getEdges()) {
+            Integer from = edge.getFrom();
+            if (from == null) {
+                issues.add(subject + " has an edge with no from status");
+                continue;
+            }
+            String edgeSubject = subject + " edge [" + statusLabel(from, statuses) + "]";
+            if (!statuses.containsKey(from)) {
+                issues.add(edgeSubject + " from is not a seeded status - known: " + statusNames(statuses));
+                continue;
+            }
+            if (edges.containsKey(from)) {
+                issues.add(edgeSubject + " is declared more than once - list every target of a status in ONE entry");
+                continue;
+            }
+            if (edge.getTo()
+                    .isEmpty()) {
+                issues.add(edgeSubject + " has no to statuses - drop the edge instead, a status with no target is terminal");
+                continue;
+            }
+            Set<Integer> targets = new LinkedHashSet<>();
+            for (Integer to : edge.getTo()) {
+                if (to == null || !statuses.containsKey(to)) {
+                    issues.add(edgeSubject + " to [" + to + "] is not a seeded status - known: " + statusNames(statuses));
+                } else if (to.equals(from)) {
+                    issues.add(edgeSubject + " lists itself as a target - an edge moves the record to another status");
+                } else {
+                    targets.add(to);
+                }
+            }
+            edges.put(from, targets);
+        }
+        return edges;
+    }
+
+    /**
+     * A {@code transitions:} button is PRESENTATION over an edge: every one of its {@code from}
+     * statuses must actually reach its {@code setStatus}, so the buttons and the graph cannot disagree.
+     */
+    private static void validateTransitionsAgainstLifecycle(IntentModel model, EntityIntent entity, Map<Integer, Set<Integer>> edges,
+            Map<Integer, String> statuses, List<String> issues) {
+        for (TransitionIntent transition : model.getTransitions()) {
+            if (!entity.getName()
+                       .equals(transition.getForEntity())
+                    || transition.getSetStatus() == null || transition.getFrom() == null) {
+                continue;
+            }
+            for (Integer from : transition.getFrom()) {
+                if (from == null || from.equals(transition.getSetStatus())) {
+                    continue; // already reported by the transition's own validation
+                }
+                if (!edges.getOrDefault(from, Set.of())
+                          .contains(transition.getSetStatus())) {
+                    issues.add("transition [" + transition.getName() + "] moves [" + statusLabel(from, statuses) + "] to ["
+                            + statusLabel(transition.getSetStatus(), statuses) + "], which entity [" + entity.getName()
+                            + "] lifecycle does not allow - add the edge or drop the source status from the button");
+                }
+            }
+        }
+    }
+
+    /**
+     * The status writes with no declared source: a workflow step's {@code setRelationField} on the
+     * status FK, and the status a {@code checks:} rejection forces. The graph cannot say where the
+     * record will be standing when they run, but it can say whether the target is a status anything may
+     * ever move INTO - a target no edge reaches is unreachable by construction.
+     */
+    private static void validateStatusWritesAgainstLifecycle(IntentModel model, EntityIntent entity, RelationIntent status,
+            Set<Integer> reachable, Map<Integer, String> statuses, List<String> issues) {
+        for (ProcessIntent process : model.getProcesses()) {
+            if (!entity.getName()
+                       .equals(triggerEntityName(process))) {
+                continue;
+            }
+            for (StepIntent step : process.getSteps()) {
+                String relation = stepArg(step, "setRelationField");
+                Integer target = authoredId(stepArg(step, "value"));
+                if (relation == null || !relation.equalsIgnoreCase(status.getName()) || target == null) {
+                    continue; // a non-numeric or unresolvable value is reported by the step's own validation
+                }
+                if (!reachable.contains(target)) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName() + "] sets the status to ["
+                            + statusLabel(target, statuses) + "], which no edge of the [" + entity.getName()
+                            + "] lifecycle reaches - add the edge or set a status the graph can enter");
+                }
+            }
+        }
+        if (entity.getChecks() == null) {
+            return;
+        }
+        for (CheckIntent check : entity.getChecks()) {
+            Integer forced = check.getSetStatus();
+            if (forced != null && !reachable.contains(forced)) {
+                issues.add("entity [" + entity.getName() + "] check [" + check.getKind() + "] files the record as ["
+                        + statusLabel(forced, statuses) + "], which no edge of its lifecycle reaches - add the edge or reject to a"
+                        + " status the graph can enter");
+            }
+        }
+    }
+
+    /**
+     * An authored record / seed id as an int, or {@code null} when the token is not one. Digits alone
+     * are not enough: a run too long to fit an int is no id either, and parsing it unguarded would fail
+     * the whole parse where the author deserves a validation message. Statuses reach here already
+     * resolved to their seed ids, so a leftover word is likewise simply not an id - and no stored id
+     * ever matches {@code null}.
+     *
+     * @param value the authored token
+     * @return the id, or {@code null}
+     */
+    private static Integer authoredId(String value) {
+        if (value == null || !value.matches("-?\\d+")) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(value);
+        } catch (NumberFormatException ex) {
+            return null; // more digits than an int holds - no seed id looks like that
+        }
+    }
+
+    /** A status as the author reads it: its seeded name when it has one, else the bare id. */
+    private static String statusLabel(Integer id, Map<Integer, String> statuses) {
+        String name = statuses.get(id);
+        return name == null || name.isBlank() ? String.valueOf(id) : name;
+    }
+
+    /** Every seeded status, for a "known: ..." hint. */
+    private static List<String> statusNames(Map<Integer, String> statuses) {
+        List<String> names = new ArrayList<>(statuses.size());
+        for (Integer id : statuses.keySet()) {
+            names.add(statusLabel(id, statuses));
+        }
+        return names;
     }
 
     /** The compiled shape of a transition {@code when} guard: {@code <Field> ==|!= <number>}. */
