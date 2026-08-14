@@ -443,6 +443,12 @@ class GlueGenerator {
                 "itemLines", "fromItemEntity", "toItemEntity", "srcFkProperty", "toFkProperty", "itemFieldAssignments", "fromPerspective",
                 "sourceStatusProperty", "sourceStatusValue");
         context.put("fromJavaPerspective", sanitize(item, "fromPerspective"));
+        // The SOURCE's gen folder / owning project: this project unless the source belongs to another
+        // model (intent `fromUses:`). That is what lets a create-from be authored on the module owning
+        // the TARGET and keeps the two modules' generated Java acyclic - only one side references the
+        // other.
+        context.put("fromGenFolder", truthy(item, "crossModelSource") ? sanitize(item, "fromModel") : str(parameters, "javaGenFolderName"));
+        context.put("fromProjectName", truthy(item, "crossModelSource") ? str(item, "fromProject") : str(parameters, "projectName"));
         context.put("toGenFolder", truthy(item, "crossModel") ? sanitize(item, "toModel") : str(parameters, "javaGenFolderName"));
         context.put("toJavaPerspective", sanitize(item, "toPerspective"));
         // A primary source item that is not a composition child lives outside the source document's

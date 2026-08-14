@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -94,6 +95,20 @@ class ModelGenerationIT extends IntegrationTest {
      * Mustache engine names its indexed collection twins by suffixing an underscore.
      */
     private static final Pattern ENGINE_ADDED_KEY = Pattern.compile("\"[A-Za-z0-9]+_\"\\s*:");
+
+    /**
+     * A Velocity reference that survived rendering. {@code ${JavaTask}} is excluded: it is a literal
+     * Flowable delegate expression that generated code carries on purpose.
+     */
+    private static final Pattern UNRESOLVED_REFERENCE = Pattern.compile("\\$\\{(?!JavaTask\\b)[A-Za-z]\\w*\\}?");
+
+    /**
+     * A member access whose member is missing - {@code parent. == null}, {@code target. = row.X} or
+     * {@code derived.put("X", parent.)} - which is what an emitted-code helper produces when the field
+     * name it interpolates is empty. Deliberately same-line only: generated code breaks a chained call
+     * after the dot, so a dot at end of line is normal and its member is on the next one.
+     */
+    private static final Pattern DANGLING_MEMBER_ACCESS = Pattern.compile("\\w\\.[ \\t]*[=;),!]");
 
     /** The workspace service. */
     @Autowired
@@ -191,6 +206,7 @@ class ModelGenerationIT extends IntegrationTest {
                     .contains("{{")) {
                 problems.add("[" + label + "] a rendered path kept its placeholder: " + file.getKey());
             }
+            problems.addAll(unresolvedReferences(label, file.getKey(), file.getValue()));
         }
         String descriptorPath = baseName(fixture) + DESCRIPTOR_EXTENSION;
         String descriptor = rendered.get(descriptorPath);
@@ -314,6 +330,46 @@ class ModelGenerationIT extends IntegrationTest {
     private static String baseName(String fixture) {
         int dot = fixture.indexOf('.');
         return dot > 0 ? fixture.substring(0, dot) : fixture;
+    }
+
+    /**
+     * Collects what would not compile in a rendered {@code .java} file.
+     *
+     * <p>
+     * Generated Java is the one output whose validity can be judged without running it, and it is the
+     * output where a rendering gap is most expensive: the client-Java runtime compiles the whole
+     * registry in ONE javac task, so a single broken generated file unregisters every controller in the
+     * application - the symptom is a 404 on an endpoint that has nothing to do with the defect. Both
+     * checks below are here because both defects reached master:
+     * <ul>
+     * <li>a surviving {@code ${reference}} - Velocity renders an undefined reference verbatim, so a key
+     * the binder forgot to put in the context (it was {@code fromGenFolder}) becomes a syntax error
+     * rather than a missing value;</li>
+     * <li>a dangling {@code .} - what an emitted-code helper produces when a field name it interpolates
+     * is the empty string, which is what the intent glue writes for an unused optional field.</li>
+     * </ul>
+     *
+     * @param label the case label
+     * @param path the rendered file path
+     * @param content the rendered content
+     * @return the problems found, empty when the file is sound
+     */
+    private static List<String> unresolvedReferences(String label, String path, String content) {
+        if (!path.endsWith(".java") || content == null) {
+            return List.of();
+        }
+        List<String> problems = new ArrayList<>();
+        Matcher reference = UNRESOLVED_REFERENCE.matcher(content);
+        while (reference.find()) {
+            problems.add("[" + label + "] " + path + " kept an unresolved template reference: " + reference.group());
+        }
+        Matcher dangling = DANGLING_MEMBER_ACCESS.matcher(content);
+        while (dangling.find()) {
+            problems.add("[" + label + "] " + path + " emitted a member access with no member, so an interpolated field name was"
+                    + " empty: " + dangling.group()
+                                           .trim());
+        }
+        return problems;
     }
 
 }
