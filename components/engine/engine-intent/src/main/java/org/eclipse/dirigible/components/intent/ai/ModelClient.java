@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.intent.ai;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -52,6 +53,9 @@ public class ModelClient {
      * here.
      */
     private static final Gson GSON = new Gson();
+
+    /** The Anthropic Messages path, appended to the configured base URL. */
+    private static final String MESSAGES_PATH = "/v1/messages";
 
     private final HttpClient httpClient = HttpClient.newBuilder()
                                                     .connectTimeout(Duration.ofSeconds(15))
@@ -134,7 +138,7 @@ public class ModelClient {
         String body = GSON.toJson(requestBody(systemPrompt, messages, tool));
 
         HttpRequest httpRequest = HttpRequest.newBuilder()
-                                             .uri(URI.create(baseUrl() + "/v1/messages"))
+                                             .uri(messagesEndpoint())
                                              .timeout(Duration.ofSeconds(120))
                                              .header("content-type", "application/json")
                                              .header("x-api-key", apiKey)
@@ -157,10 +161,44 @@ public class ModelClient {
         }
     }
 
-    /** The configured API base URL, without a trailing slash. */
-    private static String baseUrl() {
+    /**
+     * The Messages endpoint, built from the configured base URL after checking it is one we are willing
+     * to send an API key to.
+     *
+     * <p>
+     * The check is not ceremony. This request carries {@link DirigibleConfig#INTENT_AI_API_KEY} in a
+     * header, so wherever this URL points is where the key goes - and the base URL is a
+     * {@code Configuration} value, which on this platform is not as fixed as "deployment configuration"
+     * suggests: {@code JobService.trigger} writes every parameter of a manually triggered job straight
+     * into the global runtime configuration, so a caller privileged enough to trigger a job can
+     * transiently redefine any key. Refusing anything that is not an absolute
+     * {@code http}/{@code https} URL with a host and no embedded credentials keeps a redefinition from
+     * turning into a credential hand-off, and turns a typo'd base URL into a clear message instead of
+     * an obscure failure inside the HTTP client.
+     *
+     * @return the endpoint to POST to
+     * @throws AssistantNotConfiguredException when the configured base URL is not usable
+     */
+    static URI messagesEndpoint() {
         String configured = DirigibleConfig.INTENT_AI_BASE_URL.getStringValue();
-        return configured != null && configured.endsWith("/") ? configured.substring(0, configured.length() - 1) : configured;
+        String trimmed = StringUtils.trimToEmpty(configured);
+        String withoutTrailingSlash = trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+        URI base;
+        try {
+            base = new URI(withoutTrailingSlash);
+        } catch (URISyntaxException ex) {
+            throw new AssistantNotConfiguredException(unusableBaseUrl(withoutTrailingSlash), ex);
+        }
+        boolean http = "http".equalsIgnoreCase(base.getScheme()) || "https".equalsIgnoreCase(base.getScheme());
+        if (!http || StringUtils.isBlank(base.getHost()) || base.getUserInfo() != null) {
+            throw new AssistantNotConfiguredException(unusableBaseUrl(withoutTrailingSlash));
+        }
+        return URI.create(base.getScheme() + "://" + base.getAuthority() + StringUtils.defaultString(base.getPath()) + MESSAGES_PATH);
+    }
+
+    private static String unusableBaseUrl(String configured) {
+        return "The AI assistant is not usable: DIRIGIBLE_INTENT_AI_BASE_URL must be an absolute http(s) URL without credentials,"
+                + " but is [" + configured + "].";
     }
 
     /** Shape the Anthropic Messages request: system prompt, the single proposal tool, and the turns. */

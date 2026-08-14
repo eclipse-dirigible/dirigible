@@ -25,4 +25,14 @@ public class AssistantNotConfiguredException extends RuntimeException {
     public AssistantNotConfiguredException(String message) {
         super(message);
     }
+
+    /**
+     * Instantiates the exception.
+     *
+     * @param message the message
+     * @param cause the cause
+     */
+    public AssistantNotConfiguredException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

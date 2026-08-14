@@ -95,7 +95,7 @@ class WorkspaceJavaSources {
             } catch (RuntimeException ex) {
                 // A .java file with no parseable type declaration cannot be a compilation unit; leaving it
                 // out keeps the batch compilable instead of failing the whole assist on somebody's scratch file.
-                LOGGER.debug("Skipping unparseable Java source [{}]", path, ex);
+                LOGGER.debug("Skipping unparseable Java source [{}]", LoggedPath.of(path), ex);
             }
         }
         for (ICollection child : collection.getCollections()) {

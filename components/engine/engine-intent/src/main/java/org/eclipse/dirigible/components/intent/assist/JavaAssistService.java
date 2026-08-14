@@ -146,13 +146,13 @@ class JavaAssistService {
         try {
             result = compiler.compileBatch(units);
         } catch (RuntimeException ex) {
-            LOGGER.error("Could not compile the proposed Java for [{}]", context.path(), ex);
+            LOGGER.error("Could not compile the proposed Java for [{}]", LoggedPath.of(context.path()), ex);
             return List.of(new AssistDiagnostic(-1, -1, "the proposal could not be compiled: " + ex.getMessage()));
         }
         if (!result.failures()
                    .isEmpty()) {
-            LOGGER.debug("Assist compile of [{}] reported failures for [{}]", context.path(), result.failures()
-                                                                                                    .keySet());
+            LOGGER.debug("Assist compile of [{}] reported failures for [{}]", LoggedPath.of(context.path()), result.failures()
+                                                                                                                   .keySet());
         }
         List<CompileDiagnostic> diagnostics = result.diagnostics()
                                                     .get(fqn);
