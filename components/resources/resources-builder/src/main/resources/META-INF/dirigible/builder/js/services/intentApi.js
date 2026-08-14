@@ -116,8 +116,10 @@
 
     /**
      * One conversation turn. `history` must be the clean alternating user/assistant transcript.
-     * Returns `{reply, proposedYaml}` - note the endpoint answers 200 even when the proposal is
-     * still invalid, so callers MUST re-validate the proposal through parse() before applying it.
+     * Returns `{reply, proposedYaml, boundaries}` - note the endpoint answers 200 even when the
+     * proposal is still invalid, so callers MUST re-validate the proposal through parse() before
+     * applying it. `boundaries` lists the requirements the proposal could NOT express; they are part
+     * of the answer, not a footnote, and must be shown as such.
      */
     async agent(yaml, message, history) {
       const result = await call('POST', `${INTENT_BASE}/agent`, {

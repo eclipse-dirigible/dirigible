@@ -17,8 +17,9 @@ import com.fasterxml.jackson.annotation.JsonValue;
  *
  * <p>
  * {@link #USER} and {@link #ASSISTANT} are the transcript proper - the alternating dialogue the
- * model API is fed on the next turn; {@link #NOTE} and {@link #ERROR} are display-only, so a client
- * rebuilding its upstream history from a restored conversation simply keeps the first two.
+ * model API is fed on the next turn; {@link #NOTE}, {@link #ERROR} and {@link #BOUNDARY} are
+ * record-only, so a client rebuilding its upstream history from a restored conversation simply
+ * keeps the first two.
  */
 public enum ConversationRole {
 
@@ -29,7 +30,13 @@ public enum ConversationRole {
     /** A UI note the client showed, e.g. that a proposal was applied. */
     NOTE,
     /** A failure the client showed, e.g. a proposal that did not validate. */
-    ERROR;
+    ERROR,
+    /**
+     * A requirement the proposal could not express, reported next to it. Part of the record - it is
+     * what the developer still has to build, and what tells the platform which gap a real project hit -
+     * but never replayed to the model, which said it in the first place.
+     */
+    BOUNDARY;
 
     /**
      * The wire name - lower case, matching what both clients already put on their message objects.

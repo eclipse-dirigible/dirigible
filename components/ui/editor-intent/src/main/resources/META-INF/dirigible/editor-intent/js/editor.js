@@ -426,6 +426,50 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         });
     };
 
+    /**
+     * Render each requirement the proposal could NOT express as its own bubble - what it was, why the
+     * intent does not carry it, and which extension point does. Kept out of the assistant's prose on
+     * purpose: as another paragraph it reads like the rest of the answer and gets skimmed past, which
+     * is how "the system identifies the driver" once became "an officer identifies the driver" with
+     * nobody noticing. When the extension point is a Java class the bubble also carries a way into it.
+     */
+    const reportBoundaries = (boundaries) => {
+        for (const boundary of boundaries || []) {
+            if (!boundary || !boundary.requirement) continue;
+            const lines = ['Not expressible in the intent: ' + boundary.requirement];
+            if (boundary.explanation) lines.push(boundary.explanation);
+            if (boundary.extensionKind && boundary.extensionKind !== 'none') {
+                lines.push('Carried by: ' + boundary.extensionKind
+                    + (boundary.suggestedClass ? ' (' + boundary.suggestedClass + ', to be written by hand)' : ''));
+            }
+            $scope.chat.messages.push({ role: 'boundary', text: lines.join('\n'), file: customFileFor(boundary.suggestedClass) });
+        }
+    };
+
+    /** Where a suggested class lives in this project - the same custom/ mapping the stub generator uses. */
+    const customFileFor = (suggestedClass) => {
+        if (!suggestedClass) return null;
+        const relative = suggestedClass.replace(/\./g, '/')
+                                       .replace(/^custom\//, '');
+        return 'custom/' + relative + '.java';
+    };
+
+    /**
+     * Open the hand-written class of a boundary. The stub is scaffolded by Generate (custom/ is
+     * generate-once and never overwritten), so before that there is nothing to open and saying so beats
+     * opening an editor on a file that does not exist.
+     */
+    $scope.openBoundaryFile = (file) => {
+        const location = fileLocation();
+        const path = `/${location.workspace}/${location.project}/${file}`;
+        WorkspaceService.resourceExists(path).then(() => layoutHub.openEditor({ path: path }), () => dialogHub.showAlert({
+            title: 'Not generated yet',
+            message: `${file} does not exist yet. Click Generate - the stub is scaffolded then, and never overwritten afterwards.`,
+            type: AlertTypes.Information,
+            preformatted: false,
+        }));
+    };
+
     $scope.sendChat = () => {
         const message = ($scope.chat.input || '').trim();
         if (!message || $scope.chat.busy) return;
@@ -445,6 +489,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                      $scope.chat.messages.push({ role: 'assistant', text: reply });
                      $scope.chat.turns.push({ role: 'assistant', content: reply });
                  }
+                 reportBoundaries(response.data && response.data.boundaries);
                  if (response.data && response.data.proposedYaml) {
                      proposedYaml = response.data.proposedYaml;
                      $scope.chat.proposalPending = true;
