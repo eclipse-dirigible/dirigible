@@ -46,7 +46,7 @@ class GlueGenerator {
     private static final List<String> COLLECTIONS =
             List.of("triggers", "resolvers", "fieldLoaders", "timerLoaders", "waits", "aborts", "setters", "writers", "notifications",
                     "schedules", "integrations", "inbound", "rollups", "expansions", "settlements", "generates", "generateEvents",
-                    "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering");
+                    "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -109,6 +109,7 @@ class GlueGenerator {
             case "printFeeders" -> each(collection, source, content, model, parameters, GlueGenerator::bindPrintFeeder);
             case "snapshots" -> each(collection, source, content, model, parameters, GlueGenerator::bindSnapshot);
             case "numbering" -> each(collection, source, content, model, parameters, GlueGenerator::bindNumbering);
+            case "resolves" -> each(collection, source, content, model, parameters, GlueGenerator::bindResolve);
             case "rollups" -> rollups(source, content, model, parameters);
             case "aggregates" -> aggregates(source, content, model, parameters);
             default -> List.of();
@@ -620,6 +621,22 @@ class GlueGenerator {
     private static void bindNumbering(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "entity", "masterPk", "field", "series", "per");
         context.put("javaPerspective", sanitize(item, "perspective"));
+    }
+
+    /**
+     * Binds an effective-dated register lookup - the listener that fills a to-one from the register row
+     * valid on the record's date.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindResolve(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "name", "className", "entity", "perspective", "keyProperty", "topicSuffix", "guardExpression", "setProperty",
+                "registerEntity", "registerPerspective", "registerValueProperty", "matches", "matchSummary", "startProperty", "endProperty",
+                "valueProperty", "outcomeProperty", "statusProperty", "foundStatus", "notFoundStatus", "ambiguousStatus", "writesStatus");
+        context.put("javaPerspective", sanitize(item, "perspective"));
+        context.put("javaRegisterPerspective", sanitize(item, "registerPerspective"));
     }
 
     /**

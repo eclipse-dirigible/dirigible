@@ -82,6 +82,7 @@ final class StatusSymbolResolver {
         resolver.rewriteProcesses(root);
         resolver.rewritePostings(root);
         resolver.rewriteGenerates(root);
+        resolver.rewriteResolves(root);
         resolver.rewriteReports(root);
         if (!resolver.issues.isEmpty()) {
             throw new IntentValidationException(resolver.issues);
@@ -245,6 +246,32 @@ final class StatusSymbolResolver {
             String subject = "generates [" + text(generate, "name") + "] event when";
             Target status = text(generate, "fromUses") != null ? new Target(source, text(generate, "fromUses")) : statusOf(source);
             put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(source), status, subject));
+        }
+    }
+
+    /**
+     * An effective-dated register lookup routes the record it enriches by status: each of its three
+     * outcomes may name one, on the record's own nomenclature.
+     */
+    private void rewriteResolves(Map<?, ?> root) {
+        for (Object node : asList(root.get("resolves"))) {
+            Map<?, ?> resolve = asMap(node);
+            Map<?, ?> event = asMap(resolve == null ? null : resolve.get("event"));
+            if (event == null) {
+                continue;
+            }
+            String record = event.get("onCreate") != null ? text(event, "onCreate") : text(event, "onUpdate");
+            Target status = statusOf(record);
+            String subject = "resolve [" + text(resolve, "name") + "]";
+            if (event.get("when") != null) {
+                put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(record), status, subject + " event when"));
+            }
+            for (String outcome : List.of("found", "notFound", "ambiguous")) {
+                Map<?, ?> block = asMap(resolve.get(outcome));
+                if (block != null) {
+                    putResolved(block, "setStatus", status, subject + " " + outcome + " setStatus");
+                }
+            }
         }
     }
 

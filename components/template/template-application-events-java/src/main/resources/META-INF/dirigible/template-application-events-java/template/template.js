@@ -195,6 +195,13 @@ export function getTemplate(parameters) {
                 collection: "aggregates"
             },
             {
+                location: "/template-application-events-java/events/Resolve.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}Resolve.java",
+                engine: "velocity",
+                collection: "resolves"
+            },
+            {
                 location: "/template-application-events-java/project.json.mjs",
                 action: "generate",
                 rename: "project.json",

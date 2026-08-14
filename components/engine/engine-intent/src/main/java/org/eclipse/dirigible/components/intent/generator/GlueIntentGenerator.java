@@ -105,6 +105,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> postings = buildPostings(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> posts = buildPosts(model, byName, compositionParents);
         List<Map<String, Object>> aggregates = buildAggregates(model, byName, compositionParents);
+        List<Map<String, Object>> resolves = buildResolves(model, byName, compositionParents, settings);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
         List<Map<String, Object>> snapshots =
                 SnapshotSupport.buildSnapshots(model, byName, compositionParents, crossModelLookup(model, context));
@@ -114,7 +115,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 && aborts.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty() && schedules.isEmpty()
                 && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty()
                 && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty()
-                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty()) {
+                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty() && resolves.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -148,6 +149,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("postings", postings);
         glue.put("posts", posts);
         glue.put("aggregates", aggregates);
+        glue.put("resolves", resolves);
         glue.put("printFeeders", printFeeders);
         glue.put("snapshots", snapshots);
         glue.put("numbering", numbering);
@@ -1343,6 +1345,138 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /** Test hook: build the {@code aggregates} glue collection without a repository. */
     static List<Map<String, Object>> buildAggregatesForTest(IntentModel model) {
         return buildAggregates(model, IntentEntities.byName(model), IntentEntities.compositionParents(model));
+    }
+
+    /**
+     * Build the {@code resolves} glue collection: one descriptor per effective-dated register lookup
+     * ({@link org.eclipse.dirigible.components.intent.model.ResolveIntent}). Each drives a generated
+     * handler that, on the record's create/update event, queries the register by the {@code match} keys
+     * and keeps the rows whose validity period covers the record's date - then fills the to-one from
+     * the single covering row, or leaves it unset and flags the record when there is none or more than
+     * one.
+     */
+    private static List<Map<String, Object>> buildResolves(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (org.eclipse.dirigible.components.intent.model.ResolveIntent resolve : model.getResolves()) {
+            if (resolve.getName() == null || resolve.getName()
+                                                    .isBlank()) {
+                continue; // malformed: the parser already reported it
+            }
+            if (!settings.shouldGenerate("resolves", resolve.getName())) {
+                LOGGER.info("Settings opt-out: keeping existing handler for resolve [{}] (not generated)", resolve.getName());
+                continue;
+            }
+            String kind = EventBinding.kind(resolve.getEvent());
+            EntityIntent record = byName.get(EventBinding.entity(resolve.getEvent()));
+            EntityIntent register = byName.get(resolve.getFrom());
+            if (kind == null || record == null || register == null) {
+                continue;
+            }
+            RelationIntent filled = toOneRelation(record, resolve.getSet());
+            RelationIntent value = filled == null ? null : soleToOneTo(register, filled.getTo());
+            if (filled == null || value == null) {
+                continue;
+            }
+            List<Map<String, String>> matches = new ArrayList<>();
+            for (Map.Entry<String, String> pair : resolve.getMatch()
+                                                         .entrySet()) {
+                Map<String, String> match = new LinkedHashMap<>();
+                match.put("registerProperty", IntentNaming.pascalCase(pair.getKey()));
+                match.put("recordProperty", IntentNaming.pascalCase(pair.getValue()));
+                matches.add(match);
+            }
+            if (matches.isEmpty()) {
+                continue;
+            }
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("name", resolve.getName());
+            e.put("className", IntentNaming.pascalIdentifier(resolve.getName()));
+            e.put("entity", record.getName());
+            e.put("perspective", IntentEntities.resolvePerspective(record.getName(), compositionParents, model));
+            e.put("keyProperty", IntentEntities.keyFieldName(record));
+            e.put("topicSuffix", EventBinding.topicSuffix(kind));
+            e.put("guardExpression", NotificationSupport.guard(stringArg(resolve.getEvent(), "when")));
+            e.put("setProperty", IntentNaming.pascalCase(filled.getName()));
+            e.put("registerEntity", register.getName());
+            e.put("registerPerspective", IntentEntities.resolvePerspective(register.getName(), compositionParents, model));
+            e.put("registerValueProperty", IntentNaming.pascalCase(value.getName()));
+            e.put("matches", matches);
+            e.put("matchSummary", matches.stream()
+                                         .map(match -> match.get("registerProperty") + " = " + match.get("recordProperty"))
+                                         .collect(java.util.stream.Collectors.joining(", ")));
+            e.put("startProperty", property(resolve.getBetween()
+                                                   .get("start")));
+            e.put("endProperty", property(resolve.getBetween()
+                                                 .get("end")));
+            e.put("valueProperty", property(resolve.getBetween()
+                                                   .get("value")));
+            e.put("outcomeProperty", property(resolve.getOutcome()));
+            String statusProperty = entityStatusProperty(record);
+            String foundStatus = status(resolve.getFound());
+            String notFoundStatus = status(resolve.getNotFound());
+            String ambiguousStatus = status(resolve.getAmbiguous());
+            e.put("statusProperty", statusProperty);
+            e.put("foundStatus", foundStatus);
+            e.put("notFoundStatus", notFoundStatus);
+            e.put("ambiguousStatus", ambiguousStatus);
+            // Whether the handler routes by status at all - a lookup that never sets one gets no status
+            // parameter and no status branch, rather than dead code carried through every generated app.
+            e.put("writesStatus", String.valueOf(
+                    !statusProperty.isEmpty() && !(foundStatus.isEmpty() && notFoundStatus.isEmpty() && ambiguousStatus.isEmpty())));
+            out.add(e);
+        }
+        return out;
+    }
+
+    /**
+     * The entity's ONLY to-one relation pointing at {@code target}, or {@code null} when there is none
+     * or more than one - a lookup with a choice of columns to copy is refused, not guessed.
+     */
+    private static RelationIntent soleToOneTo(EntityIntent entity, String target) {
+        RelationIntent found = null;
+        for (RelationIntent relation : entity.getRelations() == null ? List.<RelationIntent>of() : entity.getRelations()) {
+            if (!target.equals(relation.getTo()) || !("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                continue;
+            }
+            if (found != null) {
+                return null;
+            }
+            found = relation;
+        }
+        return found;
+    }
+
+    /** The {@code function: EntityStatus} relation's property of the entity, or {@code ""}. */
+    private static String entityStatusProperty(EntityIntent entity) {
+        for (RelationIntent relation : entity.getRelations() == null ? List.<RelationIntent>of() : entity.getRelations()) {
+            if (relation.isEntityStatus()) {
+                return IntentNaming.pascalCase(relation.getName());
+            }
+        }
+        return "";
+    }
+
+    /** An authored property name as the generated Java field, or {@code ""} when absent. */
+    private static String property(String authored) {
+        return authored == null || authored.isBlank() ? "" : IntentNaming.pascalCase(authored);
+    }
+
+    /** An outcome block's {@code setStatus} seed id as a string, or {@code ""} when it sets none. */
+    private static String status(Map<String, Object> outcome) {
+        Object value = outcome == null ? null : outcome.get("setStatus");
+        return value instanceof Number number ? String.valueOf(number.intValue()) : "";
+    }
+
+    /** A string argument of a free-form binding map, or {@code null}. */
+    private static String stringArg(Map<String, Object> map, String key) {
+        Object value = map == null ? null : map.get(key);
+        return value == null ? null : value.toString();
+    }
+
+    /** Test hook: build the {@code resolves} glue collection without a repository. */
+    static List<Map<String, Object>> buildResolvesForTest(IntentModel model) {
+        return buildResolves(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
     }
 
     /**

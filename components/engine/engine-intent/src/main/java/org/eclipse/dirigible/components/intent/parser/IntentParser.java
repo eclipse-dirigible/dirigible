@@ -41,6 +41,7 @@ import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
+import org.eclipse.dirigible.components.intent.model.ResolveIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.model.ExpansionIntent;
@@ -112,6 +113,14 @@ public final class IntentParser {
     private static final Set<String> SCHEDULE_OPERATORS = Set.of("eq", "ne", "gt", "ge", "lt", "le", "like");
     /** HTTP methods an outbound integration may use. */
     private static final Set<String> HTTP_METHODS = Set.of("GET", "POST", "PUT", "PATCH", "DELETE");
+    /** Field types an effective-dated lookup may use as a period bound or as the covered date. */
+    private static final Set<String> RESOLVE_DATE_TYPES = Set.of("date", "timestamp");
+    /**
+     * The shape a lookup's {@code event.when} guard must have - the one the generator can render
+     * ({@code <Field> ==|!= <literal>}). Anything else would silently degrade to an always-open guard.
+     */
+    private static final java.util.regex.Pattern RESOLVE_WHEN =
+            java.util.regex.Pattern.compile("\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(==|!=)\\s*(.+?)\\s*");
 
     /**
      * Plain Gson for the YAML-Map -> JSON -> POJO round-trip. The platform's {@code JsonHelper} /
@@ -208,6 +217,7 @@ public final class IntentParser {
         validateRollups(model, issues);
         validateExpansions(model, issues);
         validateSettlements(model, issues);
+        validateResolves(model, entityNames, issues);
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
         }
@@ -1247,6 +1257,284 @@ public final class IntentParser {
                 issues.add("inbound webhook [" + name + "] creates unknown entity [" + inbound.getCreate() + "]");
             }
         }
+    }
+
+    /**
+     * Each effective-dated register lookup must bind to exactly one create/update event of a declared
+     * entity, fill a to-one of that entity, read a register declared in this model, and name the match
+     * keys and the validity period. The register must carry exactly one to-one to the same target as
+     * the filled relation - that is the value the lookup copies - and the period bounds must be date
+     * fields, so a lookup that cannot possibly resolve fails at Generate rather than at run time.
+     */
+    private static void validateResolves(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Map<String, EntityIntent> byName = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
+        Set<String> names = new HashSet<>();
+        for (ResolveIntent resolve : model.getResolves()) {
+            String name = resolve.getName();
+            if (name == null || name.isBlank()) {
+                issues.add("resolve has no name");
+                continue;
+            }
+            String subject = "resolve [" + name + "]";
+            if (!names.add(name)) {
+                issues.add("duplicate " + subject);
+            }
+            EntityIntent record = resolveEventEntity(resolve, subject, entityNames, byName, issues);
+            EntityIntent register = null;
+            if (resolve.getFrom() == null || resolve.getFrom()
+                                                    .isBlank()) {
+                issues.add(subject + " has no from - the register entity to look the value up in");
+            } else if (!entityNames.contains(resolve.getFrom())) {
+                issues.add(subject + " from references unknown entity [" + resolve.getFrom()
+                        + "] - a register must be declared in this model");
+            } else {
+                register = byName.get(resolve.getFrom());
+            }
+            RelationIntent filled = validateResolveSet(resolve, subject, record, register, issues);
+            validateResolveMatch(resolve, subject, record, register, issues);
+            validateResolveBetween(resolve, subject, record, register, issues);
+            validateResolveOutcomes(resolve, subject, record, issues);
+            if (record != null && filled != null && filled.getName()
+                                                          .equals(resolve.getOutcome())) {
+                issues.add(subject + " outcome [" + resolve.getOutcome() + "] is the relation it fills - name a separate string field");
+            }
+        }
+    }
+
+    /**
+     * The record entity a lookup fires for: exactly one {@code onCreate}/{@code onUpdate} naming a
+     * declared entity. {@code onDelete} is refused - there is nothing left to fill.
+     *
+     * @param resolve the lookup
+     * @param subject the message prefix
+     * @param entityNames the declared entity names
+     * @param byName the declared entities by name
+     * @param issues the collected issues
+     * @return the record entity, or {@code null} when it did not resolve
+     */
+    private static EntityIntent resolveEventEntity(ResolveIntent resolve, String subject, Set<String> entityNames,
+            Map<String, EntityIntent> byName, List<String> issues) {
+        if (resolve.getEvent()
+                   .get("onDelete") != null) {
+            issues.add(subject + " cannot bind to onDelete - a lookup fills a relation on a record that still exists");
+            return null;
+        }
+        EntityIntent record = null;
+        int eventCount = 0;
+        for (String kind : List.of("onCreate", "onUpdate")) {
+            Object target = resolve.getEvent()
+                                   .get(kind);
+            if (target == null) {
+                continue;
+            }
+            eventCount++;
+            if (entityNames.contains(target.toString())) {
+                record = byName.get(target.toString());
+            } else {
+                issues.add(subject + " " + kind + " references unknown entity [" + target + "]");
+            }
+        }
+        if (eventCount != 1) {
+            issues.add(subject + " must declare exactly one of onCreate/onUpdate");
+        }
+        Object when = resolve.getEvent()
+                             .get("when");
+        if (when != null) {
+            java.util.regex.Matcher matcher = RESOLVE_WHEN.matcher(when.toString());
+            if (!matcher.matches()) {
+                issues.add(subject + " when [" + when + "] must be `<Field> == <value>` or `<Field> != <value>`");
+            } else if (record != null && !hasPropertyIgnoreCase(record, matcher.group(1))) {
+                issues.add(subject + " when references [" + matcher.group(1) + "] which is not a field or to-one relation of ["
+                        + record.getName() + "]");
+            }
+        }
+        return record;
+    }
+
+    /**
+     * {@code set} must name a to-one of the record, and the register must carry exactly one to-one to
+     * the same target - the value the lookup copies. Zero means the register holds nothing to resolve;
+     * two would make the copied value a coin toss, which this construct exists to refuse.
+     *
+     * @param resolve the lookup
+     * @param subject the message prefix
+     * @param record the record entity, or {@code null} when unknown
+     * @param register the register entity, or {@code null} when unknown
+     * @param issues the collected issues
+     * @return the filled relation, or {@code null} when it did not resolve
+     */
+    private static RelationIntent validateResolveSet(ResolveIntent resolve, String subject, EntityIntent record, EntityIntent register,
+            List<String> issues) {
+        if (resolve.getSet() == null || resolve.getSet()
+                                               .isBlank()) {
+            issues.add(subject + " has no set - the to-one relation to fill");
+            return null;
+        }
+        if (record == null) {
+            return null;
+        }
+        RelationIntent filled = toOneRelationByName(record, resolve.getSet());
+        if (filled == null) {
+            issues.add(subject + " set [" + resolve.getSet() + "] is not a to-one relation of [" + record.getName() + "]");
+            return null;
+        }
+        if (register == null) {
+            return filled;
+        }
+        List<RelationIntent> candidates = new ArrayList<>();
+        for (RelationIntent relation : register.getRelations()) {
+            if (filled.getTo()
+                      .equals(relation.getTo())
+                    && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                candidates.add(relation);
+            }
+        }
+        if (candidates.isEmpty()) {
+            issues.add(subject + " register [" + register.getName() + "] has no to-one relation to [" + filled.getTo()
+                    + "] - there is nothing for it to resolve");
+        } else if (candidates.size() > 1) {
+            issues.add(subject + " register [" + register.getName() + "] has " + candidates.size() + " to-one relations to ["
+                    + filled.getTo() + "] - a lookup must have exactly one, so the resolved value is unambiguous");
+        }
+        return filled;
+    }
+
+    /**
+     * Every {@code match} pair must name a property of the register on the left and of the record on
+     * the right; without at least one the lookup would scan the whole register.
+     *
+     * @param resolve the lookup
+     * @param subject the message prefix
+     * @param record the record entity, or {@code null} when unknown
+     * @param register the register entity, or {@code null} when unknown
+     * @param issues the collected issues
+     */
+    private static void validateResolveMatch(ResolveIntent resolve, String subject, EntityIntent record, EntityIntent register,
+            List<String> issues) {
+        if (resolve.getMatch()
+                   .isEmpty()) {
+            issues.add(subject + " has no match keys - a lookup without one would scan the whole register");
+            return;
+        }
+        for (Map.Entry<String, String> pair : resolve.getMatch()
+                                                     .entrySet()) {
+            if (register != null && !hasPropertyIgnoreCase(register, pair.getKey())) {
+                issues.add(subject + " match key [" + pair.getKey() + "] is not a field or to-one relation of register ["
+                        + register.getName() + "]");
+            }
+            if (record != null && !hasPropertyIgnoreCase(record, pair.getValue())) {
+                issues.add(
+                        subject + " match value [" + pair.getValue() + "] is not a field or to-one relation of [" + record.getName() + "]");
+            }
+        }
+    }
+
+    /**
+     * The validity period: {@code start} and {@code end} are date fields of the register, {@code value}
+     * a date field of the record. A non-date on any of the three would compare as text.
+     *
+     * @param resolve the lookup
+     * @param subject the message prefix
+     * @param record the record entity, or {@code null} when unknown
+     * @param register the register entity, or {@code null} when unknown
+     * @param issues the collected issues
+     */
+    private static void validateResolveBetween(ResolveIntent resolve, String subject, EntityIntent record, EntityIntent register,
+            List<String> issues) {
+        Map<String, String> between = resolve.getBetween();
+        if (between.get("start") == null && between.get("end") == null) {
+            issues.add(subject + " has no between.start or between.end - an effective-dated lookup needs at least one period bound");
+        }
+        String value = between.get("value");
+        if (value == null || value.isBlank()) {
+            issues.add(subject + " has no between.value - the record's date the period must cover");
+        } else {
+            validateResolveDateField(record, value, subject + " between.value", issues);
+        }
+        validateResolveDateField(register, between.get("start"), subject + " between.start", issues);
+        validateResolveDateField(register, between.get("end"), subject + " between.end", issues);
+    }
+
+    /**
+     * One period bound: a declared field of its entity, of a date type.
+     *
+     * @param entity the owning entity, or {@code null} when unknown (already reported)
+     * @param field the field name, or {@code null} when the bound is open by declaration
+     * @param subject the message prefix
+     * @param issues the collected issues
+     */
+    private static void validateResolveDateField(EntityIntent entity, String field, String subject, List<String> issues) {
+        if (entity == null || field == null || field.isBlank()) {
+            return;
+        }
+        FieldIntent declared = fieldByName(entity, field);
+        if (declared == null) {
+            issues.add(subject + " [" + field + "] is not a field of [" + entity.getName() + "]");
+        } else if (!RESOLVE_DATE_TYPES.contains(declared.getType())) {
+            issues.add(subject + " [" + field + "] must be a date or timestamp field, was [" + declared.getType() + "]");
+        }
+    }
+
+    /**
+     * The three outcomes: each may carry a {@code setStatus}, which needs the record to declare a
+     * {@code function: EntityStatus} relation to write it to. The {@code outcome} field, when named,
+     * must be a string field the handler can stamp.
+     *
+     * @param resolve the lookup
+     * @param subject the message prefix
+     * @param record the record entity, or {@code null} when unknown
+     * @param issues the collected issues
+     */
+    private static void validateResolveOutcomes(ResolveIntent resolve, String subject, EntityIntent record, List<String> issues) {
+        boolean anyStatus = false;
+        for (Map.Entry<String, Map<String, Object>> outcome : Map.of("found", resolve.getFound(), "notFound", resolve.getNotFound(),
+                "ambiguous", resolve.getAmbiguous())
+                                                                 .entrySet()) {
+            Object status = outcome.getValue()
+                                   .get("setStatus");
+            if (status == null) {
+                continue;
+            }
+            anyStatus = true;
+            if (!(status instanceof Number) || ((Number) status).intValue() <= 0) {
+                issues.add(subject + " " + outcome.getKey() + " setStatus [" + status + "] must be a positive status seed id or name");
+            }
+        }
+        if (record == null) {
+            return;
+        }
+        if (anyStatus && !hasEntityStatus(record)) {
+            issues.add(
+                    subject + " sets a status but [" + record.getName() + "] declares no function: EntityStatus relation to write it to");
+        }
+        String field = resolve.getOutcome();
+        if (field == null || field.isBlank()) {
+            return;
+        }
+        FieldIntent declared = fieldByName(record, field);
+        if (declared == null) {
+            issues.add(subject + " outcome [" + field + "] is not a field of [" + record.getName() + "]");
+        } else if (!"string".equals(declared.getType())) {
+            issues.add(subject + " outcome [" + field + "] must be a string field, was [" + declared.getType() + "]");
+        }
+    }
+
+    /** Whether the entity declares a {@code function: EntityStatus} relation. */
+    private static boolean hasEntityStatus(EntityIntent entity) {
+        if (entity.getRelations() == null) {
+            return false;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.isEntityStatus()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
