@@ -1921,6 +1921,50 @@ are invoice fields; `status` a to-one relation of the invoice; `match` are to-on
 invoice (and same-named on the payment). Allocation is bounded by the invoice open amount and the
 payment's unallocated balance; entity writes go only through the generated repositories.
 
+### resolves - fill a relation from a register valid on a date
+
+**Use when:** a record must be linked to whatever a **register** says applied **on a particular date**
+- "who was driving that vehicle on the violation date", "which price list was in force on the order
+date", "which contract rate applied on the booking date", "who approved for that department on the
+request date". The register rows say "X applied to Y from A to B"; the record carries the match key(s)
+and the date.
+
+```yaml
+resolves:
+  - name: identifyDriver
+    event: { onCreate: Fine }               # onCreate or onUpdate, optional `when` guard
+    set: driver                             # the to-one of Fine this fills
+    from: VehicleAssignment                 # the register
+    match: { vehicle: vehicle }             # register property <- record property (one or more)
+    between: { start: validFrom, end: validTo, value: violationAt }
+    outcome: resolution                     # optional string field stamped found/notFound/ambiguous
+    found:     { setStatus: IDENTIFIED }
+    notFound:  { setStatus: UNRESOLVED }
+    ambiguous: { setStatus: UNRESOLVED }
+```
+
+**The three outcomes are the whole point.** Exactly one covering register row fills the relation. NO
+covering row and MORE THAN ONE covering row both leave it unset - a lookup never picks one of two
+candidates, because a silently-wrong driver (or price, or approver) is worse than an unresolved
+record. Route each outcome with `setStatus` and/or record it with `outcome:` so the unresolved ones
+are a filterable worklist a human can finish, and so a process `decision` can branch on them.
+
+**Semantics worth knowing:**
+- The value copied is **derived**: the register must have exactly ONE to-one relation to the same
+  entity as `set:`. Zero or two is an error - name the register's column unambiguously instead.
+- A record that already carries the relation is skipped, so a manual correction is never overwritten.
+- `between.start` / `between.end` are register date fields, `between.value` the record's date. Either
+  bound may be omitted (open-ended = still valid); the end is **inclusive**, and a date-only bound
+  covers its whole day.
+- Only the resolved relation, the outcome and the status are written - nothing else of the record.
+
+**Rules:** `event` binds `onCreate` or `onUpdate` of a declared entity (never `onDelete`); `set` is a
+to-one of that entity; `from` is an entity declared in **this** model; `match` needs at least one pair
+(left = register property, right = record property); `between.value` is required and every period
+field must be a `date` or `timestamp`; `outcome` must be a `string` field of the record; a `setStatus`
+needs the record to declare a `function: EntityStatus` relation, and may be a seed id or a seeded
+name.
+
 ## Allowed values
 
 | Where | Allowed |
@@ -1951,6 +1995,9 @@ payment's unallocated balance; entity writes go only through the generated repos
 | rollup `op` | `count` (default), `sum`, `latest` (needs `of` + `by`) |
 | expansion `unit` | `day`, `week`, `month` |
 | transition `when` op | `==`, `!=` |
+| resolve `event` | `onCreate`, `onUpdate` (never `onDelete`); `when` is `<Field> ==\|!= <value>` |
+| resolve `between` field type | `date`, `timestamp` |
+| resolve `outcome` values | `found`, `notFound`, `ambiguous` (stamped into a `string` field) |
 
 ## Mapping requests to capabilities (quick reference)
 
@@ -1958,6 +2005,7 @@ payment's unallocated balance; entity writes go only through the generated repos
 - "approval / multi-step / workflow" -> **processes** (+ a **form** for each user task)
 - "the flow waits for a reply / a payment / a goods receipt (a data event resumes it)" -> **processes** (a `wait` step)
 - "remind / escalate if a task is not handled in N days (SLA)" -> **processes** (userTask `timeout:`)
+- "who/which was assigned / in force / valid on that date (from a register with from-to dates)" -> **resolves**
 - "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)
 - "cancel the in-flight approval when the document is voided/cancelled (no orphaned Inbox task)" -> **processes** (`abortOn:`)
 - "a screen to enter / edit X" -> **forms**

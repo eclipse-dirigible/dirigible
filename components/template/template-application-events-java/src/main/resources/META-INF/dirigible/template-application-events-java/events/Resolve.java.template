@@ -1,0 +1,156 @@
+package gen.events.${javaGenFolderName};
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+import gen.${javaGenFolderName}.data.${javaRegisterPerspective}.${registerEntity}Entity;
+import gen.${javaGenFolderName}.data.${javaRegisterPerspective}.${registerEntity}Repository;
+
+/**
+ * Effective-dated register lookup ${name}: fills ${entity}.${setProperty} from the ${registerEntity}
+ * row whose validity period covers ${entity}.${valueProperty}, matched on [${matchSummary}].
+ *
+ * Generated from the intent resolves block - do not edit; it is re-generated with the application.
+ *
+ * All three outcomes are first-class. Exactly one covering row fills the relation; NO covering row and
+ * MORE THAN ONE covering row both leave it unset - an automation that silently picks one of two
+ * candidates is worse than none, so an ambiguous register is handed back to a human. Each outcome may
+ * route the record by status, and the attempt is traceable: the outcome is stamped on the record and
+ * logged with the keys and the date that were checked.
+ *
+ * A record that already carries ${setProperty} is skipped, so a manual correction is never overwritten
+ * and a re-delivered event is a no-op. The write is TARGETED (updateProperties) - only the resolved
+ * column, the outcome and the status are in the UPDATE statement, so a concurrent user write to any
+ * other column cannot be reverted, and no "-updated" event re-fires.
+ */
+@Component("${javaGenFolderName}_${className}Resolve")
+public class ${className}Resolve implements MessageHandler {
+
+    /** Application logger - nested under the platform's `app.` root, like every other app logger. */
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Resolve");
+
+    @Override
+    public String destination() {
+        return "${projectName}-${perspective}-${entity}${topicSuffix}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        ${entity}Entity entity = Json.parse(message, ${entity}Entity.class);
+        if (entity == null || entity.${keyProperty} == null#if($guardExpression != "true") || !(${guardExpression})#end) {
+            return;
+        }
+        if (entity.${setProperty} != null) {
+            return;
+        }
+        Long at = millis(entity.${valueProperty});
+        java.util.List<${registerEntity}Entity> covering = new java.util.ArrayList<>();
+        if (at != null#foreach($match in $matches) && entity.${match.recordProperty} != null#end) {
+            for (${registerEntity}Entity row : new ${registerEntity}Repository().findAll(Criteria.create()#foreach($match in $matches).eq("${match.registerProperty}", entity.${match.recordProperty})#end)) {
+                if (covers(row, at)) {
+                    covering.add(row);
+                }
+            }
+        }
+        if (covering.size() == 1) {
+            Integer resolved = covering.get(0).${registerValueProperty};
+            LOG.info("${name}: ${entity} [{}] resolved ${setProperty} to [{}] valid on [{}]", entity.${keyProperty}, resolved,
+                    entity.${valueProperty});
+            stamp(entity.${keyProperty}, "found", resolved#if($writesStatus == "true"), #if($foundStatus != "")${foundStatus}#{else}null#end#end);
+        } else if (covering.isEmpty()) {
+            LOG.info("${name}: no ${registerEntity} row covers [{}] for ${entity} [{}] - ${setProperty} left unresolved",
+                    entity.${valueProperty}, entity.${keyProperty});
+            stamp(entity.${keyProperty}, "notFound", null#if($writesStatus == "true"), #if($notFoundStatus != "")${notFoundStatus}#{else}null#end#end);
+        } else {
+            LOG.warn("${name}: [{}] ${registerEntity} rows cover [{}] for ${entity} [{}] - ${setProperty} left unresolved for a human",
+                    covering.size(), entity.${valueProperty}, entity.${keyProperty});
+            stamp(entity.${keyProperty}, "ambiguous", null#if($writesStatus == "true"), #if($ambiguousStatus != "")${ambiguousStatus}#{else}null#end#end);
+        }
+    }
+
+    /**
+     * Whether a register row's validity period covers the record's date. An absent bound is open-ended
+     * (a row with no end is still valid), and the end is inclusive - a date-only end covers its whole day.
+     */
+    private static boolean covers(${registerEntity}Entity row, long at) {
+#if($startProperty != "")
+        Long from = millis(row.${startProperty});
+        if (from != null && at < from) {
+            return false;
+        }
+#end
+#if($endProperty != "")
+        Long to = endExclusive(row.${endProperty});
+        if (to != null && at >= to) {
+            return false;
+        }
+#end
+        return true;
+    }
+
+    /**
+     * One targeted write carrying everything this attempt decided: the resolved relation when there is
+     * one, the outcome trace, and the routing status. Nothing else of the record is touched.
+     */
+    private static void stamp(Object id, String outcome, Integer resolved#if($writesStatus == "true"), Integer status#end) {
+        java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
+        if (resolved != null) {
+            values.put("${setProperty}", resolved);
+        }
+#if($outcomeProperty != "")
+        values.put("${outcomeProperty}", outcome);
+#end
+#if($writesStatus == "true")
+        if (status != null) {
+            values.put("${statusProperty}", status);
+        }
+#end
+        if (!values.isEmpty()) {
+            new ${entity}Repository().updateProperties(id, values);
+        }
+    }
+
+    /**
+     * Epoch-milli of a temporal value, so a date-only bound and an instant compare on one axis. A
+     * date-only value is taken at the start of its day, UTC.
+     */
+    private static Long millis(Object value) {
+        if (value instanceof java.time.Instant instant) {
+            return instant.toEpochMilli();
+        }
+        if (value instanceof java.time.LocalDate date) {
+            return date.atStartOfDay(java.time.ZoneOffset.UTC)
+                       .toInstant()
+                       .toEpochMilli();
+        }
+        if (value instanceof java.time.LocalDateTime dateTime) {
+            return dateTime.toInstant(java.time.ZoneOffset.UTC)
+                           .toEpochMilli();
+        }
+        if (value instanceof java.util.Date date) {
+            return date.getTime();
+        }
+        return null;
+    }
+
+    /** The exclusive upper bound of a period end: a date-only end covers its whole day. */
+    private static Long endExclusive(Object value) {
+        if (value instanceof java.time.LocalDate date) {
+            return millis(date.plusDays(1));
+        }
+        Long at = millis(value);
+        return at == null ? null : at + 1;
+    }
+}

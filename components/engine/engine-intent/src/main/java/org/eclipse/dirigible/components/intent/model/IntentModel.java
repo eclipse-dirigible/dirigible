@@ -75,9 +75,21 @@ public class IntentModel {
      * Keyed cross-entity aggregates - a running sum/count grouped by FKs, materialised into a target.
      */
     private List<AggregateIntent> aggregates = new ArrayList<>();
+    /**
+     * Effective-dated register lookups - fill a to-one from the register row valid on a record's date.
+     */
+    private List<ResolveIntent> resolves = new ArrayList<>();
 
     public List<ActionIntent> getActions() {
         return actions;
+    }
+
+    public List<ResolveIntent> getResolves() {
+        return resolves;
+    }
+
+    public void setResolves(List<ResolveIntent> resolves) {
+        this.resolves = resolves == null ? new ArrayList<>() : resolves;
     }
 
     public List<AggregateIntent> getAggregates() {

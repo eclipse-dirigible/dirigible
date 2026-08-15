@@ -95,8 +95,12 @@ class IntentEngineIT extends IntegrationTest {
                   - { name: total,     type: decimal }
                   # Depends-On auto-populate: copied from the chosen customer's creditLimit.
                   - { name: creditSnapshot, type: decimal, dependsOn: { relation: customer, valueFrom: creditLimit } }
+                  # The observable trace of the effective-dated salesRep lookup (found/notFound/ambiguous).
+                  - { name: repResolution, type: string, length: 20, readOnly: true }
                 relations:
                   - { name: customer, kind: manyToOne, to: Customer }
+                  # Filled by the `resolves` lookup below, never typed in.
+                  - { name: salesRep, kind: manyToOne, to: SalesRep }
                   # Depends-On cascade: narrowed to the chosen customer's country (filterBy defaults to the PK).
                   - { name: country,  kind: manyToOne, to: Country, dependsOn: { relation: customer, valueFrom: country } }
                   - { name: items,    kind: oneToMany, to: OrderItem }
@@ -118,6 +122,21 @@ class IntentEngineIT extends IntegrationTest {
                 languageFrom: customer.locale
                 relations:
                   - { name: order, kind: manyToOne, to: Order, composition: true }
+
+              - name: SalesRep
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string,  required: true, length: 200 }
+
+              # The effective-dated register: who covered this customer between which dates.
+              - name: CustomerAssignment
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: validFrom, type: date }
+                  - { name: validTo,   type: date }
+                relations:
+                  - { name: customer, kind: manyToOne, to: Customer }
+                  - { name: salesRep, kind: manyToOne, to: SalesRep }
 
             processes:
               - name: OrderApproval
@@ -250,6 +269,17 @@ class IntentEngineIT extends IntegrationTest {
                 entity: Order
                 via: customer
                 field: orderCount
+
+            # Effective-dated register lookup: the rep who covered this customer on the order date.
+            # Zero and more-than-one covering rows are distinct outcomes - neither fills the relation.
+            resolves:
+              - name: assignSalesRep
+                event: { onCreate: Order }
+                set: salesRep
+                from: CustomerAssignment
+                match: { customer: customer }
+                between: { start: validFrom, end: validTo, value: orderDate }
+                outcome: repResolution
             """;
 
     @Autowired
@@ -267,7 +297,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("name", equalTo("orders"))
-                                                 .body("entities", hasSize(5))
+                                                 .body("entities", hasSize(7))
                                                  .body("entities.name", hasItems("Country", "Customer", "Order", "OrderItem"))
                                                  .body("processes", hasSize(1))
                                                  .body("processes[0].steps", hasSize(6))
@@ -622,6 +652,31 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(feeder.contains("new gen.orders.data.order.OrderItemRepository().findAll(Criteria.create().eq(\"Order\", id))"),
                 "the feeder should load the line items by the composition FK");
         assertTrue(feeder.contains("return Json.stringify(payload)"), "the feeder should return the { document, items } payload as JSON");
+
+        // The effective-dated register lookup: a self-describing @Component MessageHandler that queries
+        // the register by the match keys, keeps only the rows whose period covers the order date, and
+        // treats found / notFound / ambiguous as three distinct outcomes.
+        String lookup = contentOf("gen/events/orders/AssignSalesRepResolve.java");
+        assertTrue(
+                lookup.contains("@Component") && lookup.contains("class AssignSalesRepResolve implements MessageHandler")
+                        && lookup.contains("return \"intent-test-Order-Order\""),
+                "the lookup should be a @Component MessageHandler bound to the record's create topic");
+        assertTrue(lookup.contains("new CustomerAssignmentRepository().findAll(Criteria.create().eq(\"Customer\", entity.Customer))"),
+                "the lookup should query the register with a typed Criteria built from the match keys");
+        assertTrue(
+                lookup.contains("Long at = millis(entity.OrderDate)") && lookup.contains("Long from = millis(row.ValidFrom)")
+                        && lookup.contains("Long to = endExclusive(row.ValidTo)"),
+                "the lookup should compare the record's date against both period bounds");
+        assertTrue(lookup.contains("if (entity.SalesRep != null)"),
+                "an already-resolved record should be skipped, so a manual correction is never overwritten");
+        assertTrue(
+                lookup.contains("stamp(entity.Id, \"found\", resolved)") && lookup.contains("\"notFound\"")
+                        && lookup.contains("\"ambiguous\""),
+                "all three outcomes should be generated - an ambiguous register is never resolved by picking one");
+        assertTrue(
+                lookup.contains("values.put(\"SalesRep\", resolved)") && lookup.contains("values.put(\"RepResolution\", outcome)")
+                        && lookup.contains("new OrderRepository().updateProperties(id, values)"),
+                "the resolved relation and the outcome trace should be written in ONE targeted update");
     }
 
     @Test
