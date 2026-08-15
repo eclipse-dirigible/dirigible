@@ -65,7 +65,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>
  * {@link ReportIntent#getScope()} adds the <b>lifecycle</b> predicate on top of that - see
- * {@link #scopePredicate}: an aggregation over an entity carrying a {@code function: EntityStatus}
+ * {@link #scopeCondition}: an aggregation over an entity carrying a {@code function: EntityStatus}
  * counts only the statuses classified {@code stage: live} unless it says otherwise, so a draft or a
  * voided document cannot silently inflate a total.
  *
@@ -74,6 +74,15 @@ import org.springframework.stereotype.Component;
  * aliases are not) so the SQL runs on PostgreSQL, which folds unquoted identifiers to lower case
  * and would otherwise never match the quoted UPPER_SNAKE objects the platform creates; H2 accepts
  * the quoted form too.
+ *
+ * <p>
+ * The document carries the query <b>twice</b> - as this structured model and as the materialised
+ * {@code query} - and the report editor rebuilds the query from the model on open to decide whether
+ * its visual builder may own it. So the two must agree: {@link #buildQuery} emits the query
+ * <i>from</i> the {@code columns} / {@code joins} / {@code conditions} it also writes out, and
+ * anything the builder cannot represent is deliberately left out of the model rather than
+ * half-emitted, which parks the report in the editor's free-style mode instead of corrupting it on
+ * save (dirigible #6675).
  *
  * <p>
  * Column physical names and the base table mirror what {@code EdmIntentGenerator} emits
@@ -113,6 +122,12 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      */
     private static final Pattern AGEING_BUCKET =
             Pattern.compile("\\s*ageing\\s*\\(\\s*([^,\\[]+?)\\s*,\\s*\\[\\s*([^\\]]+?)\\s*\\]\\s*\\)\\s*", Pattern.CASE_INSENSITIVE);
+
+    /** Disqualifies a filter term from the structured decomposition - see {@link #conditions}. */
+    private static final Pattern OR_OPERATOR = Pattern.compile("\\bOR\\b", Pattern.CASE_INSENSITIVE);
+
+    /** Every join a report resolves is an inner one; the editor's builder offers the other kinds. */
+    private static final String JOIN_TYPE = "INNER";
 
     @Override
     public String name() {
@@ -161,8 +176,6 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
 
         Map<String, Join> joins = new LinkedHashMap<>();
         List<Map<String, Object>> columns = new ArrayList<>();
-        List<String> selectParts = new ArrayList<>();
-        List<String> groupParts = new ArrayList<>();
         // Widget resolution inputs: the column each authored dimension/measure expression produced
         // (keyed by the whitespace/case-insensitive expression), plus the date-bucket function of a
         // month(x)/year(x) dimension so the KPI runtime can resolve the `now` token type-aware.
@@ -189,13 +202,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                         ? "(EXTRACT(YEAR FROM " + ref.qualified() + ") * 100 + EXTRACT(MONTH FROM " + ref.qualified() + "))"
                         : "EXTRACT(YEAR FROM " + ref.qualified() + ")";
                 String alias = humanize(function + " " + fieldReference.replace('.', ' '));
-                Map<String, Object> bucketColumn = column(ref.tableAlias, alias, ref.physicalColumn, "INTEGER", "NONE", aggregated);
+                Map<String, Object> bucketColumn =
+                        column(ref.tableAlias, alias, ref.physicalColumn, "INTEGER", "NONE", aggregated, expression);
                 columns.add(bucketColumn);
                 dimensionColumns.put(expressionKey(dimension), new WidgetDimension(bucketColumn, function));
-                selectParts.add(expression + " as \"" + alias + "\"");
-                if (aggregated) {
-                    groupParts.add(expression);
-                }
                 continue;
             }
             // An ageing(field, [30, 60, 90]) dimension buckets a date by how long ago it fell, so the
@@ -215,13 +225,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 String expression = ageingExpression(ageingRef.qualified(), thresholds);
                 String alias = humanize("ageing " + fieldReference.replace('.', ' '));
                 Map<String, Object> ageingColumn =
-                        column(ageingRef.tableAlias, alias, ageingRef.physicalColumn, "VARCHAR", "NONE", aggregated);
+                        column(ageingRef.tableAlias, alias, ageingRef.physicalColumn, "VARCHAR", "NONE", aggregated, expression);
                 columns.add(ageingColumn);
                 dimensionColumns.put(expressionKey(dimension), new WidgetDimension(ageingColumn, "ageing"));
-                selectParts.add(expression + " as \"" + alias + "\"");
-                if (aggregated) {
-                    groupParts.add(expression);
-                }
                 continue;
             }
             ColumnRef ref = resolve(context, model, source, baseAlias, dimension.trim());
@@ -230,32 +236,28 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                     column(ref.tableAlias, ref.displayAlias, ref.physicalColumn, ref.reportType, "NONE", aggregated);
             columns.add(dimensionColumn);
             dimensionColumns.put(expressionKey(dimension), new WidgetDimension(dimensionColumn, null));
-            selectParts.add(ref.qualified() + " as \"" + ref.displayAlias + "\"");
-            if (aggregated) {
-                groupParts.add(ref.qualified());
-            }
         }
         if (balance) {
-            addBalanceMeasures(context, model, source, baseAlias, report, joins, columns, selectParts);
+            addBalanceMeasures(context, model, source, baseAlias, report, joins, columns);
         } else {
             for (String measure : report.getMeasures()) {
                 if (measure == null || measure.isBlank()) {
                     continue;
                 }
                 int before = columns.size();
-                addMeasure(context, model, source, baseAlias, measure.trim(), joins, columns, selectParts);
+                addMeasure(context, model, source, baseAlias, measure.trim(), joins, columns);
                 if (columns.size() > before) {
                     measureColumns.put(expressionKey(measure), columns.get(before));
                 }
             }
         }
 
-        String where = buildWhere(context, model, source, baseAlias, joins, report.getFilter());
-        String scope = scopePredicate(context, model, source, baseAlias, report, aggregated);
-        if (scope != null) {
-            where = where == null || where.isBlank() ? scope : "(" + where + ") AND " + scope;
-        }
-        String query = buildQuery(baseTable, baseAlias, joins, selectParts, where, aggregated ? groupParts : List.of());
+        String filter = buildWhere(context, model, source, baseAlias, joins, report.getFilter());
+        Map<String, Object> scope = scopeCondition(context, model, source, baseAlias, report, aggregated);
+        List<Map<String, Object>> conditions = conditions(filter, scope);
+        String where = conditions == null ? rawWhere(filter, scope) : predicate(conditions);
+        List<Map<String, Object>> joinRows = joinRows(joins);
+        String query = buildQuery(baseTable, baseAlias, joinRows, columns, where);
 
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("name", report.getName());
@@ -289,17 +291,24 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             document.put("kind", "balance");
         }
         document.put("columns", columns);
+        if (!joinRows.isEmpty()) {
+            document.put("joins", joinRows);
+        }
         document.put("query", query);
         if (balance) {
             document.put("parameters", balanceParameters());
         }
-        document.put("conditions", conditions(context, model, source, baseAlias, report.getFilter()));
+        // Only when the predicate round-trips: an empty `conditions` used to make the editor emit a
+        // bare `WHERE`, and a partial one would have silently dropped the rest of the filter.
+        if (conditions != null && !conditions.isEmpty()) {
+            document.put("conditions", conditions);
+        }
         document.put("security", security(context, report.getName()));
         return document;
     }
 
     private static void addMeasure(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
-            String measure, Map<String, Join> joins, List<Map<String, Object>> columns, List<String> selectParts) {
+            String measure, Map<String, Join> joins, List<Map<String, Object>> columns) {
         Matcher matcher = AGGREGATE_EXPRESSION.matcher(measure);
         if (matcher.matches()) {
             String aggregate = matcher.group(1)
@@ -310,8 +319,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 if (field.isEmpty() || "*".equals(field)) {
                     String alias = aggregate.charAt(0) + aggregate.substring(1)
                                                                   .toLowerCase(Locale.ROOT);
+                    // The bare star is the column NAME, so the builder emits COUNT(*) rather than
+                    // qualifying it as COUNT(<alias>.*), which H2 rejects as an aggregate argument.
                     columns.add(column(baseAlias, alias, "*", "INTEGER", aggregate, false));
-                    selectParts.add(aggregate + "(*) as \"" + alias + "\"");
                     return;
                 }
                 ColumnRef ref = resolve(context, model, source, baseAlias, field);
@@ -320,7 +330,6 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 String type = "COUNT".equals(aggregate) ? "INTEGER"
                         : ("MIN".equals(aggregate) || "MAX".equals(aggregate) ? ref.reportType : "DECIMAL");
                 columns.add(column(ref.tableAlias, alias, ref.physicalColumn, type, aggregate, false));
-                selectParts.add(aggregate + "(" + ref.qualified() + ") as \"" + alias + "\"");
                 return;
             }
         }
@@ -388,7 +397,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void addBalanceMeasures(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
-            ReportIntent report, Map<String, Join> joins, List<Map<String, Object>> columns, List<String> selectParts) {
+            ReportIntent report, Map<String, Join> joins, List<Map<String, Object>> columns) {
         ColumnRef date = resolve(context, model, source, baseAlias, report.getDate()
                                                                           .trim());
         registerJoin(joins, date);
@@ -401,20 +410,19 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         String opening = date.qualified() + " < :fromDate";
         String period = date.qualified() + " >= :fromDate AND " + date.qualified() + " <= :toDate";
         String closing = date.qualified() + " <= :toDate";
-        addBalanceColumn(columns, selectParts, debit, opening, "Opening Debit");
-        addBalanceColumn(columns, selectParts, credit, opening, "Opening Credit");
-        addBalanceColumn(columns, selectParts, debit, period, "Debit");
-        addBalanceColumn(columns, selectParts, credit, period, "Credit");
-        addBalanceColumn(columns, selectParts, debit, closing, "Closing Debit");
-        addBalanceColumn(columns, selectParts, credit, closing, "Closing Credit");
+        addBalanceColumn(columns, debit, opening, "Opening Debit");
+        addBalanceColumn(columns, credit, opening, "Opening Credit");
+        addBalanceColumn(columns, debit, period, "Debit");
+        addBalanceColumn(columns, credit, period, "Credit");
+        addBalanceColumn(columns, debit, closing, "Closing Debit");
+        addBalanceColumn(columns, credit, closing, "Closing Credit");
     }
 
-    private static void addBalanceColumn(List<Map<String, Object>> columns, List<String> selectParts, ColumnRef amount, String window,
-            String alias) {
-        columns.add(column(amount.tableAlias, alias, amount.physicalColumn, "DECIMAL", "SUM", false));
+    private static void addBalanceColumn(List<Map<String, Object>> columns, ColumnRef amount, String window, String alias) {
         // COALESCE the amount: a one-sided ledger line (the exactlyOne debit/credit shape) holds
         // NULL on the other side, and SUM over all-NULL yields NULL instead of the 0 a balance shows.
-        selectParts.add("SUM(CASE WHEN " + window + " THEN COALESCE(" + amount.qualified() + ", 0) ELSE 0 END) as \"" + alias + "\"");
+        String expression = "CASE WHEN " + window + " THEN COALESCE(" + amount.qualified() + ", 0) ELSE 0 END";
+        columns.add(column(amount.tableAlias, alias, amount.physicalColumn, "DECIMAL", "SUM", false, expression));
     }
 
     /**
@@ -648,22 +656,56 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
     }
 
-    private static String buildQuery(String baseTable, String baseAlias, Map<String, Join> joins, List<String> selectParts, String where,
-            List<String> groupParts) {
+    /**
+     * The SQL, built from the very {@code columns} / {@code joins} / {@code conditions} the document
+     * carries - so the structured model and the materialised {@code query} cannot disagree.
+     *
+     * <p>
+     * That is the contract the report editor's round-trip guard checks: it rebuilds the query from the
+     * structured model on open and, when the two match, lets the visual builder own the query. A
+     * generated report whose model said something else than its query opened dirty and was rewritten
+     * destructively on save (dirigible #6675) - so the emission here is aligned token for token with
+     * {@code buildQuery()} in {@code editor-report/js/editor.js}. Keep the two in step.
+     *
+     * @param baseTable the physical base table (unquoted; blank for a source-less report)
+     * @param baseAlias the base-table alias
+     * @param joins the emitted join rows
+     * @param columns the emitted column rows
+     * @param where the WHERE predicate, or null/blank for none
+     * @return the query
+     */
+    private static String buildQuery(String baseTable, String baseAlias, List<Map<String, Object>> joins, List<Map<String, Object>> columns,
+            String where) {
+        List<String> selectParts = new ArrayList<>();
+        List<String> groupParts = new ArrayList<>();
+        for (Map<String, Object> column : columns) {
+            String term = columnTerm(column);
+            String aggregate = (String) column.get("aggregate");
+            selectParts.add(("NONE".equals(aggregate) ? term : aggregate + "(" + term + ")") + " as \"" + column.get("alias") + "\"");
+            if (Boolean.TRUE.equals(column.get("grouping"))) {
+                groupParts.add(term);
+            }
+        }
         StringBuilder sql = new StringBuilder();
+        // A report with neither dimensions nor measures still has to run, so it selects everything -
+        // the builder has no columns to own there anyway, and the editor opens it free-style.
         sql.append("SELECT ")
            .append(selectParts.isEmpty() ? "*" : String.join(", ", selectParts));
-        sql.append("\nFROM ")
-           .append(baseTable.isBlank() ? baseTable : quote(baseTable))
-           .append(" as ")
-           .append(baseAlias);
-        for (Join join : joins.values()) {
-            sql.append("\nINNER JOIN ")
-               .append(quote(join.table))
+        if (!baseTable.isBlank()) {
+            sql.append("\nFROM ")
+               .append(quote(baseTable))
                .append(" as ")
-               .append(join.alias)
+               .append(baseAlias);
+        }
+        for (Map<String, Object> join : joins) {
+            sql.append('\n')
+               .append(join.get("type"))
+               .append(" JOIN ")
+               .append(quote((String) join.get("name")))
+               .append(" as ")
+               .append(join.get("alias"))
                .append(" ON ")
-               .append(join.on);
+               .append(join.get("condition"));
         }
         if (where != null && !where.isBlank()) {
             sql.append("\nWHERE ")
@@ -674,6 +716,37 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                .append(String.join(", ", groupParts));
         }
         return sql.toString();
+    }
+
+    /**
+     * What a column contributes to SELECT and GROUP BY: its {@code expression} verbatim when it has one
+     * (a date bucket, an ageing CASE, a balance window), the bare star of a {@code count(*)} measure,
+     * else its quoted qualified physical column.
+     *
+     * @param column the emitted column row
+     * @return the SQL term
+     */
+    private static String columnTerm(Map<String, Object> column) {
+        String expression = (String) column.get("expression");
+        if (expression != null) {
+            return expression;
+        }
+        String name = (String) column.get("name");
+        return "*".equals(name) ? name : column.get("table") + "." + quote(name);
+    }
+
+    /** The joins as the {@code .report} rows the editor's builder reads and re-emits. */
+    private static List<Map<String, Object>> joinRows(Map<String, Join> joins) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Join join : joins.values()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("alias", join.alias);
+            row.put("name", join.table);
+            row.put("type", JOIN_TYPE);
+            row.put("condition", join.on);
+            rows.add(row);
+        }
+        return rows;
     }
 
     /**
@@ -694,10 +767,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * omission is then reported as a generation warning rather than silently producing an inflated
      * total, which is the whole point of this feature (dirigible #6645).
      *
-     * @return the predicate, or {@code null} when the report counts every row
+     * @return the condition, or {@code null} when the report counts every row
      */
-    private static String scopePredicate(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
-            ReportIntent report, boolean aggregated) {
+    private static Map<String, Object> scopeCondition(IntentGenerationContext context, IntentModel model, EntityIntent source,
+            String baseAlias, ReportIntent report, boolean aggregated) {
         RelationIntent status = LifecycleStages.statusRelation(source);
         if (status == null || status.getTo() == null) {
             return null;
@@ -730,10 +803,11 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                     + "] - the report is generated over every status");
             return null;
         }
-        return baseAlias + "." + quote(column(source.getName(), status.getName())) + " IN (" + ids.stream()
-                                                                                                  .map(String::valueOf)
-                                                                                                  .collect(Collectors.joining(", "))
-                + ")";
+        return condition(baseAlias + "." + quote(column(source.getName(), status.getName())), "IN", "(" + ids.stream()
+                                                                                                             .map(String::valueOf)
+                                                                                                             .collect(Collectors.joining(
+                                                                                                                     ", "))
+                + ")");
     }
 
     /**
@@ -834,39 +908,75 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Best-effort structured condition for a single binary predicate (matches what the editor shows).
+     * The WHERE predicate as the structured {@code conditions} rows the editor's builder owns - or
+     * {@code null} when it cannot be represented, in which case the query string stays the only source
+     * of truth and the editor opens the report free-style.
+     *
+     * <p>
+     * The rows must reproduce the predicate exactly ({@link #predicate}), so the filter is only
+     * decomposed when every {@code AND}-separated term is a plain binary comparison. A term carrying an
+     * unbalanced quote or an {@code OR} is refused: the first means the split cut through a string
+     * literal, and the second means dropping the filter's parentheses around the whole predicate would
+     * change how it binds against the appended scope condition.
+     *
+     * @param filter the rewritten filter, or null/blank for none
+     * @param scope the lifecycle scope condition, or null for none
+     * @return the conditions (possibly empty), or null when the predicate does not round-trip
      */
-    private static List<Map<String, Object>> conditions(IntentGenerationContext context, IntentModel model, EntityIntent source,
-            String baseAlias, String filter) {
+    private static List<Map<String, Object>> conditions(String filter, Map<String, Object> scope) {
         List<Map<String, Object>> conditions = new ArrayList<>();
-        if (filter == null || filter.isBlank() || source == null) {
-            return conditions;
+        if (filter != null && !filter.isBlank()) {
+            for (String term : filter.trim()
+                                     .split(" AND ")) {
+                Matcher matcher = SIMPLE_CONDITION.matcher(term);
+                if (!matcher.matches() || countOf(term, '\'') % 2 != 0 || OR_OPERATOR.matcher(term)
+                                                                                     .find()) {
+                    return null;
+                }
+                conditions.add(condition(matcher.group(1), matcher.group(2), matcher.group(3)));
+            }
         }
-        Matcher matcher = SIMPLE_CONDITION.matcher(filter.trim());
-        if (matcher.matches()) {
-            Map<String, Object> condition = new LinkedHashMap<>();
-            condition.put("left", qualifyToken(model, source, baseAlias, matcher.group(1)));
-            condition.put("operation", matcher.group(2));
-            condition.put("right", qualifyToken(model, source, baseAlias, matcher.group(3)));
-            conditions.add(condition);
+        if (scope != null) {
+            conditions.add(scope);
         }
         return conditions;
     }
 
+    private static Map<String, Object> condition(String left, String operation, String right) {
+        Map<String, Object> condition = new LinkedHashMap<>();
+        condition.put("left", left);
+        condition.put("operation", operation);
+        condition.put("right", right);
+        return condition;
+    }
+
+    /** The conditions as the WHERE predicate - the inverse of {@link #conditions}. */
+    private static String predicate(List<Map<String, Object>> conditions) {
+        return conditions.stream()
+                         .map(condition -> condition.get("left") + " " + condition.get("operation") + " " + condition.get("right"))
+                         .collect(Collectors.joining(" AND "));
+    }
+
     /**
-     * Qualify a single filter token to a physical column when it names a field/relation.field; else
-     * leave it.
+     * The WHERE predicate for a filter the builder cannot represent: the filter is parenthesised so an
+     * appended scope condition cannot rebind it.
      */
-    private static String qualifyToken(IntentModel model, EntityIntent source, String baseAlias, String token) {
-        int dot = token.indexOf('.');
-        if (dot > 0) {
-            RelationIntent relation = relationByName(source, token.substring(0, dot));
-            if (relation != null && relation.getTo() != null) {
-                return relation.getTo() + "." + column(relation.getTo(), token.substring(dot + 1));
-            }
-            return token;
+    private static String rawWhere(String filter, Map<String, Object> scope) {
+        String scopePredicate = scope == null ? null : predicate(List.of(scope));
+        if (filter == null || filter.isBlank()) {
+            return scopePredicate;
         }
-        return fieldByName(source, token) != null ? baseAlias + "." + column(source.getName(), token) : token;
+        return scopePredicate == null ? filter : "(" + filter + ") AND " + scopePredicate;
+    }
+
+    private static int countOf(String value, char character) {
+        int count = 0;
+        for (int i = 0; i < value.length(); i++) {
+            if (value.charAt(i) == character) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static Map<String, Object> security(IntentGenerationContext context, String reportName) {
@@ -880,10 +990,33 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
 
     private static Map<String, Object> column(String tableAlias, String alias, String physicalColumn, String reportType, String aggregate,
             boolean grouping) {
+        return column(tableAlias, alias, physicalColumn, reportType, aggregate, grouping, null);
+    }
+
+    /**
+     * One {@code columns} row.
+     *
+     * @param tableAlias the alias of the table the column lives on
+     * @param alias the display alias
+     * @param physicalColumn the physical column name (unquoted; {@code *} for a bare aggregate)
+     * @param reportType the SQL type the report editor records
+     * @param aggregate the aggregate function, or {@code NONE}
+     * @param grouping whether the column is part of the GROUP BY
+     * @param expression the verbatim SQL the column emits instead of its qualified physical column (a
+     *        date bucket, an ageing CASE, a balance window), or null. The report editor's builder reads
+     *        it back, which is what keeps a computed dimension from degrading to its raw column on
+     *        save.
+     * @return the row
+     */
+    private static Map<String, Object> column(String tableAlias, String alias, String physicalColumn, String reportType, String aggregate,
+            boolean grouping, String expression) {
         Map<String, Object> column = new LinkedHashMap<>();
         column.put("table", tableAlias);
         column.put("alias", alias);
         column.put("name", physicalColumn);
+        if (expression != null) {
+            column.put("expression", expression);
+        }
         column.put("type", reportType);
         column.put("aggregate", aggregate);
         column.put("select", Boolean.TRUE);

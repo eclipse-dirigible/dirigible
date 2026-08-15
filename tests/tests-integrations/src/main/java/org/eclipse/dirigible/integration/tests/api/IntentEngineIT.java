@@ -2922,6 +2922,21 @@ class IntentEngineIT extends IntegrationTest {
                 "a bare relation dimension (customer) should INNER JOIN the related entity with quoted identifiers");
         assertTrue(body.contains("SELECT Customer.\\\"CUSTOMER_NAME\\\" as") && body.contains("GROUP BY Customer.\\\"CUSTOMER_NAME\\\""),
                 "the bare relation dimension should select + group by the related entity's name, not its FK id");
+        // The query is not the only place the structure lives: the report editor's visual builder
+        // rebuilds the query from the model on open, so a join present only in the query string was
+        // deleted the moment the file was saved (dirigible #6675). Same for a computed dimension,
+        // which degraded to its raw column, and for an empty conditions array, which emitted a bare
+        // WHERE. The builder-owned model has to say exactly what the query says.
+        assertTrue(body.contains("\"joins\": ["), "the resolved joins should be part of the model the report editor edits");
+        assertTrue(
+                body.contains("\"name\": \"ORDERS_CUSTOMER\"") && body.contains("\"type\": \"INNER\"")
+                        && body.contains("\"condition\": \"Order.\\\"ORDER_CUSTOMER\\\" = Customer.\\\"CUSTOMER_ID\\\"\""),
+                "a join row should carry the physical table, the join type and the ON condition");
+        assertTrue(monthly.contains(
+                "\"expression\": \"(EXTRACT(YEAR FROM Order.\\\"ORDER_ORDER_DATE\\\") * 100 + EXTRACT(MONTH FROM Order.\\\"ORDER_ORDER_DATE\\\"))\""),
+                "a computed dimension should carry its expression on the column, else it degrades to the raw column on save");
+        assertFalse(body.contains("\"conditions\""),
+                "an unfiltered report should emit no conditions at all - an empty array makes the editor emit a bare WHERE");
 
         // A relation.field dimension joins the related table; the filter becomes a qualified WHERE.
         String joined = contentOf("BigOrderItems.report");
@@ -2930,6 +2945,10 @@ class IntentEngineIT extends IntegrationTest {
                 "a relation.field dimension (order.orderDate) should INNER JOIN the related entity on its FK");
         assertTrue(joined.contains("WHERE OrderItem.\\\"ORDER_ITEM_QUANTITY\\\" > 1"),
                 "the intent filter should become a WHERE with the field rewritten to its quoted, qualified column");
+        assertTrue(
+                joined.contains("\"left\": \"OrderItem.\\\"ORDER_ITEM_QUANTITY\\\"\"") && joined.contains("\"operation\": \">\"")
+                        && joined.contains("\"right\": \"1\""),
+                "the filter should also be the builder-owned condition, with the same quoted column the query uses");
 
         // kind: balance - the six windowed totals around the runtime :fromDate/:toDate parameters,
         // declared on the .report in the editor's {name, type, initial} shape with all-time defaults.

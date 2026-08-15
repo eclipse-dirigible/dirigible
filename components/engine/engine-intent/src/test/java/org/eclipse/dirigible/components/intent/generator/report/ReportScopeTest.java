@@ -139,7 +139,12 @@ class ReportScopeTest {
         assertFalse(query.contains("WHERE"), "a plain listing keeps every row, got: " + query);
     }
 
-    /** A scope combines with an authored filter rather than replacing it. */
+    /**
+     * A scope combines with an authored filter rather than replacing it. The filter is not
+     * parenthesised because it decomposes into plain AND-ed comparisons (a filter that does not is left
+     * bracketed - see {@code ReportEditorRoundTripTest}), which is what lets the report editor's
+     * builder own the predicate instead of opening the report free-style.
+     */
     @Test
     void anExplicitScopeAndsWithTheFilter() {
         String query = queryOf("""
@@ -149,7 +154,7 @@ class ReportScopeTest {
                     filter: "issuedOn >= CURRENT_DATE"
                     measures: ["sum(total)"]
                 """);
-        assertTrue(query.contains("WHERE (Invoice.\"INVOICE_ISSUED_ON\" >= CURRENT_DATE) AND Invoice.\"INVOICE_STATUS\" IN (3, 7)"),
+        assertTrue(query.contains("WHERE Invoice.\"INVOICE_ISSUED_ON\" >= CURRENT_DATE AND Invoice.\"INVOICE_STATUS\" IN (3, 7)"),
                 "the filter and the scope should be ANDed, got: " + query);
     }
 
