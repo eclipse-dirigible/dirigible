@@ -85,6 +85,12 @@ import org.springframework.stereotype.Component;
  * save (dirigible #6675).
  *
  * <p>
+ * A dimension bound to a translatable property of a {@code multilingual} entity is read through its
+ * sibling <code>&lt;TABLE&gt;_LANG</code> table for the caller's language - see {@link #translate}.
+ * Only the SELECT list is overlaid; {@code filter} and the lifecycle scope compile against the base
+ * table.
+ *
+ * <p>
  * Column physical names and the base table mirror what {@code EdmIntentGenerator} emits
  * ({@code <ENTITY>_<FIELD>} columns, {@code <INTENT>_<ENTITY>} table) so the report can never drift
  * from the model. Generation is idempotent - identical input yields byte-identical output.
@@ -123,11 +129,28 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     private static final Pattern AGEING_BUCKET =
             Pattern.compile("\\s*ageing\\s*\\(\\s*([^,\\[]+?)\\s*,\\s*\\[\\s*([^\\]]+?)\\s*\\]\\s*\\)\\s*", Pattern.CASE_INSENSITIVE);
 
+    /** The sibling translation table of a multilingual entity, and its bookkeeping columns. */
+    private static final String LANGUAGE_TABLE_SUFFIX = "_LANG";
+    private static final String LANGUAGE_ID_COLUMN = "Id";
+    private static final String LANGUAGE_CODE_COLUMN = "Language";
+
+    /**
+     * The named parameter the generated report repository binds from the caller's
+     * {@code Accept-Language}. It is the only runtime input the query has that is not a declared report
+     * parameter, so its name is fixed on both sides.
+     */
+    private static final String LANGUAGE_PARAMETER = ":language";
+
     /** Disqualifies a filter term from the structured decomposition - see {@link #conditions}. */
     private static final Pattern OR_OPERATOR = Pattern.compile("\\bOR\\b", Pattern.CASE_INSENSITIVE);
 
-    /** Every join a report resolves is an inner one; the editor's builder offers the other kinds. */
+    /**
+     * Every entity join a report resolves is an inner one; the editor's builder offers the other kinds.
+     */
     private static final String JOIN_TYPE = "INNER";
+
+    /** A translation table is joined leniently - a row without a translation keeps its base value. */
+    private static final String LANGUAGE_JOIN_TYPE = "LEFT";
 
     @Override
     public String name() {
@@ -232,8 +255,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             }
             ColumnRef ref = resolve(context, model, source, baseAlias, dimension.trim());
             registerJoin(joins, ref);
-            Map<String, Object> dimensionColumn =
-                    column(ref.tableAlias, ref.displayAlias, ref.physicalColumn, ref.reportType, "NONE", aggregated);
+            Map<String, Object> dimensionColumn = column(ref.tableAlias, ref.displayAlias, ref.physicalColumn, ref.reportType, "NONE",
+                    aggregated, ref.translationExpression());
             columns.add(dimensionColumn);
             dimensionColumns.put(expressionKey(dimension), new WidgetDimension(dimensionColumn, null));
         }
@@ -548,6 +571,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 ref.reportType = targetField == null ? "CHARACTER VARYING" : reportType(targetField.getType());
                 ref.displayAlias = humanize(reference.replace('.', ' '));
                 ref.join = join(context, model, source, relation, target, targetAlias, baseAlias);
+                translate(context, ref, target, crossModelInfo(context, model, relation), fieldName);
                 return ref;
             }
         }
@@ -558,6 +582,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             ref.physicalColumn = column(source.getName(), reference);
             ref.reportType = reportType(field.getType());
             ref.displayAlias = humanize(reference);
+            translate(context, ref, source, null, reference);
             return ref;
         }
         // A bare to-one relation (e.g. `member`): JOIN the related table and show its label (name)
@@ -577,6 +602,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             ref.reportType = info != null ? "CHARACTER VARYING" : reportType(labeled == null ? null : labeled.getType());
             ref.displayAlias = humanize(reference);
             ref.join = join(context, model, source, relation, target, targetAlias, baseAlias);
+            // The label of a multilingual nomenclature is exactly the value a list page shows
+            // translated - this is the column the issue was raised about (dirigible #6544).
+            translate(context, ref, target, info, labelField);
             return ref;
         }
         // Best-effort: treat the reference as a raw column on the source.
@@ -585,6 +613,75 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         ref.reportType = "CHARACTER VARYING";
         ref.displayAlias = humanize(reference);
         return ref;
+    }
+
+    /**
+     * Give a resolved column the multilingual overlay when the entity it lives on keeps per-language
+     * values and the selected property is one of the translated ones.
+     *
+     * <p>
+     * A multilingual entity's own repository translates every read from its sibling
+     * <code>&lt;TABLE&gt;_LANG</code> table for the caller's {@code Accept-Language} - but a report is
+     * raw SQL over the base tables, so without this a report column showed the base-language value
+     * right next to a list page showing the translated one (dirigible #6544). The column becomes
+     * {@code COALESCE(<lang>."<Property>", <base>."<COLUMN>")} over a LEFT JOIN keyed on the base row
+     * and the {@code :language} named parameter the generated repository binds; a row with no
+     * translation, or a caller with no language, reads its base value.
+     *
+     * <p>
+     * The overlay is deliberately confined to the SELECT list: {@link ReportIntent#getFilter()} and the
+     * lifecycle scope compile against the BASE table, which is why translating a nomenclature can never
+     * change what a report filter matches.
+     *
+     * @param context the generation context (for the same-model physical table name)
+     * @param ref the resolved column, mutated in place when it is translatable
+     * @param owner the entity the column lives on, for a same-model target
+     * @param info the resolved owner-model facts, for a cross-model target (null otherwise)
+     * @param name the selected property - the authored field name same-model, the target's property
+     *        name cross-model
+     */
+    private static void translate(IntentGenerationContext context, ColumnRef ref, EntityIntent owner, CrossModelSupport.TargetInfo info,
+            String name) {
+        String property = IntentNaming.pascalCase(name);
+        String table;
+        String keyColumn;
+        if (info != null) {
+            if (!info.translatedProperties()
+                     .contains(property)) {
+                return;
+            }
+            table = info.tableDataName();
+            keyColumn = info.keyColumn();
+        } else {
+            if (owner == null || !owner.isMultilingual() || !isTranslatable(fieldByName(owner, name))) {
+                return;
+            }
+            FieldIntent primaryKey = primaryKeyOf(owner);
+            table = IntentNaming.tableName(context, owner.getName());
+            keyColumn = column(owner.getName(), primaryKey == null ? "id" : primaryKey.getName());
+        }
+        String alias = ref.tableAlias + LANGUAGE_TABLE_SUFFIX;
+        ref.languageColumn = property;
+        ref.languageJoin = new Join(table + LANGUAGE_TABLE_SUFFIX, alias, alias + "." + quote(LANGUAGE_ID_COLUMN) + " = " + ref.tableAlias
+                + "." + quote(keyColumn) + " AND " + alias + "." + quote(LANGUAGE_CODE_COLUMN) + " = " + LANGUAGE_PARAMETER, true);
+    }
+
+    /**
+     * Whether a field has a column in its entity's language table - mirroring what the schema template
+     * emits there: a character-typed field that is neither the primary key nor calculated. (A relation
+     * is not a field, and the audit columns are not authored ones, so neither can reach this.)
+     *
+     * @param field the field, or null when the reference names no declared field
+     * @return true when the language table carries a column for it
+     */
+    private static boolean isTranslatable(FieldIntent field) {
+        if (field == null || field.isPrimaryKey() || field.isCalculated()) {
+            return false;
+        }
+        String type = field.getType() == null ? "string"
+                : field.getType()
+                       .toLowerCase(Locale.ROOT);
+        return "string".equals(type) || "text".equals(type);
     }
 
     /**
@@ -654,6 +751,12 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     private static void registerJoin(Map<String, Join> joins, ColumnRef ref) {
         if (ref.join != null) {
             joins.putIfAbsent(ref.join.alias, ref.join);
+        }
+        // The language join is registered right after the entity join it hangs off, so the emitted FROM
+        // clause always introduces an alias before the join that references it. Two translated columns
+        // of the same entity share one join - same alias, same ON.
+        if (ref.languageJoin != null) {
+            joins.putIfAbsent(ref.languageJoin.alias, ref.languageJoin);
         }
     }
 
@@ -743,7 +846,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("alias", join.alias);
             row.put("name", join.table);
-            row.put("type", JOIN_TYPE);
+            // A language join is LEFT: an untranslated row - or a caller with no language at all - must
+            // still appear, carrying the base value the SELECT's COALESCE then falls back to.
+            row.put("type", join.language ? LANGUAGE_JOIN_TYPE : JOIN_TYPE);
             row.put("condition", join.on);
             rows.add(row);
         }
@@ -1235,7 +1340,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
 
     /**
      * A resolved column reference: where it lives, its physical name + type, display alias, optional
-     * join.
+     * join, and - when its entity is multilingual - the language-table join that overlays it.
      */
     private static final class ColumnRef {
         private String tableAlias;
@@ -1243,22 +1348,39 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         private String reportType;
         private String displayAlias;
         private Join join;
+        private Join languageJoin;
+        private String languageColumn;
 
         private String qualified() {
             return tableAlias + "." + quote(physicalColumn);
         }
+
+        /**
+         * The verbatim SQL a translated column SELECTs (and groups by): the caller's translation with the
+         * base value as its fallback. Null when the column needs no overlay, so it stays a plain qualified
+         * physical column.
+         */
+        private String translationExpression() {
+            return languageJoin == null ? null : "COALESCE(" + languageJoin.alias + "." + quote(languageColumn) + ", " + qualified() + ")";
+        }
     }
 
-    /** An INNER JOIN to a related entity's table. */
+    /** A join to a related entity's table - INNER, or LEFT for a language table. */
     private static final class Join {
         private final String table;
         private final String alias;
         private final String on;
+        private final boolean language;
 
         private Join(String table, String alias, String on) {
+            this(table, alias, on, false);
+        }
+
+        private Join(String table, String alias, String on, boolean language) {
             this.table = table;
             this.alias = alias;
             this.on = on;
+            this.language = language;
         }
     }
 }

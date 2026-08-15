@@ -62,20 +62,22 @@ import org.springframework.beans.factory.annotation.Autowired;
  * Covered here: {@code immutableWhen} / {@code immutable} (409 on write/delete, and the lock
  * inherited by a composition child - a line of a locked document is refused while a child that
  * declared {@code locksWithMaster: false} keeps its writes), {@code checks} (exactlyOne / itemsMin
- * / itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual} (read-time overlay),
- * seed rows carrying a RELATION column, aggregate totals, first-class {@code number:} stamping from
- * an authored {@code .numbers} series declaration, {@code transitions} (the guarded on-demand
- * status flip: allowed-status 200, wrong-status/guard 409), {@code lifecycle} (the declarative
- * state machine: the graph walked through its transitions, an unmodeled flip and a create filed
- * mid-lifecycle both refused through the plain REST surface no transition guard covers),
- * {@code postings} with {@code reverses} (post on a transition; red-storno reversal on void -
- * negated amounts, storno link, fail-soft), the {@code notify} block with {@code attach: print}
- * (send the document itself by e-mail - on a transition and on a process step; the fail-soft
- * contract), {@code calculatedActionOnCreate} on a to-one RELATION (the FK resolved server-side by
- * a hand-written {@code custom/} action: assigned in the repository, and at runtime both defaulted
- * when omitted and left alone when the caller supplied one), the event-driven {@code generates}
- * (posting the source mints the whole document with nobody clicking, and a click afterwards returns
- * that same document - the at-most-once back-reference guard), and the personal (my) surface
+ * / itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual} (the read-time overlay
+ * on an entity read, and its SQL counterpart on a report grouping by that nomenclature - the two
+ * must agree on the same value in the same language), seed rows carrying a RELATION column,
+ * aggregate totals, first-class {@code number:} stamping from an authored {@code .numbers} series
+ * declaration, {@code transitions} (the guarded on-demand status flip: allowed-status 200,
+ * wrong-status/guard 409), {@code lifecycle} (the declarative state machine: the graph walked
+ * through its transitions, an unmodeled flip and a create filed mid-lifecycle both refused through
+ * the plain REST surface no transition guard covers), {@code postings} with {@code reverses} (post
+ * on a transition; red-storno reversal on void - negated amounts, storno link, fail-soft), the
+ * {@code notify} block with {@code attach: print} (send the document itself by e-mail - on a
+ * transition and on a process step; the fail-soft contract), {@code calculatedActionOnCreate} on a
+ * to-one RELATION (the FK resolved server-side by a hand-written {@code custom/} action: assigned
+ * in the repository, and at runtime both defaulted when omitted and left alone when the caller
+ * supplied one), the event-driven {@code generates} (posting the source mints the whole document
+ * with nobody clicking, and a click afterwards returns that same document - the at-most-once
+ * back-reference guard), and the personal (my) surface
  * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
  * fields).
  */
@@ -88,6 +90,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     private static final String GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
     private static final String API = "/services/java/" + PROJECT + "/gen/emission/api";
+    /** A standalone report owns its own gen folder, named after the report file. */
+    private static final String REPORT_API = "/services/java/" + PROJECT + "/gen/claimsbyunit/api/reports";
     /** What a {@code type: text} field's column is sized to (EdmIntentGenerator's TEXT_LENGTH). */
     private static final int TEXT_COLUMN_LENGTH = 4000;
 
@@ -921,6 +925,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             permissions:
               - { role: Payroll, description: May see what people are paid }
 
+            reports:
+              # A report grouping by a MULTILINGUAL nomenclature: its label column must be translated
+              # for the caller's Accept-Language exactly as the entity list page next to it is, or the
+              # two disagree on the same value (dirigible #6544).
+              - name: ClaimsByUnit
+                source: Claim
+                dimensions: [Unit]
+                measures: ["count(*)"]
+
             seeds:
               - name: people
                 entity: Person
@@ -938,8 +951,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - name: claims
                 entity: Claim
                 rows:
-                  - { id: 1, note: mine,    rate: 50, Person: 1 }
-                  - { id: 2, note: foreign, rate: 70, Person: 2 }
+                  - { id: 1, note: mine,    rate: 50, Person: 1, Unit: 1 }
+                  - { id: 2, note: foreign, rate: 70, Person: 2, Unit: 1 }
               - name: parties
                 entity: Party
                 rows:
@@ -1185,6 +1198,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertHistoryEmission(schema, entryRepository);
         String unitRepository = contentOf("gen/emission/data/settings/UnitRepository.java");
         assertTrue(unitRepository.contains("Translator"), "multilingual must emit the read-time translation overlay into the repository");
+
+        // A report reading that nomenclature's label overlays it in SQL instead - the report backend
+        // never loads an entity, so the Translator cannot reach it. The join is LEFT and the column a
+        // COALESCE so an untranslated row keeps its base value, and the language is a bound parameter
+        // (never interpolated) that the report repository fills from the request.
+        String claimsByUnitReport = contentOf("ClaimsByUnit.report");
+        assertTrue(claimsByUnitReport.contains(
+                "LEFT JOIN \\\"EMISSION_UNIT_LANG\\\" as Unit_LANG ON Unit_LANG.\\\"Id\\\" = Unit.\\\"UNIT_ID\\\" AND Unit_LANG.\\\"Language\\\" = :language"),
+                "a translated report dimension must join the language table for the request language: " + claimsByUnitReport);
+        assertTrue(claimsByUnitReport.contains("COALESCE(Unit_LANG.\\\"Name\\\", Unit.\\\"UNIT_NAME\\\")"),
+                "a translated report dimension must fall back to its base value: " + claimsByUnitReport);
+        String claimsByUnitRepository = contentOf("gen/claimsbyunit/data/reports/ClaimsByUnitRepository.java");
+        assertTrue(claimsByUnitRepository.contains("parameter(\"language\", \"VARCHAR\", language())"),
+                "the report repository must bind the language parameter its query uses");
+        assertTrue(claimsByUnitRepository.contains("User.getLanguage()"),
+                "the report's language must come from the caller's Accept-Language, like every entity read");
 
         // The seed's RELATION key (Parent: 1) must survive into the CSV as the FK column - an
         // unknown/mis-cased key is dropped silently and CSVIM then skips the rows.
@@ -2012,6 +2041,30 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("[0].Name", equalTo("Брой")));
+
+        // ... and a REPORT grouping by that nomenclature agrees with the list page it sits next to:
+        // the same request language, the same value. A report is raw SQL over the base tables, so
+        // before the language-table overlay reached the SELECT list this row read "Piece" while the
+        // list beside it read "Брой" (dirigible #6544).
+        restAssuredExecutor.execute(() -> given().header("Accept-Language", "bg")
+                                                 .when()
+                                                 .get(REPORT_API + "/ClaimsByUnitController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("[0].Unit", equalTo("Брой"))
+                                                 // The report backend answers generic JSON, so every
+                                                 // number comes back as a float - the group is both
+                                                 // claim rows, so the join did not multiply them.
+                                                 .body("[0].Count", equalTo(2.0F)),
+                30);
+        // The fallback half: no translation for the caller's language leaves the base value - which
+        // is what makes the join LEFT and the column a COALESCE rather than a plain translated read.
+        restAssuredExecutor.execute(() -> given().header("Accept-Language", "de")
+                                                 .when()
+                                                 .get(REPORT_API + "/ClaimsByUnitController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("[0].Unit", equalTo("Piece")));
 
         // calculatedActionOnCreate on a to-one relation, end to end: a create that OMITS the FK comes
         // back carrying the one the action resolved. Tariff 2 is the row flagged `base` - not the first

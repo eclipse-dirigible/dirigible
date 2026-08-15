@@ -55,6 +55,12 @@ class ReportEditorRoundTripTest {
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string }
                   - { name: country, type: string }
+              - name: Currency
+                function: Setting
+                multilingual: true
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
               - name: Invoice
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
@@ -65,6 +71,7 @@ class ReportEditorRoundTripTest {
                 relations:
                   - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
                   - { name: Customer, kind: manyToOne, to: Customer }
+                  - { name: Currency, kind: manyToOne, to: Currency }
             reports:
             #REPORT#
             seeds:
@@ -117,6 +124,29 @@ class ReportEditorRoundTripTest {
         Map<String, Object> count = columns(document).get(1);
         assertEquals("*", count.get("name"));
         assertEquals("COUNT", count.get("aggregate"));
+    }
+
+    @Test
+    void aTranslatedDimensionRoundTrips() {
+        Map<String, Object> document = document("""
+                  - name: InvoicesByCurrency
+                    source: Invoice
+                    dimensions: [Currency]
+                    measures: ["sum(total)"]
+                """);
+        assertRoundTrips(document);
+
+        // The overlay rides on the two things the editor's builder already rebuilds from: a LEFT join
+        // row and the column's verbatim expression. Neither needed a new concept in the editor - but
+        // both must be in the model, or opening the report would drop the translation on save.
+        Map<String, Object> language = joins(document).get(1);
+        assertEquals("Currency_LANG", language.get("alias"));
+        assertEquals("SALES_CURRENCY_LANG", language.get("name"));
+        assertEquals("LEFT", language.get("type"));
+        assertEquals("Currency_LANG.\"Id\" = Currency.\"CURRENCY_ID\" AND Currency_LANG.\"Language\" = :language",
+                language.get("condition"));
+        assertEquals("COALESCE(Currency_LANG.\"Name\", Currency.\"CURRENCY_NAME\")", columns(document).get(0)
+                                                                                                      .get("expression"));
     }
 
     /** A computed dimension lives only in the query string unless the column carries its expression. */
