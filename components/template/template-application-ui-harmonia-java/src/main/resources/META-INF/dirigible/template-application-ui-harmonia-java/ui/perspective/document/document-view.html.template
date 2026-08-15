@@ -496,7 +496,7 @@
 #foreach($property in $properties)
 #if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))#set($hasReadOnly = true)#end
 #end
-#if($hasReadOnly || $docStatusProp != "")
+#if($hasReadOnly || $docStatusProp != "" || $history == "true")
     <div class="vbox gap-4 shrink-0" style="width: 18rem;" x-show="isEdit || isPreview">
 #if($hasReadOnly)
       <div x-h-card>
@@ -541,6 +541,31 @@
               </div>
             </template>
           </nav>
+        </div>
+      </div>
+#end
+#if($history == "true")
+      <!-- Change history (intent `history: true`): the document's field-level trail, newest first.
+           Read-only everywhere - the shadow table has no write verb on any surface. -->
+      <div x-h-card x-show="history.length">
+        <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.defaults.history', 'History')"></h3></div>
+        <div x-h-card-content>
+          <div class="vbox gap-3">
+            <template x-for="entry in history" :key="entry.GUID">
+              <div class="vbox gap-0">
+                <div class="hbox items-center gap-2">
+                  <span class="text-xs font-medium" x-text="historyLabel(entry.Property)"></span>
+                  <span x-h-badge data-variant="outline" x-show="entry.Source === 'SYSTEM'" x-text="T('$projectName:${tprefix}.defaults.system', 'System')"></span>
+                </div>
+                <span class="text-sm break-all">
+                  <span class="text-muted-foreground line-through" x-show="entry.OldValue" x-text="entry.OldValue"></span>
+                  <span x-show="entry.OldValue"> &rarr; </span>
+                  <span x-text="historyValue(entry.NewValue)"></span>
+                </span>
+                <span class="text-xs text-muted-foreground" x-text="historyWho(entry)"></span>
+              </div>
+            </template>
+          </div>
         </div>
       </div>
 #end

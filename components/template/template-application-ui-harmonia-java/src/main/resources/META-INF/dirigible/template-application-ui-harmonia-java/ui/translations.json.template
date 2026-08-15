@@ -73,6 +73,7 @@
         "list": "List",
         "slots": "Slots",
         "details": "Details",
+        "history": "History",
         "selectTitle": "Select a {{name}}",
         "back": "Back",
         "backToList": "Back to list",
