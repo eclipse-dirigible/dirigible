@@ -164,7 +164,9 @@ jobs:
   # the wall-clock time of a run is the slowest shard (~50 min) instead of the whole suite (~2h+):
   #   api     - every HTTP-level IT (untagged, i.e. everything not tagged "ui")
   #   ui      - the browser-driven ITs except the sample-project and camel families
-  #   samples - the sample-project clone/publish ITs ("sample") + the camel route ITs ("camel")
+  #   samples - the sample-project clone/publish ITs ("sample") + the camel journeys still driven
+  #             through the browser ("camel"), which is now only the two template starters - the
+  #             route ITs themselves publish over HTTP and so live in "api"
   # The shards partition the suite: api + ui + samples = the complete IT set. A new untagged IT
   # lands in "api"; a new UI IT (extends UserInterfaceIntegrationTest) lands in "ui" unless it is
   # explicitly tagged "sample" or "camel".

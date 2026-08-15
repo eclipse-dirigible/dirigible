@@ -7,24 +7,22 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.ui.tests.camel;
+package org.eclipse.dirigible.integration.tests.api.camel;
 
 import ch.qos.logback.classic.Level;
-import org.eclipse.dirigible.tests.base.ProjectUtil;
-import org.eclipse.dirigible.tests.framework.ide.EdmView;
-import org.eclipse.dirigible.tests.framework.ide.IDE;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
+import org.junit.jupiter.api.Test;
 
-@Lazy
-@Component
-class CamelExtractTransformLoadJdbcTestProject extends BaseCamelTestProject {
-    public CamelExtractTransformLoadJdbcTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView) {
-        super("CamelExtractTransformLoadJdbcIT", ide, projectUtil, edmView);
-    }
+/**
+ * The order replication that reads and writes through JDBC loads the orders it was given.
+ */
+public class CamelExtractTransformLoadJdbcIT extends BaseExtractTransformLoadIT {
 
-    @Override
-    public void verify() {
+    private static final String PROJECT = "CamelExtractTransformLoadJdbcIT";
+
+    @Test
+    void theOrdersAreReplicated() {
+        projectDeployer.deploy(PROJECT);
+
         assertLogContainsMessage(camelLogAsserter, "Replicating orders from OpenCart using JDBC...", Level.INFO);
         assertLogContainsMessage(camelLogAsserter, "Successfully replicated orders from OpenCart using JDBC", Level.INFO);
         assertDatabaseETLCompletion();

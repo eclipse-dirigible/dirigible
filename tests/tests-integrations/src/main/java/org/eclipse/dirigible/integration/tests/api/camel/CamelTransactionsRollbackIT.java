@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.ui.tests.camel;
+package org.eclipse.dirigible.integration.tests.api.camel;
 
 import ch.qos.logback.classic.Level;
 import org.assertj.db.api.Assertions;
@@ -15,41 +15,52 @@ import org.assertj.db.type.AssertDbConnection;
 import org.assertj.db.type.AssertDbConnectionFactory;
 import org.assertj.db.type.Table;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.tests.base.BaseTestProject;
-import org.eclipse.dirigible.tests.base.ProjectUtil;
-import org.eclipse.dirigible.tests.framework.ide.EdmView;
-import org.eclipse.dirigible.tests.framework.ide.IDE;
+import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.eclipse.dirigible.tests.base.ProjectDeployer;
 import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import javax.sql.DataSource;
 import java.util.concurrent.TimeUnit;
 
 import static org.awaitility.Awaitility.await;
 
-@Lazy
-@Component
-class CamelTransactionsRollbackTestProject extends BaseTestProject {
+/**
+ * A route whose JavaScript step saves an entity and then fails leaves nothing behind - the save is
+ * rolled back with the route.
+ */
+@Disabled("Disabled until transaction logic is implemented")
+public class CamelTransactionsRollbackIT extends IntegrationTest {
 
-    private final DataSourcesManager dataSourcesManager;
-    private final LogsAsserter logsAsserter;
+    private static final String PROJECT = "CamelTransactionsRollbackIT";
 
-    protected CamelTransactionsRollbackTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView,
-            DataSourcesManager dataSourcesManager) {
-        super("CamelTransactionsRollbackIT", ide, projectUtil, edmView);
-        this.dataSourcesManager = dataSourcesManager;
-        this.logsAsserter = new LogsAsserter("app.out", Level.INFO);
+    private static final String MODEL = "edm.model";
+
+    private LogsAsserter logsAsserter;
+
+    @Autowired
+    private ProjectDeployer projectDeployer;
+
+    @Autowired
+    private DataSourcesManager dataSourcesManager;
+
+    /**
+     * Attaches the log asserter here and not in a field initializer: Spring re-initializes logback
+     * while it starts the application context, which is after the test instance is constructed and
+     * before this callback - an appender attached any earlier is dropped by that reset.
+     */
+    @BeforeEach
+    void attachLogAsserter() {
+        logsAsserter = new LogsAsserter("app.out", Level.INFO);
     }
 
-    public void configure() {
-        copyToWorkspace();
-        generateEDM("edm.edm");
-        publish();
-    }
+    @Test
+    void theSavedEntityIsRolledBack() {
+        projectDeployer.deployGeneratedFromModel(PROJECT, MODEL);
 
-    @Override
-    public void verify() throws Exception {
         await().atMost(10, TimeUnit.SECONDS)
                .pollDelay(1, TimeUnit.SECONDS)
                .until(() -> logsAsserter.containsMessage("camel-handler.ts: an entity is saved", Level.INFO));
