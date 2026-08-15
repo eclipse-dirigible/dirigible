@@ -1352,6 +1352,45 @@ generates:
   step when the step would be waiting for a human to remember to click - an unclicked record parks its
   process instance forever.
 
+**Prompted input (`prompt:`).** Use when the target needs a value or two that CANNOT be derived from
+the source - the canonical case is manual payment allocation on an issued invoice: which payment, and
+how much (an allocation is often partial). `prompt:` declares a small input form shown before the
+target is created; without it a `generates` button fires immediately and every target value must come
+from `map`/`defaults`. It also reaches a child record on an **immutable** document, because per-record
+action buttons are not gated on mutability (the same reason Void works on an issued invoice) - the
+sibling of `locksWithMaster: false`, which reopens the child's own panel: use the panel when the rows
+are ordinary data entry, and a prompted action when the create is a guided one - a narrowed form over
+values the source mostly derives.
+
+```yaml
+generates:
+  - name: allocate-payment
+    from: SalesInvoice
+    to: SalesInvoiceCustomerPayment  # a composition child of the forEntity (required with prompt:)
+    label: Allocate Payment
+    icon: link
+    map:
+      SalesInvoice: id               # the clicked record becomes the child's master FK
+      Customer: Customer             # derived values stay mapped - only prompt what cannot be derived
+    prompt:
+      - { field: CustomerPayment, required: true }   # which payment - a to-one relation of the target
+      - { field: amount, required: true }            # how much - a field of the target
+```
+
+- Each `prompt` entry names a **field or to-one relation of the TARGET** entity; the dialog's controls
+  are typed from the target's own definitions, so the target's `dependsOn:` declarations apply
+  unchanged (the payment list narrows to the invoice's customer, `amount` defaults to the picked
+  payment's amount - all authored on the target already).
+- `required: true` is enforced in the dialog AND by the generated controller (400 before anything is
+  written); an absent optional input leaves the target's own default in place.
+- Prompted values are set on the target AFTER `map`/`defaults`; a property may not be both prompted
+  and mapped/defaulted (exactly one writer - parser-rejected).
+- Constraints (v1, parser-enforced): the target must be a **local** entity (no `uses:`) declaring a
+  **composition to-one relation to `forEntity`** (that is what guarantees the generated detail
+  metadata the dialog renders from), `scope` must be `entity`, a `timestamp` field cannot be
+  prompted yet, and `prompt:` cannot be combined with `event:` - an event-driven create-from runs
+  with nobody there to answer the form.
+
 ### reports - read-only aggregations
 
 **Use when:** the user needs a read-only view, list, or aggregation across records.

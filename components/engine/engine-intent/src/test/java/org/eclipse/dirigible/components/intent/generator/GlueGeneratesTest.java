@@ -673,4 +673,69 @@ class GlueGeneratesTest {
         assertTrue(assigns.contains(Map.of("targetProp", "Name", "expr", "\"Consulting services\"")));
         assertTrue(assigns.contains(Map.of("targetProp", "Factor", "expr", "Calc.eval(\"Hours * 2\", source, 2).doubleValue()")));
     }
+
+    /**
+     * The {@code prompt:} inputs (issue #6685) render per prompted TARGET property: its PascalCase
+     * name, the required flag, and a typed conversion expression over the posted {@code Object raw} - a
+     * to-one relation converts to its integer FK, a decimal field to BigDecimal.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void promptFieldsRenderTypedConversions() {
+        IntentModel model = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: CustomerPayment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: SalesInvoiceCustomerPayment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal, required: true }
+                      - { name: note, type: string }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                      - { name: CustomerPayment, kind: manyToOne, to: CustomerPayment, required: true }
+                generates:
+                  - name: allocate-payment
+                    from: SalesInvoice
+                    to: SalesInvoiceCustomerPayment
+                    map:
+                      SalesInvoice: id
+                    prompt:
+                      - { field: CustomerPayment, required: true }
+                      - { field: amount, required: true }
+                      - { field: note }
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+        assertEquals(true, g.get("hasPrompt"));
+        List<Map<String, Object>> prompt = (List<Map<String, Object>>) g.get("promptFields");
+        assertEquals(3, prompt.size());
+        assertTrue(prompt.contains(Map.of("prop", "CustomerPayment", "required", true, "expr",
+                "Integer.valueOf(new java.math.BigDecimal(String.valueOf(raw)).intValue())")));
+        assertTrue(prompt.contains(Map.of("prop", "Amount", "required", true, "expr", "new java.math.BigDecimal(String.valueOf(raw))")));
+        assertTrue(prompt.contains(Map.of("prop", "Note", "required", false, "expr", "String.valueOf(raw)")));
+    }
+
+    /** An action without a prompt keeps the flag off so the template renders nothing new. */
+    @Test
+    void noPromptLeavesTheFlagOff() {
+        IntentModel model = IntentParser.parse(YAML);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+        assertEquals(false, g.get("hasPrompt"));
+        assertTrue(((List<?>) g.get("promptFields")).isEmpty());
+    }
 }

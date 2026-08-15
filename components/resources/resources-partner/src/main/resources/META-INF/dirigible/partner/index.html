@@ -299,6 +299,68 @@
       </div>
     </div>
 
+    <!-- Input dialog for a prompted `endpoint` custom action (issue #6685): the declared inputs are
+         rendered from the target entity's own detail registration (App.detailsFor), so its dropdown
+         lookups and dependsOn cascades apply unchanged. Submitting the dialog IS the run
+         confirmation. The customActionPrompt wrapper keeps the markup free of `$store` references
+         (the per-project shell is a Velocity template) and hosts the cascade watcher. -->
+    <div x-data="customActionPrompt">
+      <div x-h-dialog-overlay :data-open="s.promptOpen">
+        <div x-h-dialog data-prompt-dialog>
+          <div x-h-dialog-header>
+            <h2 x-h-dialog-title x-text="(s.promptAction && s.promptAction.label) || T('application-core:shell.customActions.promptTitle', 'Run action')"></h2>
+            <button x-h-dialog-close @click="s.cancelPrompt()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+          </div>
+          <div x-h-dialog-content>
+            <div x-show="s.promptError" x-h-alert data-variant="negative" role="alert">
+              <div x-h-alert-description x-text="T('application-core:shell.customActions.promptMissing', 'Required: {{fields}}', { fields: s.promptError })"></div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <template x-for="col in s.promptCols" :key="col.name">
+                <div x-h-field :style="['NUMBER','CHECKBOX','DATE'].includes(col.widget) ? '' : 'grid-column: 1 / -1'">
+                  <label x-h-label x-text="col.tkey ? T(col.tkey, col.label) : col.label"></label>
+                  <template x-if="col.widget === 'DROPDOWN'">
+                    <div x-h-select data-filter="contains">
+                      <input x-h-select-input x-model="s.promptValues[col.name]" :placeholder="T('application-core:shell.customActions.promptSelect', 'Select...')" />
+                      <div x-h-select-content>
+                        <div x-h-select-search></div>
+                        <template x-for="opt in s.promptOptionsFor(col.name)" :key="opt.value">
+                          <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                  <template x-if="col.widget === 'NUMBER'">
+                    <div x-h-input-number><input type="number" step="any" x-model.number="s.promptValues[col.name]" :data-prompt-field="col.name" /></div>
+                  </template>
+                  <template x-if="col.widget === 'CHECKBOX'">
+                    <span x-h-checkbox><input type="checkbox" x-model="s.promptValues[col.name]" /></span>
+                  </template>
+                  <template x-if="col.widget === 'DATE'">
+                    <div x-h-date-picker.table>
+                      <input type="text" />
+                      <button x-h-date-picker-trigger aria-label="Choose date"></button>
+                      <div x-h-date-picker-popup x-model="s.promptValues[col.name]"></div>
+                    </div>
+                  </template>
+                  <template x-if="!['DROPDOWN','NUMBER','CHECKBOX','DATE'].includes(col.widget)">
+                    <input x-h-input type="text" x-model="s.promptValues[col.name]" :pattern="col.pattern" :data-prompt-field="col.name" />
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+          <div x-h-dialog-footer>
+            <button x-h-button data-variant="transparent" @click="s.cancelPrompt()" :disabled="s.promptBusy" x-text="T('application-core:shell.customActions.promptCancel', 'Cancel')"></button>
+            <button x-h-button data-variant="primary" @click="s.promptRun()" :disabled="s.promptBusy">
+              <span x-show="s.promptBusy" x-h-spinner></span>
+              <span x-text="T('application-core:shell.customActions.promptRun', 'Run')"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- App-wide transient toasts (raised through Harmonia's notifications magic with this template). -->
     <section x-h-notification-overlay>
       <template id="toast">

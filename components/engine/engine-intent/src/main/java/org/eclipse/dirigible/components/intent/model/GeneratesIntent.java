@@ -168,6 +168,15 @@ public class GeneratesIntent {
      */
     private java.util.List<GenerateChildIntent> children;
 
+    /**
+     * Optional declared input form (issue #6685): a small set of the TARGET's properties the user
+     * supplies before the target is created - the values that cannot be derived from the source (which
+     * payment, how much). Entries name fields / to-one relations of {@link #to}; the values are posted
+     * with the source id and set on the target after {@link #map} / {@link #defaults}. See
+     * {@link PromptFieldIntent}.
+     */
+    private List<PromptFieldIntent> prompt;
+
     public String getName() {
         return name;
     }
@@ -325,5 +334,18 @@ public class GeneratesIntent {
 
     public void setChildren(java.util.List<GenerateChildIntent> children) {
         this.children = children;
+    }
+
+    public List<PromptFieldIntent> getPrompt() {
+        return prompt;
+    }
+
+    public void setPrompt(List<PromptFieldIntent> prompt) {
+        this.prompt = prompt;
+    }
+
+    /** Whether this action declares a {@code prompt:} input form. */
+    public boolean hasPrompt() {
+        return prompt != null && !prompt.isEmpty();
     }
 }

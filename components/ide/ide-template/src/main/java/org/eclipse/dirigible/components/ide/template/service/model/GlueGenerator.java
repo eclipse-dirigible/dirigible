@@ -449,7 +449,10 @@ class GlueGenerator {
                 "sourceStatusProperty", "sourceStatusValue",
                 // The event half (issue #6711): the trigger kind, the status guard and the back-reference
                 // the at-most-once check reads, plus whether a button is contributed at all.
-                "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "backRefProperty");
+                "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "backRefProperty",
+                // The declared input form (issue #6685): the prompted target properties with their
+                // pre-rendered value conversions - the template renders one block per entry.
+                "hasPrompt", "promptFields");
         context.put("fromJavaPerspective", sanitize(item, "fromPerspective"));
         // The SOURCE's gen folder / owning project: this project unless the source belongs to another
         // model (intent `fromUses:`). That is what lets a create-from be authored on the module owning

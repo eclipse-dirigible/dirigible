@@ -393,6 +393,28 @@ status init and calculated fields fire. `sourceStatus:` flips the SOURCE to the 
 seed id once the target exists (proforma -> INVOICED) - a system write: no `-updated` re-fire, but
 the source's `-transitioned` topic is published.
 
+`prompt:` (#6685) declares a small input form shown before the target is created - the values the
+source cannot derive (which payment, how much). Entries name fields / to-one relations of the
+TARGET, so the dialog's controls are typed from the target's own definitions and its `dependsOn:`
+cascades apply unchanged; required inputs are enforced in the dialog and again by the generated
+controller (400). This is what makes a post-issue child (a manual payment allocation) reachable on
+an **immutable** document - the panel is read-only by design, the action button is not:
+
+```yaml
+generates:
+  - name: allocate-payment
+    from: SalesInvoice
+    to: SalesInvoiceCustomerPayment   # must be a composition child of forEntity (local, scope entity)
+    map: { SalesInvoice: id, Customer: Customer }
+    prompt:
+      - { field: CustomerPayment, required: true }
+      - { field: amount, required: true }
+```
+
+A prompted property may not also be mapped/defaulted (one writer); prompted values are set on the
+target after `map`/`defaults`, and the create still goes through the target's repository, so the
+ordinary `-created` event and rollups fire unchanged.
+
 ## postings - source-document to ledger
 
 When a (usually cross-model) source document reaches a status, create ONE local document with

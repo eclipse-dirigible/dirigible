@@ -195,7 +195,12 @@
       "confirmTitle": "Run action",
       "confirmBody": "Run {{name}} for the selected record? This creates or changes data.",
       "confirmCancel": "Cancel",
-      "confirmRun": "Run"
+      "confirmRun": "Run",
+      "promptTitle": "Run action",
+      "promptMissing": "Required: {{fields}}",
+      "promptCancel": "Cancel",
+      "promptRun": "Run",
+      "promptSelect": "Select..."
     }
   }
 }
