@@ -219,6 +219,10 @@ public final class IntentParser {
     private static void validate(IntentModel model) {
         List<String> issues = new ArrayList<>();
         propagateSensitiveDerivations(model);
+        // An n:m is materialised into its intermediate (link) entity FIRST, so every validator and
+        // generator below sees an ordinary composition + association pair - the DSL holds exactly one
+        // representation of a many-to-many, and nothing is accepted and then silently dropped.
+        ManyToManyExpander.expand(model, issues);
         Set<String> usesAliases = validateUses(model, issues);
         Set<String> entityNames = validateEntities(model, usesAliases, issues);
         validateFunctions(model, issues);
@@ -2113,9 +2117,22 @@ public final class IntentParser {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] has unknown kind ["
                             + relation.getKind() + "]");
                 }
+                // ManyToManyExpander consumed every n:m before this ran, so a surviving manyToMany is one
+                // it already refused, with a message naming what the author wrote. The association-shaped
+                // checks below would only pile contradictory advice (a composition kind, a target FK, a
+                // cross-model restriction) onto a relation that never becomes a column.
+                if ("manyToMany".equals(relation.getKind())) {
+                    continue;
+                }
                 if (relation.getSize() != null && (relation.getSize() < 1 || relation.getSize() > 12)) {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] size [" + relation.getSize()
                             + "] must be a 12-column grid span between 1 and 12 (typically 3/4/6/12)");
+                }
+                // through: names the link entity a manyToMany materialises into (the expander cleared it
+                // on the relations it rewrote, so a survivor was authored on a kind that has no link).
+                if (!isBlank(relation.getThrough())) {
+                    issues.add("entity [" + entity.getName() + "] relation [" + relation.getName()
+                            + "] declares through: but only a manyToMany materialises an intermediate entity");
                 }
                 if (relation.isComposition() && !"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName()
