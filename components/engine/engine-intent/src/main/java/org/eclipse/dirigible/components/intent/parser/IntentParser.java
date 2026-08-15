@@ -19,6 +19,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.intent.generator.IntentEntities;
+import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
@@ -3173,6 +3175,7 @@ public final class IntentParser {
             validateAbortOn(process, triggerEntity, byName, issues);
             validateParallelSteps(process, issues);
             validateTaskFormActions(process, model, issues);
+            validateTaskAssigneePaths(process, triggerEntity, byName, model, issues);
         }
     }
 
@@ -3343,6 +3346,52 @@ public final class IntentParser {
             }
         }
         return null;
+    }
+
+    /**
+     * A map-shaped {@code assignee: { path: employee.manager, fallback: manager }} routes a user task
+     * to the person a relation walk off the trigger record names. Every hop is checked here so a
+     * dangling segment fails Generate rather than the running process: each segment must be a to-one
+     * relation (the first of the trigger entity, each further one of the previous target), a
+     * cross-model relation may only be the last hop (a projection carries no relations to walk on), and
+     * the walk must end at an entity declaring {@code identity} - the same mapping the personal
+     * surfaces use to turn a record into a login. A cross-model terminal target's identity lives in the
+     * owner's {@code .model} and is checked at generation time instead, exactly as a cross-model
+     * {@code personal} owner relation is.
+     * <p>
+     * {@code fallback} is required: it names the candidate group that keeps the task claimable when the
+     * walk resolves to nobody, which is what stops an unresolvable path from minting a task no one can
+     * see.
+     */
+    private static void validateTaskAssigneePaths(ProcessIntent process, String triggerEntity, Map<String, EntityIntent> byName,
+            IntentModel model, List<String> issues) {
+        Map<String, String> compositionParents = IntentEntities.compositionParents(model);
+        Set<String> settingEntities = IntentEntities.settingEntities(byName.values());
+        for (StepIntent step : process.getSteps()) {
+            ProcessAssigneeSupport.PathAssignee declared = ProcessAssigneeSupport.pathAssignee(step);
+            if (declared == null) {
+                continue;
+            }
+            String subject = "process [" + process.getName() + "] step [" + step.getName() + "] ";
+            List<String> unknown = ProcessAssigneeSupport.unknownAssigneeKeys(step);
+            if (!unknown.isEmpty()) {
+                issues.add(subject + "declares unknown assignee key(s) " + unknown + " (supported: path, fallback)");
+            }
+            if (declared.fallback() == null) {
+                issues.add(subject + "declares an assignee path but no fallback candidate group - an unresolvable"
+                        + " path would leave a task nobody can claim");
+            }
+            EntityIntent owner = triggerEntity == null ? null : byName.get(triggerEntity);
+            if (owner == null) {
+                issues.add(subject + "declares an assignee path but the process has no trigger entity to walk it off");
+                continue;
+            }
+            ProcessAssigneeSupport.Walk walk =
+                    ProcessAssigneeSupport.walk(declared.path(), owner, byName, compositionParents, settingEntities, null);
+            if (!walk.resolved()) {
+                issues.add(subject + walk.failure());
+            }
+        }
     }
 
     private static void validateTaskFormActions(ProcessIntent process, IntentModel model, List<String> issues) {
