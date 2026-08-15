@@ -1043,28 +1043,37 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     + " relation back to [" + (entity == null ? "?" : entity.getName()) + "] - the mail was NOT generated");
         }
         EntityIntent about = fanOut == null ? entity : byName.get(fanOut.entity());
+        // The record the rows hang off stays addressable inside a fan-out, but only through the explicit
+        // `record.` placeholder scope - so which of the two entities a path reads is always authored.
+        EntityIntent anchor = fanOut == null ? null : entity;
         boolean dropped = fanOutRequested && fanOut == null;
         NotificationSupport.Plan plan = notify == null || dropped ? null
-                : NotificationSupport.plan(notify.getTo(), notify.getSubject(), notify.getBody(), null, about, byName, compositionParents,
-                        crossModelLookup(model, context));
+                : NotificationSupport.plan(notify.getTo(), notify.getSubject(), notify.getBody(), null, about, anchor, byName,
+                        compositionParents, crossModelLookup(model, context));
         if (notify != null && plan == null && !dropped) {
             reportDroppedGlue(context, subject + " recipient [" + notify.getTo() + "] is not a resolvable field or relation.field of ["
                     + (about == null ? "?" : about.getName()) + "] - the mail was NOT generated");
         }
+        // `attach: recordPrint` attaches the ANCHOR record's document instead of the row's - one
+        // document, many recipients - so it is resolved (and later rendered) against the record.
+        EntityIntent document = NotifySupport.attachesRecordPrint(notify) && fanOut != null ? entity : about;
         NotifySupport.PrintAttachment attachment =
-                plan == null ? null : printAttachment(notify, about, model, byName, compositionParents, context, subject);
+                plan == null ? null : printAttachment(notify, document, model, byName, compositionParents, context, subject);
         boolean send = plan != null && (attachment != null || !NotifySupport.attachesPrint(notify));
         fields.put("notify", String.valueOf(send));
         fields.put("notifyRelationLoads", send ? relationLoads(plan) : new ArrayList<>());
         fields.put("notifyToExpression", send ? plan.toExpression() : "null");
         fields.put("notifySubjectExpression", send ? plan.subjectExpression() : "\"\"");
         fields.put("notifyBodyExpression", send ? plan.bodyExpression() : "\"\"");
+        // Whether a per-row message quotes the anchor record - the fan-out templates then hand the
+        // loaded record to their send method, and only then (an argument nothing reads is noise).
+        fields.put("notifyRecordScoped", String.valueOf(send && fanOut != null && NotifySupport.usesRecordScope(notify)));
         fields.putAll(NotifySupport.fanOutFields(send ? fanOut : null));
         fields.putAll(NotifySupport.attachmentFields(send ? attachment : null));
-        // With a fan-out the attachment (and the recipient) belong to the ROW, so the print feeder is
-        // fed the ROW's key - the loop variable is named `entity` in the templates for exactly this
-        // reason, so one expression set serves both shapes.
-        fields.put("attachKeyProperty", send && attachment != null ? IntentEntities.keyFieldName(about) : "");
+        // The key the print feeder is fed with: the ROW's for `attach: print` (the loop variable is
+        // named `entity` in the templates for exactly this reason, so one expression set serves both
+        // shapes), the ANCHOR record's for `attach: recordPrint`.
+        fields.put("attachKeyProperty", send && attachment != null ? IntentEntities.keyFieldName(document) : "");
         return fields;
     }
 

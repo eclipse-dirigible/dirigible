@@ -35,6 +35,11 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
  * one-hop mechanism the decision resolvers use, see {@link ProcessResolverSupport}). Multi-hop
  * paths are not supported. The {@code when} guard supports a single {@code field ==|!= literal}
  * comparison on a direct field.
+ *
+ * <p>
+ * Inside a <b>fan-out</b> the entity every bare path resolves against is the ROW; a placeholder
+ * (never the recipient) reaches the record the rows hang off through the explicit
+ * {@link NotifySupport#RECORD_SCOPE} prefix - {@code {record.<field>}}.
  */
 public final class NotificationSupport {
 
@@ -182,7 +187,31 @@ public final class NotificationSupport {
      */
     public static Plan plan(String to, String subject, String body, String when, EntityIntent entity, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, CrossModelLookup crossModel) {
-        Resolver resolver = new Resolver(entity, byName, compositionParents, crossModel);
+        return plan(to, subject, body, when, entity, null, byName, compositionParents, crossModel);
+    }
+
+    /**
+     * Build the translation plan of a <b>fan-out</b> notify block: {@code entity} is the ROW every bare
+     * path resolves against, and {@code anchor} is the record the rows hang off, reachable only through
+     * the explicit {@code {record.<field>}} scope (see {@link NotifySupport#RECORD_SCOPE}). The
+     * recipient may not be record-scoped - a fan-out sends to its rows - so a record-scoped {@code to}
+     * stays unresolvable and the caller drops the block instead of mailing one address N times.
+     *
+     * @param to the recipient: a literal address, a direct field, or a one-hop {@code relation.field}
+     * @param subject the subject, with {@code {field}} / {@code {relation.field}} /
+     *        {@code {record.field}} placeholders
+     * @param body the body, with the same placeholders
+     * @param when an optional guard over a direct field, or {@code null} for none
+     * @param entity the entity the message is about (a fan-out's row)
+     * @param anchor the fan-out's anchor record, or {@code null} outside a fan-out
+     * @param byName all LOCAL entities by name (to resolve same-model relation targets)
+     * @param compositionParents composition-parent map (to resolve a target's perspective)
+     * @param crossModel resolver for a cross-model relation's owner facts, or {@code null}
+     * @return the plan, or {@code null} if the recipient cannot be resolved
+     */
+    public static Plan plan(String to, String subject, String body, String when, EntityIntent entity, EntityIntent anchor,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, CrossModelLookup crossModel) {
+        Resolver resolver = new Resolver(entity, anchor, byName, compositionParents, crossModel);
         String recipient = resolver.value(to);
         if (recipient == null) {
             return null; // an unresolvable recipient relation.field - skip rather than email garbage
@@ -237,15 +266,17 @@ public final class NotificationSupport {
     private static final class Resolver {
 
         private final EntityIntent entity;
+        private final EntityIntent anchor;
         private final Map<String, EntityIntent> byName;
         private final Map<String, String> compositionParents;
         private final Set<String> settingEntities;
         private final CrossModelLookup crossModel;
         private final Map<String, RelationLoad> loads = new LinkedHashMap<>();
 
-        Resolver(EntityIntent entity, Map<String, EntityIntent> byName, Map<String, String> compositionParents,
+        Resolver(EntityIntent entity, EntityIntent anchor, Map<String, EntityIntent> byName, Map<String, String> compositionParents,
                 CrossModelLookup crossModel) {
             this.entity = entity;
+            this.anchor = anchor;
             this.byName = byName;
             this.compositionParents = compositionParents;
             this.settingEntities = IntentEntities.settingEntities(byName.values());
@@ -266,7 +297,10 @@ public final class NotificationSupport {
                                               .matches()) {
                 return quote(trimmed);
             }
-            return access(trimmed); // null when an unresolvable relation.field
+            // A record-scoped recipient is deliberately NOT resolved: a fan-out mails its rows, so one
+            // record-scoped address would go out once per row. It reads as a relation named `record`
+            // and, finding none, drops the block - which the parser has already reported precisely.
+            return access(trimmed, false); // null when an unresolvable relation.field
         }
 
         /**
@@ -283,7 +317,7 @@ public final class NotificationSupport {
                 if (matcher.start() > last) {
                     terms.add(quote(raw.substring(last, matcher.start())));
                 }
-                String access = access(matcher.group(1));
+                String access = access(matcher.group(1), true);
                 // An unresolvable placeholder degrades to the literal text rather than failing the build.
                 terms.add(access == null ? quote(matcher.group()) : access);
                 last = matcher.end();
@@ -304,10 +338,24 @@ public final class NotificationSupport {
         /**
          * A Java access expression for a {@code field} or {@code relation.field} path, registering the
          * relation load when needed. Returns {@code null} for an unresolvable relation.field.
+         *
+         * @param path the authored path
+         * @param recordScope whether the {@code record.<field>} scope may address the fan-out's anchor here
+         *        (placeholders yes, the recipient no)
          */
-        private String access(String path) {
+        private String access(String path, boolean recordScope) {
             if (APP_URL_TOKEN.equals(path)) {
                 return APP_URL_EXPRESSION;
+            }
+            if (recordScope && anchor != null && path.startsWith(NotifySupport.RECORD_SCOPE + ".")) {
+                // The anchor record of a fan-out, already loaded by the generated code: one field of it,
+                // never a walk on (that would need a second load per message, and the composed value
+                // belongs in a field of the record).
+                String field = path.substring(NotifySupport.RECORD_SCOPE.length() + 1);
+                if (field.isEmpty() || field.indexOf('.') >= 0 || fieldOf(anchor, field) == null) {
+                    return null;
+                }
+                return NotifySupport.RECORD_LOCAL + "." + IntentNaming.pascalCase(field);
             }
             int dot = path.indexOf('.');
             if (dot < 0) {

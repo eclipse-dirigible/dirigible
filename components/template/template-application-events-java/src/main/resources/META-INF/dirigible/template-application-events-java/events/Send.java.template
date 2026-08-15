@@ -1,4 +1,11 @@
 package gen.events.${javaGenFolderName};
+#if($notifyRecordScoped == "true")
+#set($recordArgument = "source, ")
+#set($recordParameter = "${entity}Entity source, ")
+#else
+#set($recordArgument = "")
+#set($recordParameter = "")
+#end
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -48,6 +55,13 @@ import gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspec
  * The document rides along as a PDF attachment: the generated ${attachEntity}PrintFeeder assembles the
  * { document, items } payload the print template binds and sdk.print.Print renders it server-side -
  * the same two steps the snapshot delegate takes.
+#elseif($attach == "recordPrint")
+ *
+ * The ${attachEntity} the rows hang off rides along as a PDF attachment - ONE document to MANY
+ * recipients, so it is rendered ONCE before the loop (the generated ${attachEntity}PrintFeeder
+ * assembles the { document, items } payload and sdk.print.Print renders it) and the same bytes go out
+ * with every message. A render failure therefore fails the step before anything is mailed, which is
+ * safe to retry: nobody has received a copy yet.
 #end
  *
  * A row with no recipient is a no-op (log + skip): it simply has nobody to mail, which must not stall
@@ -82,6 +96,11 @@ public class ${className} implements JavaDelegate {
         }
         List<${forEach}Entity> rows = new ${forEach}Repository().findAll(Criteria.create()
                                                                                 .eq("${forEachFkProperty}", id));
+#if($attach == "recordPrint")
+        // Rendered once, outside the loop: the document belongs to the record, not to the row - and
+        // not at all when there is nobody to mail it to.
+        Map document = rows.isEmpty() ? null : renderDocument(source);
+#end
         int sent = 0;
         int skipped = 0;
         int failed = 0;
@@ -89,7 +108,7 @@ public class ${className} implements JavaDelegate {
         // against the ROW, exactly as the non-fan-out shape renders against the record.
         for (${forEach}Entity entity : rows) {
             try {
-                if (send(entity)) {
+                if (send(${recordArgument}entity#if($attach == "recordPrint"), document#end)) {
                     sent++;
                 } else {
                     skipped++;
@@ -101,11 +120,30 @@ public class ${className} implements JavaDelegate {
         }
         LOG.info("Mailed the ${forEach}s of ${entity} [{}]: sent [{}], no recipient [{}], failed [{}]", id, sent, skipped, failed);
     }
+#if($attach == "recordPrint")
+
+    /**
+     * The ${attachEntity}'s own document, rendered once for the whole fan-out.
+     */
+    private Map renderDocument(${entity}Entity source) {
+#if($attachLanguageFkProperty != "")
+        ${attachLanguageTargetEntity}Entity attachLanguageSource = source.${attachLanguageFkProperty} == null ? null
+                : new ${attachLanguageTargetEntity}Repository().findById(source.${attachLanguageFkProperty});
+#end
+        Map document = new HashMap();
+        document.put("type", "attachment");
+        document.put("contentType", "application/pdf");
+        document.put("fileName", ${attachFileNameExpression});
+        document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
+                new ${attachEntity}PrintFeeder().feed(source.${attachKeyProperty})));
+        return document;
+    }
+#end
 
     /**
      * Send about one ${forEach}. Returns false when the row has nobody to mail.
      */
-    private boolean send(${forEach}Entity entity) {
+    private boolean send(${recordParameter}${forEach}Entity entity#if($attach == "recordPrint"), Map document#end) {
 #else
         ${entity}Entity entity = new ${entity}Repository().findById(id);
         if (entity == null) {
@@ -141,6 +179,9 @@ public class ${className} implements JavaDelegate {
         document.put("fileName", ${attachFileNameExpression});
         document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
                 new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
+        parts.add(document);
+#elseif($attach == "recordPrint")
+        // The record's document, rendered once for every recipient of this fan-out.
         parts.add(document);
 #end
         String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
