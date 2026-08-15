@@ -556,6 +556,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # an item-level to-one: the print feeder must feed it per row so an items-table
                   # column can render {{Unit}} (the label, translated) or {{Unit.Name}}
                   - { name: Unit, kind: manyToOne, to: Unit }
+              # the RECIPIENT LIST of a bill: rows that are nobody's document - they only say who
+              # gets the bill's own PDF (attach: recordPrint, one document to many recipients).
+              - name: BillRecipient
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: Bill,   kind: manyToOne, to: Bill, required: true }
+                  - { name: Person, kind: manyToOne, to: Person }
 
               # keyed cross-entity aggregate: a signed ledger summed per (Person, Unit) into a
               # materialised total row keyed by the same two FKs. Ledger.amount is SENSITIVE and
@@ -705,6 +713,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         to: Person.email
                         subject: "Bill {note}"
                         body: "Dear {Person.name}, your bill totals {amount}."
+                      next: shareBill
+                  # the MIRROR of the per-row fan-out: the rows are only the recipient list, and the
+                  # document is the BILL's - rendered once (and not at all when nobody is invited,
+                  # which is the path this test's Bills take) and attached to every message.
+                  - name: shareBill
+                    kind: serviceTask
+                    args:
+                      notify:
+                        forEach: BillRecipient
+                        to: Person.email
+                        subject: "Bill {record.note}"
+                        body: "Dear {Person.name}, the bill is attached."
+                        attach: recordPrint
                       next: end
                   - { name: end, kind: end }
 
@@ -1597,6 +1618,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String billBpmn = contentOf("BillFlow.bpmn");
         assertTrue(billBpmn.contains("gen.events.emission.BillFlowMailBillSend"),
                 "the BPMN service task must bind the generated sender delegate");
+
+        // (3) The FAN-OUT mirror - one document, many recipients (#6717). The rows are only the
+        // recipient list, so the recipient still resolves against the ROW while the attachment is the
+        // ANCHOR record's, rendered ONCE outside the loop and handed to every message.
+        String shareBill = contentOf("gen/events/emission/BillFlowShareBillSend.java");
+        assertTrue(shareBill.contains("Map document = rows.isEmpty() ? null : renderDocument(source);"),
+                "a recordPrint fan-out must render the document once, before the loop - and not at all with no recipients");
+        assertTrue(
+                shareBill.contains("private Map renderDocument(BillEntity source)")
+                        && shareBill.contains("new BillPrintFeeder().feed(source.Id)"),
+                "the rendered document must be the ANCHOR record's, fed with the anchor's key: " + shareBill);
+        assertEquals(1, shareBill.split("Print\\.render\\(", -1).length - 1,
+                "one document for the whole fan-out means exactly one render call");
+        assertTrue(shareBill.contains("private boolean send(BillEntity source, BillRecipientEntity entity, Map document)"),
+                "the per-row send must take the anchor (a placeholder quotes it) and the rendered document");
+        assertTrue(shareBill.contains("(Person == null ? null : Person.Email)"),
+                "the recipient must still resolve against the ROW - the rows ARE the recipient list");
+        assertTrue(shareBill.contains("\"Bill \" + source.Note"),
+                "a {record.<field>} placeholder must read the anchor record, not the row: " + shareBill);
+        assertTrue(billBpmn.contains("gen.events.emission.BillFlowShareBillSend"),
+                "the BPMN service task must bind the generated fan-out sender delegate too");
         assertFalse(repository.getResource(PROJECT_PATH + "/custom/MailBill.java")
                               .exists(),
                 "a notify serviceTask must NOT also scaffold a custom stub (it would never be invoked)");

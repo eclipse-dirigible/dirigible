@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
+import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
@@ -114,8 +115,24 @@ public final class IntentParser {
     private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
     /** Notification delivery channels supported today. */
     private static final Set<String> NOTIFICATION_CHANNELS = Set.of("email");
-    /** Documents a notify block may attach: the record's own rendered print template. */
-    private static final Set<String> NOTIFY_ATTACHMENTS = Set.of("print");
+    /**
+     * Documents a notify block may attach (compared lower-cased): {@code print} renders the print
+     * template of the record the block is about - which inside a fan-out is the ROW - and
+     * {@code recordPrint} renders the fan-out's ANCHOR record instead, once, for every recipient.
+     */
+    private static final Set<String> NOTIFY_ATTACHMENTS = Set.of("print", "recordprint");
+    /** The {@code attach} value that attaches the fan-out's anchor record rather than the row. */
+    private static final String ATTACH_RECORD_PRINT = "recordPrint";
+    /**
+     * The reserved placeholder scope that addresses a fan-out's <b>anchor record</b>. Inside a fan-out
+     * a bare path resolves against the ROW (unchanged); {@code {record.<field>}} is the only way to
+     * reach the record the rows hang off, so which entity a placeholder reads is always written down
+     * rather than inferred - implicit mixing is how a message ends up quoting the wrong party's data.
+     */
+    private static final String RECORD_SCOPE = NotifySupport.RECORD_SCOPE;
+    /** The {@code {record.<path>}} placeholders of a subject / body. */
+    private static final java.util.regex.Pattern RECORD_PLACEHOLDER =
+            java.util.regex.Pattern.compile("\\{(" + RECORD_SCOPE + "\\.[A-Za-z0-9_.]*)\\}");
     /** Comparison operators a schedule's {@code where} condition may use. */
     private static final Set<String> SCHEDULE_OPERATORS = Set.of("eq", "ne", "gt", "ge", "lt", "le", "like");
     /** HTTP methods an outbound integration may use. */
@@ -747,7 +764,7 @@ public final class IntentParser {
                             + " supports the generate action; notify needs the source's relation metadata - keep the schedule in the"
                             + " source's model or drop model:");
                 } else {
-                    validateNotifyBlock(schedule.getNotify(), "schedule [" + name + "] notify", schedule.getEntity(), model, issues);
+                    validateNotifyBlock(schedule.getNotify(), "schedule [" + name + "] notify", schedule.getEntity(), model, false, issues);
                 }
             } else {
                 validateScheduleGenerate(schedule, source, entityNames, usesAliases, issues);
@@ -1628,7 +1645,7 @@ public final class IntentParser {
                     eventEntity = target.toString();
                 }
             }
-            validateNotifyBlock(notification, "notification [" + name + "]", eventEntity, model, issues);
+            validateNotifyBlock(notification, "notification [" + name + "]", eventEntity, model, false, issues);
         }
     }
 
@@ -1637,19 +1654,21 @@ public final class IntentParser {
      * {@code schedules[].notify}, a {@code transitions[].notify} and a {@code serviceTask}'s
      * {@code args.notify}. Checks the channel, the recipient rule (a literal address, a direct field or
      * a one-hop {@code relation.field} - the generator resolves a single to-one relation by FK id), and
-     * the {@code attach} switch: {@code print} is the only value, and it renders the record's own
-     * {@code .print} template, so the entity the block is about must be a printable document master (a
-     * line-items child, hence a generated print feeder). Anything else would generate a mail that
-     * claims an attachment it cannot produce.
+     * the {@code attach} switch: {@code print} renders the {@code .print} template of the record the
+     * block is about (inside a fan-out, the ROW), {@code recordPrint} renders the fan-out's anchor
+     * record instead - one document mailed to many recipients. Whichever is rendered must be a
+     * printable document master (a line-items child, hence a generated print feeder); anything else
+     * would generate a mail that claims an attachment it cannot produce.
      *
      * @param notify the block, may be {@code null} (nothing to validate)
      * @param subject the message prefix identifying the call site
      * @param aboutEntity the entity the message is about, or {@code null} when it is already unknown
      * @param model the parsed model (to resolve the document-master shape)
+     * @param fanOutSupported whether this call site generates a {@code forEach} fan-out
      * @param issues the collected issues
      */
     private static void validateNotifyBlock(NotificationIntent notify, String subject, String aboutEntity, IntentModel model,
-            List<String> issues) {
+            boolean fanOutSupported, List<String> issues) {
         if (notify == null) {
             return;
         }
@@ -1668,9 +1687,17 @@ public final class IntentParser {
         }
         // A fan-out sends one message per row of a related entity instead of one about the record, so
         // from here on every path (the recipient, the placeholders, the attachment) is about the ROW -
-        // which is what `aboutEntity` becomes.
+        // which is what `aboutEntity` becomes. The record itself stays reachable, but only through the
+        // explicit `record.` scope, so no path is ambiguous about which of the two it reads.
+        String anchorEntity = aboutEntity;
         String forEach = notify.getForEach();
-        if (forEach != null && !forEach.isBlank()) {
+        boolean fansOut = forEach != null && !forEach.isBlank();
+        if (fansOut && !fanOutSupported) {
+            issues.add(subject + " declares forEach, which is generated only on a transitions[].notify and a serviceTask's args.notify"
+                    + " - a schedules[].notify already runs once per matched row, and a notifications[] entry is about the event record");
+            return;
+        }
+        if (fansOut) {
             String rows = forEach.trim();
             EntityIntent rowEntity = entityByName(model, rows);
             if (rowEntity == null) {
@@ -1682,8 +1709,14 @@ public final class IntentParser {
                         + "] - that relation is what selects the rows to send about");
                 return;
             }
+            if (toOneRelationNamed(rowEntity, RECORD_SCOPE) != null) {
+                issues.add(subject + " forEach [" + rows + "] declares a to-one relation named [" + RECORD_SCOPE
+                        + "], which is the reserved scope a fan-out addresses the anchor record with - rename the relation");
+                return;
+            }
             aboutEntity = rows;
         }
+        validateRecordScope(notify, subject, fansOut, anchorEntity, model, issues);
         String attach = notify.getAttach();
         boolean hasLanguage = notify.getLanguage() != null && !notify.getLanguage()
                                                                      .isBlank();
@@ -1695,18 +1728,93 @@ public final class IntentParser {
             }
             return;
         }
-        if (!NOTIFY_ATTACHMENTS.contains(attach.trim()
-                                               .toLowerCase(Locale.ROOT))) {
-            issues.add(subject + " has unsupported attach [" + attach + "] (supported: print)");
-        } else if (aboutEntity != null && !isPrintableDocument(model, aboutEntity)) {
-            issues.add(subject + " attach: print needs [" + aboutEntity
+        String kind = attach.trim();
+        boolean recordPrint = ATTACH_RECORD_PRINT.equalsIgnoreCase(kind);
+        // Which record the attachment renders: the one the block is about (the ROW inside a fan-out)
+        // for `print`, the fan-out's anchor for `recordPrint` - one document, many recipients.
+        String documentEntity = recordPrint ? anchorEntity : aboutEntity;
+        if (!NOTIFY_ATTACHMENTS.contains(kind.toLowerCase(Locale.ROOT))) {
+            issues.add(subject + " has unsupported attach [" + attach + "] (supported: print, recordPrint)");
+        } else if (recordPrint && !fansOut) {
+            issues.add(subject + " attach: recordPrint attaches the anchor record of a fan-out, so it needs a forEach"
+                    + " - without one, attach: print already renders this very record");
+        } else if (documentEntity != null && !isPrintableDocument(model, documentEntity)) {
+            issues.add(subject + " attach: " + kind + " needs [" + documentEntity
                     + "] to be a document (header + line-items child) - only a document has a print template to render");
         }
         if (hasLanguage && hasLanguageFrom) {
             issues.add(subject + " declares both language and languageFrom - they are mutually exclusive");
-        } else if (hasLanguageFrom && aboutEntity != null) {
-            validateLanguageFromPath(notify.getLanguageFrom(), aboutEntity, subject + " languageFrom", model, issues);
+        } else if (hasLanguageFrom && documentEntity != null) {
+            // The language belongs to whatever is rendered, so a recordPrint reads it off the anchor.
+            validateLanguageFromPath(notify.getLanguageFrom(), documentEntity, subject + " languageFrom", model, issues);
         }
+    }
+
+    /**
+     * The {@code record.} scope: inside a fan-out, {@code {record.<field>}} in the subject or the body
+     * reads a field of the <b>anchor record</b> the rows hang off, while every bare path keeps
+     * resolving against the ROW. One hop only - the record is loaded, but walking on from it would need
+     * a second load per message, and the composed value belongs in a field of the record instead.
+     * <p>
+     * The recipient may never be record-scoped: a fan-out's recipients ARE its rows, so a record-scoped
+     * address would mail the same person once per row - a bug that looks like a working configuration.
+     */
+    private static void validateRecordScope(NotificationIntent notify, String subject, boolean fansOut, String anchorEntity,
+            IntentModel model, List<String> issues) {
+        String to = notify.getTo() == null ? ""
+                : notify.getTo()
+                        .trim();
+        if (to.startsWith(RECORD_SCOPE + ".")) {
+            issues.add(subject + " recipient [" + to + "] is record-scoped - a fan-out sends to its ROWS, so a record-scoped"
+                    + " address would mail the same recipient once per row");
+        }
+        List<String> paths = new ArrayList<>();
+        collectRecordScopedPaths(notify.getSubject(), paths);
+        collectRecordScopedPaths(notify.getBody(), paths);
+        if (paths.isEmpty()) {
+            return;
+        }
+        if (!fansOut) {
+            issues.add(subject + " uses the record. scope in [{" + paths.get(0) + "}] without a forEach - outside a fan-out every"
+                    + " path already resolves against the record, so the bare placeholder is the same thing");
+            return;
+        }
+        EntityIntent anchor = anchorEntity == null ? null : entityByName(model, anchorEntity);
+        for (String path : paths) {
+            String field = path.substring(RECORD_SCOPE.length() + 1);
+            if (field.isEmpty() || field.indexOf('.') >= 0) {
+                issues.add(subject + " record-scoped placeholder [{" + path + "}] must name ONE field of the anchor record [" + anchorEntity
+                        + "] - a walk from the record is not supported");
+            } else if (anchor != null && fieldByName(anchor, field) == null) {
+                issues.add(subject + " record-scoped placeholder [{" + path + "}]: [" + field + "] is not a field of the anchor record ["
+                        + anchorEntity + "]");
+            }
+        }
+    }
+
+    /** The {@code record.*} placeholder paths of one text, appended to {@code paths}. */
+    private static void collectRecordScopedPaths(String text, List<String> paths) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        java.util.regex.Matcher matcher = RECORD_PLACEHOLDER.matcher(text);
+        while (matcher.find()) {
+            paths.add(matcher.group(1));
+        }
+    }
+
+    /** The entity's to-one relation with that exact name, or {@code null}. */
+    private static RelationIntent toOneRelationNamed(EntityIntent entity, String name) {
+        if (entity.getRelations() == null) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && name.equals(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     /**
@@ -3582,7 +3690,7 @@ public final class IntentParser {
                         issues.add(stepSubject + " cannot be combined with setField/setRelationField/call/delegate - give the send its own"
                                 + " serviceTask");
                     }
-                    validateNotifyBlock(NotificationIntent.fromMap(notifyArg), stepSubject, triggerEntity, model, issues);
+                    validateNotifyBlock(NotificationIntent.fromMap(notifyArg), stepSubject, triggerEntity, model, true, issues);
                 }
             }
             String next = stepArg(step, "next");
@@ -4876,7 +4984,7 @@ public final class IntentParser {
             }
             // Optional outbound mail after the flip ("on Void, mail the counterparty"), about the
             // transitioned record itself.
-            validateNotifyBlock(t.getNotify(), subject + " notify", entity == null ? null : entity.getName(), model, issues);
+            validateNotifyBlock(t.getNotify(), subject + " notify", entity == null ? null : entity.getName(), model, true, issues);
         }
     }
 

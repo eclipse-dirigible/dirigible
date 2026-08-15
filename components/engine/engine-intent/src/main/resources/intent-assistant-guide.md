@@ -1749,6 +1749,37 @@ The row entity must have **exactly one** to-one relation back to the record: non
 unrelated, several make the intended set ambiguous, and both are validation errors rather than a
 quietly wrong list of recipients.
 
+**A fan-out is generated on a `transitions[].notify` and a `serviceTask`'s `args.notify` only.** A
+`schedules[].notify` already runs once per matched row and a `notifications[]` entry is about the event
+record, so a `forEach` there is a validation error rather than a silently ignored declaration.
+
+**One document, many recipients: `attach: recordPrint`.** The mirror shape - the related rows are only
+the RECIPIENT LIST and the document belongs to the record they hang off: a request for quotation mailed
+to each invited supplier, an agenda mailed to each participant. `attach: print` would be wrong there
+(it renders the ROW, which is nobody's document); `attach: recordPrint` renders the fan-out's **anchor
+record** instead - **once**, before the loop, with the same PDF on every message.
+
+```yaml
+    notify:
+      forEach: InvitedSupplier             # the rows: the recipient list
+      to: Supplier.email                   # the ROW's supplier - the rows ARE the recipients
+      subject: "RFQ {record.number}"       # {record.<field>} = the ANCHOR RECORD's field
+      body: "Dear {Supplier.name}, please quote by {record.deadline}."   # bare = the ROW
+      attach: recordPrint                  # the RECORD's rendered document, once for everybody
+```
+
+**Scoping rule (normative).** Inside a fan-out a **bare** path always resolves against the **ROW** -
+the recipient, `{field}` and `{Relation.field}` alike - and the reserved prefix **`record.`** is the
+only way to reach the anchor record: `{record.<field>}`, one field of the record, never a walk on from
+it. The recipient may **not** be record-scoped: the rows ARE the recipients, so a record-scoped address
+would mail the same person once per row. `record.` outside a fan-out is an error too (there every bare
+path is already the record's). All of it is validated at parse time - which entity a placeholder reads
+is written down, never inferred, because nothing about the rendered text would reveal the wrong one.
+
+`recordPrint` requires a `forEach` (without one, `attach: print` already renders that very record), and
+it is the **anchor** that must be a document: `language:` / `languageFrom:` then select ITS render
+language, read off the record, since there is only one render for the whole fan-out.
+
 **A fan-out is fail-soft per row, at every call site** - including a process step, which otherwise
 fails. A row with no address is skipped, a failed send is logged, and the step completes with a summary
 count. That is deliberate: failing the task would have the engine retry the WHOLE fan-out and mail
@@ -1764,9 +1795,10 @@ Where the block can sit - the three places an intent acts, plus the standalone `
 | `schedules[].notify` | each matched row | on every cron tick, per row (dunning runs) |
 | `notifications[]` | the event record | on the entity's create / update / delete |
 
-**Rules:** `attach`'s only value is `print`, and the entity the block is about must be a **document**
-(a header with a line-items child) - that is what has a print template and a generated print feeder to
-assemble its data. Attaching the print of a plain entity is a validation error, not a silent
+**Rules:** `attach` is `print` (the record the block is about - inside a fan-out, the ROW) or
+`recordPrint` (a fan-out's anchor record), and whichever is rendered must be a **document** (a header
+with a line-items child) - that is what has a print template and a generated print feeder to assemble
+its data. Attaching the print of a plain entity is a validation error, not a silent
 plain-text mail. The render language: `language:` names a FIXED print-template language,
 `languageFrom: <relation.field>` reads it per record off a one-hop to-one path (mutually exclusive);
 absent both, the first entry of the tenant's application language set is used at send time.
@@ -2099,8 +2131,8 @@ name.
 | trigger `businessKeyStrategy` | `timestamp` |
 | lifecycle event | `onCreate`, `onUpdate`, `onDelete` |
 | notification `channel` | `email` |
-| notify `attach` | `print` (the record's own rendered document; the entity must be a document) |
-| notify `forEach` | a declared entity with exactly ONE to-one relation back to the record (one message per row; every path resolves against the row) |
+| notify `attach` | `print` (the record the block is about - inside a fan-out, the ROW), `recordPrint` (a fan-out's anchor record, rendered once); whichever is rendered must be a document |
+| notify `forEach` | a declared entity with exactly ONE to-one relation back to the record (one message per row; every bare path resolves against the row, `{record.<field>}` against the anchor record) - on `transitions[].notify` and `serviceTask` `args.notify` only |
 | notify block sites | `notifications[]`, `schedules[].notify`, `transitions[].notify`, `serviceTask` `args.notify` |
 | schedule `where` `op` | `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `like` |
 | integration `method` | `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
