@@ -22,6 +22,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+#if($masterLock)
+#if($partnerParent)
+#set($masterRepositoryRef = "parentRepository")
+#else
+#set($masterRepositoryRef = "masterRepository")
+#end
+#end
 /**
  * The PARTNER surface of ${name}: every read is scoped to the logged-in EXTERNAL partner's identity
  * record (Customer / Supplier, matched by email) and every write is forced onto it - a partner can
@@ -42,13 +49,20 @@ public class ${name}PartnerController {
 #if($partnerParent)
     private final ${partnerParent.repositoryClass} parentRepository;
 #end
+#if($masterLock && !$partnerParent)
+    private final ${masterLock.repositoryClass} masterRepository;
+#end
 
     public ${name}PartnerController(${name}Repository repository, ${partnerIdentityRepositoryClass} identityRepository#if($partnerParent),
-            ${partnerParent.repositoryClass} parentRepository#end) {
+            ${partnerParent.repositoryClass} parentRepository#end#if($masterLock && !$partnerParent),
+            ${masterLock.repositoryClass} masterRepository#end) {
         this.repository = repository;
         this.identityRepository = identityRepository;
 #if($partnerParent)
         this.parentRepository = parentRepository;
+#end
+#if($masterLock && !$partnerParent)
+        this.masterRepository = masterRepository;
 #end
     }
 
@@ -117,6 +131,9 @@ public class ${name}PartnerController {
         // The owner is the server's decision - whatever the client sent is overwritten.
         entity.${partnerProperty} = me;
 #end
+#if($masterLock)
+        requireMasterMutable(entity.${masterLock.fkProperty});
+#end
 #foreach($sensitive in $sensitiveProperties)
         entity.${sensitive} = null;
 #end
@@ -129,6 +146,9 @@ public class ${name}PartnerController {
         ${name}Entity existing = requireMine(id);
 #if($immutableAlways || $immutableStatusProperty)
         requireMutable(existing);
+#end
+#if($masterLock)
+        requireMasterMutable(existing.${masterLock.fkProperty});
 #end
         entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = id;
 #if($partnerParent)
@@ -150,6 +170,9 @@ public class ${name}PartnerController {
         ${name}Entity existing = requireMine(id);
 #if($immutableAlways || $immutableStatusProperty)
         requireMutable(existing);
+#end
+#if($masterLock)
+        requireMasterMutable(existing.${masterLock.fkProperty});
 #end
         try {
             repository.deleteById(id);
@@ -228,6 +251,45 @@ public class ${name}PartnerController {
         if (parent == null || !me.equals(parent.${partnerParent.partnerProperty})) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${partnerParent.entity} not found");
         }
+    }
+#end
+#if($masterLock)
+
+    // Inherited immutability: this ${name} is a line of a ${masterLock.entity}, and its writes
+    // recompute that document's totals - so while the document is locked its lines are locked with
+    // it. Declare `locksWithMaster: false` on the child to keep a collection writable past the
+    // master's lock. Workflow / system writes through the repository stay unaffected.
+    private void requireMasterMutable(${masterLock.fkJavaClass} masterId) {
+        if (masterId == null) {
+            return;
+        }
+        ${masterLock.entityClass} master = ${masterRepositoryRef}.findOne(masterId).orElse(null);
+        if (master == null || isMasterMutable(master)) {
+            return;
+        }
+#if($masterLock.always)
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "This ${name} belongs to an append-only ${masterLock.entity} and can no longer be changed");
+#else
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "The ${masterLock.entity} of this ${name} is immutable in its current status - corrections go through the workflow");
+#end
+    }
+
+    private static boolean isMasterMutable(${masterLock.entityClass} master) {
+#if($masterLock.always)
+        return false;
+#else
+        if (master.${masterLock.statusProperty} == null) {
+            return true;
+        }
+        for (String immutable : "${masterLock.statusValues}".split(",")) {
+            if (immutable.equals(String.valueOf(master.${masterLock.statusProperty}))) {
+                return false;
+            }
+        }
+        return true;
+#end
     }
 #end
 #if($immutableAlways)
