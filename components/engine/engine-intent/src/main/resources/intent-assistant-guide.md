@@ -906,6 +906,30 @@ the task lands with whoever owns the triggering record. This requires the trigge
 `personal:` relation (see *Personal surfaces*), which is how the owner is resolved; the parser rejects
 `assignee: personal` when there is no personal relation to resolve the owner from.
 
+**Assignee by relation walk.** When the reviewer is a person the RECORD names - the requester's
+manager, the customer's account manager, the department's approver - give `assignee` a **path** off
+the trigger entity instead of a name:
+
+```yaml
+- name: approve
+  kind: userTask
+  args:
+    assignee: { path: employee.manager, fallback: manager }   # walk, then a claimable group
+    form: ApproveRequest
+```
+
+**Rules:** every segment is a **to-one relation** (the first of the trigger entity, each further one
+of the previous target) and the walk ends at an entity that declares `identity:` - that is what maps
+the record to a login. A **cross-model** relation may only be the **last** segment (a projection
+carries the target's own properties but not its relations). Every hop is checked at parse time, so a
+dangling segment fails Generate, not the running process.
+
+`fallback` is **required** and names the candidate group. The walk is resolved at **task entry**
+(later than `assignee: personal`, which is fixed at process start - so a relation an earlier step of
+the same process set is visible), and when it resolves to nobody - a null hop, a deleted record, a
+blank identity - the task is created unassigned and the fallback group can still claim it. That is
+what stops an unresolvable path from minting a task nobody can see.
+
 **Approve/Reject on a user task = branch on the chosen `action`.** A task form's button (e.g. Approve,
 Reject) completes the task with an `action` variable; put a `decision` immediately after the task that
 tests it. Continue on approve, branch to a cancel-and-end on reject - or loop the reject branch back to

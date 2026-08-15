@@ -43,10 +43,10 @@ import static org.eclipse.dirigible.components.ide.template.service.model.ModelV
 class GlueGenerator {
 
     /** The names of the collections this generator handles. */
-    private static final List<String> COLLECTIONS =
-            List.of("triggers", "resolvers", "fieldLoaders", "timerLoaders", "waits", "aborts", "setters", "writers", "notifications",
-                    "schedules", "integrations", "inbound", "rollups", "expansions", "settlements", "generates", "generateEvents",
-                    "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
+    private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
+            "aborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "rollups", "expansions", "settlements",
+            "generates", "generateEvents", "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots",
+            "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -87,6 +87,7 @@ class GlueGenerator {
             case "triggers" -> each(collection, source, content, model, parameters, GlueGenerator::bindTrigger);
             case "resolvers" -> each(collection, source, content, model, parameters, GlueGenerator::bindResolver);
             case "fieldLoaders" -> each(collection, source, content, model, parameters, GlueGenerator::bindFieldLoader);
+            case "assignees" -> each(collection, source, content, model, parameters, GlueGenerator::bindAssignee);
             case "timerLoaders" -> each(collection, source, content, model, parameters, GlueGenerator::bindTimerLoader);
             case "waits" -> each(collection, source, content, model, parameters, GlueGenerator::bindWait);
             case "aborts" -> each(collection, source, content, model, parameters, GlueGenerator::bindAbort);
@@ -226,6 +227,45 @@ class GlueGenerator {
     private static void bindFieldLoader(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "process", "handler", "ownerEntity", "ownerPerspective", "ownerKeyProperty", "ownerKeyAccessor", "fields");
         context.put("javaOwnerPerspective", sanitize(item, "ownerPerspective"));
+    }
+
+    /**
+     * Binds a user-task assignee resolver - the delegate that walks the trigger record's relations to
+     * the person a task belongs to and publishes their login.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindAssignee(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "process", "step", "handler", "variable", "path", "ownerEntity", "ownerPerspective", "ownerKeyProperty",
+                "ownerKeyAccessor", "firstFkProperty", "identityLocal", "identityProperty");
+        context.put("javaOwnerPerspective", sanitize(item, "ownerPerspective"));
+        context.put("hops", assigneeHops(item.get("hops"), parameters));
+    }
+
+    /**
+     * Resolves each hop of an assignee walk to the generated classes it loads. The intent layer carries
+     * only logical names; the package layout is known here, and a cross-model hop resolves against the
+     * owner model's generation folder rather than this project's.
+     *
+     * @param raw the declared hops
+     * @param parameters the generation parameters
+     * @return the resolved hops
+     */
+    private static List<Object> assigneeHops(Object raw, Map<String, Object> parameters) {
+        List<Object> hops = new ArrayList<>();
+        for (Map<String, Object> hop : asMaps(raw)) {
+            String genFolder = truthy(hop, "crossModel") ? sanitize(hop, "targetModel") : str(parameters, "javaGenFolderName");
+            String qualified = "gen." + genFolder + ".data." + sanitize(hop, "perspective") + "." + str(hop, "entity");
+            Map<String, Object> resolved = new LinkedHashMap<>();
+            resolved.put("local", hop.get("local"));
+            resolved.put("nextFkProperty", strOr(hop, "nextFkProperty", ""));
+            resolved.put("entityClass", qualified + "Entity");
+            resolved.put("repositoryClass", qualified + "Repository");
+            hops.add(resolved);
+        }
+        return hops;
     }
 
     /**

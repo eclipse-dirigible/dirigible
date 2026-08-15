@@ -61,6 +61,9 @@ import org.springframework.stereotype.Component;
  * <li>{@code resolvers} - one per {@code relation.field} referenced in a decision; generates the
  * {@code JavaDelegate} that loads the related entity at the decision and sets the variable the
  * rewritten condition tests (see {@link ProcessResolverSupport}).</li>
+ * <li>{@code assignees} - one per user task whose {@code assignee} is a relation walk off the
+ * trigger record; generates the {@code JavaDelegate} that walks it to the person the task belongs
+ * to and publishes their login (see {@link ProcessAssigneeSupport}).</li>
  * </ul>
  * The matching BPMN nodes (the resolver service task, the rewritten condition) are emitted by the
  * BPMN generator; the {@code ProcessId} back-reference column stays in the EDM (it is a real
@@ -87,6 +90,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> triggers = buildTriggers(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> resolvers = buildResolvers(model, settings);
         List<Map<String, Object>> fieldLoaders = buildFieldLoaders(model, settings);
+        List<Map<String, Object>> assignees = buildAssignees(model, settings, context);
         List<Map<String, Object>> timerLoaders = buildTimerLoaders(model, settings);
         List<Map<String, Object>> waits = buildWaits(model, settings);
         List<Map<String, Object>> aborts = buildAborts(model, settings);
@@ -111,11 +115,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 SnapshotSupport.buildSnapshots(model, byName, compositionParents, crossModelLookup(model, context));
         List<Map<String, Object>> numbering = NumberingSupport.buildNumbering(model, compositionParents);
 
-        if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && timerLoaders.isEmpty() && waits.isEmpty()
-                && aborts.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty() && schedules.isEmpty()
-                && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty()
-                && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty()
-                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty() && resolves.isEmpty()) {
+        if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && assignees.isEmpty() && timerLoaders.isEmpty()
+                && waits.isEmpty() && aborts.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty()
+                && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty() && expansions.isEmpty()
+                && settlements.isEmpty() && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty()
+                && snapshots.isEmpty() && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty()
+                && resolves.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -124,6 +129,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("triggers", triggers);
         glue.put("resolvers", resolvers);
         glue.put("fieldLoaders", fieldLoaders);
+        glue.put("assignees", assignees);
         glue.put("timerLoaders", timerLoaders);
         glue.put("waits", waits);
         glue.put("aborts", aborts);
@@ -1105,6 +1111,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /** Test hook: build the {@code waits} glue collection without a repository. */
     static List<Map<String, Object>> buildWaitsForTest(IntentModel model) {
         return buildWaits(model, IntentSettings.parse("{}"));
+    }
+
+    /** Test hook: build the {@code assignees} glue collection without a repository. */
+    static List<Map<String, Object>> buildAssigneesForTest(IntentModel model) {
+        return buildAssignees(model, IntentSettings.parse("{}"), null);
     }
 
     /** Test hook: build the {@code timerLoaders} glue collection without a repository. */
@@ -2874,6 +2885,69 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * leaf first" contract as generate targets and relation links). A {@code null} context (unit test)
      * yields a no-op lookup so same-model resolution is unaffected.
      */
+    /**
+     * The same lookup shaped for {@link ProcessAssigneeSupport}, which needs the target's identity
+     * property (which login a record maps to) rather than its property names.
+     */
+    private static ProcessAssigneeSupport.CrossModelLookup assigneeCrossModelLookup(IntentModel model, IntentGenerationContext context) {
+        if (context == null) {
+            return relation -> null;
+        }
+        return relation -> {
+            UsesIntent uses = findUses(model, relation.getModel());
+            if (uses == null) {
+                return null;
+            }
+            CrossModelSupport.TargetInfo target = CrossModelSupport.resolve(context, uses, relation.getTo());
+            return new ProcessAssigneeSupport.CrossModelTarget(target.perspectiveName(), uses.resolveProject(), uses.getModel(),
+                    target.identityProperty());
+        };
+    }
+
+    /**
+     * One assignee resolver per user task whose {@code assignee} is a relation walk: a
+     * {@code JavaDelegate} inserted before the task (by the BPMN generator) that walks the trigger
+     * record's to-one relations to the person the task belongs to and publishes their login into the
+     * variable the task's {@code flowable:assignee} binds to (see {@link ProcessAssigneeSupport}).
+     */
+    private static List<Map<String, Object>> buildAssignees(IntentModel model, IntentSettings settings, IntentGenerationContext context) {
+        List<Map<String, Object>> assignees = new ArrayList<>();
+        for (ProcessAssigneeSupport.Assignee assignee : ProcessAssigneeSupport.assignees(model, assigneeCrossModelLookup(model, context))) {
+            if (!settings.shouldGenerate("assignees", assignee.handler())) {
+                LOGGER.info("Settings opt-out: keeping existing handler for assignee resolver [{}] (not generated)", assignee.handler());
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("process", assignee.process());
+            entry.put("step", assignee.step());
+            entry.put("handler", assignee.handler());
+            entry.put("variable", assignee.variable());
+            entry.put("path", assignee.path());
+            entry.put("ownerEntity", assignee.ownerEntity());
+            entry.put("ownerPerspective", assignee.ownerPerspective());
+            entry.put("ownerKeyProperty", assignee.ownerKeyProperty());
+            entry.put("ownerKeyAccessor", assignee.ownerKeyAccessor());
+            entry.put("firstFkProperty", assignee.firstFkProperty());
+            entry.put("identityLocal", assignee.identityLocal());
+            entry.put("identityProperty", assignee.identityProperty());
+            List<Map<String, Object>> hops = new ArrayList<>();
+            for (ProcessAssigneeSupport.Hop hop : assignee.hops()) {
+                Map<String, Object> entryHop = new LinkedHashMap<>();
+                entryHop.put("local", hop.local());
+                entryHop.put("entity", hop.entity());
+                entryHop.put("perspective", hop.perspective());
+                entryHop.put("nextFkProperty", hop.nextFkProperty());
+                entryHop.put("crossModel", hop.crossModel());
+                entryHop.put("targetModel", hop.targetModel());
+                entryHop.put("targetProject", hop.targetProject());
+                hops.add(entryHop);
+            }
+            entry.put("hops", hops);
+            assignees.add(entry);
+        }
+        return assignees;
+    }
+
     private static NotificationSupport.CrossModelLookup crossModelLookup(IntentModel model, IntentGenerationContext context) {
         if (context == null) {
             return relation -> null;

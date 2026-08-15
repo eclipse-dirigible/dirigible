@@ -123,10 +123,15 @@ class IntentEngineIT extends IntegrationTest {
                 relations:
                   - { name: order, kind: manyToOne, to: Order, composition: true }
 
+              # identity: the login a rep record maps to - what makes it addressable as a task assignee.
               - name: SalesRep
+                identity: email
                 fields:
-                  - { name: id,   type: integer, primaryKey: true, generated: true }
-                  - { name: name, type: string,  required: true, length: 200 }
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: name,  type: string,  required: true, length: 200 }
+                  - { name: email, type: string,  unique: true, length: 200 }
+                relations:
+                  - { name: manager, kind: manyToOne, to: SalesRep }
 
               # The effective-dated register: who covered this customer between which dates.
               - name: CustomerAssignment
@@ -148,9 +153,12 @@ class IntentEngineIT extends IntegrationTest {
                   - name: bigOrder
                     kind: decision
                     args: { if: "customer.creditLimit > 10000", then: cfoReview, else: notifyCustomer }
+                  # Resolver-path assignment: the order's own sales rep decides WHO reviews it - the
+                  # rep's manager - resolved at task entry off the record, with `cfo` as the candidate
+                  # group that keeps the task claimable when the walk resolves to nobody.
                   - name: cfoReview
                     kind: userTask
-                    args: { assignee: cfo, form: ApproveOrder }
+                    args: { assignee: { path: salesRep.manager, fallback: cfo }, form: ApproveOrder }
                   - name: cfoDecision
                     kind: decision
                     args: { if: "action == 'approve'", then: notifyCustomer, else: done }
@@ -550,6 +558,23 @@ class IntentEngineIT extends IntegrationTest {
                 "a relation.field referenced only by a user-task form should still generate a resolver");
         assertTrue(formResolver.contains("execution.setVariable(\"customer_name\"") && formResolver.contains("entity.Name"),
                 "the form resolver should publish the related field as the customer_name variable the form control binds to");
+
+        // The resolver-path assignee (cfoReview -> salesRep.manager): a JavaDelegate that walks the
+        // order's relations to the reviewing person and publishes their login for the task to bind to.
+        String assignee = contentOf("gen/events/orders/ResolveOrderApprovalCfoReviewAssignee.java");
+        assertTrue(assignee.contains("class ResolveOrderApprovalCfoReviewAssignee implements JavaDelegate"),
+                "the assignee resolver should be a Flowable JavaDelegate");
+        // Published FIRST, on every path out: the task's assignee expression reads it at task creation
+        // and an absent variable is an expression error, while a null one just leaves the candidate group.
+        assertTrue(assignee.contains("execution.setVariable(\"__assignee_cfoReview\", null)"),
+                "the assignee resolver should publish a null variable before walking, so the expression always resolves");
+        assertTrue(assignee.contains("owner.SalesRep"), "the walk should start at the FK of the trigger record's first relation");
+        assertTrue(assignee.contains("hop0.Manager"), "the walk should follow the intermediate hop's FK to the next one");
+        assertTrue(assignee.contains("hop1.Email"), "the login should be read off the identity property of the LAST hop");
+        assertTrue(
+                assignee.contains("import gen.orders.data.order.OrderRepository")
+                        && assignee.contains("gen.orders.data.salesrep.SalesRepRepository"),
+                "the resolver should load the owner and each hop from their real (lowercased) Java packages");
 
         // The notification (onUpdate: Order) is a self-describing @Component MessageHandler that sends mail
         // when an Order is updated -
@@ -2596,6 +2621,11 @@ class IntentEngineIT extends IntegrationTest {
                 "glue should carry the customer.creditLimit resolver (used by both the form and the decision)");
         assertTrue(glue.contains("\"handler\": \"ResolveCustomerName\"") && glue.contains("\"variable\": \"customer_name\""),
                 "glue should carry the form-only customer.name resolver");
+        // Assignees: one per user task whose assignee is a relation walk.
+        assertTrue(
+                glue.contains("\"assignees\"") && glue.contains("\"handler\": \"ResolveOrderApprovalCfoReviewAssignee\"")
+                        && glue.contains("\"path\": \"salesRep.manager\"") && glue.contains("\"identityProperty\": \"Email\""),
+                "glue should carry the cfoReview assignee walk down to the identity property it ends at");
         assertTrue(
                 glue.contains("\"fkProperty\": \"Customer\"") && glue.contains("\"targetEntity\": \"Customer\"")
                         && glue.contains("\"targetField\": \"CreditLimit\"") && glue.contains("\"variable\": \"customer_creditLimit\""),
@@ -2810,8 +2840,19 @@ class IntentEngineIT extends IntegrationTest {
                 body.contains("<serviceTask id=\"notifyCustomer\" name=\"Notify Customer\"")
                         && body.contains("<![CDATA[custom.NotifyCustomer]]>"),
                 "a no-call service task should bind to ${JavaTask} -> custom.<Step>");
-        assertTrue(body.contains("id=\"flow_bigOrder_then\" sourceRef=\"bigOrder\" targetRef=\"cfoReview\""),
-                "the conditioned flow should target the `then` step");
+        // A flow into a step lands on the FIRST node it expands to - here the assignee-walk delegate
+        // that publishes the login cfoReview's flowable:assignee reads. Jumping straight at the task
+        // would sail past it and the expression would fail task creation outright.
+        assertTrue(body.contains("id=\"flow_bigOrder_then\" sourceRef=\"bigOrder\" targetRef=\"resolveOrderApprovalCfoReviewAssignee\""),
+                "the conditioned flow should target the `then` step, entering at its resolver");
+        assertTrue(body.contains("sourceRef=\"resolveOrderApprovalCfoReviewAssignee\" targetRef=\"cfoReview\""),
+                "the assignee resolver should run right before the task it routes");
+        assertTrue(body.contains("gen.events.orders.ResolveOrderApprovalCfoReviewAssignee"),
+                "the assignee resolver task should point at its generated handler FQN");
+        assertTrue(body.contains("flowable:assignee=\"${__assignee_cfoReview}\""),
+                "the task should bind its assignee to the variable the resolver publishes");
+        assertTrue(body.contains("flowable:candidateGroups=\"Cfo,ADMINISTRATOR\""),
+                "an assignee walk keeps its fallback candidate group, so an unresolved walk still leaves a claimable task");
         assertTrue(body.contains("id=\"flow_bigOrder_default\" sourceRef=\"bigOrder\" targetRef=\"notifyCustomer\""),
                 "the gateway default flow should target the `else` step so small orders skip CFO review");
         // customer.creditLimit is referenced by BOTH the managerReview user-task form and the bigOrder

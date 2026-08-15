@@ -39,6 +39,13 @@ export function getTemplate(parameters) {
                 collection: "fieldLoaders"
             },
             {
+                location: "/template-application-events-java/events/Assignee.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{handler}}.java",
+                engine: "velocity",
+                collection: "assignees"
+            },
+            {
                 location: "/template-application-events-java/events/TimerLoader.java.template",
                 action: "generate",
                 rename: "gen/events/{{javaGenFolderName}}/{{handler}}.java",
