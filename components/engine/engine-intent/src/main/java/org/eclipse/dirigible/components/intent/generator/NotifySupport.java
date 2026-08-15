@@ -173,6 +173,32 @@ public final class NotifySupport {
     }
 
     /**
+     * The glue keys the reserved deep-link tokens contribute, always present so the templates can
+     * compare them. The two {@code uses*} flags say which link locals the events template must declare;
+     * the other two are the only facts the intent layer supplies towards the record link - the entity
+     * and its key property. The ROUTE itself is assembled by that template, which is the layer that
+     * knows the generated application's URL layout (the path-agnostic rule).
+     *
+     * <p>
+     * In a fan-out {@code about} is the ROW, so {@code recordUrl} links the row - the thing that
+     * message is about - exactly like every other bare path.
+     *
+     * @param plan the translated notify block, or {@code null} when nothing is sent
+     * @param about the entity the message is about (a fan-out's row)
+     * @return the {@code usesRecordUrl} / {@code usesInboxUrl} / {@code recordUrlEntity} /
+     *         {@code recordUrlKeyProperty} keys
+     */
+    public static Map<String, Object> deepLinkFields(NotificationSupport.Plan plan, EntityIntent about) {
+        boolean record = plan != null && plan.usesRecordUrl() && about != null;
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("usesRecordUrl", String.valueOf(record));
+        fields.put("usesInboxUrl", String.valueOf(plan != null && plan.usesInboxUrl()));
+        fields.put("recordUrlEntity", record ? about.getName() : "");
+        fields.put("recordUrlKeyProperty", record ? IntentEntities.keyFieldName(about) : "");
+        return fields;
+    }
+
+    /**
      * A resolved print attachment: everything the generated code needs to render and name the PDF.
      *
      * @param entity the document entity whose print template is rendered

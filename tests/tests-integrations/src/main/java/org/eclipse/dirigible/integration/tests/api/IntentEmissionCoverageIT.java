@@ -752,7 +752,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         forEach: BillRecipient
                         to: Person.email
                         subject: "Bill {record.note}"
-                        body: "Dear {Person.name}, the bill is attached."
+                        # {recordUrl} in a fan-out links the ROW - what THIS message is about -
+                        # while {record.note} above reads the anchor. Two different scopes, both
+                        # explicit.
+                        body: "Dear {Person.name}, the bill is attached. Your copy: {recordUrl}"
                         attach: recordPrint
                       next: end
                   - { name: end, kind: end }
@@ -836,7 +839,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 notify:
                   to: ops@example.com
                   subject: "Bill {note}"
-                  body: "Please find the bill attached."
+                  body: "Please find the bill attached. Open it here: {recordUrl}"
                   attach: print
                   # languageFrom: the counterparty decides the language the attached print renders in.
                   languageFrom: Person.locale
@@ -1697,6 +1700,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the item relation map carries the __label the binder renders for a bare {{Unit}}");
         assertTrue(billFeeder.contains("im.put(\"Unit\", itemUnitMap)"), "the map is hung under the relation's own key on the row");
         assertTrue(sendBill.contains("catch (Exception"), "a transition's mail must be fail-soft - the status flip has already committed");
+        // {recordUrl}: the notification carries the link back to the record, and the ROUTE is composed
+        // in the template - the only layer that knows it. This is also the compile proof: an
+        // undeclared local would fail the whole client-Java batch, taking every REST assertion below
+        // with it.
+        assertTrue(sendBill.contains("\"/services/web/emission-test/gen/emission/index.html#/Bill/\" + entity.Id"),
+                "the transition's mail must compose the record's deep link from the project, gen folder, entity and key");
 
         // (2) On a PROCESS STEP - a JavaDelegate whose work IS the message: it re-loads the trigger
         // record through the generated repository, resolves the recipient, and sends. The BPMN must
@@ -1736,6 +1745,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the recipient must still resolve against the ROW - the rows ARE the recipient list");
         assertTrue(shareBill.contains("\"Bill \" + source.Note"),
                 "a {record.<field>} placeholder must read the anchor record, not the row: " + shareBill);
+        // The deep link follows the SAME scoping rule as every other bare path: it links the ROW the
+        // message is about, not the anchor whose document rides along.
+        assertTrue(shareBill.contains("\"/services/web/emission-test/gen/emission/index.html#/BillRecipient/\" + entity.Id"),
+                "a fan-out's {recordUrl} must link the ROW, not the anchor record: " + shareBill);
         assertTrue(billBpmn.contains("gen.events.emission.BillFlowShareBillSend"),
                 "the BPMN service task must bind the generated fan-out sender delegate too");
         assertFalse(repository.getResource(PROJECT_PATH + "/custom/MailBill.java")

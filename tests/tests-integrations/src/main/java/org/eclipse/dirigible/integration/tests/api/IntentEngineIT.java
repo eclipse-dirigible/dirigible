@@ -248,7 +248,9 @@ class IntentEngineIT extends IntegrationTest {
                 event: { onUpdate: Order }
                 to: ops@example.com
                 subject: "Order {id} for {customer.name}, total {total}"
-                body: "The order changed."
+                # {recordUrl} - the deep link to the record. The intent never spells a route: the
+                # events template composes it from the entity + key the glue carries.
+                body: "The order changed. Open it here: {recordUrl}"
 
             schedules:
               - name: staleOrders
@@ -259,7 +261,7 @@ class IntentEngineIT extends IntegrationTest {
                 notify:
                   to: ops@example.com
                   subject: "Stale order {id} for {customer.name}"
-                  body: "This order is stale."
+                  body: "This order is stale. Open it: {recordUrl} - your tasks: {inboxUrl}"
 
             integrations:
               - name: pushOrderToWarehouse
@@ -601,6 +603,18 @@ class IntentEngineIT extends IntegrationTest {
                 "the listener should load the one-hop related entity by FK id");
         assertTrue(notification.contains("\"Order \" + entity.Id + \" for \" + (customer == null ? null : customer.Name)"),
                 "the subject should interpolate the relation.field against the loaded related entity");
+        // {recordUrl}: the ROUTE is the template's knowledge, the entity + key the intent's. What the
+        // intent emits is the bare identifier; the local composed here is what makes the link work, and
+        // is the whole point of the token over hand-typing a path after {appUrl}.
+        assertTrue(
+                notification.contains("String recordUrl = Configurations.get(\"DIRIGIBLE_APP_BASE_URL\", \"\")")
+                        && notification.contains("\"/services/web/intent-test/gen/orders/index.html#/Order/\" + entity.Id"),
+                "the notification should declare the recordUrl local composed from the project, gen folder, entity and key");
+        assertTrue(notification.contains("+ recordUrl"), "the body should read the declared link local, not an entity field");
+        assertFalse(notification.contains("entity.RecordUrl"),
+                "recordUrl is reserved - it must never fall through to a (non-existent) entity property");
+        assertFalse(notification.contains("String inboxUrl"),
+                "a link the message never references must not be declared - no dead local in generated code");
 
         // The schedule is a self-describing @Component JobHandler (cron()) that queries via a typed
         // Criteria and notifies per row.
@@ -617,6 +631,13 @@ class IntentEngineIT extends IntegrationTest {
                         "CustomerEntity customer = entity.Customer == null ? null : new CustomerRepository().findById(entity.Customer)"),
                 "the per-row notify should load the one-hop related entity");
         assertTrue(job.contains("Mail.send("), "the job should notify per row via the SDK Mail API");
+        // Both links at the second call site: the per-row record link and the Inbox link, each declared
+        // only because the body names it.
+        assertTrue(job.contains("\"/services/web/intent-test/gen/orders/index.html#/Order/\" + entity.Id"),
+                "the job should compose the per-row record link from the queried entity and its key");
+        assertTrue(job.contains("\"/services/web/intent-test/gen/orders/index.html#/inbox\""),
+                "the job should compose the Inbox link from the same base");
+        assertTrue(job.contains("+ recordUrl") && job.contains("+ inboxUrl"), "the body should read both declared link locals");
 
         // The integration is a self-describing @Component MessageHandler that forwards the entity JSON to
         // an external endpoint.
