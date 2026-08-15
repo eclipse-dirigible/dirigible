@@ -10,11 +10,9 @@
 package org.eclipse.dirigible.components.engine.cms;
 
 import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.security.verifier.AccessVerifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.stereotype.Component;
@@ -49,19 +47,6 @@ public class CmisSessionFactory implements ApplicationContextAware, Initializing
     private static ApplicationContext applicationContext;
     /** The instance. */
     private static CmisSessionFactory INSTANCE;
-    /** The security access verifier. */
-    private final AccessVerifier securityAccessVerifier;
-
-    /**
-     * Instantiates a new cmis session factory.
-     *
-     * @param securityAccessVerifier the security access verifier
-     */
-    @Autowired
-    public CmisSessionFactory(AccessVerifier securityAccessVerifier) {
-        this.securityAccessVerifier = securityAccessVerifier;
-    }
-
 
     /**
      * After properties set.
