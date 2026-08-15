@@ -27,6 +27,7 @@ import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -43,6 +44,7 @@ import io.restassured.http.ContentType;
  * The override lives in the server-side HTTP session, so every sequence pins one session through a
  * {@link SessionFilter}.
  */
+@Tag("slow")
 class ActAsSessionIT extends IntegrationTest {
 
     private static final String ACT_AS_ENDPOINT = "/services/core/actas";

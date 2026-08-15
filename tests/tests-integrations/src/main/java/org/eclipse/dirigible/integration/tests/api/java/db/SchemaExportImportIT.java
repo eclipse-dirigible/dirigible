@@ -28,6 +28,7 @@ import org.eclipse.dirigible.tests.framework.util.ResourceUtil;
 import org.eclipse.dirigible.tests.framework.util.TestConditionsChecker;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.history.HistoricProcessInstance;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +47,7 @@ import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+@Tag("slow")
 public class SchemaExportImportIT extends IntegrationTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SchemaExportImportIT.class);

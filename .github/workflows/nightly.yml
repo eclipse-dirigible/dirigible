@@ -4,8 +4,9 @@ name: Nightly Integration Tests
 # on both H2 and PostgreSQL. It is heavy (~2h of test time per DB), so it does not run on every PR -
 # PRs run the fast "smoke-tests" job (see pull-request.yml). Runs on a nightly schedule and on
 # demand; the same full suite also runs on every push to master (see build.yml). Like build.yml, the
-# suite is sharded into three tag-selected slices (api / ui / samples) that run in parallel, so the
-# wall-clock time is the slowest shard (~50 min), not the whole suite.
+# suite is sharded into four tag-selected slices (api / ui / samples / slow) that run in parallel,
+# so the wall-clock time is the slowest shard (~35 min), not the whole suite. build.yml carries the
+# description of what each shard selects; keep the two matrices identical.
 on:
   schedule:
     - cron: '0 2 * * *'
@@ -23,12 +24,14 @@ jobs:
       matrix:
         shard:
           - name: api
-            groups: "!ui"
+            groups: "!ui & !slow"
           - name: ui
-            groups: "ui & !sample & !camel"
+            groups: "ui & !slow & !sample & !camel"
           - name: samples
-            groups: "sample | camel"
-    timeout-minutes: 90
+            groups: "ui & !slow & (sample | camel)"
+          - name: slow
+            groups: "slow"
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -89,12 +92,14 @@ jobs:
       matrix:
         shard:
           - name: api
-            groups: "!ui"
+            groups: "!ui & !slow"
           - name: ui
-            groups: "ui & !sample & !camel"
+            groups: "ui & !slow & !sample & !camel"
           - name: samples
-            groups: "sample | camel"
-    timeout-minutes: 90
+            groups: "ui & !slow & (sample | camel)"
+          - name: slow
+            groups: "slow"
+    timeout-minutes: 60
     env:
       POSTGRES_DB: testdb
       POSTGRES_USER: testuser

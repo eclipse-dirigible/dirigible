@@ -10,11 +10,13 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 
+@Tag("slow")
 public class BpmnMultitenancyIT extends MultitenancyUserInterfaceIntegrationTest {
 
     @Autowired

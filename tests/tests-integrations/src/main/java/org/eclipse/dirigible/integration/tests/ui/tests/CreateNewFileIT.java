@@ -13,6 +13,7 @@ import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.Test;
  * nightly/master {@code ui} shard only; the per-PR smoke gate runs {@link CreateNewFileSmokeIT},
  * which covers one representative option per heavyweight editor family.
  */
+@Tag("slow")
 public class CreateNewFileIT extends UserInterfaceIntegrationTest {
 
     @Test

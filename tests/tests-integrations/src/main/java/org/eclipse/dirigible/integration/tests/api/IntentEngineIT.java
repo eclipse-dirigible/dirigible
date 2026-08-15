@@ -28,6 +28,7 @@ import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
@@ -46,6 +47,7 @@ import org.springframework.test.annotation.DirtiesContext;
 // One Dirigible boot for the whole class: each method cleans up after itself, so the per-method
 // context reset inherited from IntegrationTest would only add ~10s of boot time per test.
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@Tag("slow")
 class IntentEngineIT extends IntegrationTest {
 
     private static final String PROJECT = "intent-test";

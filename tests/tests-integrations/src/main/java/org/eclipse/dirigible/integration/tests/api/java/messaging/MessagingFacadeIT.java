@@ -16,6 +16,7 @@ import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.util.SleepUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.TimeUnit;
@@ -27,6 +28,7 @@ import org.springframework.test.annotation.DirtiesContext;
 // One Dirigible boot for the whole class: each method cleans up after itself (or is read-only), so
 // the per-method context reset inherited from IntegrationTest would only add boot time per test.
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@Tag("slow")
 public class MessagingFacadeIT extends IntegrationTest {
 
     private static final String TEST_MESSAGE = "Test message";

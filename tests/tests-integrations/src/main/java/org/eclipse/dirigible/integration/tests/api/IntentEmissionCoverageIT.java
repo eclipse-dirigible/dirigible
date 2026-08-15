@@ -44,6 +44,7 @@ import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -78,6 +79,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
  * fields).
  */
+@Tag("slow")
 class IntentEmissionCoverageIT extends IntegrationTest {
 
     private static final String PROJECT = "emission-test";

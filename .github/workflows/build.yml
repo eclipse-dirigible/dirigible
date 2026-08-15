@@ -160,16 +160,22 @@ jobs:
         if: runner.os == 'Linux'
         run: mvn test -P testcontainers
 
-  # The full IT suite is split ("sharded") into three disjoint slices selected by JUnit 5 tags, so
-  # the wall-clock time of a run is the slowest shard (~50 min) instead of the whole suite (~2h+):
-  #   api     - every HTTP-level IT (untagged, i.e. everything not tagged "ui")
-  #   ui      - the browser-driven ITs except the sample-project and camel families
+  # The full IT suite is split ("sharded") into four disjoint slices selected by JUnit 5 tags, so
+  # the wall-clock time of a run is the slowest shard (~35 min) instead of the whole suite (~2h+):
+  #   api     - every HTTP-level IT (untagged, i.e. everything not tagged "ui") bar the long poles
+  #   ui      - the browser-driven ITs except the sample-project, camel and long-pole families
   #   samples - the sample-project clone/publish ITs ("sample") + the camel journeys still driven
   #             through the browser ("camel"), which is now only the two template starters - the
   #             route ITs themselves publish over HTTP and so live in "api"
-  # The shards partition the suite: api + ui + samples = the complete IT set. A new untagged IT
-  # lands in "api"; a new UI IT (extends UserInterfaceIntegrationTest) lands in "ui" unless it is
-  # explicitly tagged "sample" or "camel".
+  #   slow    - the long poles of both families ("slow"). Membership is a balancing decision, not a
+  #             semantic one: without it "api" (~48 min) and "ui" (~43 min) are the critical path
+  #             while "samples" idles at ~10 min. It is currently the api classes measured above
+  #             ~55 s and the browser journeys above ~110 s on the h2 leg (measured on the shard
+  #             logs of run 31883998354). Re-check the cut when the shard times drift apart again.
+  # The shards partition the suite: api + ui + samples + slow = the complete IT set, and no IT is
+  # selected by two of them. A new untagged IT lands in "api"; a new UI IT (extends
+  # UserInterfaceIntegrationTest) lands in "ui" unless it is explicitly tagged "sample", "camel" or
+  # "slow". Mistagging can only unbalance the shards, never drop an IT from the run.
   integration-tests-h2:
     runs-on: ubuntu-latest
     strategy:
@@ -177,14 +183,17 @@ jobs:
       matrix:
         shard:
           - name: api
-            groups: "!ui"
+            groups: "!ui & !slow"
           - name: ui
-            groups: "ui & !sample & !camel"
+            groups: "ui & !slow & !sample & !camel"
           - name: samples
-            groups: "sample | camel"
-    # A green shard takes ~50 min; a heap-exhausted JVM used to thrash for 4h+ before anyone
-    # noticed. Cap the job well above the healthy time so hangs fail fast instead of burning runners.
-    timeout-minutes: 90
+            groups: "ui & !slow & (sample | camel)"
+          - name: slow
+            groups: "slow"
+    # A green shard takes ~35 min (~40 on the PostgreSQL leg); a heap-exhausted JVM used to thrash
+    # for 4h+ before anyone noticed. Cap the job above the healthy time so hangs fail fast instead
+    # of burning runners.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -246,12 +255,14 @@ jobs:
       matrix:
         shard:
           - name: api
-            groups: "!ui"
+            groups: "!ui & !slow"
           - name: ui
-            groups: "ui & !sample & !camel"
+            groups: "ui & !slow & !sample & !camel"
           - name: samples
-            groups: "sample | camel"
-    timeout-minutes: 90
+            groups: "ui & !slow & (sample | camel)"
+          - name: slow
+            groups: "slow"
+    timeout-minutes: 60
     env:
       POSTGRES_DB: testdb
       POSTGRES_USER: testuser
