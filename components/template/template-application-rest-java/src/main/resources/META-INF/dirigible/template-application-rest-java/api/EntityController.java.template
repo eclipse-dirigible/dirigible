@@ -41,9 +41,15 @@ public class ${name}Controller {
     private static final Set<String> FILTER_FIELDS = Set.of(#foreach($property in $properties)"${property.name}"#if($foreach.hasNext), #end#end);
 
     private final ${name}Repository repository;
+#if($masterLock)
+    private final ${masterLock.repositoryClass} masterRepository;
+#end
 
-    public ${name}Controller(${name}Repository repository) {
+    public ${name}Controller(${name}Repository repository#if($masterLock), ${masterLock.repositoryClass} masterRepository#end) {
         this.repository = repository;
+#if($masterLock)
+        this.masterRepository = masterRepository;
+#end
     }
 
     @Get
@@ -155,6 +161,9 @@ public class ${name}Controller {
 #if($needsRoles)
         checkPermissions("write");
 #end
+#if($masterLock)
+        requireMasterMutable(entity.${masterLock.fkProperty});
+#end
 #if($isEntityPropertySecurityEnabled)
         applyOnCreate(entity);
 #end
@@ -177,6 +186,9 @@ public class ${name}Controller {
         if (!org.eclipse.dirigible.sdk.http.Upload.isMultipartContent()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The request must be multipart/form-data");
         }
+#if($masterLock)
+        requireMasterMutable(${masterEntityId});
+#end
         List<${name}Entity> uploaded = new java.util.ArrayList<>();
         // The SDK parses the multipart request and stores each file in the tenant CMS at
         // /Attachments/${name}/<yyyy>/<MM>/<uuid>/<file> (the multipart/FileItem handling stays inside
@@ -226,6 +238,11 @@ public class ${name}Controller {
 #if($immutableStatusProperty || $immutableAlways)
         requireMutable(id);
 #end
+#if($masterLock)
+        // Neither an edit inside a locked ${masterLock.entity} nor a move into one.
+        repository.findOne(id).ifPresent(stored -> requireMasterMutable(stored.${masterLock.fkProperty}));
+        requireMasterMutable(entity.${masterLock.fkProperty});
+#end
 #if($isEntityPropertySecurityEnabled)
         ${name}Entity existing = repository.findOne(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
@@ -256,6 +273,9 @@ public class ${name}Controller {
         }
 #if($immutableStatusProperty || $immutableAlways)
         requireMutable(id);
+#end
+#if($masterLock)
+        repository.findOne(id).ifPresent(stored -> requireMasterMutable(stored.${masterLock.fkProperty}));
 #end
 #if($attachmentEntity)
         String storagePath = repository.findOne(id)
@@ -481,6 +501,47 @@ public class ${name}Controller {
             }
         }
         return true;
+    }
+
+#end
+#if($masterLock)
+    // Inherited immutability: this ${name} is a line of a ${masterLock.entity}, and its writes
+    // recompute that document's totals - so while the document is locked its lines are locked with it,
+    // which is what the generated UI already shows (no Add, no row actions). Declare
+    // `locksWithMaster: false` on the child to keep a collection writable past the master's lock.
+    // Workflow / system writes through the repository stay unaffected, as for the master's own guard.
+    private void requireMasterMutable(${masterLock.fkJavaClass} masterId) {
+        // No master to consult: an unset FK is the required-field check's business, not the lock's.
+        if (masterId == null) {
+            return;
+        }
+        ${masterLock.entityClass} master = masterRepository.findOne(masterId).orElse(null);
+        if (master == null || isMasterMutable(master)) {
+            return;
+        }
+#if($masterLock.always)
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "This ${name} belongs to an append-only ${masterLock.entity} and can no longer be changed");
+#else
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "The ${masterLock.entity} of this ${name} is immutable in its current status - corrections go through the workflow");
+#end
+    }
+
+    private static boolean isMasterMutable(${masterLock.entityClass} master) {
+#if($masterLock.always)
+        return false;
+#else
+        if (master.${masterLock.statusProperty} == null) {
+            return true;
+        }
+        for (String immutable : "${masterLock.statusValues}".split(",")) {
+            if (immutable.equals(String.valueOf(master.${masterLock.statusProperty}))) {
+                return false;
+            }
+        }
+        return true;
+#end
     }
 
 #end

@@ -22,6 +22,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+## A see-only personal surface refuses every write with 403 already, so the inherited lock would
+## only add an unreachable guard and an unused repository: drop it for that variant.
+#if($personalReadOnly)
+#set($masterLock = false)
+#end
+#if($masterLock)
+#if($personalParent)
+#set($masterRepositoryRef = "parentRepository")
+#else
+#set($masterRepositoryRef = "masterRepository")
+#end
+#end
 /**
  * The PERSONAL (my) surface of ${name}: every read is scoped to the logged-in user's identity
  * record and every write is forced onto it - the client can neither see nor touch anybody else's
@@ -41,13 +53,20 @@ public class ${name}MyController {
 #if($personalParent)
     private final ${personalParent.repositoryClass} parentRepository;
 #end
+#if($masterLock && !$personalParent)
+    private final ${masterLock.repositoryClass} masterRepository;
+#end
 
     public ${name}MyController(${name}Repository repository, ${personalIdentityRepositoryClass} identityRepository#if($personalParent),
-            ${personalParent.repositoryClass} parentRepository#end) {
+            ${personalParent.repositoryClass} parentRepository#end#if($masterLock && !$personalParent),
+            ${masterLock.repositoryClass} masterRepository#end) {
         this.repository = repository;
         this.identityRepository = identityRepository;
 #if($personalParent)
         this.parentRepository = parentRepository;
+#end
+#if($masterLock && !$personalParent)
+        this.masterRepository = masterRepository;
 #end
     }
 
@@ -138,6 +157,9 @@ public class ${name}MyController {
         // The owner is the server's decision - whatever the client sent is overwritten.
         entity.${personalProperty} = me;
 #end
+#if($masterLock)
+        requireMasterMutable(entity.${masterLock.fkProperty});
+#end
 #foreach($sensitive in $sensitiveProperties)
         entity.${sensitive} = null;
 #end
@@ -150,6 +172,9 @@ public class ${name}MyController {
         ${name}Entity existing = requireMine(id);
 #if($immutableAlways || $immutableStatusProperty)
         requireMutable(existing);
+#end
+#if($masterLock)
+        requireMasterMutable(existing.${masterLock.fkProperty});
 #end
         entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = id;
 #if($personalParent)
@@ -171,6 +196,9 @@ public class ${name}MyController {
         ${name}Entity existing = requireMine(id);
 #if($immutableAlways || $immutableStatusProperty)
         requireMutable(existing);
+#end
+#if($masterLock)
+        requireMasterMutable(existing.${masterLock.fkProperty});
 #end
         try {
             repository.deleteById(id);
@@ -253,6 +281,45 @@ public class ${name}MyController {
         if (parent == null || !me.equals(parent.${personalParent.personalProperty})) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${personalParent.entity} not found");
         }
+    }
+#end
+#if($masterLock)
+
+    // Inherited immutability: this ${name} is a line of a ${masterLock.entity}, and its writes
+    // recompute that document's totals - so while the document is locked its lines are locked with
+    // it. Declare `locksWithMaster: false` on the child to keep a collection writable past the
+    // master's lock. Workflow / system writes through the repository stay unaffected.
+    private void requireMasterMutable(${masterLock.fkJavaClass} masterId) {
+        if (masterId == null) {
+            return;
+        }
+        ${masterLock.entityClass} master = ${masterRepositoryRef}.findOne(masterId).orElse(null);
+        if (master == null || isMasterMutable(master)) {
+            return;
+        }
+#if($masterLock.always)
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "This ${name} belongs to an append-only ${masterLock.entity} and can no longer be changed");
+#else
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "The ${masterLock.entity} of this ${name} is immutable in its current status - corrections go through the workflow");
+#end
+    }
+
+    private static boolean isMasterMutable(${masterLock.entityClass} master) {
+#if($masterLock.always)
+        return false;
+#else
+        if (master.${masterLock.statusProperty} == null) {
+            return true;
+        }
+        for (String immutable : "${masterLock.statusValues}".split(",")) {
+            if (immutable.equals(String.valueOf(master.${masterLock.statusProperty}))) {
+                return false;
+            }
+        }
+        return true;
+#end
     }
 #end
 #if($immutableAlways)

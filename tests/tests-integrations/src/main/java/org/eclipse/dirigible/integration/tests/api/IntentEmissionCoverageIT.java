@@ -53,23 +53,25 @@ import org.springframework.beans.factory.annotation.Autowired;
  * row), and a stale registry template generates feature-less code - all with every pipeline step
  * returning success. A feature's test must therefore assert the OUTERMOST observable layer (the
  * generated token at minimum, the runtime behavior where reachable), never only the parsed model.
- * Covered here: {@code immutableWhen} / {@code immutable} (409 on write/delete), {@code checks}
- * (exactlyOne / itemsMin / itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual}
- * (read-time overlay), seed rows carrying a RELATION column, aggregate totals, first-class
- * {@code number:} stamping from an authored {@code .numbers} series declaration,
- * {@code transitions} (the guarded on-demand status flip: allowed-status 200, wrong-status/guard
- * 409), {@code lifecycle} (the declarative state machine: the graph walked through its transitions,
- * an unmodeled flip and a create filed mid-lifecycle both refused through the plain REST surface no
- * transition guard covers), {@code postings} with {@code reverses} (post on a transition;
- * red-storno reversal on void - negated amounts, storno link, fail-soft), the {@code notify} block
- * with {@code attach: print} (send the document itself by e-mail - on a transition and on a process
- * step; the fail-soft contract), {@code calculatedActionOnCreate} on a to-one RELATION (the FK
- * resolved server-side by a hand-written {@code custom/} action: assigned in the repository, and at
- * runtime both defaulted when omitted and left alone when the caller supplied one), the
- * event-driven {@code generates} (posting the source mints the whole document with nobody clicking,
- * and a click afterwards returns that same document - the at-most-once back-reference guard), and
- * the personal (my) surface ({@code identity}/{@code personal}/{@code sensitive}: scoped reads,
- * forced owner, stripped fields).
+ * Covered here: {@code immutableWhen} / {@code immutable} (409 on write/delete, and the lock
+ * inherited by a composition child - a line of a locked document is refused while a child that
+ * declared {@code locksWithMaster: false} keeps its writes), {@code checks} (exactlyOne / itemsMin
+ * / itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual} (read-time overlay),
+ * seed rows carrying a RELATION column, aggregate totals, first-class {@code number:} stamping from
+ * an authored {@code .numbers} series declaration, {@code transitions} (the guarded on-demand
+ * status flip: allowed-status 200, wrong-status/guard 409), {@code lifecycle} (the declarative
+ * state machine: the graph walked through its transitions, an unmodeled flip and a create filed
+ * mid-lifecycle both refused through the plain REST surface no transition guard covers),
+ * {@code postings} with {@code reverses} (post on a transition; red-storno reversal on void -
+ * negated amounts, storno link, fail-soft), the {@code notify} block with {@code attach: print}
+ * (send the document itself by e-mail - on a transition and on a process step; the fail-soft
+ * contract), {@code calculatedActionOnCreate} on a to-one RELATION (the FK resolved server-side by
+ * a hand-written {@code custom/} action: assigned in the repository, and at runtime both defaulted
+ * when omitted and left alone when the caller supplied one), the event-driven {@code generates}
+ * (posting the source mints the whole document with nobody clicking, and a click afterwards returns
+ * that same document - the at-most-once back-reference guard), and the personal (my) surface
+ * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
+ * fields).
  */
 class IntentEmissionCoverageIT extends IntegrationTest {
 
@@ -244,13 +246,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # layout must resolve the status FK to a label lookup and render it as a badge in
               # the table column and the detail pane, exactly like the list layout does.
               - name: Campaign
+                immutableWhen: "Status == 2"
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 100 }
                 relations:
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
 
+              # locksWithMaster: false - the deliberate post-lock collection (#6700). It is the
+              # negative control for the inherited lock below: notes keep their writes after the
+              # campaign froze, while EntryLine (which says nothing) inherits the lock.
               - name: CampaignNote
+                locksWithMaster: false
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
@@ -525,6 +532,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # `attach: print` is authored on a transition AND on a process step (below).
               - name: Bill
                 function: Document
+                # SENT (status 2) freezes the document: the assertions below add the line write that
+                # would otherwise rewrite the totals the sent PDF was rendered from (#6695).
+                immutableWhen: "Status == 2"
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: note,   type: string,  length: 200 }
@@ -1055,6 +1065,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String lineController = contentOf("gen/emission/api/entry/EntryLineController.java");
         assertTrue(lineController.contains("Exactly one of debit/credit"),
                 "checks: exactlyOne must emit its authored message into the row-level REST validation");
+        // #6695: the master's immutability reaches its LINES. A child declares no immutability of its
+        // own, yet its writes recompute the master's totals - so without this the lock had an
+        // unguarded back door through the child's controller, which the UI never offers but REST did.
+        assertTrue(lineController.contains("requireMasterMutable"),
+                "a composition child of an immutable master must emit the inherited lock into its REST controller");
+        assertTrue(lineController.contains("EntryRepository masterRepository"),
+                "the inherited lock must consult the MASTER's repository, got: " + lineController);
+        // The document's own line items are the same story through a different layout - and it is the
+        // one where the child literally resums the master (BillLineRepository -> BillRepository).
+        assertTrue(contentOf("gen/emission/api/bill/BillLineController.java").contains("requireMasterMutable"),
+                "a document ITEM of an immutable master must emit the inherited lock into its REST controller");
+        // ...and the opt-out really opts out: the settlement-style collection keeps its writes.
+        String campaignNoteController = contentOf("gen/emission/api/campaign/CampaignNoteController.java");
+        assertFalse(campaignNoteController.contains("requireMasterMutable"),
+                "locksWithMaster: false must leave the child's REST writes unguarded");
 
         String schema = contentOf("gen/emission/schema/" + PROJECT + ".schema");
         assertTrue(schema.contains("EMISSION_UNIT_LANG"), "multilingual must emit the _LANG translation table into the schema");
@@ -2082,12 +2107,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(400));
 
         // Balance the entry -> POSTED is accepted...
-        restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body("{\"Entry\":" + entryId + ",\"Credit\":100}")
-                                                 .when()
-                                                 .post(API + "/entry/EntryLineController")
-                                                 .then()
-                                                 .statusCode(200));
+        AtomicInteger creditLine = new AtomicInteger();
+        restAssuredExecutor.execute(() -> creditLine.set(given().contentType("application/json")
+                                                                .body("{\"Entry\":" + entryId + ",\"Credit\":100}")
+                                                                .when()
+                                                                .post(API + "/entry/EntryLineController")
+                                                                .then()
+                                                                .statusCode(200)
+                                                                .extract()
+                                                                .path("Id")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Id\":" + entryId + ",\"Date\":\"2026-01-15\",\"Account\":2,\"Status\":2}")
                                                  .when()
@@ -2113,6 +2141,65 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("mutable", equalTo(false)));
+
+        // ...and so are the document's LINES (#6695): a line write recomputes the master's totals, so
+        // the lock has to reach the child's own controller too - otherwise the one operation the lock
+        // exists to prevent stays reachable, and rewrites the totals after the ledger posted from them.
+        int lineId = creditLine.get();
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Entry\":" + entryId + ",\"Debit\":50}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryLineController")
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + lineId + ",\"Entry\":" + entryId + ",\"Credit\":500}")
+                                                 .when()
+                                                 .put(API + "/entry/EntryLineController/" + lineId)
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(API + "/entry/EntryLineController/" + lineId)
+                                                 .then()
+                                                 .statusCode(409));
+        // ...and the collection is exactly as the entry left it - the refusals wrote nothing.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryLineController?Entry=" + entryId)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(2))
+                                                 .body("find { it.Id == " + lineId + " }.Credit", equalTo(100.0f)));
+
+        // ...while the collection that declared `locksWithMaster: false` keeps its writes past the
+        // master's lock - the settlement case (#6700), which is why the inherited lock has an opt-out
+        // rather than being unconditional.
+        AtomicInteger campaign = new AtomicInteger();
+        restAssuredExecutor.execute(() -> campaign.set(given().contentType("application/json")
+                                                              .body("{\"Name\":\"Spring\"}")
+                                                              .when()
+                                                              .post(API + "/campaign/CampaignController")
+                                                              .then()
+                                                              .statusCode(200)
+                                                              .extract()
+                                                              .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + campaign.get() + ",\"Name\":\"Spring\",\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/campaign/CampaignController/" + campaign.get())
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + campaign.get() + ",\"Name\":\"Summer\",\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/campaign/CampaignController/" + campaign.get())
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Campaign\":" + campaign.get() + ",\"Note\":\"called the sponsor\"}")
+                                                 .when()
+                                                 .post(API + "/campaign/CampaignNoteController")
+                                                 .then()
+                                                 .statusCode(200));
 
         // history: the whole life of the record is readable from one endpoint - the create, and the
         // status hop the user made with both sides of it recorded, so "who changed this from what"
@@ -2254,6 +2341,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Status", equalTo(2)));
+        // ...and the send froze the document, LINES INCLUDED (#6695). This is the whole point of the
+        // inherited lock: a line write recomputes the header's totals, so accepting one here would
+        // move the amount the mailed PDF was rendered from, on a document nobody may edit any more.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Amount\":999,\"Bill\":" + bill.get() + "}")
+                                                 .when()
+                                                 .post(API + "/bill/BillLineController")
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> {
+            Object amount = given().when()
+                                   .get(API + "/bill/BillController/" + bill.get())
+                                   .then()
+                                   .statusCode(200)
+                                   .extract()
+                                   .path("Amount");
+            assertTrue(amount instanceof Number && Math.abs(((Number) amount).doubleValue() - 250.0) < 0.001,
+                    "a refused line write must leave the locked document's total untouched, got: " + amount);
+        });
 
         // postings: posting a Doc creates the balanced Entry (async handler - poll)...
         AtomicInteger doc = new AtomicInteger();

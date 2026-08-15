@@ -73,6 +73,7 @@ final class ModelParameterProcessor {
             processEntity(entity, entities, parameters);
         }
         if (truthy(parameters, "javaRuntime")) {
+            inheritMasterLock(entities, parameters);
             inheritPersonalScope(entities, parameters);
             inheritPartnerScope(entities, parameters);
             collectSensitiveProperties(entities);
@@ -478,6 +479,59 @@ final class ModelParameterProcessor {
         // folder name while the controllers live under the sanitized one, so this must be built from
         // the raw folder rather than by rewriting the controller URL.
         property.put("widgetDropdownAppUrl", "/services/web/" + targetProject + "/gen/" + targetGenFolder + "/index.html");
+    }
+
+    /**
+     * Propagates a composition master's immutability to its direct children, so that the REST surface
+     * forbids what the generated UI already withholds.
+     *
+     * <p>
+     * A child declares no immutability of its own - the lock belongs to the document - yet its writes
+     * synchronously recompute the master's aggregate columns. Without this, creating, editing or
+     * deleting a line of a locked document succeeded over REST and silently rewrote the very totals the
+     * lock protects, after the number was stamped, the snapshot taken and the ledger posted.
+     *
+     * <p>
+     * Only the direct child is covered, which is the shape that writes through to the master. Engine
+     * writers stay exempt by construction: they go through the repository rather than the controller,
+     * exactly as the master's own guard already assumes. A child that declares
+     * {@code locksWithMaster: false} keeps its user writes - the deliberately post-lock collection,
+     * such as the payments settling an issued invoice.
+     *
+     * @param entities every entity in the model
+     * @param parameters the generation parameters
+     */
+    private static void inheritMasterLock(List<Map<String, Object>> entities, Map<String, Object> parameters) {
+        for (Map<String, Object> entity : entities) {
+            if ("false".equals(str(entity, "locksWithMaster"))) {
+                continue;
+            }
+            Map<String, Object> parentFk = findCompositionProperty(entity);
+            if (parentFk == null) {
+                continue;
+            }
+            Map<String, Object> parent = findEntity(entities, str(parentFk, "relationshipEntityName"));
+            if (parent == null) {
+                continue;
+            }
+            boolean always = truthy(parent, "immutableAlways");
+            String statusProperty = str(parent, "immutableStatusProperty");
+            if (!always && (statusProperty == null || statusProperty.isEmpty())) {
+                continue;
+            }
+            String parentPerspective = NamingHelper.sanitizeJavaIdentifier(str(parentFk, "relationshipEntityPerspectiveName"));
+            String parentPackage = "gen." + str(parameters, "javaGenFolderName") + ".data." + parentPerspective + ".";
+            Map<String, Object> masterLock = new LinkedHashMap<>();
+            masterLock.put("fkProperty", parentFk.get("name"));
+            masterLock.put("fkJavaClass", parentFk.get("dataTypeJavaClass"));
+            masterLock.put("entity", parent.get("name"));
+            masterLock.put("entityClass", parentPackage + str(parent, "name") + "Entity");
+            masterLock.put("repositoryClass", parentPackage + str(parent, "name") + "Repository");
+            masterLock.put("always", always);
+            masterLock.put("statusProperty", statusProperty);
+            masterLock.put("statusValues", str(parent, "immutableStatusValues"));
+            entity.put("masterLock", masterLock);
+        }
     }
 
     /**
