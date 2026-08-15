@@ -115,6 +115,32 @@ public final class IntentParser {
     /** Implemented relation {@code function} values (lower-cased). */
     private static final Set<String> RELATION_FUNCTIONS = Set.of("entitystatus");
     private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "wait", "parallel", "end");
+    /**
+     * The args each step kind reads - the vocabulary {@code validateStepArgs} enforces. AUTHORED, not
+     * reflected: {@code args} is a map, so nothing can derive it. Every entry mirrors what the parser,
+     * the BPMN generator and the glue supports actually consult for that kind, and {@code next} (an
+     * explicit successor overriding the linear chain) is read on every step. A {@code script} shares
+     * the service task's actions - {@code ServiceTaskHandlerGenerator} scaffolds both from the same
+     * keys.
+     */
+    private static final Map<String, Set<String>> STEP_ARGS_BY_KIND = Map.of("userTask",
+            Set.of("assignee", "form", "timeout", "expire", "setRelationField", "value", "next"), "serviceTask",
+            Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next"), "script",
+            Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next"), "decision",
+            Set.of("if", "then", "else", "next"), "wait", Set.of("onCreate", "onUpdate", "via", "when", "next"), "parallel",
+            Set.of("branches", "next"), "end", Set.of("next"));
+    /** Every arg the DSL knows, on any kind - anything else is a typo, not a misplacement. */
+    private static final Set<String> KNOWN_STEP_ARGS = STEP_ARGS_BY_KIND.values()
+                                                                        .stream()
+                                                                        .flatMap(Set::stream)
+                                                                        .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    /**
+     * Args whose wrong-kind use is already reported, with a message that explains what the feature
+     * needs, by the validator that owns it - so {@code validateStepArgs} stays quiet about them rather
+     * than adding a second, blunter line.
+     */
+    private static final Set<String> STEP_ARGS_CHECKED_BY_KIND_ELSEWHERE =
+            Set.of("setField", "setRelationField", "delegate", "notify", "timeout", "expire");
     /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
     private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
     /**
@@ -3562,6 +3588,7 @@ public final class IntentParser {
                     issues.add(
                             "process [" + process.getName() + "] step [" + step.getName() + "] has unknown kind [" + step.getKind() + "]");
                 }
+                validateStepArgs(process, step, issues);
             }
             validateDecisionTargets(process, issues);
             validateSetFieldSteps(process, triggerEntity, byName, model, issues);
@@ -3571,6 +3598,87 @@ public final class IntentParser {
             validateParallelSteps(process, issues);
             validateTaskFormActions(process, model, issues);
             validateTaskAssigneePaths(process, triggerEntity, byName, model, issues);
+        }
+    }
+
+    /**
+     * A step's {@code args:} is a map, so - unlike every typed node - its keys cannot be reflected off
+     * a model class: they are AUTHORED per kind in {@link #STEP_ARGS_BY_KIND}, and anything else is an
+     * error rather than a silent drop. Both shapes are caught: a key no kind knows ({@code assigne})
+     * and a key that belongs to another kind ({@code timeout} on a serviceTask, {@code if} on a user
+     * task) - the second is the same silent drop, since the step simply does not read it.
+     *
+     * <p>
+     * Keys whose wrong-kind use already has a dedicated, better-worded check ({@code setField} and
+     * friends, whose validators explain what they need) are not re-reported here; they stay in the
+     * vocabulary so they are never called unknown.
+     *
+     * <p>
+     * The three authored maps nested inside {@code args} are checked too: a boundary timer's {@code {
+     * after|until, then }} and the reusable notify block, whose vocabulary is
+     * {@link NotificationIntent#BLOCK_KEYS} - the set its own reader consults. A delegate's
+     * {@code fields:} stays opaque: those keys are the delegate's field names, not the DSL's.
+     */
+    private static void validateStepArgs(ProcessIntent process, StepIntent step, List<String> issues) {
+        Map<String, Object> args = step.getArgs();
+        if (args == null || args.isEmpty()) {
+            return;
+        }
+        String kind = step.getKind() == null ? "userTask" : step.getKind();
+        Set<String> allowed = STEP_ARGS_BY_KIND.get(kind);
+        if (allowed == null) {
+            return; // an unknown kind is reported on its own; every arg would be noise on top of it
+        }
+        String subject = "process [" + process.getName() + "] step [" + step.getName() + "]";
+        for (Map.Entry<String, Object> arg : args.entrySet()) {
+            String key = arg.getKey();
+            if (allowed.contains(key)) {
+                validateNestedStepArg(subject, key, arg.getValue(), issues);
+                continue;
+            }
+            if (!KNOWN_STEP_ARGS.contains(key)) {
+                issues.add(subject + " declares unknown arg [" + key + "]" + UnknownKeyValidator.suggestion(key, allowed));
+            } else if (!STEP_ARGS_CHECKED_BY_KIND_ELSEWHERE.contains(key)) {
+                issues.add(subject + " declares arg [" + key + "] but is a " + kind + " - " + key + " is " + kindsAccepting(key)
+                        + " argument");
+            }
+        }
+    }
+
+    /**
+     * The kinds an arg is valid on, as the tail of "... is a userTask / a decision or a wait argument".
+     */
+    private static String kindsAccepting(String key) {
+        List<String> kinds = new ArrayList<>();
+        for (Map.Entry<String, Set<String>> entry : STEP_ARGS_BY_KIND.entrySet()) {
+            if (entry.getValue()
+                     .contains(key)) {
+                kinds.add(entry.getKey());
+            }
+        }
+        java.util.Collections.sort(kinds);
+        return kinds.size() == 1 ? "a " + kinds.get(0) : "a " + String.join(" / ", kinds);
+    }
+
+    /** The authored maps nested in a step's args: the two boundary timers and the notify block. */
+    private static void validateNestedStepArg(String subject, String key, Object value, List<String> issues) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return; // shape is the business of the feature's own validator
+        }
+        Set<String> vocabulary = switch (key) {
+            case "timeout" -> Set.of("after", "then");
+            case "expire" -> Set.of("until", "then");
+            case "notify" -> NotificationIntent.BLOCK_KEYS;
+            default -> null;
+        };
+        if (vocabulary == null) {
+            return;
+        }
+        for (Object nested : map.keySet()) {
+            String name = String.valueOf(nested);
+            if (!vocabulary.contains(name)) {
+                issues.add(subject + " " + key + " declares unknown key [" + name + "]" + UnknownKeyValidator.suggestion(name, vocabulary));
+            }
         }
     }
 

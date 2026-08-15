@@ -136,6 +136,13 @@ not as an apology.
   name; it is never accepted and ignored. The same holds for a **seed row**, whose keys are the
   entity's own field and to-one relation names (plus the lifecycle `stage:` marker). Never invent a
   plausible-looking key to express something: if the schema cannot say it, say so instead.
+- **A step's `args:` are checked per KIND, and so are the other fixed-vocabulary maps.** An arg no
+  kind knows (`assigne:`) and an arg belonging to another kind (`if:` on a userTask, `timeout:` on a
+  serviceTask) are both errors - the step reads neither. The same applies to a process `trigger:` /
+  `abortOn:`, a glue `event:` binding (including a step binding's `{ process, step }`), a posting's
+  `rule:`, a `forEach:` and a lookup's `between:` / `found:` / `notFound:` / `ambiguous:`. Only maps
+  whose keys are names from the application being described stay free-form: a `map:` / `defaults:`
+  projection, a relation's `where:`, a widget's `at:`, and a delegate's injected `fields:`.
 
 ## Capabilities
 

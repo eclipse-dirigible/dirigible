@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.intent.model;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A declarative notification: send a message when an entity event fires. The first concrete pattern
@@ -67,6 +68,15 @@ public class NotificationIntent {
      * ROW's own document.
      */
     private String forEach;
+
+    /**
+     * The keys {@link #fromMap} reads - the whole vocabulary of an embedded notify block. Published so
+     * the parser can reject anything else instead of dropping it silently;
+     * {@code NotificationIntentTest} pins the two together, since a key added to {@code fromMap} and
+     * not to this set would go straight back to being unauthorable.
+     */
+    public static final Set<String> BLOCK_KEYS =
+            Set.of("to", "subject", "body", "attach", "language", "languageFrom", "forEach", "channel");
 
     /**
      * Read an <b>embedded</b> notify block off a free-form map - a process step's {@code args.notify},
