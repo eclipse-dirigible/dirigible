@@ -191,6 +191,14 @@ public class EntityIntent {
     private List<CheckIntent> checks;
 
     /**
+     * Optional declarative state machine over the entity's {@code function: EntityStatus} relation: the
+     * whole set of legal status edges, enforced on EVERY status write (user form, workflow setter,
+     * transition button, custom action) instead of only on the flips that happen to go through a
+     * {@code transitions:} button. See {@link LifecycleIntent}.
+     */
+    private LifecycleIntent lifecycle;
+
+    /**
      * On a {@code function: Snapshot} child only: the fixed print-template language its generated
      * copies are rendered in (a {@code languages:} code, e.g. {@code bg}). Mutually exclusive with
      * {@link #languageFrom}; absent both, the mint falls back to the first entry of the tenant-resolved
@@ -458,6 +466,14 @@ public class EntityIntent {
 
     public void setChecks(List<CheckIntent> checks) {
         this.checks = checks;
+    }
+
+    public LifecycleIntent getLifecycle() {
+        return lifecycle;
+    }
+
+    public void setLifecycle(LifecycleIntent lifecycle) {
+        this.lifecycle = lifecycle;
     }
 
     public List<RelationIntent> getRelations() {

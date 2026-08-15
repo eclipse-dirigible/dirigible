@@ -42,6 +42,9 @@ import org.eclipse.dirigible.components.intent.model.NumberIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.LifecycleEdgeIntent;
+import org.eclipse.dirigible.components.intent.model.LifecycleIntent;
+import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
@@ -566,6 +569,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     entityMap.put("immutableStatusValues", String.join(",", ids));
                 }
             }
+            putLifecycle(entityMap, entity, model);
             if (entity.getHierarchy() != null && !entity.getHierarchy()
                                                         .isBlank()) {
                 // The tree edge: the FK property of the entity's self-relation named by `hierarchy`.
@@ -1734,6 +1738,58 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             checkMaps.add(checkMap);
         }
         return checkMaps;
+    }
+
+    /**
+     * Compiles the declarative state machine ({@code lifecycle:}) into the three scalars the generated
+     * repository enforces it with: the status property, the legal edges as {@code 1&gt;2} id pairs, and
+     * the seeded status names so a rejection reads "cannot move from ISSUED to DRAFT" rather than
+     * quoting positional ids at the user. The graph guards the REPOSITORY - the one choke point every
+     * status write passes through, whoever writes it - so the {@code init:} status also rides along:
+     * with a declared start, a record cannot be CREATED mid-lifecycle either.
+     *
+     * <p>
+     * Scalars, so they reach the {@code .edm} twin as attributes like {@code immutableStatusValues}
+     * does; the parser has already rejected an unseeded or self-referencing edge, so what is emitted
+     * here is a valid graph.
+     */
+    private static void putLifecycle(Map<String, Object> entityMap, EntityIntent entity, IntentModel model) {
+        LifecycleIntent lifecycle = entity.getLifecycle();
+        RelationIntent status = lifecycle == null ? null : entityStatusRelation(entity);
+        if (status == null) {
+            return;
+        }
+        List<String> edges = new ArrayList<>();
+        for (LifecycleEdgeIntent edge : lifecycle.getEdges()) {
+            if (edge.getFrom() == null) {
+                continue;
+            }
+            for (Integer to : edge.getTo()) {
+                if (to != null) {
+                    edges.add(edge.getFrom() + ">" + to);
+                }
+            }
+        }
+        if (edges.isEmpty()) {
+            return; // the parser already reported an empty graph
+        }
+        entityMap.put("lifecycleStatusProperty", IntentNaming.pascalCase(status.getName()));
+        entityMap.put("lifecycleEdges", String.join(",", edges));
+        List<String> names = new ArrayList<>();
+        for (Map.Entry<Integer, String> seeded : LifecycleStages.seededStatuses(model, status.getTo())
+                                                                .entrySet()) {
+            if (seeded.getValue() != null && !seeded.getValue()
+                                                    .isBlank()) {
+                names.add(seeded.getKey() + "=" + seeded.getValue());
+            }
+        }
+        if (!names.isEmpty()) {
+            entityMap.put("lifecycleStatusNames", String.join(",", names));
+        }
+        if (status.getInit() != null && status.getInit()
+                                              .matches("-?\\d+")) {
+            entityMap.put("lifecycleInitialStatus", status.getInit());
+        }
     }
 
     /** The entity's {@code function: EntityStatus} relation, or null. */

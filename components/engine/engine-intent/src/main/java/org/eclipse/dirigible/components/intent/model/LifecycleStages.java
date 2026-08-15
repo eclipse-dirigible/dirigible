@@ -122,6 +122,43 @@ public final class LifecycleStages {
     }
 
     /**
+     * The status nomenclature as it is seeded in this model: each seed id mapped to the row's
+     * {@code name}, in seed order. The id set is what a lifecycle graph, a transition and a workflow
+     * setter are validated against; the names are what their error messages read as (an id is
+     * positional and means nothing to the reader of a rejection).
+     *
+     * @param model the model whose seeds carry the nomenclature
+     * @param statusEntity the status entity's name
+     * @return seed id to row name (the name may be {@code null}), never {@code null}
+     */
+    public static Map<Integer, String> seededStatuses(IntentModel model, String statusEntity) {
+        Map<Integer, String> statuses = new LinkedHashMap<>();
+        if (model == null || statusEntity == null) {
+            return statuses;
+        }
+        EntityIntent entity = entityByName(model, statusEntity);
+        if (entity == null) {
+            return statuses;
+        }
+        String idField = idFieldOf(entity);
+        for (SeedIntent seed : model.getSeeds()) {
+            if (!statusEntity.equals(seed.getEntity()) || seed.isLanguageSeed()) {
+                continue;
+            }
+            for (Map<String, Object> row : seed.getRows()) {
+                Integer id = integerOf(row.get(idField));
+                if (id != null) {
+                    Object name = row.get("name");
+                    statuses.putIfAbsent(id, name == null ? null
+                            : String.valueOf(name)
+                                    .trim());
+                }
+            }
+        }
+        return statuses;
+    }
+
+    /**
      * The stage a seed row declares, normalized, or {@code null} when it declares none or one outside
      * the vocabulary (the parser reports that separately).
      *
