@@ -44,9 +44,9 @@ class GlueGenerator {
 
     /** The names of the collections this generator handles. */
     private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
-            "aborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "rollups", "expansions", "settlements",
-            "generates", "generateEvents", "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots",
-            "numbering", "resolves");
+            "aborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles",
+            "stepEvents", "rollups", "expansions", "settlements", "generates", "generateEvents", "transitions", "sends", "posts",
+            "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -97,6 +97,9 @@ class GlueGenerator {
             case "schedules" -> each(collection, source, content, model, parameters, GlueGenerator::bindSchedule);
             case "integrations" -> each(collection, source, content, model, parameters, GlueGenerator::bindIntegration);
             case "inbound" -> each(collection, source, content, model, parameters, GlueGenerator::bindInbound);
+            case "inboundMessages" -> each(collection, source, content, model, parameters, GlueGenerator::bindInboundMessage);
+            case "inboundFiles" -> each(collection, source, content, model, parameters, GlueGenerator::bindInboundFile);
+            case "stepEvents" -> each(collection, source, content, model, parameters, GlueGenerator::bindStepEvent);
             case "expansions" -> each(collection, source, content, model, parameters, GlueGenerator::bindExpansion);
             case "settlements" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlement);
             // Both collections carry the SAME create-from descriptors (generateEvents is the
@@ -430,6 +433,45 @@ class GlueGenerator {
      */
     private static void bindInbound(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "path");
+        context.put("javaPerspective", sanitize(item, "perspective"));
+    }
+
+    /**
+     * Binds an inbound message ingest - the listener that ingests every record arriving on a queue or a
+     * topic.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindInboundMessage(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "name", "className", "entity", "perspective", "destination", "listenerKind");
+        context.put("javaPerspective", sanitize(item, "perspective"));
+    }
+
+    /**
+     * Binds an inbound file ingest - the job that polls a drop folder and ingests every file that
+     * arrived.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindInboundFile(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "name", "className", "entity", "perspective", "folder", "cron");
+        context.put("javaPerspective", sanitize(item, "perspective"));
+    }
+
+    /**
+     * Binds a process-step event emitter - the delegate that publishes the process's record when the
+     * execution reaches or completes a step.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindStepEvent(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "name", "className", "process", "step", "entity", "perspective", "keyProperty", "keyAccessor", "topicSuffix");
         context.put("javaPerspective", sanitize(item, "perspective"));
     }
 

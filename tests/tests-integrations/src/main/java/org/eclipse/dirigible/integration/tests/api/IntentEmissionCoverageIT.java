@@ -20,7 +20,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -30,6 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 
+import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
@@ -511,6 +516,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Rfq, kind: manyToOne, to: Rfq, composition: true, required: true }
 
+              # The non-HTTP inbound arrivals (#6537) ingest into an entity of their own: an ingested
+              # record must not start a process, or the queue/file scenarios would seed extra Inbox
+              # tasks the RFQ scenarios pick up by name.
+              - name: Signal
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 200 }
+
               # BPM events wave 2 (abortOn): an approval whose confirm task is cancelled the moment
               # the record is voided via the CancelApproval transition (reusing the EntryStatus seeds:
               # DRAFT 1 / CANCELLED 3). Closes the orphaned-Inbox-task hole.
@@ -743,6 +756,34 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         attach: recordPrint
                       next: end
                   - { name: end, kind: end }
+
+            # The glue EVENT AXIS (#6537): a notification and an integration bound to a process STEP
+            # rather than to an entity lifecycle event. The emitter inserted at the step boundary
+            # publishes the RFQ on the step topic, and these ordinary listeners consume it - so the
+            # emitter sits in the middle of the RfqFlow scenarios below: were it broken, the review
+            # task would never appear and the timeout/expire/wait assertions would fail. The recipient
+            # is a LITERAL so the send is really attempted and cannot succeed (no SMTP on this
+            # instance) - the flow must run through the step regardless. The integration's URL comes
+            # from a configuration key that is not set here, which is the listener's documented no-op.
+            notifications:
+              - name: rfqReviewPending
+                event: { onStepReached: { process: RfqFlow, step: review } }
+                to: ops@example.com
+                subject: "RFQ {title} awaits review"
+                body: "A reviewer must handle it."
+
+            integrations:
+              - name: pushRfqReplied
+                event: { onStepCompleted: { process: RfqFlow, step: markReplied } }
+                method: POST
+                url: "@config:EMISSION_RFQ_WEBHOOK"
+
+            # The non-HTTP inbound arrivals (#6537): the same JSON record, saved through the same
+            # repository, arriving on a queue or dropped as a file into a polled folder.
+            inbound:
+              - { name: signalHook,  path: /signal, create: Signal }
+              - { name: signalQueue, source: { queue: emission-signals }, create: Signal }
+              - { name: signalDrop,  source: { folder: target/inbox-emission, cron: "0/2 * * * * ?" }, create: Signal }
 
             # transitions: the guarded on-demand status flip - Cancel is allowed only on a DRAFT
             # entry with nothing paid (Calc semantics: a null field reads as 0, so a never-paid
@@ -1333,6 +1374,42 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String timerLoader = contentOf("gen/events/emission/LoadRfqFlowReviewExpire.java");
         assertTrue(timerLoader.contains("execution.setVariable(\"__reviewExpireDate\", due)"),
                 "the expire date loader must publish the variable the boundary timer arms from");
+
+        // The glue event axis (#6537), step half: the emitter delegate is wired INTO the flow (before
+        // the observed task, after the observed service task, carrying its routing), it publishes the
+        // trigger record on the step topic, and the consumers bind to that exact topic. A wrong topic
+        // on either side is the silent failure mode - the app runs and nobody is ever notified.
+        assertTrue(
+                rfqBpmn.contains("<serviceTask id=\"rfqFlowReviewReached\"")
+                        && rfqBpmn.contains("<sequenceFlow id=\"flow_rfqFlowReviewReached_review\""),
+                "onStepReached must insert its emitter right before the observed task");
+        assertTrue(
+                rfqBpmn.contains("<serviceTask id=\"rfqFlowMarkRepliedCompleted\"")
+                        && rfqBpmn.contains("<sequenceFlow id=\"flow_markReplied_rfqFlowMarkRepliedCompleted\""),
+                "onStepCompleted must insert its emitter right after the observed step");
+        String reachedEmitter = contentOf("gen/events/emission/RfqFlowReviewReached.java");
+        assertTrue(reachedEmitter.contains("execution.getVariable(\"Id\")") && reachedEmitter.contains("new RfqRepository()"),
+                "the emitter must load the trigger record by the id in the process context");
+        assertTrue(reachedEmitter.contains("-step-RfqFlow-review-reached") && reachedEmitter.contains("Process.executeAfterCommit"),
+                "the emitter must publish the step topic after the chain commits");
+        String stepNotification = contentOf("gen/events/emission/RfqReviewPendingNotification.java");
+        assertTrue(stepNotification.contains("-step-RfqFlow-review-reached"),
+                "a step-bound notification must bind to the topic its emitter publishes to");
+        String stepIntegration = contentOf("gen/events/emission/PushRfqRepliedIntegration.java");
+        assertTrue(stepIntegration.contains("-step-RfqFlow-markReplied-completed"),
+                "a step-bound integration must bind to the topic its emitter publishes to");
+
+        // The glue event axis, inbound half: the same ingest, three arrivals.
+        String consumer = contentOf("gen/events/emission/SignalQueueConsumer.java");
+        assertTrue(consumer.contains("return \"emission-signals\";") && consumer.contains("ListenerKind.QUEUE"),
+                "a queue source must emit a MessageHandler bound to that queue");
+        assertTrue(consumer.contains("Json.parse(message, SignalEntity.class)") && consumer.contains("new SignalRepository().save(entity)"),
+                "a message ingest must save the record through the repository, like the webhook does");
+        String fileImport = contentOf("gen/events/emission/SignalDropFileImport.java");
+        assertTrue(fileImport.contains("return \"0/2 * * * * ?\";") && fileImport.contains("Paths.get(\"target/inbox-emission\")"),
+                "a folder source must emit a JobHandler polling that folder on the declared cron");
+        assertTrue(fileImport.contains("SignalEntity[].class") && fileImport.contains("Files.move"),
+                "a file ingest must accept a batch and move every read file out of the drop folder");
 
         // abortOn (wave 2): the interrupting event subprocess + the correlating listener.
         String approvalBpmn = contentOf("ApprovalFlow.bpmn");
@@ -2829,7 +2906,49 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(403));
 
         assertManyToManyRuntime();
+        assertInboundSourcesRuntime();
         assertBpmEventsRuntime();
+    }
+
+    /**
+     * The non-HTTP inbound arrivals end to end (#6537): a JSON record sent to the declared queue, and
+     * one dropped as a file into the polled folder, both turn into rows through the entity's own
+     * repository. This is the layer the declaration is about - the generated listener actually being
+     * subscribed, and the generated job actually polling - which no amount of asserting the emitted
+     * source can show.
+     */
+    private void assertInboundSourcesRuntime() {
+        String signalApi = API + "/signal/SignalController";
+
+        MessagingFacade.sendToQueue("emission-signals", "{\"Note\":\"from the queue\"}");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(signalApi)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Note", hasItem("from the queue")),
+                60);
+
+        // The drop folder is relative to the running instance's working directory, exactly as the
+        // intent declares it. A file is only read once it has been untouched for the generated
+        // handler's stability window, so the poll below is generous.
+        Path dropFolder = Paths.get("target/inbox-emission");
+        try {
+            Files.createDirectories(dropFolder);
+            // A batch, so the array form of the payload is exercised too.
+            Files.writeString(dropFolder.resolve("signals.json"), "[{\"Note\":\"from the file\"},{\"Note\":\"from the file too\"}]");
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to drop the ingest file into " + dropFolder.toAbsolutePath(), ex);
+        }
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(signalApi)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Note", hasItem("from the file"))
+                                                 .body("Note", hasItem("from the file too")),
+                120);
+        // Every read file leaves the drop folder, so the next tick cannot ingest it again.
+        assertTrue(Files.exists(dropFolder.resolve("processed/signals.json")),
+                "an ingested file must be moved out of the drop folder, into processed/");
     }
 
     /**
@@ -3094,6 +3213,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(greaterThanOrEqualTo(200)));
         if (repository.hasCollection(PROJECT_PATH)) {
             repository.removeCollection(PROJECT_PATH);
+        }
+        removeDropFolder();
+    }
+
+    /** The inbound drop folder is outside the repository - clear it so a rerun starts empty. */
+    private void removeDropFolder() {
+        Path dropFolder = Paths.get("target/inbox-emission");
+        if (!Files.isDirectory(dropFolder)) {
+            return;
+        }
+        try (java.util.stream.Stream<Path> tree = Files.walk(dropFolder)) {
+            for (Path path : tree.sorted(java.util.Comparator.reverseOrder())
+                                 .toList()) {
+                Files.deleteIfExists(path);
+            }
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to clear the inbound drop folder " + dropFolder.toAbsolutePath(), ex);
         }
     }
 
