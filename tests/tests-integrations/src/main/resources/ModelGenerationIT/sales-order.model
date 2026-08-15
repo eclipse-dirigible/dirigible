@@ -382,7 +382,9 @@
                         "widgetIsMajor": "true",
                         "widgetLength": "20",
                         "widgetSize": "",
-                        "widgetType": "NUMBER"
+                        "widgetType": "NUMBER",
+                        "roleRead": "Pricing,Administrator",
+                        "roleWrite": "Pricing,Administrator"
                     }
                 ],
                 "caption": "Manage entity Product",
@@ -621,7 +623,9 @@
                         "widgetIsMajor": "true",
                         "widgetLength": "20",
                         "widgetSize": "",
-                        "widgetType": "NUMBER"
+                        "widgetType": "NUMBER",
+                        "roleRead": "Pricing,Administrator",
+                        "roleWrite": "Pricing,Administrator"
                     }
                 ],
                 "caption": "Manage entity SalesOrderItem",

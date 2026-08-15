@@ -4,6 +4,11 @@
   (right), via x-h-split. Root x-data binds the generated ${name}MasterPage; detail panels are
   generic detailPanel components driven by the runtime registry (App.detailsFor).
 -->
+## Role-scoped field (intent `visibleTo:`): rendered only for a caller the server actually serves it
+## to - the page asked the controller which fields it withholds (canSee). Emits nothing for an
+## unrestricted property. The redaction applied to every response stays the authoritative one; this
+## only keeps a control that could never show or save a value off the page.
+#macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
 <div x-data="${name}MasterPage" class="vbox size-full">
 
   <div x-h-toolbar data-variant="transparent">
@@ -54,7 +59,7 @@
             <tr x-h-table-row>
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-              <th x-h-table-head scope="col"#if($property.isNumberType) class="text-right"#end>${property.name}</th>
+              <th x-h-table-head scope="col"#if($property.isNumberType) class="text-right"#end#visibleGate($property)>${property.name}</th>
 #end
 #end
               <th x-h-table-head scope="col"></th>
@@ -68,17 +73,17 @@
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
 #if($property.widgetType == "DOCUMENT_STATUS")
                 <!-- EntityStatus column: the resolved status name as a coloured badge pill. -->
-                <td x-h-table-cell><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}))" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>
+                <td x-h-table-cell#visibleGate($property)><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}))" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>
 #elseif($property.widgetType == "DROPDOWN")
-                <td x-h-table-cell x-text="lookupText('${property.name}', row.${property.name})"></td>
+                <td x-h-table-cell#visibleGate($property) x-text="lookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.isDateType)
-                <td x-h-table-cell x-text="displayValue(row.${property.name}, true)"></td>
+                <td x-h-table-cell#visibleGate($property) x-text="displayValue(row.${property.name}, true)"></td>
 #elseif($property.isFloatType)
-                <td x-h-table-cell class="text-right" x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></td>
+                <td x-h-table-cell class="text-right"#visibleGate($property) x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></td>
 #elseif($property.isNumberType)
-                <td x-h-table-cell class="text-right" x-text="displayValue(row.${property.name})"></td>
+                <td x-h-table-cell class="text-right"#visibleGate($property) x-text="displayValue(row.${property.name})"></td>
 #else
-                <td x-h-table-cell x-text="displayValue(row.${property.name})"></td>
+                <td x-h-table-cell#visibleGate($property) x-text="displayValue(row.${property.name})"></td>
 #end
 #end
 #end
@@ -171,7 +176,7 @@
 #if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))
               <div class="vbox gap-0" x-show="selected?.${property.name} !== null && selected?.${property.name} !== undefined && selected?.${property.name} !== ''">
 #else
-              <div class="vbox gap-0">
+              <div class="vbox gap-0"#visibleGate($property)>
 #end
                 <span x-h-text.muted class="text-xs" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${plabel}')"></span>
 #if($property.widgetType == "DOCUMENT_STATUS")

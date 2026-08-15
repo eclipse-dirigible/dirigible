@@ -64,6 +64,12 @@ App.registerDetail('${masterEntity}', {
   // this panel's Add / row actions. The server always allowed it - the child has its own controller.
   locksWithMaster: false,
 #end
+#if($hasRestrictedFields)
+  // This child has role-scoped columns (intent `visibleTo:`): whoever renders it - the shared detail
+  // panel, a document's line table and line dialog - asks this controller which of them the caller may
+  // not see and drops those. Declared here so a child WITHOUT any costs no request at all.
+  restrictedFields: true,
+#end
   columns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.name != $masterEntityId)

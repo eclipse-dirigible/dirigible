@@ -1098,6 +1098,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // personal REST controller's responses. The power surface ignores this attribute.
             p.put("sensitiveProperty", "true");
         }
+        if (!field.getVisibleTo()
+                  .isEmpty()) {
+            // Role-scoped field (intent `visibleTo:`), emitted as the model's own property-level read
+            // and write roles - the pair the generated controllers already enforce, so a hand-modeled
+            // .edm carrying them behaves identically. The list is comma-separated: the caller needs ANY
+            // of the roles. Read and write get the SAME list on purpose - a caller who may not see the
+            // value must not be able to set it either, and splitting them is a modeler-level refinement
+            // the intent deliberately does not offer.
+            String roles = String.join(",", field.getVisibleTo());
+            p.put("roleRead", roles);
+            p.put("roleWrite", roles);
+        }
         if (field.isPrimaryKey()) {
             p.put("dataPrimaryKey", "true");
         } else if (field.isRequired()) {

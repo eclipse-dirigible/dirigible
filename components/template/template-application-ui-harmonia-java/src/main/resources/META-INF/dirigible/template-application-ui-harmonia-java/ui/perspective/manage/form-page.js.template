@@ -200,6 +200,12 @@ document.addEventListener('alpine:init', () => {
 #end
 
     async init() {
+#if($hasRestrictedFields)
+      // Role-scoped fields: ask the controller which ones it withholds from this caller, so the form
+      // leaves those inputs out rather than offering a control whose value is never served and never
+      // saved. Not awaited - the inputs disappear as soon as the answer lands.
+      this.loadRestrictedFields();
+#end
       // The edit/preview routes are /${name}/{id}/edit|preview — Pinecone exposes the param as `id`.
       // Read the live hash, not PineconeRouter.context.path: for these routes Pinecone can fire
       // pinecone:end before the context is assigned, but the hash is already updated.

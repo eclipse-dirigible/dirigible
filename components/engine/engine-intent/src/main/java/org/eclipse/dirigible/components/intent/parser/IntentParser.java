@@ -49,6 +49,7 @@ import org.eclipse.dirigible.components.intent.model.LifecycleEdgeIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
+import org.eclipse.dirigible.components.intent.model.PermissionIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
@@ -184,6 +185,7 @@ public final class IntentParser {
             return new IntentModel();
         }
         rejectRemovedNumberKeys(tree);
+        rejectEmptyVisibleTo(tree);
         rejectLifecycleOn(tree);
         moveGeneratesItemLines(tree);
         // Statuses may be referenced by their seeded NAME; resolve them to ids on the raw tree so the
@@ -227,6 +229,7 @@ public final class IntentParser {
     private static void validate(IntentModel model) {
         List<String> issues = new ArrayList<>();
         propagateSensitiveDerivations(model);
+        propagateRestrictedDerivations(model);
         // An n:m is materialised into its intermediate (link) entity FIRST, so every validator and
         // generator below sees an ordinary composition + association pair - the DSL holds exactly one
         // representation of a many-to-many, and nothing is accepted and then silently dropped.
@@ -1092,6 +1095,75 @@ public final class IntentParser {
                 field.setSensitive(true);
             }
         }
+    }
+
+    /**
+     * The same leak one hop out, for the role allow-list: a field that sums or copies a
+     * {@code visibleTo:} field re-serves on its own entity exactly the figure the source restricts, and
+     * there it is an ordinary column every reader gets. So a derived field fed by a restricted source
+     * inherits its allow-list - across the three derivation shapes
+     * {@code propagateSensitiveDerivations} covers (a rollup target, an {@code aggregate: true} master
+     * field, an {@code aggregates:} target).
+     *
+     * <p>
+     * Unconditional, unlike the sensitive propagation: {@code sensitive} only matters where a personal
+     * surface exists, while {@code visibleTo} scopes the power surface itself, which every entity has.
+     * A target that declares its own {@code visibleTo} is left alone - the author has already said who
+     * may see the total, and inheriting on top of that could only widen or narrow it behind their back.
+     */
+    private static void propagateRestrictedDerivations(IntentModel model) {
+        java.util.Map<String, EntityIntent> byName = new java.util.HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
+        for (RollupIntent rollup : model.getRollups()) {
+            EntityIntent child = byName.get(rollup.getEntity());
+            if (child == null) {
+                continue;
+            }
+            RelationIntent via = toOneRelationByName(child, rollup.getVia());
+            EntityIntent parent = via == null ? null : byName.get(via.getTo());
+            FieldIntent of = rollup.getOf() == null || parent == null ? null : fieldByName(child, rollup.getOf());
+            FieldIntent target = parent == null ? null : fieldByName(parent, rollup.getField());
+            inheritVisibleTo(of, target);
+        }
+        for (EntityIntent parent : model.getEntities()) {
+            for (FieldIntent target : parent.getFields()) {
+                if (!target.isAggregate()) {
+                    continue;
+                }
+                for (EntityIntent child : model.getEntities()) {
+                    for (RelationIntent relation : child.getRelations()) {
+                        if (relation.isComposition() && parent.getName() != null && parent.getName()
+                                                                                          .equals(relation.getTo())) {
+                            inheritVisibleTo(fieldByName(child, target.getName()), target);
+                        }
+                    }
+                }
+            }
+        }
+        for (AggregateIntent aggregate : model.getAggregates()) {
+            EntityIntent source = byName.get(aggregate.getOf());
+            EntityIntent target = byName.get(aggregate.getInto());
+            if (source == null || target == null || aggregate.getSum() == null) {
+                continue;
+            }
+            inheritVisibleTo(fieldByName(source, aggregate.getSum()),
+                    aggregate.getField() == null ? null : fieldByName(target, aggregate.getField()));
+        }
+    }
+
+    /** Copy a restricted source's allow-list onto a derived field that declares none of its own. */
+    private static void inheritVisibleTo(FieldIntent source, FieldIntent derived) {
+        if (source == null || derived == null || source.getVisibleTo()
+                                                       .isEmpty()
+                || !derived.getVisibleTo()
+                           .isEmpty()) {
+            return;
+        }
+        derived.setVisibleTo(new ArrayList<>(source.getVisibleTo()));
     }
 
     /**
@@ -2124,6 +2196,7 @@ public final class IntentParser {
                 byName.put(entity.getName(), entity);
             }
         }
+        Set<String> declaredRoles = declaredRoles(model);
         for (EntityIntent entity : model.getEntities()) {
             String name = entity.getName();
             if (name == null || name.isBlank()) {
@@ -2189,6 +2262,10 @@ public final class IntentParser {
                              .equals(entity.getIdentity())) {
                         issues.add("entity [" + name + "] field [" + field.getName() + "] is the identity field so it cannot be sensitive");
                     }
+                }
+                if (!field.getVisibleTo()
+                          .isEmpty()) {
+                    validateVisibleTo(entity, field, declaredRoles, issues);
                 }
             }
             if (idCount > 1) {
@@ -2489,6 +2566,56 @@ public final class IntentParser {
         }
     }
 
+    /** The role names the intent declares in its {@code permissions} block. */
+    private static Set<String> declaredRoles(IntentModel model) {
+        Set<String> roles = new HashSet<>();
+        for (PermissionIntent permission : model.getPermissions()) {
+            if (permission.getRole() != null && !permission.getRole()
+                                                           .isBlank()) {
+                roles.add(permission.getRole());
+            }
+        }
+        return roles;
+    }
+
+    /**
+     * {@code visibleTo: [Role, ...]} - the field's role allow-list. Every listed role must be declared
+     * in {@code permissions}: a role no permission grants is either a typo or a role the application
+     * never issues, and in both cases the field would silently be invisible to everybody - the
+     * authored-but-unconsumed failure mode, with nothing to see anywhere.
+     *
+     * <p>
+     * The scoping is refused on the three fields the surfaces themselves need: the primary key (every
+     * response is addressed by it), the entity's {@code identity} field (the personal surface resolves
+     * the logged-in user through it) and the document number rendered as the form's title. Hiding any
+     * of them does not produce a restricted field, it produces a broken page.
+     */
+    private static void validateVisibleTo(EntityIntent entity, FieldIntent field, Set<String> declaredRoles, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] field [" + field.getName() + "] visibleTo";
+        for (String role : field.getVisibleTo()) {
+            if (role == null || role.isBlank()) {
+                issues.add(subject + " lists a blank role");
+                continue;
+            }
+            if (!declaredRoles.contains(role)) {
+                List<String> known = new ArrayList<>(declaredRoles);
+                known.sort(null);
+                issues.add(subject + " names role [" + role + "], which the intent does not declare - add it to `permissions`"
+                        + (known.isEmpty() ? " (the intent declares no roles at all)" : " (declared: " + String.join(", ", known) + ")"));
+            }
+        }
+        if (field.isPrimaryKey()) {
+            issues.add(subject + " is not allowed on the primary key - every response is addressed by it");
+        }
+        if (field.getName()
+                 .equals(entity.getIdentity())) {
+            issues.add(subject + " is not allowed on the identity field - the personal surface resolves the logged-in user through it");
+        }
+        if (field.isDocumentTitle() || "DocumentTitle".equalsIgnoreCase(field.getFunction())) {
+            issues.add(subject + " is not allowed on the document title - it is the document form's heading, not a field");
+        }
+    }
+
     /**
      * {@code label: "..."} - a display-label expression generating the stored read-only {@code Name}
      * property. Tokens are own fields or one-hop to-one relation properties; a same-model target
@@ -2522,6 +2649,10 @@ public final class IntentParser {
                 } else if (field.isSensitive()) {
                     issues.add(subject + " token [" + part.property()
                             + "] is a sensitive field - the generated Name is visible on the personal surface");
+                } else if (!field.getVisibleTo()
+                                 .isEmpty()) {
+                    issues.add(subject + " token [" + part.property()
+                            + "] is restricted by visibleTo - the generated Name is a plain column every reader of the entity gets");
                 }
                 continue;
             }
@@ -2548,6 +2679,11 @@ public final class IntentParser {
                 FieldIntent targetField = fieldByName(target, part.property());
                 if (targetField != null && targetField.isSensitive()) {
                     issues.add(subject + " token [" + part.relation() + "." + part.property() + "] is a sensitive field of ["
+                            + relation.getTo() + "] - it must not leak into a label");
+                }
+                if (targetField != null && !targetField.getVisibleTo()
+                                                       .isEmpty()) {
+                    issues.add(subject + " token [" + part.relation() + "." + part.property() + "] is restricted by visibleTo on ["
                             + relation.getTo() + "] - it must not leak into a label");
                 }
             }
@@ -2985,6 +3121,39 @@ public final class IntentParser {
                                 + " a jurisdiction that restarts numbering is an administrator setting the prefix and the next value"
                                 + " in the Document Numbering settings");
                     }
+                }
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
+        }
+    }
+
+    /**
+     * An empty {@code visibleTo: []} is refused on the raw tree: the typed mapping cannot tell it from
+     * an absent key, so it would parse into "no restriction at all" - the opposite of what an author
+     * who wrote the key meant, and silent. Either list the roles or drop the key.
+     *
+     * @param tree the raw YAML tree
+     */
+    private static void rejectEmptyVisibleTo(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity) || !(entity.get("fields") instanceof List<?> fields)) {
+                continue;
+            }
+            for (Object fieldNode : fields) {
+                if (!(fieldNode instanceof Map<?, ?> field) || !field.containsKey("visibleTo")) {
+                    continue;
+                }
+                Object roles = field.get("visibleTo");
+                if (roles == null || (roles instanceof List<?> list && list.isEmpty())) {
+                    issues.add("entity [" + entity.get("name") + "] field [" + field.get("name")
+                            + "] declares an empty `visibleTo` - list the roles that may see the field, or remove the key"
+                            + " (an empty allow-list would leave the field visible to everyone)");
                 }
             }
         }

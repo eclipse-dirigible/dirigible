@@ -312,6 +312,12 @@ document.addEventListener('alpine:init', () => {
     },
 
     async init() {
+#if($hasRestrictedFields)
+      // Role-scoped fields: ask the controller which ones it withholds from this caller, so the header
+      // form and the totals footer leave them out rather than showing an input or a total that is
+      // never served and never saved.
+      this.loadRestrictedFields();
+#end
       const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};
       this.id = params.id ?? null;
       // Read the live hash to tell /preview from /edit (Pinecone's context can lag the hash).
@@ -320,6 +326,18 @@ document.addEventListener('alpine:init', () => {
 
       // The line-items child registered itself as a detail of this master; pick it by name.
       this.itemsDef = App.detailsFor('${name}').find(d => d.entity === '${documentItemsEntity}') || null;
+
+      // The child declares in its registration whether it HAS role-scoped columns; only then is there
+      // anything to ask its controller about. Awaited, so the line dialog's column metadata is already
+      // pruned when the watchers below are registered against it.
+      if (this.itemsDef && this.itemsDef.restrictedFields) {
+        try {
+          const answer = await App.services.api.get(this.itemsDef.apiPath + '/restricted');
+          this.itemRestricted = (answer && answer.restricted) || [];
+        } catch (e) {
+          console.error('[restricted] could not read the line-item field visibility', e);
+        }
+      }
 
       // Depends-On watchers for the item dialog, one per distinct trigger column (metadata-driven,
       // registered once; openRowDialog suppresses them while a draft is being built).
@@ -653,7 +671,14 @@ document.addEventListener('alpine:init', () => {
 #end
 
     // ----- Items (read-only table + add/edit dialog, server-side) --------------------------------
-    get editColumns() { return (this.itemsDef && this.itemsDef.editColumns) || []; },
+    // Role-scoped columns of the ITEMS child (intent `visibleTo:` on a line-item field, e.g. a cost
+    // price): filled from the child's own controller when its registration says it has any, so the
+    // line table and the line dialog drop them for a caller the server does not serve them to.
+    itemRestricted: [],
+
+    get editColumns() {
+      return ((this.itemsDef && this.itemsDef.editColumns) || []).filter(c => !this.itemRestricted.includes(c.name));
+    },
 
     // The columns the read-only items TABLE shows: the display columns (major fields - `major:
     // false` hides a field/relation from the table), carried with their full edit metadata so

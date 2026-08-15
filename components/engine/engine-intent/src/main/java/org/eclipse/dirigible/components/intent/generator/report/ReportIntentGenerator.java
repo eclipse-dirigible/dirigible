@@ -252,6 +252,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             }
         }
 
+        warnOnRestrictedColumns(context, model, source, report);
         String filter = buildWhere(context, model, source, baseAlias, joins, report.getFilter());
         Map<String, Object> scope = scopeCondition(context, model, source, baseAlias, report, aggregated);
         List<Map<String, Object>> conditions = conditions(filter, scope);
@@ -828,6 +829,70 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
         return report.getFilter() != null && token.matcher(report.getFilter())
                                                   .find();
+    }
+
+    /**
+     * A report has no field-level scoping: its query runs as written and every row it returns reaches
+     * everyone the report itself is readable by. So a report that groups by, sums or filters on a
+     * {@code visibleTo:} field re-serves the restricted figure through a second door - the same leak
+     * the entity closed, one artefact further out. It is a legitimate thing to author (a payroll report
+     * over payroll data is exactly the point), so this is a generation warning rather than a refusal:
+     * the author is told which report re-exposes which field, and scopes the report's own roles
+     * accordingly.
+     *
+     * <p>
+     * Own fields and one-hop {@code relation.field} paths are both scanned, over the dimensions, the
+     * measures, the filter and the {@code kind: balance} amount fields.
+     */
+    private static void warnOnRestrictedColumns(IntentGenerationContext context, IntentModel model, EntityIntent source,
+            ReportIntent report) {
+        if (source == null) {
+            return;
+        }
+        List<String> expressions = new ArrayList<>(report.getDimensions());
+        expressions.addAll(report.getMeasures());
+        expressions.add(report.getFilter());
+        expressions.add(report.getDebit());
+        expressions.add(report.getCredit());
+        for (FieldIntent field : source.getFields()) {
+            if (!field.getVisibleTo()
+                      .isEmpty()
+                    && mentions(expressions, field.getName())) {
+                warnRestrictedColumn(context, report, source.getName(), field);
+            }
+        }
+        for (RelationIntent relation : source.getRelations()) {
+            EntityIntent target = relation.getTo() == null ? null : entityByName(model, relation.getTo());
+            if (target == null) {
+                continue;
+            }
+            for (FieldIntent field : target.getFields()) {
+                if (!field.getVisibleTo()
+                          .isEmpty()
+                        && mentions(expressions, relation.getName() + "." + field.getName())) {
+                    warnRestrictedColumn(context, report, target.getName(), field);
+                }
+            }
+        }
+    }
+
+    /** The report re-exposes one restricted field - say which, and to whom the entity restricts it. */
+    private static void warnRestrictedColumn(IntentGenerationContext context, ReportIntent report, String entityName, FieldIntent field) {
+        context.addIssue("report [" + report.getName() + "] reads [" + entityName + "." + field.getName() + "], which [" + entityName
+                + "] restricts to " + field.getVisibleTo()
+                + " with `visibleTo` - a report carries no field-level scoping, so everyone who may open it sees the value");
+    }
+
+    /** Whether any of the expressions mentions the token as a whole word (dotted paths included). */
+    private static boolean mentions(List<String> expressions, String token) {
+        Pattern pattern = Pattern.compile("(?<![\\w.])" + Pattern.quote(token) + "\\b", Pattern.CASE_INSENSITIVE);
+        for (String expression : expressions) {
+            if (expression != null && pattern.matcher(expression)
+                                             .find()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

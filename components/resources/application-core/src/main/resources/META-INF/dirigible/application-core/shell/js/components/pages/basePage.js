@@ -27,6 +27,38 @@ function basePage() {
     refreshIcons() {},
 
     /**
+     * Role-scoped fields (intent `visibleTo:`) this caller may not see. The SERVER decides: it strips
+     * those properties from every response and ignores them on writes, and its /restricted endpoint
+     * says which ones they are for the caller in front of us. The page asks once and leaves the
+     * matching columns and inputs out, so the user never sees a permanently empty control instead of
+     * being told nothing about a field that is not theirs.
+     *
+     * Only pages that HAVE such a field call load - the endpoint is generated only for those entities.
+     */
+    restrictedFields: [],
+
+    /** Whether a property may be rendered for this caller. */
+    canSee(name) {
+      return !this.restrictedFields.includes(name);
+    },
+
+    /**
+     * Ask the entity's controller which fields it withholds from this caller. Failure leaves every
+     * field visible: the values are stripped server-side either way, so the worst case is an empty
+     * column the user can see is empty - never a field silently hidden from someone entitled to it.
+     */
+    async loadRestrictedFields(apiPath) {
+      const path = apiPath || this.apiPath;
+      if (!path) return;
+      try {
+        const answer = await App.services.api.get(path + '/restricted');
+        this.restrictedFields = (answer && answer.restricted) || [];
+      } catch (e) {
+        console.error('[restricted] could not read the field visibility of ' + path, e);
+      }
+    },
+
+    /**
      * Format a floating-point value for display: decimals from the field's DecimalFormat pattern, the
      * grouping/decimal separators from the instance-wide Number setting (services/format.js).
      */

@@ -33,6 +33,13 @@ document.addEventListener('alpine:init', () => {
     apiPath: '/${javaPerspectiveName}/${name}PartnerController',
 
     async init() {
+#if($hasRestrictedFields)
+      // Role-scoped fields (intent `visibleTo:`): this surface's own controller strips them from the
+      // rows too - owning the record is not a role - so ask which ones and drop those columns.
+      this.loadRestrictedFields().then(() => {
+        this.columns = this.columns.filter(c => this.canSee(c.name));
+      });
+#end
 #if($statusProp != "")
       try {
         const rows = await App.services.api.getAll('${statusUrl}', { baseUrl: '' });

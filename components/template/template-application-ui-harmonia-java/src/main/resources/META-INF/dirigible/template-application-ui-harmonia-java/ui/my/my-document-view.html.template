@@ -11,6 +11,11 @@
 #if($property.widgetType == "DOCUMENT_STATUS")#set($statusProp = $property.name)#end
 #if($property.widgetType == "DOCUMENT_NUMBER")#set($docNumProp = $property.name)#end
 #end
+## Role-scoped field (intent `visibleTo:`): rendered only for a caller the server actually serves it
+## to - the page asked the controller which fields it withholds (canSee). Emits nothing for an
+## unrestricted property. Owning the record (or being the partner it belongs to) does not grant a
+## role, so this surface hides exactly what its own controller strips from the wire.
+#macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
 <div x-data="${name}MyDocumentPage" class="vbox size-full">
 
   <div x-h-toolbar data-variant="transparent">
@@ -42,7 +47,7 @@
     <div class="grid grid-cols-12 gap-4" style="max-width: 900px">
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name" && $property.name != "$!{personalProperty}" && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && !($property.widgetType == "DOCUMENT_NUMBER" && $property.numberSeries) && $property.aggregate != "true")
-      <div x-h-field style="grid-column: span #if($property.widgetSize && $property.widgetSize != "")${property.widgetSize}#{else}6#end">
+      <div x-h-field style="grid-column: span #if($property.widgetSize && $property.widgetSize != "")${property.widgetSize}#{else}6#end"#visibleGate($property)>
         <label x-h-label>
           <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end')"></span>#if($property.isRequiredProperty == "true") <span class="text-destructive">*</span>#end
         </label>
@@ -238,7 +243,7 @@
         <div x-h-card-content class="vbox gap-1">
 #foreach($property in $properties)
 #if($property.aggregate == "true" && !$property.sensitiveProperty)
-          <div class="hbox items-baseline justify-between gap-4">
+          <div class="hbox items-baseline justify-between gap-4"#visibleGate($property)>
             <span class="text-sm text-secondary-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end')"></span>
             <span class="text-sm tabular-nums" x-text="window.HarmoniaFormat ? window.HarmoniaFormat.number(form.${property.name}) : form.${property.name}"></span>
           </div>
