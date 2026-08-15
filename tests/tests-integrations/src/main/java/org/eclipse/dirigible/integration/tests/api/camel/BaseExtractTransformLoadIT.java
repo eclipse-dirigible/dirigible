@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.ui.tests.camel;
+package org.eclipse.dirigible.integration.tests.api.camel;
 
 import ch.qos.logback.classic.Level;
 import org.assertj.db.api.Assertions;
@@ -15,12 +15,10 @@ import org.assertj.db.type.AssertDbConnection;
 import org.assertj.db.type.AssertDbConnectionFactory;
 import org.assertj.db.type.Table;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
-import org.eclipse.dirigible.tests.base.BaseTestProject;
-import org.eclipse.dirigible.tests.base.ProjectUtil;
-import org.eclipse.dirigible.tests.base.TestProject;
-import org.eclipse.dirigible.tests.framework.ide.EdmView;
-import org.eclipse.dirigible.tests.framework.ide.IDE;
+import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.eclipse.dirigible.tests.base.ProjectDeployer;
 import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import javax.sql.DataSource;
@@ -28,18 +26,37 @@ import java.util.concurrent.TimeUnit;
 
 import static org.awaitility.Awaitility.await;
 
-public abstract class BaseCamelTestProject extends BaseTestProject implements TestProject {
+/**
+ * What the two order-replication routes share: the loggers they report progress on, and the table
+ * the replication is expected to have loaded. Each replication owns the {@code ORDERS} table it
+ * asserts row by row, which is why the two run in instances of their own rather than as two methods
+ * of one class.
+ */
+abstract class BaseExtractTransformLoadIT extends IntegrationTest {
 
-    protected final LogsAsserter camelLogAsserter;
-    protected final LogsAsserter consoleLogAsserter;
+    /** The logger the routes themselves log their progress on. */
+    protected LogsAsserter camelLogAsserter;
+
+    /** The logger the JavaScript the routes call logs on. */
+    protected LogsAsserter consoleLogAsserter;
+
+    /** Brings the replication's own fixture project live. */
+    @Autowired
+    protected ProjectDeployer projectDeployer;
 
     @Autowired
     private DataSourcesManager dataSourcesManager;
 
-    protected BaseCamelTestProject(String projectResourcesFolder, IDE ide, ProjectUtil projectUtil, EdmView edmView) {
-        super(projectResourcesFolder, ide, projectUtil, edmView);
-        this.consoleLogAsserter = new LogsAsserter("app.out", Level.INFO);
-        this.camelLogAsserter = new LogsAsserter("OpenCartOrdersReplication", Level.INFO);
+    /**
+     * Attaches the log asserters here and not in a field initializer: Spring re-initializes logback
+     * while it starts the application context, which is after the test instance is constructed and
+     * before this callback - an appender attached any earlier is dropped by that reset, and the
+     * assertions then time out against messages the log plainly shows.
+     */
+    @BeforeEach
+    final void attachLogAsserters() {
+        camelLogAsserter = new LogsAsserter("OpenCartOrdersReplication", Level.INFO);
+        consoleLogAsserter = new LogsAsserter("app.out", Level.INFO);
     }
 
     protected void assertLogContainsMessage(LogsAsserter logAsserter, String message, Level level) {

@@ -7,32 +7,35 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.ui.tests.camel;
+package org.eclipse.dirigible.integration.tests.api.camel;
 
-import org.eclipse.dirigible.tests.base.BaseTestProject;
-import org.eclipse.dirigible.tests.base.ProjectUtil;
-import org.eclipse.dirigible.tests.framework.ide.EdmView;
-import org.eclipse.dirigible.tests.framework.ide.IDE;
+import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.eclipse.dirigible.tests.base.ProjectDeployer;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 
-@Lazy
-@Component
-class CamelAsyncStepTestProject extends BaseTestProject {
+/**
+ * A route whose step awaits an asynchronous JavaScript function answers with what that function
+ * resolved to.
+ */
+public class CamelAsyncStepIT extends IntegrationTest {
 
-    private final RestAssuredExecutor restAssuredExecutor;
+    private static final String PROJECT = "CamelAsyncStepIT";
 
-    public CamelAsyncStepTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, RestAssuredExecutor restAssuredExecutor) {
-        super("CamelAsyncStepIT", ide, projectUtil, edmView);
-        this.restAssuredExecutor = restAssuredExecutor;
-    }
+    @Autowired
+    private ProjectDeployer projectDeployer;
 
-    @Override
-    public void verify() {
+    @Autowired
+    private RestAssuredExecutor restAssuredExecutor;
+
+    @Test
+    void theRouteAnswersWithTheResolvedValue() {
+        projectDeployer.deploy(PROJECT);
+
         restAssuredExecutor.execute( //
                 () -> given().when()
                              .get("/services/integrations/CamelAsyncStepITRoute")

@@ -57,7 +57,14 @@ public class ProjectUtil {
         copyResourceFolderContentToUserWorkspaceProject(user, resourcesFolder, targetProjectName, placeholders);
     }
 
-    private String extractFolderName(String resourcesFolder) {
+    /**
+     * The name a resources folder is copied into the workspace under - its last segment, which is also
+     * the project name.
+     *
+     * @param resourcesFolder the test resources folder holding the project
+     * @return the project name
+     */
+    static String extractFolderName(String resourcesFolder) {
         boolean rootDir = resourcesFolder.lastIndexOf("/") == -1;
         return rootDir ? resourcesFolder : (resourcesFolder.substring(resourcesFolder.lastIndexOf("/") + 1));
     }

@@ -9,12 +9,12 @@
  */
 package org.eclipse.dirigible.integration.tests;
 
+import org.eclipse.dirigible.integration.tests.api.camel.CamelTransactionsCommitIT;
+import org.eclipse.dirigible.integration.tests.api.camel.CamelTransactionsRollbackIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.GitPerspectiveIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.QuartzTransactionsCommitIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.QuartzTransactionsRollbackIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.RestTransactionsIT;
-import org.eclipse.dirigible.integration.tests.ui.tests.camel.CamelTransactionsCommitIT;
-import org.eclipse.dirigible.integration.tests.ui.tests.camel.CamelTransactionsRollbackIT;
 import org.junit.platform.suite.api.SelectClasses;
 import org.junit.platform.suite.api.Suite;
 
