@@ -130,6 +130,12 @@ not as an apology.
   does not exist, that notification or schedule is dropped and reported in the generate response's
   `warnings` (as well as the server log) - fix the reference so the glue is emitted.
 - **Names are identifiers** within their block and must be unique.
+- **Only the keys documented here exist, and they are case-sensitive.** A key the schema does not
+  declare - an invented one, or a case slip (`Required:` for `required:`, `contributionScheme:` for
+  the relation `ContributionScheme`) - is a validation ERROR naming the key and the nearest declared
+  name; it is never accepted and ignored. The same holds for a **seed row**, whose keys are the
+  entity's own field and to-one relation names (plus the lifecycle `stage:` marker). Never invent a
+  plausible-looking key to express something: if the schema cannot say it, say so instead.
 
 ## Capabilities
 

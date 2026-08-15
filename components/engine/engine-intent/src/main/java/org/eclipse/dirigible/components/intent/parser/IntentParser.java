@@ -186,6 +186,11 @@ public final class IntentParser {
         rejectRemovedNumberKeys(tree);
         rejectLifecycleOn(tree);
         moveGeneratesItemLines(tree);
+        // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
+        // is collected here - on the raw tree, while the author's spelling still exists - and reported
+        // together with the structural issues below.
+        List<String> issues = new ArrayList<>();
+        UnknownKeyValidator.collect(tree, issues);
         // Statuses may be referenced by their seeded NAME; resolve them to ids on the raw tree so the
         // typed mapping, every validator and every generator keep seeing the integers they always saw.
         StatusSymbolResolver.resolve(tree);
@@ -203,9 +208,9 @@ public final class IntentParser {
                     + " a recipient/path field must be a plain scalar (e.g. `to: member.email`, not `to: {member.email}`)"));
         }
         if (model == null) {
-            return new IntentModel();
+            model = new IntentModel();
         }
-        validate(model);
+        validate(model, issues);
         return model;
     }
 
@@ -223,9 +228,11 @@ public final class IntentParser {
     /**
      * Run all structural checks. Collects every issue before throwing so authors get one complete error
      * message rather than playing whack-a-mole.
+     *
+     * @param model the typed model
+     * @param issues the issues already found on the raw tree (unknown keys), appended to
      */
-    private static void validate(IntentModel model) {
-        List<String> issues = new ArrayList<>();
+    private static void validate(IntentModel model, List<String> issues) {
         propagateSensitiveDerivations(model);
         // An n:m is materialised into its intermediate (link) entity FIRST, so every validator and
         // generator below sees an ordinary composition + association pair - the DSL holds exactly one
@@ -5640,6 +5647,7 @@ public final class IntentParser {
                 validateLanguageSeed(seed, byName.get(seed.getEntity()), issues);
             } else {
                 validateSeedStages(seed, byName.get(seed.getEntity()), nomenclatures, issues);
+                validateSeedRowKeys(seed, byName.get(seed.getEntity()), issues);
             }
         }
     }
@@ -5698,6 +5706,43 @@ public final class IntentParser {
         }
     }
 
+    /**
+     * A seed row's keys are the entity's own declared names: a field, or a to-one relation carrying the
+     * FK. The CSV generator emits a column per declared field plus one per referenced to-one relation
+     * and reads each cell by that exact name, so a key matching neither - a typo, a case slip
+     * ({@code contributionScheme} for the relation {@code ContributionScheme}), a collection relation
+     * that has no column - contributes nothing. That drop used to be silent, and when the missing
+     * column was a NOT NULL FK the import then skipped EVERY row, leaving an empty nomenclature behind
+     * a fully green pipeline. It is an error naming the key, the entity and the nearest declared name.
+     */
+    private static void validateSeedRowKeys(SeedIntent seed, EntityIntent entity, List<String> issues) {
+        if (entity == null) {
+            return; // the unknown entity is reported separately
+        }
+        Set<String> declared = new java.util.LinkedHashSet<>();
+        for (FieldIntent field : entity.getFields()) {
+            if (field.getName() != null) {
+                declared.add(field.getName());
+            }
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (relation.getName() != null && toOne) {
+                declared.add(relation.getName());
+            }
+        }
+        for (Map<String, Object> row : seed.getRows()) {
+            for (String key : row.keySet()) {
+                // `stage` is the lifecycle classification marker - metadata about the row, never a column.
+                if (declared.contains(key) || LifecycleStages.STAGE_KEY.equals(key)) {
+                    continue;
+                }
+                issues.add("seed [" + seed.getName() + "] row references [" + key + "] which is not a field or a to-one relation of ["
+                        + entity.getName() + "]" + UnknownKeyValidator.suggestion(key, declared));
+            }
+        }
+    }
+
     /** The field name a seed row keys the entity's primary key by ({@code id} by convention). */
     private static String seedIdField(EntityIntent entity) {
         for (FieldIntent field : entity.getFields()) {
@@ -5743,7 +5788,8 @@ public final class IntentParser {
             for (String key : row.keySet()) {
                 if (!allowed.contains(key)) {
                     issues.add("seed [" + seed.getName() + "] row references [" + key
-                            + "] which is not the id or a translatable (string/text) field of [" + entity.getName() + "]");
+                            + "] which is not the id or a translatable (string/text) field of [" + entity.getName() + "]"
+                            + UnknownKeyValidator.suggestion(key, allowed));
                 }
             }
         }
