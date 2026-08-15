@@ -78,10 +78,15 @@ public final class CrossModelSupport {
      *        the model was not resolved. A cross-model {@code generates} SOURCE needs it to render the
      *        {@code sourceStatus} completion hook, which reads the same fact off
      *        {@code RelationIntent.isEntityStatus()} in the local case
+     * @param translatedProperties the target's translatable property names (PascalCase) - the columns
+     *        its sibling <code>&lt;TABLE&gt;_LANG</code> table carries, empty when the target is not
+     *        {@code multilingual} or the model was not resolved. A consumer reading the target's
+     *        columns directly (a report SELECT) needs it to overlay the caller's language the way the
+     *        target's own repository does
      */
     public record TargetInfo(boolean resolved, String perspectiveName, String tableDataName, String keyField, String keyColumn,
             String labelField, String fkType, java.util.Set<String> propertyNames, String hierarchyProperty, String identityProperty,
-            java.util.Map<String, String> propertyWidgets, String statusProperty) {
+            java.util.Map<String, String> propertyWidgets, String statusProperty, java.util.Set<String> translatedProperties) {
     }
 
     @SuppressWarnings("unchecked")
@@ -316,12 +321,44 @@ public final class CrossModelSupport {
                 String hierarchyProperty = str(entity.get("hierarchyProperty"), null);
                 String identityProperty = str(entity.get("identityProperty"), null);
                 return new TargetInfo(true, perspective, tableDataName, keyField, keyColumn, labelField, fkType, propertyNames,
-                        hierarchyProperty, identityProperty, propertyWidgets, statusProperty);
+                        hierarchyProperty, identityProperty, propertyWidgets, statusProperty,
+                        translatedProperties("true".equals(String.valueOf(entity.get("multilingual"))), properties));
             }
         } catch (RuntimeException e) {
             LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", modelPath, targetEntity, e);
         }
         return null;
+    }
+
+    /**
+     * The properties a multilingual entity's sibling <code>&lt;TABLE&gt;_LANG</code> table carries a
+     * column for - mirroring exactly what the schema template emits there: the character-typed
+     * properties that are neither the primary key, nor a foreign key, nor calculated, nor an audit
+     * column. A consumer that reads the base table directly can only overlay a property that actually
+     * has a language column.
+     *
+     * @param multilingual whether the entity keeps per-language values at all
+     * @param properties the entity's model properties
+     * @return the translatable property names, empty when there is no language table
+     */
+    private static java.util.Set<String> translatedProperties(boolean multilingual, List<Map<String, Object>> properties) {
+        if (!multilingual || properties == null) {
+            return java.util.Set.of();
+        }
+        java.util.Set<String> translated = new java.util.LinkedHashSet<>();
+        for (Map<String, Object> property : properties) {
+            String name = str(property.get("name"), null);
+            String dataType = str(property.get("dataType"), "");
+            boolean character = "VARCHAR".equals(dataType) || "CHAR".equals(dataType) || "CLOB".equals(dataType);
+            boolean audit = !"NONE".equals(str(property.get("auditType"), "NONE"));
+            if (name == null || !character || audit || "true".equals(String.valueOf(property.get("dataPrimaryKey")))
+                    || "true".equals(String.valueOf(property.get("isCalculatedProperty")))
+                    || property.get("relationshipEntityName") != null) {
+                continue;
+            }
+            translated.add(name);
+        }
+        return translated;
     }
 
     /**
@@ -351,7 +388,8 @@ public final class CrossModelSupport {
     private static TargetInfo convention(String alias, String targetEntity) {
         String table = IntentNaming.upperSnake(alias) + "_" + IntentNaming.upperSnake(targetEntity);
         String keyColumn = IntentNaming.upperSnake(targetEntity) + "_ID";
-        return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null, null);
+        return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null, null,
+                java.util.Set.of());
     }
 
     /**

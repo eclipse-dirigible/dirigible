@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.sdk.db.Database;
+#if($query && $query.contains(":language"))
+import org.eclipse.dirigible.sdk.security.User;
+#end
 import org.eclipse.dirigible.sdk.utils.Json;
 
 /**
@@ -17,6 +20,12 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * {@code SELECT * FROM (QUERY) AS "REPORT_DATA" WHERE "<alias>" <op> :reportFilter<i>}. Columns are
  * validated against the report's column aliases and typed from the report metadata, operators
  * against a fixed whitelist - so the filter surface is exactly the visible table.
+ *
+ * {@code :language} is the one RESERVED named parameter: a query that reads a multilingual entity's
+ * translated columns joins its language table on it, and this repository binds it from the caller's
+ * Accept-Language - the same overlay the entity repositories apply. It is bound whenever the query
+ * uses it (so a hand-authored report can reach it too) and BEFORE the report's own parameters, so an
+ * explicitly declared {@code language} parameter still wins.
  *
  * Do not modify the content as it may be re-generated again.
  */
@@ -133,12 +142,33 @@ public class ${name}Repository {
 
     private static List<Map<String, Object>> baseParameters(Map<String, Object> filter) {
         List<Map<String, Object>> parameters = new ArrayList<>();
+#if($query && $query.contains(":language"))
+        parameters.add(parameter("language", "VARCHAR", language()));
+#end
 #foreach($parameter in $parameters)
         parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", "${parameter.initial}")));
 #end
         return parameters;
     }
 
+#if($query && $query.contains(":language"))
+    /**
+     * The caller's language for the translation overlay: the primary subtag of the Accept-Language
+     * request header, lower-cased (en-US -> en), which is the code the &lt;TABLE&gt;_LANG rows carry and
+     * what the entity repositories translate by. Blank outside a request scope - the query's LEFT JOINs
+     * then match no translation row and every overlaid column reads its base value.
+     */
+    private static String language() {
+        String language = User.getLanguage();
+        if (language == null || language.isBlank()) {
+            return "";
+        }
+        return language.trim()
+                       .split("[-_,;]")[0]
+                       .toLowerCase(java.util.Locale.ROOT);
+    }
+
+#end
     private static Map<String, Object> parameter(String name, String type, Object value) {
         Map<String, Object> parameter = new LinkedHashMap<>();
         parameter.put("name", name);
