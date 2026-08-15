@@ -18,6 +18,7 @@ import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
@@ -40,6 +41,7 @@ import static org.hamcrest.Matchers.containsString;
  * Server.java}, available since Java 11). Java is the platform's hard runtime requirement, so this
  * needs no extra prerequisite on the CI runner.
  */
+@Tag("slow")
 class LocalNativeAppLifecycleIT extends IntegrationTest {
 
     private static final long ASSERT_TIMEOUT_SECONDS = 30;

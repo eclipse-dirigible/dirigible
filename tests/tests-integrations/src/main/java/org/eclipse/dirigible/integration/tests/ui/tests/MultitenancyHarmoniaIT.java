@@ -13,6 +13,7 @@ import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.BrowserFactory;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -31,6 +32,7 @@ import java.util.List;
  * Java-entity CRUD is isolated per tenant - which {@code verifyTestProjectWithMultipleTenants}
  * asserts here.
  */
+@Tag("slow")
 public class MultitenancyHarmoniaIT extends MultitenancyUserInterfaceIntegrationTest {
 
     @Autowired

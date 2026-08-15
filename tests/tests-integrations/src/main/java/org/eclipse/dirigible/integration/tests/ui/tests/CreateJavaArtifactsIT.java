@@ -16,6 +16,7 @@ import static org.hamcrest.Matchers.not;
 import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -26,6 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * skeleton follows the strong-interface style. Content is read back over the workspace REST API
  * rather than the Monaco DOM, which keeps the assertions deterministic.
  */
+@Tag("slow")
 class CreateJavaArtifactsIT extends UserInterfaceIntegrationTest {
 
     private static final String PROJECT = "CreateJavaArtifactsIT";

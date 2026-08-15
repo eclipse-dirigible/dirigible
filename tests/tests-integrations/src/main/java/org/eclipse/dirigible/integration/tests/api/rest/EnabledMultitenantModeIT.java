@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.api.rest;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.annotation.DirtiesContext;
 
@@ -23,6 +24,7 @@ import org.springframework.test.annotation.DirtiesContext;
 // collision-free state), so the per-method context reset inherited from IntegrationTest would only
 // add boot time per test.
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@Tag("slow")
 public class EnabledMultitenantModeIT extends TenantDeterminationIT {
 
     @BeforeAll
