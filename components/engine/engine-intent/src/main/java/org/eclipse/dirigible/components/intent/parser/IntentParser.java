@@ -23,6 +23,8 @@ import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
+import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
+import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
@@ -38,6 +40,7 @@ import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
 import org.eclipse.dirigible.components.intent.model.PromptFieldIntent;
 import org.eclipse.dirigible.components.intent.model.InboundIntent;
+import org.eclipse.dirigible.components.intent.model.InboundSourceIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.GenerateChildIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -113,6 +116,11 @@ public final class IntentParser {
     private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "wait", "parallel", "end");
     /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
     private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
+    /**
+     * The process-step half of the glue event axis - each names a <code>{ process, step }</code> pair
+     * rather than an entity.
+     */
+    private static final Set<String> STEP_EVENT_KINDS = Set.of(StepEventSupport.ON_STEP_REACHED, StepEventSupport.ON_STEP_COMPLETED);
     /** Notification delivery channels supported today. */
     private static final Set<String> NOTIFICATION_CHANNELS = Set.of("email");
     /**
@@ -1265,27 +1273,70 @@ public final class IntentParser {
     }
 
     /**
-     * Each inbound webhook must have a unique name, a path, and a declared entity to create from the
-     * posted payload.
+     * Each inbound ingest must have a unique name, a declared entity to create from the payload, and
+     * exactly one arrival: an HTTP {@code path} or a {@code source} naming exactly one of a queue, a
+     * topic or a polled folder. Declaring both (or neither) is ambiguous about what gets generated, so
+     * it fails at parse rather than silently generating one of them.
      */
     private static void validateInbound(IntentModel model, Set<String> entityNames, List<String> issues) {
         Set<String> names = new HashSet<>();
         for (InboundIntent inbound : model.getInbound()) {
             String name = inbound.getName();
             if (name == null || name.isBlank()) {
-                issues.add("inbound webhook has no name");
+                issues.add("inbound has no name");
                 continue;
             }
             if (!names.add(name)) {
-                issues.add("duplicate inbound webhook [" + name + "]");
+                issues.add("duplicate inbound [" + name + "]");
             }
-            if (inbound.getPath() == null || inbound.getPath()
-                                                    .isBlank()) {
-                issues.add("inbound webhook [" + name + "] has no path");
+            String subject = "inbound [" + name + "]";
+            boolean http = inbound.getPath() != null && !inbound.getPath()
+                                                                .isBlank();
+            InboundSourceIntent source = inbound.getSource();
+            if (http && source != null) {
+                issues.add(subject + " declares both a path and a source - an ingest arrives one way");
+            } else if (!http && source == null) {
+                issues.add(subject + " has no path and no source (queue/topic/folder)");
+            } else if (source != null) {
+                validateInboundSource(source, subject, issues);
             }
             if (inbound.getCreate() == null || !entityNames.contains(inbound.getCreate())) {
-                issues.add("inbound webhook [" + name + "] creates unknown entity [" + inbound.getCreate() + "]");
+                issues.add(subject + " creates unknown entity [" + inbound.getCreate() + "]");
             }
+        }
+    }
+
+    /**
+     * A non-HTTP inbound source names exactly one arrival channel; a polled folder additionally needs
+     * the cron that polls it (there is no file-system watch - the drop folder is scanned on a
+     * schedule).
+     */
+    private static void validateInboundSource(InboundSourceIntent source, String subject, List<String> issues) {
+        int declared = 0;
+        boolean folder = source.getFolder() != null && !source.getFolder()
+                                                              .isBlank();
+        if (source.getQueue() != null && !source.getQueue()
+                                                .isBlank()) {
+            declared++;
+        }
+        if (source.getTopic() != null && !source.getTopic()
+                                                .isBlank()) {
+            declared++;
+        }
+        if (folder) {
+            declared++;
+        }
+        if (declared != 1) {
+            issues.add(subject + " source must declare exactly one of queue/topic/folder");
+            return;
+        }
+        boolean cron = source.getCron() != null && !source.getCron()
+                                                          .isBlank();
+        if (folder && !cron) {
+            issues.add(subject + " source folder [" + source.getFolder() + "] has no cron to poll it on");
+        }
+        if (!folder && cron) {
+            issues.add(subject + " source declares a cron, which only a folder source polls on");
         }
     }
 
@@ -1568,8 +1619,9 @@ public final class IntentParser {
     }
 
     /**
-     * Each integration must have a unique name, bind to exactly one entity lifecycle event of a
-     * declared entity, use a supported HTTP method, and name a target URL.
+     * Each integration must have a unique name, bind to exactly one event of the glue event axis (an
+     * entity lifecycle event or a process step event), use a supported HTTP method, and name a target
+     * URL.
      */
     private static void validateIntegrations(IntentModel model, Set<String> entityNames, List<String> issues) {
         Set<String> names = new HashSet<>();
@@ -1582,20 +1634,7 @@ public final class IntentParser {
             if (!names.add(name)) {
                 issues.add("duplicate integration [" + name + "]");
             }
-            int eventCount = 0;
-            for (String kind : EVENT_KINDS) {
-                Object target = integration.getEvent()
-                                           .get(kind);
-                if (target != null) {
-                    eventCount++;
-                    if (!entityNames.contains(target.toString())) {
-                        issues.add("integration [" + name + "] " + kind + " references unknown entity [" + target + "]");
-                    }
-                }
-            }
-            if (eventCount != 1) {
-                issues.add("integration [" + name + "] must declare exactly one of onCreate/onUpdate/onDelete");
-            }
+            validateEventBinding(integration.getEvent(), "integration [" + name + "]", entityNames, model, issues);
             String method = integration.getMethod();
             if (method != null && !method.isBlank() && !HTTP_METHODS.contains(method.trim()
                                                                                     .toUpperCase(Locale.ROOT))) {
@@ -1609,11 +1648,10 @@ public final class IntentParser {
     }
 
     /**
-     * Each notification must have a unique name, bind to exactly one entity lifecycle event
-     * ({@code onCreate}/{@code onUpdate}/{@code onDelete}) of a declared entity, use a supported
-     * channel, and name a recipient. The {@code when} guard and the {@code to} resolver path are
-     * carried through to the generator (a later increment), which validates the path against the entity
-     * at generation time.
+     * Each notification must have a unique name, bind to exactly one event of the glue event axis (an
+     * entity lifecycle event or a process step event), use a supported channel, and name a recipient.
+     * The {@code when} guard and the {@code to} resolver path are carried through to the generator,
+     * which validates the path against the entity at generation time.
      */
     private static void validateNotifications(IntentModel model, Set<String> entityNames, List<String> issues) {
         Set<String> names = new HashSet<>();
@@ -1626,31 +1664,87 @@ public final class IntentParser {
             if (!names.add(name)) {
                 issues.add("duplicate notification [" + name + "]");
             }
-            int eventCount = 0;
-            for (String kind : EVENT_KINDS) {
-                Object target = notification.getEvent()
-                                            .get(kind);
-                if (target != null) {
-                    eventCount++;
-                    if (!entityNames.contains(target.toString())) {
-                        issues.add("notification [" + name + "] " + kind + " references unknown entity [" + target + "]");
-                    }
-                }
-            }
-            if (eventCount != 1) {
-                issues.add("notification [" + name + "] must declare exactly one of onCreate/onUpdate/onDelete");
-            }
-            // The event entity is what an `attach: print` renders, so resolve it for the shared checks.
-            String eventEntity = null;
-            for (String kind : EVENT_KINDS) {
-                Object target = notification.getEvent()
-                                            .get(kind);
-                if (target != null) {
-                    eventEntity = target.toString();
-                }
-            }
-            validateNotifyBlock(notification, "notification [" + name + "]", eventEntity, model, false, issues);
+            String subject = "notification [" + name + "]";
+            // The event entity is what the recipient path resolves against and what an `attach: print`
+            // renders - for a step event it is the process's trigger entity, the record it runs on.
+            String eventEntity = validateEventBinding(notification.getEvent(), subject, entityNames, model, issues);
+            validateNotifyBlock(notification, subject, eventEntity, model, false, issues);
         }
+    }
+
+    /**
+     * The <b>event axis</b> of the declarative glue, shared by notifications and integrations: exactly
+     * one of an entity lifecycle event ({@code onCreate}/{@code onUpdate}/{@code onDelete}: an entity)
+     * or a process step event ({@code onStepReached}/{@code onStepCompleted}:
+     * <code>{ process, step }</code>).
+     *
+     * <p>
+     * A step event is delivered as a message about the process's <b>trigger entity</b> - the record the
+     * process runs on - so the whole action vocabulary (recipient paths, placeholders, forwarded
+     * bodies) reads exactly as it does for a lifecycle event. A process with no trigger has no such
+     * record, and a step kind that occupies no moment in the flow (a decision, a wait, the end) has no
+     * boundary to emit at: both are rejected here rather than generating glue nothing ever fires.
+     *
+     * @return the entity the bound event is about, or {@code null} when the binding does not resolve
+     */
+    private static String validateEventBinding(Map<String, Object> event, String subject, Set<String> entityNames, IntentModel model,
+            List<String> issues) {
+        String entity = null;
+        int declared = 0;
+        for (String kind : EVENT_KINDS) {
+            Object target = event.get(kind);
+            if (target != null) {
+                declared++;
+                entity = target.toString();
+                if (!entityNames.contains(entity)) {
+                    issues.add(subject + " " + kind + " references unknown entity [" + target + "]");
+                    entity = null;
+                }
+            }
+        }
+        for (String kind : STEP_EVENT_KINDS) {
+            if (event.get(kind) != null) {
+                declared++;
+                entity = validateStepEventBinding(event, kind, subject, model, issues);
+            }
+        }
+        if (declared != 1) {
+            issues.add(subject + " must declare exactly one of onCreate/onUpdate/onDelete/onStepReached/onStepCompleted");
+        }
+        return entity;
+    }
+
+    /** One {@code onStepReached}/{@code onStepCompleted} binding: the process, the step, the record. */
+    private static String validateStepEventBinding(Map<String, Object> event, String kind, String subject, IntentModel model,
+            List<String> issues) {
+        StepEventSupport.Binding binding = StepEventSupport.binding(event);
+        if (binding == null || !kind.equals(binding.kind())) {
+            issues.add(subject + " " + kind + " must name a process and a step, e.g. { process: <Process>, step: <step> }");
+            return null;
+        }
+        ProcessIntent process = StepEventSupport.process(model, binding.process());
+        if (process == null) {
+            issues.add(subject + " " + kind + " references unknown process [" + binding.process() + "]");
+            return null;
+        }
+        StepIntent step = StepEventSupport.step(process, binding.step());
+        if (step == null) {
+            issues.add(subject + " " + kind + " references unknown step [" + binding.step() + "] of process [" + binding.process() + "]");
+            return null;
+        }
+        String stepKind = step.getKind() == null ? "userTask" : step.getKind();
+        if (!StepEventSupport.EVENTABLE_STEP_KINDS.contains(stepKind)) {
+            issues.add(subject + " " + kind + " references step [" + binding.step() + "] of kind [" + stepKind
+                    + "] - only a userTask or a serviceTask has a moment to observe");
+            return null;
+        }
+        String triggerEntity = TriggerSupport.triggerEntity(process);
+        if (triggerEntity == null) {
+            issues.add(subject + " " + kind + " references process [" + binding.process()
+                    + "], which has no trigger entity - a step event is about the record the process runs on");
+            return null;
+        }
+        return triggerEntity;
     }
 
     /**

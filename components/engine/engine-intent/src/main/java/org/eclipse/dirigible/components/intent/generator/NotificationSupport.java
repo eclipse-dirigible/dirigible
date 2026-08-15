@@ -108,6 +108,9 @@ public final class NotificationSupport {
     }
 
     /**
+     * The <b>lifecycle</b> half of the event axis only - a notification bound to a process step
+     * ({@link StepEventSupport}) has no lifecycle kind and yields {@code null} here.
+     *
      * @param notification the notification
      * @return the lifecycle event kind it binds to, or {@code null}
      */
@@ -116,8 +119,12 @@ public final class NotificationSupport {
     }
 
     /**
+     * The <b>lifecycle</b> half of the event axis only - use
+     * {@link StepEventSupport#eventEntity(org.eclipse.dirigible.components.intent.model.IntentModel, Map)}
+     * to resolve a binding of either axis (a step event is about the process's trigger entity).
+     *
      * @param notification the notification
-     * @return the entity named by the bound event, or {@code null}
+     * @return the entity named by the bound lifecycle event, or {@code null}
      */
     public static String eventEntity(NotificationIntent notification) {
         return EventBinding.entity(notification.getEvent());

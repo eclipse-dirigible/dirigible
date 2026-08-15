@@ -27,6 +27,7 @@ import org.eclipse.dirigible.components.intent.model.GenerateChildIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
 import org.eclipse.dirigible.components.intent.model.InboundIntent;
+import org.eclipse.dirigible.components.intent.model.InboundSourceIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
@@ -100,6 +101,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> schedules = buildSchedules(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings);
         List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
+        List<Map<String, Object>> inboundMessages = buildInboundMessages(model, byName, compositionParents, settings);
+        List<Map<String, Object>> inboundFiles = buildInboundFiles(model, byName, compositionParents, settings);
+        List<Map<String, Object>> stepEvents = buildStepEvents(model, compositionParents, settings);
         List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> expansions = buildExpansions(model, byName, compositionParents, settings);
         List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
@@ -117,10 +121,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && assignees.isEmpty() && timerLoaders.isEmpty()
                 && waits.isEmpty() && aborts.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty()
-                && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty() && expansions.isEmpty()
-                && settlements.isEmpty() && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty()
-                && snapshots.isEmpty() && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty()
-                && resolves.isEmpty()) {
+                && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && inboundMessages.isEmpty() && inboundFiles.isEmpty()
+                && stepEvents.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty()
+                && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty() && numbering.isEmpty()
+                && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty() && resolves.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -139,6 +143,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("schedules", schedules);
         glue.put("integrations", integrations);
         glue.put("inbound", inbound);
+        glue.put("inboundMessages", inboundMessages);
+        glue.put("inboundFiles", inboundFiles);
+        // One emitter per observed process-step moment, deduplicated across every notification and
+        // integration bound to it: the delegate the BPMN generator inserts at that boundary publishes
+        // the trigger entity on the step topic those consumers already bind to.
+        glue.put("stepEvents", stepEvents);
         glue.put("rollups", rollups);
         glue.put("expansions", expansions);
         glue.put("settlements", settlements);
@@ -408,7 +418,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                               .isBlank()) {
                 continue;
             }
-            String entity = NotificationSupport.eventEntity(notification);
+            // Either axis: the entity a lifecycle event names, or the trigger entity of the process a
+            // step event names - the record the message is about, and what every path resolves against.
+            String entity = StepEventSupport.eventEntity(model, notification.getEvent());
             if (entity == null || !byName.containsKey(entity)) {
                 continue;
             }
@@ -436,7 +448,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // NOT named keyProperty: that key marks a TRIGGER entry (its process variable), and the
             // engine IT keys "no trigger was generated" on trigger-only keys being absent.
             entry.put("attachKeyProperty", IntentEntities.keyFieldName(byName.get(entity)));
-            entry.put("topicSuffix", NotificationSupport.topicSuffix(NotificationSupport.eventKind(notification)));
+            entry.put("topicSuffix", StepEventSupport.topicSuffix(notification.getEvent()));
             entry.put("relationLoads", relationLoads(plan));
             entry.put("guardExpression", plan.guardExpression());
             entry.put("toExpression", plan.toExpression());
@@ -1182,6 +1194,32 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     static List<Map<String, Object>> buildNotificationsForTest(IntentModel model) {
         return buildNotifications(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
                 null);
+    }
+
+    /** Test hook: build the {@code integrations} glue collection without a repository. */
+    static List<Map<String, Object>> buildIntegrationsForTest(IntentModel model) {
+        return buildIntegrations(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
+    }
+
+    /** Test hook: build the {@code stepEvents} glue collection without a repository. */
+    static List<Map<String, Object>> buildStepEventsForTest(IntentModel model) {
+        return buildStepEvents(model, IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
+    }
+
+    /** Test hook: build the {@code inboundMessages} glue collection without a repository. */
+    static List<Map<String, Object>> buildInboundMessagesForTest(IntentModel model) {
+        return buildInboundMessages(model, IntentEntities.byName(model), IntentEntities.compositionParents(model),
+                IntentSettings.parse("{}"));
+    }
+
+    /** Test hook: build the {@code inboundFiles} glue collection without a repository. */
+    static List<Map<String, Object>> buildInboundFilesForTest(IntentModel model) {
+        return buildInboundFiles(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
+    }
+
+    /** Test hook: build the {@code inbound} (HTTP webhook) glue collection without a repository. */
+    static List<Map<String, Object>> buildInboundForTest(IntentModel model) {
+        return buildInbound(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
     }
 
     /**
@@ -2589,27 +2627,123 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             Map<String, String> compositionParents, IntentSettings settings) {
         List<Map<String, Object>> inbound = new ArrayList<>();
         for (InboundIntent webhook : model.getInbound()) {
-            if (webhook.getName() == null || webhook.getName()
-                                                    .isBlank()) {
+            if (webhook.getSource() != null) {
+                continue; // a non-HTTP source is its own collection (its own generated handler shape)
+            }
+            Map<String, Object> entry = inboundEntry(webhook, model, byName, compositionParents, settings, "controller");
+            if (entry == null) {
                 continue;
             }
-            String entity = webhook.getCreate();
-            if (entity == null || !byName.containsKey(entity)) {
-                continue;
-            }
-            if (!settings.shouldGenerate("inbound", webhook.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing controller for inbound webhook [{}] (not generated)", webhook.getName());
-                continue;
-            }
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("name", webhook.getName());
-            entry.put("className", IntentNaming.pascalCase(webhook.getName()));
-            entry.put("entity", entity);
-            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
             entry.put("path", webhook.getPath());
             inbound.add(entry);
         }
         return inbound;
+    }
+
+    /**
+     * The queue / topic ingests: one self-describing {@code MessageHandler} each, consuming the JSON
+     * record off the declared destination and saving it exactly as the webhook does with a posted body.
+     */
+    private static List<Map<String, Object>> buildInboundMessages(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings) {
+        List<Map<String, Object>> messages = new ArrayList<>();
+        for (InboundIntent ingest : model.getInbound()) {
+            InboundSourceIntent source = ingest.getSource();
+            boolean queue = source != null && source.getQueue() != null && !source.getQueue()
+                                                                                  .isBlank();
+            boolean topic = source != null && source.getTopic() != null && !source.getTopic()
+                                                                                  .isBlank();
+            if (!queue && !topic) {
+                continue;
+            }
+            Map<String, Object> entry = inboundEntry(ingest, model, byName, compositionParents, settings, "consumer");
+            if (entry == null) {
+                continue;
+            }
+            entry.put("destination", queue ? source.getQueue() : source.getTopic());
+            entry.put("listenerKind", queue ? "QUEUE" : "TOPIC");
+            messages.add(entry);
+        }
+        return messages;
+    }
+
+    /**
+     * The drop-folder ingests: one {@code JobHandler} each, polling the folder on the declared cron and
+     * saving every record of every file that arrived.
+     */
+    private static List<Map<String, Object>> buildInboundFiles(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings) {
+        List<Map<String, Object>> files = new ArrayList<>();
+        for (InboundIntent ingest : model.getInbound()) {
+            InboundSourceIntent source = ingest.getSource();
+            if (source == null || source.getFolder() == null || source.getFolder()
+                                                                      .isBlank()) {
+                continue;
+            }
+            Map<String, Object> entry = inboundEntry(ingest, model, byName, compositionParents, settings, "job");
+            if (entry == null) {
+                continue;
+            }
+            entry.put("folder", source.getFolder());
+            entry.put("cron", source.getCron());
+            files.add(entry);
+        }
+        return files;
+    }
+
+    /**
+     * The facts every inbound ingest shares, whatever it arrives on - or {@code null} when the entry is
+     * unusable (no name, an unknown entity) or the developer opted out of generating it.
+     */
+    private static Map<String, Object> inboundEntry(InboundIntent ingest, IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings, String handlerNoun) {
+        if (ingest.getName() == null || ingest.getName()
+                                              .isBlank()) {
+            return null;
+        }
+        String entity = ingest.getCreate();
+        if (entity == null || !byName.containsKey(entity)) {
+            return null;
+        }
+        if (!settings.shouldGenerate("inbound", ingest.getName())) {
+            LOGGER.info("Settings opt-out: keeping existing {} for inbound [{}] (not generated)", handlerNoun, ingest.getName());
+            return null;
+        }
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("name", ingest.getName());
+        entry.put("className", IntentNaming.pascalCase(ingest.getName()));
+        entry.put("entity", entity);
+        entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
+        return entry;
+    }
+
+    /**
+     * The process-step event emitters: the {@code JavaDelegate} the BPMN generator inserts at each
+     * observed step boundary to publish the process's trigger entity on the step topic. Deduplicated
+     * per (process, step, moment) by {@link StepEventSupport}, so ten notifications on the same moment
+     * still publish once.
+     */
+    private static List<Map<String, Object>> buildStepEvents(IntentModel model, Map<String, String> compositionParents,
+            IntentSettings settings) {
+        List<Map<String, Object>> stepEvents = new ArrayList<>();
+        for (StepEventSupport.Emitter emitter : StepEventSupport.emitters(model)) {
+            if (!settings.shouldGenerate("stepEvents", emitter.className())) {
+                LOGGER.info("Settings opt-out: keeping existing delegate for step event [{}] (not generated)", emitter.className());
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", emitter.className());
+            entry.put("className", emitter.className());
+            entry.put("process", emitter.process());
+            entry.put("step", emitter.step());
+            entry.put("entity", emitter.entity());
+            entry.put("perspective", IntentEntities.resolvePerspective(emitter.entity(), compositionParents, model));
+            entry.put("keyProperty", emitter.keyProperty());
+            entry.put("keyAccessor", emitter.keyAccessor());
+            entry.put("topicSuffix", StepEventSupport.topicSuffix(emitter.process(), emitter.step(), emitter.kind()));
+            stepEvents.add(entry);
+        }
+        return stepEvents;
     }
 
     private static List<Map<String, Object>> buildIntegrations(IntentModel model, Map<String, EntityIntent> byName,
@@ -2620,7 +2754,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                             .isBlank()) {
                 continue;
             }
-            String entity = EventBinding.entity(integration.getEvent());
+            // Either axis - see the notification builder: a step event forwards the trigger entity.
+            String entity = StepEventSupport.eventEntity(model, integration.getEvent());
             if (entity == null || !byName.containsKey(entity)) {
                 continue;
             }
@@ -2633,7 +2768,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("className", IntentNaming.pascalCase(integration.getName()));
             entry.put("entity", entity);
             entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
-            entry.put("topicSuffix", EventBinding.topicSuffix(EventBinding.kind(integration.getEvent())));
+            entry.put("topicSuffix", StepEventSupport.topicSuffix(integration.getEvent()));
             entry.put("clientMethod", IntegrationSupport.clientMethod(integration.getMethod()));
             entry.put("hasBody", IntegrationSupport.hasBody(integration.getMethod()));
             entry.put("urlExpression", IntegrationSupport.urlExpression(integration.getUrl()));

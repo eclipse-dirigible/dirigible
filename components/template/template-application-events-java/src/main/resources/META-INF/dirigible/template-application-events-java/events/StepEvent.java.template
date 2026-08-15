@@ -1,0 +1,47 @@
+package gen.events.${javaGenFolderName};
+
+import org.eclipse.dirigible.sdk.bpm.Process;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.messaging.Producer;
+import org.eclipse.dirigible.sdk.utils.Json;
+import org.flowable.engine.delegate.DelegateExecution;
+import org.flowable.engine.delegate.JavaDelegate;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+
+/**
+ * Publishes the ${process} process reaching / completing the ${step} step, as an event about the
+ * ${entity} the process runs on.
+ *
+ * Generated from the intent .glue file - do not edit; it is re-generated with the application. Runs
+ * as a BPMN service task (flowable:delegateExpression="\${JavaTask}") inserted at the step's
+ * boundary. Under the clear-D id-only context the record itself is not in the process context, so it
+ * is loaded here at the latest moment and published on the step topic - the entity's own topic plus
+ * a step suffix - which the notification / integration listeners bound to this moment consume
+ * exactly as they consume a lifecycle event. The send is deferred to after commit, so a consumer
+ * that re-loads the record observes the writes of this same BPMN chain (a writer persisting the
+ * reviewer's edits, a setter changing the status) instead of racing them.
+ */
+public class ${className} implements JavaDelegate {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}");
+
+    private final ${entity}Repository repository = new ${entity}Repository();
+
+    @Override
+    public void execute(DelegateExecution execution) {
+        Object key = execution.getVariable("${keyProperty}");
+        if (!(key instanceof Number)) {
+            return;
+        }
+        ${entity}Entity entity = repository.findById(((Number) key).${keyAccessor}());
+        if (entity == null) {
+            LOG.warn("Step event ${className}: ${entity} [{}] is gone - nothing published", key);
+            return;
+        }
+        String payload = Json.stringify(entity);
+        Process.executeAfterCommit(() -> Producer.sendToTopic("${projectName}-${perspective}-${entity}${topicSuffix}", payload));
+    }
+}

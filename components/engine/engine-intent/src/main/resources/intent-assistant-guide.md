@@ -1717,20 +1717,21 @@ seeds:
 
 ### notifications - email on a data change
 
-**Use when:** someone should be **emailed** when a record is created, updated, or deleted.
+**Use when:** someone should be **emailed** when a record is created, updated, or deleted - or when
+a process reaches or completes a step (see "the event axis" below).
 
 ```yaml
 notifications:
   - name: welcomeMember
-    event: { onCreate: Member }          # exactly one of onCreate / onUpdate / onDelete
+    event: { onCreate: Member }          # one event of the event axis (see below)
     channel: email
     to: email                            # a field, a one-hop relation.field, or a literal address
     subject: "Welcome to the library"
     body: "Hi, your membership is active."
 ```
 
-**Rules:** exactly one event referencing a declared entity; `channel` is `email`; `to` follows the
-recipient rule (literal / field / one-hop `relation.field`).
+**Rules:** exactly one event of the event axis; `channel` is `email`; `to` follows the recipient rule
+(literal / field / one-hop `relation.field`).
 
 ### send a document by e-mail - `attach: print` on any notify block
 
@@ -1983,25 +1984,78 @@ payment gateway, a webhook).
 ```yaml
 integrations:
   - name: pushNewMember
-    event: { onCreate: Member }          # exactly one of onCreate / onUpdate / onDelete
+    event: { onCreate: Member }          # one event of the event axis (see below)
     method: POST                         # GET / POST / PUT / PATCH / DELETE
     url: "https://api.example.com/members"
 ```
 
-**Rules:** exactly one event referencing a declared entity; `method` from the allowed list; `url`
-required.
+**Rules:** exactly one event of the event axis; `method` from the allowed list; `url` required.
 
-### inbound - webhook that creates records
+### the event axis - what a notification / integration binds to
 
-**Use when:** an **external system should POST data in** to create records (a lead form, an IoT
-event, a partner callback).
+**Both** `notifications` and `integrations` declare **exactly one** `event:`, either
+
+- an **entity lifecycle** event - `{ onCreate: <Entity> }` / `{ onUpdate: ... }` / `{ onDelete: ... }`;
+- a **process step** event - `{ onStepReached: { process: <Process>, step: <step> } }` or
+  `{ onStepCompleted: { process: <Process>, step: <step> } }`.
+
+A step event fires when the running process arrives at that step (`onStepReached` - e.g. a user task
+has just become available in the inbox) or when it has just finished it (`onStepCompleted` - after
+the reviewer's edits and any status set have been persisted). It is delivered as a message about the
+**record the process runs on** - the process's `trigger` entity - so the action reads exactly as it
+does for a lifecycle event: the same `to:` recipient paths, the same `{placeholder}` interpolation,
+the same `when:` guard, the same forwarded body.
+
+```yaml
+processes:
+  - name: LoanApproval
+    trigger: { onCreate: Loan }
+    steps:
+      - { name: librarianReview, kind: userTask, args: { assignee: librarian, form: ApproveLoan } }
+      - { name: activate, kind: serviceTask, args: { setField: status, value: ACTIVE } }
+
+notifications:
+  # "when the review task becomes ready, tell the member's branch manager"
+  - name: reviewPending
+    event: { onStepReached: { process: LoanApproval, step: librarianReview } }
+    to: member.branch.managerEmail
+    subject: "Loan {id} is waiting for review"
+    body: "A librarian needs to approve it."
+
+integrations:
+  # "when the loan is activated, tell the partner system"
+  - name: pushActivation
+    event: { onStepCompleted: { process: LoanApproval, step: activate } }
+    method: POST
+    url: "@config:PARTNER_URL"
+```
+
+**Rules for a step event:** the process must exist and declare a `trigger` (that is the record the
+event is about); the step must exist and be a `userTask` or a `serviceTask` (a decision, a wait or
+an end has no moment to observe). Any number of notifications and integrations may bind to the same
+step moment - the record is published once.
+
+### inbound - an external system creates records
+
+**Use when:** something **outside the app hands us a record**: a partner POSTs it, a message arrives
+on a queue/topic, or a file is dropped into a folder. The payload is JSON shaped like the entity and
+is saved through its repository, so validations and the create event fire as for any other write.
 
 ```yaml
 inbound:
+  # HTTP: an endpoint to POST to (a lead form, an IoT event, a partner callback)
   - { name: leadHook, path: /webhooks/lead, create: Lead }
+  # message: every record arriving on a queue (point-to-point) or a topic (broadcast)
+  - { name: leadQueue, source: { queue: leads.inbound }, create: Lead }
+  - { name: leadFeed,  source: { topic: crm.leads }, create: Lead }
+  # file: every file dropped into a folder, polled on the cron (one record or an array per file);
+  # each file is then moved into <folder>/processed or <folder>/failed
+  - { name: leadDrop, source: { folder: /data/inbox/leads, cron: "0 */5 * * * ?" }, create: Lead }
 ```
 
-**Rules:** unique name, a `path`, and `create` must be a declared entity.
+**Rules:** unique name, `create` must be a declared entity, and **exactly one arrival**: either a
+`path` or a `source` naming exactly one of `queue` / `topic` / `folder`. A `folder` source needs a
+`cron` (there is no file-system watch - the folder is polled); the other sources take none.
 
 ### rollups - maintain a count on a parent
 
@@ -2195,7 +2249,8 @@ name.
 - "every day/hour, check X and notify" -> **schedules** (`notify`)
 - "on a schedule / every month, create a Y for each X / recurring invoices / auto-generate timesheets" -> **schedules** (`generate`)
 - "call an external API when X changes" -> **integrations**
-- "let an external system create X" -> **inbound**
+- "notify / call out when a task becomes available, or when a step is done" -> **notifications / integrations** with `event: { onStepReached | onStepCompleted: { process, step } }`
+- "let an external system create X" -> **inbound** (`path` for HTTP, `source: { queue | topic }` for a message, `source: { folder, cron }` for dropped files)
 - "keep a running count of children on the parent" -> **rollups**
 - "expand a from-to span into day/week/month child rows / loan installments / vacation day items" -> **expansions**
 - "compute days between two dates on the form (working days / months)" -> **calculated field with a date function**

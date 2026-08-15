@@ -1,0 +1,129 @@
+package gen.events.${javaGenFolderName};
+
+import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.job.JobHandler;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+
+/**
+ * Inbound ${name}: ingest ${entity} records from the files dropped into ${folder}.
+ *
+ * Generated from the intent inbound block - do not edit; it is re-generated with the application.
+ * There is no file-system watch, so the folder is polled on the declared cron (${cron}); a file
+ * still being written is left for the next tick (it is only read once it has been untouched for
+ * STABLE_MILLIS). A file holds either one JSON record or an array of them, and each is saved through
+ * the entity's repository - exactly as the webhook shape saves a posted body, so validations,
+ * translations and the create event all fire as they do for any other write. Every file is then
+ * moved out of the drop folder, into "processed" or into "failed", so the same records are never
+ * ingested twice and a rejected file stays inspectable.
+ *
+ * Self-describing JobHandler (strong-interface style): the schedule comes from the interface, not a
+ * &#64;Scheduled annotation.
+ */
+@Component("${javaGenFolderName}_${className}FileImport")
+public class ${className}FileImport implements JobHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}FileImport");
+
+    /** How long a file must have been untouched before it is read - a file still being copied in is not complete. */
+    private static final long STABLE_MILLIS = 5000L;
+
+    private static final Path FOLDER = Paths.get("${folder}");
+    private static final Path PROCESSED = FOLDER.resolve("processed");
+    private static final Path FAILED = FOLDER.resolve("failed");
+
+    @Override
+    public String cron() {
+        return "${cron}";
+    }
+
+    @Override
+    public void run() {
+        if (!Files.isDirectory(FOLDER)) {
+            LOG.debug("Inbound ${name}: the drop folder [{}] does not exist - nothing to ingest", FOLDER);
+            return;
+        }
+        try (DirectoryStream<Path> dropped = Files.newDirectoryStream(FOLDER)) {
+            for (Path file : dropped) {
+                if (readable(file)) {
+                    ingest(file);
+                }
+            }
+        } catch (IOException ex) {
+            LOG.error("Inbound ${name}: the drop folder [{}] could not be read", FOLDER, ex);
+        }
+    }
+
+    private boolean readable(Path file) {
+        try {
+            return Files.isRegularFile(file) && System.currentTimeMillis() - Files.getLastModifiedTime(file)
+                                                                                 .toMillis() >= STABLE_MILLIS;
+        } catch (IOException ex) {
+            LOG.warn("Inbound ${name}: [{}] could not be inspected - left for the next tick", file, ex);
+            return false;
+        }
+    }
+
+    private void ingest(Path file) {
+        try {
+            int saved = save(Files.readString(file));
+            move(file, PROCESSED);
+            LOG.info("Inbound ${name}: ingested [{}] ${entity} record(s) from [{}]", saved, file.getFileName());
+        } catch (Exception ex) {
+            LOG.error("Inbound ${name}: [{}] could not be ingested - moved to [{}]", file.getFileName(), FAILED, ex);
+            move(file, FAILED);
+        }
+    }
+
+    /** One record or an array of them - a drop file is as likely to be a batch as a single message. */
+    private int save(String content) {
+        String payload = content == null ? "" : content.trim();
+        ${entity}Repository repository = new ${entity}Repository();
+        if (payload.startsWith("[")) {
+            ${entity}Entity[] batch = Json.parse(payload, ${entity}Entity[].class);
+            if (batch == null) {
+                throw new IllegalArgumentException("the file holds no readable ${entity} records");
+            }
+            for (${entity}Entity entity : batch) {
+                repository.save(entity);
+            }
+            return batch.length;
+        }
+        ${entity}Entity entity = Json.parse(payload, ${entity}Entity.class);
+        if (entity == null) {
+            throw new IllegalArgumentException("the file holds no readable ${entity} record");
+        }
+        repository.save(entity);
+        return 1;
+    }
+
+    /**
+     * Move the file out of the drop folder, keeping its name unless that would overwrite an earlier
+     * one - the second file of a name is kept next to the first, never on top of it.
+     */
+    private void move(Path file, Path target) {
+        try {
+            Files.createDirectories(target);
+            Path destination = target.resolve(file.getFileName());
+            if (Files.exists(destination)) {
+                destination = target.resolve(System.currentTimeMillis() + "-" + file.getFileName());
+            }
+            Files.move(file, destination, StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException ex) {
+            // The file stays in the drop folder; the next tick would ingest it again, so say so loudly.
+            LOG.error("Inbound ${name}: [{}] was ingested but could not be moved to [{}] - it will be read again", file.getFileName(),
+                    target, ex);
+        }
+    }
+}

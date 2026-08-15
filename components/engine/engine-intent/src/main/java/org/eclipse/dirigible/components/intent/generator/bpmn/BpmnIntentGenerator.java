@@ -40,6 +40,7 @@ import org.eclipse.dirigible.components.intent.generator.WriterSupport;
 import org.eclipse.dirigible.components.intent.generator.WriterSupport.Writer;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
+import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
@@ -145,6 +146,10 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // inserted before it that re-reads the trigger entity's date field at task entry and publishes
         // the process variable the boundary timer's timeDate binds to.
         List<TimerLoad> allTimerLoads = ProcessTimerSupport.timerLoads(model);
+        // Step events: a notification/integration bound to onStepReached/onStepCompleted gets a
+        // JavaDelegate inserted at that step's boundary which publishes the trigger record on the step
+        // topic those consumers bind to. Deduplicated per moment, so N consumers still publish once.
+        List<StepEventSupport.Emitter> allStepEvents = StepEventSupport.emitters(model);
         // Writers: a user task with editable fields gets a JavaDelegate (gen.events.<Process><Task>Write)
         // inserted after it to persist the reviewer's edits. Index by process+task so render() can place
         // it right after the matching user task.
@@ -210,6 +215,13 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     processFieldLoads.add(load);
                 }
             }
+            List<StepEventSupport.Emitter> processStepEvents = new ArrayList<>();
+            for (StepEventSupport.Emitter emitter : allStepEvents) {
+                if (process.getName()
+                           .equals(emitter.process())) {
+                    processStepEvents.add(emitter);
+                }
+            }
             List<TimerLoad> processTimerLoads = new ArrayList<>();
             for (TimerLoad load : allTimerLoads) {
                 if (process.getName()
@@ -222,8 +234,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             Map<String, String> setterByTask = stripProcessPrefix(setterByProcessTask, taskPrefix);
             context.writeModelFile(fileName,
                     render(process, rolesByLowerName, context.getProjectName(), IntentNaming.eventsPackage(context), processResolvers,
-                            processFieldLoads, processTimerLoads, ownFieldPascalCase(process, byName), candidateGroupsExtra, writerByTask,
-                            setterByTask));
+                            processFieldLoads, processTimerLoads, processStepEvents, ownFieldPascalCase(process, byName),
+                            candidateGroupsExtra, writerByTask, setterByTask));
         }
     }
 
@@ -290,8 +302,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, String eventsPackage,
-            List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, Map<String, String> ownFieldPascalCase,
-            String candidateGroupsExtra, Map<String, String> writerByTask, Map<String, String> setterByTask) {
+            List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, List<StepEventSupport.Emitter> stepEvents,
+            Map<String, String> ownFieldPascalCase, String candidateGroupsExtra, Map<String, String> writerByTask,
+            Map<String, String> setterByTask) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
         // mutating the shared model (the glue generator runs after this one and must still see the
@@ -304,7 +317,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // walk that follows the authored routing.
         ProcessParallelSupport.Regions regions = ProcessParallelSupport.regions(process.getSteps());
         AugmentedSteps augmented = augmentWithResolvers(process.getName(), process.getSteps(), eventsPackage, resolvers, fieldLoads,
-                timerLoads, ownFieldPascalCase, writerByTask, setterByTask);
+                timerLoads, stepEvents, ownFieldPascalCase, writerByTask, setterByTask);
         List<StepIntent> steps = augmented.steps();
         // abortOn: a -transitioned into a listed status cancels the in-flight instance via an
         // interrupting message event subprocess (below). Its optional `then` cleanup is an abort-only
@@ -548,8 +561,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * Original steps otherwise pass through untouched.
      */
     private static AugmentedSteps augmentWithResolvers(String processName, List<StepIntent> steps, String eventsPackage,
-            List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, Map<String, String> ownFieldPascalCase,
-            Map<String, String> writerByTask, Map<String, String> setterByTask) {
+            List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, List<StepEventSupport.Emitter> stepEvents,
+            Map<String, String> ownFieldPascalCase, Map<String, String> writerByTask, Map<String, String> setterByTask) {
         List<StepIntent> result = new ArrayList<>(steps.size());
         Map<String, List<String>> nodesByStep = new LinkedHashMap<>();
         for (StepIntent step : steps) {
@@ -587,16 +600,32 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 String handler = ProcessAssigneeSupport.handler(processName, step.getName());
                 result.add(javaServiceTaskStep(IntentNaming.camelCase(handler), eventsPackage + "." + handler));
             }
+            for (StepEventSupport.Emitter emitter : stepEvents) {
+                if (!emitter.completed() && emitter.step()
+                                                   .equals(step.getName())) {
+                    // onStepReached: publish the trigger record the instant the execution arrives here -
+                    // last of the before-group, so it sits as close to the step as the flow allows.
+                    result.add(javaServiceTaskStep(IntentNaming.camelCase(emitter.className()), eventsPackage + "." + emitter.className()));
+                }
+            }
             boolean userTask = "userTask".equals(step.getKind()) && step.getName() != null;
-            // Delegates that run right after a user task, in order: the writer (persist the reviewer's
-            // edits) then the setter (set a relation FK). Each falls through linearly into the next, and
-            // the original `next` is carried onto the LAST one so downstream routing can't be bypassed.
-            List<String> afterTask = new ArrayList<>(2);
+            // Delegates that run right after a step, in order: the writer (persist the reviewer's
+            // edits), the setter (set a relation FK) - both user-task only - then the step-completed
+            // event emitter, LAST so it publishes a record that already carries those writes. Each falls
+            // through linearly into the next, and the original `next` is carried onto the LAST one so
+            // downstream routing can't be bypassed.
+            List<String> afterTask = new ArrayList<>(3);
             if (userTask && writerByTask.get(step.getName()) != null) {
                 afterTask.add(writerByTask.get(step.getName()));
             }
             if (userTask && setterByTask.get(step.getName()) != null) {
                 afterTask.add(setterByTask.get(step.getName()));
+            }
+            for (StepEventSupport.Emitter emitter : stepEvents) {
+                if (emitter.completed() && emitter.step()
+                                                  .equals(step.getName())) {
+                    afterTask.add(emitter.className());
+                }
             }
             if (!afterTask.isEmpty()) {
                 String next = stringArg(step, "next");

@@ -102,6 +102,27 @@ export function getTemplate(parameters) {
                 collection: "inbound"
             },
             {
+                location: "/template-application-events-java/events/InboundMessage.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}Consumer.java",
+                engine: "velocity",
+                collection: "inboundMessages"
+            },
+            {
+                location: "/template-application-events-java/events/InboundFile.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}FileImport.java",
+                engine: "velocity",
+                collection: "inboundFiles"
+            },
+            {
+                location: "/template-application-events-java/events/StepEvent.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}.java",
+                engine: "velocity",
+                collection: "stepEvents"
+            },
+            {
                 location: "/template-application-events-java/events/Rollup.java.template",
                 action: "generate",
                 rename: "gen/events/{{javaGenFolderName}}/{{className}}.java",

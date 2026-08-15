@@ -41,12 +41,14 @@ public final class EventBinding {
 
     /**
      * @param event the binding map (may be {@code null})
-     * @return the entity named by the bound event, or {@code null}
+     * @return the entity named by the bound event, or {@code null} - including when the binding is not
+     *         an entity lifecycle one at all (a {@code onStepReached}/{@code onStepCompleted} binding
+     *         names a process step, not an entity; see {@link StepEventSupport})
      */
     public static String entity(Map<String, Object> event) {
         String kind = kind(event);
         Object target = kind == null || event == null ? null : event.get(kind);
-        return target == null ? null : target.toString();
+        return target instanceof Map<?, ?> || target == null ? null : target.toString();
     }
 
     /**
