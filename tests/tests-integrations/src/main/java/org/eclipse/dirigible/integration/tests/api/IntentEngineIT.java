@@ -406,6 +406,45 @@ class IntentEngineIT extends IntegrationTest {
                                                          "process [Flow] decision [decide] `then` references unknown step [missingStep]")));
     }
 
+    /**
+     * A key the intent does not declare is dropped by the typed mapping without a sound, so the whole
+     * pipeline used to report success over an authored promise that was simply absent (#6541). Both
+     * shapes are refused: an invented key on a typed node, and a seed row key matching no field or
+     * to-one relation - each naming the nearest declared name.
+     */
+    @Test
+    void parse_rejects_an_unknown_key_and_an_unknown_seed_row_key() {
+        String yaml = """
+                name: contributions
+                entities:
+                  - name: Scheme
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Rate
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: percent, type: decimal }
+                    relations:
+                      - { name: Scheme, kind: manyToOne, to: Scheme, requird: true }
+                seeds:
+                  - name: rates
+                    entity: Rate
+                    rows:
+                      - { id: 1, percent: 13.78, scheme: 1 }
+                """;
+        restAssuredExecutor.execute(() -> given().contentType("text/plain")
+                                                 .body(yaml)
+                                                 .when()
+                                                 .post(PARSE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("issues", hasItems(
+                                                         "unknown key [requird] at [entities[Rate].relations[Scheme]] - did you mean [required]?",
+                                                         "seed [rates] row references [scheme] which is not a field or a to-one relation of [Rate] - did you mean [Scheme]? (names are case-sensitive)")));
+    }
+
     @Test
     void parse_rejects_a_trigger_to_an_unknown_entity() {
         String yaml = """
