@@ -826,6 +826,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("itemFieldAssignments", new ArrayList<>());
                 e.put("itemLines", new ArrayList<>());
             }
+            e.put("hasPrompt", g.hasPrompt());
+            e.put("promptFields", promptFields(g, crossModel ? null : byName.get(g.getTo())));
             out.add(e);
         }
         return out;
@@ -889,6 +891,51 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     + "] as its value) - it is the at-most-once guard against an event redelivery"));
         }
         e.put("backRefProperty", backReference);
+    }
+
+    /**
+     * The {@code prompt:} inputs of a generates action (issue #6685), pre-rendered for the template
+     * (the expansions convention - the template stays shape-only): per prompted TARGET property its
+     * PascalCase name, the required flag, and the Java expression converting the posted JSON value (an
+     * {@code Object raw} local - Gson delivers numbers as Double, everything else as String/Boolean) to
+     * the generated entity field's Java type. A to-one relation is its integer FK. The parser has
+     * already constrained prompts to a local target and rejected unsupported field types.
+     */
+    private static List<Map<String, Object>> promptFields(GeneratesIntent g, EntityIntent target) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (!g.hasPrompt() || target == null) {
+            return out;
+        }
+        for (org.eclipse.dirigible.components.intent.model.PromptFieldIntent p : g.getPrompt()) {
+            String field = p.getField();
+            if (field == null || field.isBlank()) {
+                continue; // parser already reported it
+            }
+            FieldIntent targetField = fieldNamed(target, field);
+            if (targetField == null && toOneRelation(target, field) == null) {
+                continue; // parser already reported it
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("prop", IntentNaming.pascalCase(field));
+            entry.put("required", p.isRequired());
+            entry.put("expr", promptConversion(targetField == null ? "relation" : targetField.getType()));
+            out.add(entry);
+        }
+        return out;
+    }
+
+    /** The Java expression converting the posted {@code Object raw} to the target field's type. */
+    private static String promptConversion(String type) {
+        String normalized = type == null ? "string" : type;
+        return switch (normalized) {
+            case "relation", "integer", "int" -> "Integer.valueOf(new java.math.BigDecimal(String.valueOf(raw)).intValue())";
+            case "long" -> "Long.valueOf(new java.math.BigDecimal(String.valueOf(raw)).longValue())";
+            case "decimal" -> "new java.math.BigDecimal(String.valueOf(raw))";
+            case "double" -> "Double.valueOf(String.valueOf(raw))";
+            case "boolean" -> "Boolean.valueOf(String.valueOf(raw))";
+            case "date" -> "java.time.LocalDate.parse(String.valueOf(raw))";
+            default -> "String.valueOf(raw)"; // string / text / uuid / month / week
+        };
     }
 
     /**

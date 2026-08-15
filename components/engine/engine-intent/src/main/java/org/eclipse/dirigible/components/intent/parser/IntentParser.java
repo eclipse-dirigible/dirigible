@@ -33,6 +33,7 @@ import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
+import org.eclipse.dirigible.components.intent.model.PromptFieldIntent;
 import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.GenerateChildIntent;
@@ -4299,6 +4300,82 @@ public final class IntentParser {
                 validateMapSource(itemSource, items.getMap(), "generates [" + name + "]", "items map", issues);
             }
             validateGeneratesItemLines(g, name, source, byName, crossModel, issues);
+            validateGeneratesPrompt(g, name, byName, crossModel, issues);
+        }
+    }
+
+    /**
+     * Validate the {@code prompt:} input form of a generates action (issue #6685). Entries name
+     * properties of the TARGET entity, so the dialog is typed from the target's own definitions and the
+     * target's {@code dependsOn:} declarations apply unchanged. The v1 constraints are deliberate: the
+     * target must be local and a composition to-one child of {@code forEntity} - that is what
+     * guarantees the generated detail registration the dialog is rendered from, and it is the
+     * motivating shape (a post-issue child on an immutable document); the scope must be {@code entity}
+     * (the input is collected for the selected record); and a prompted property must not also be mapped
+     * or defaulted - a value with two writers is ambiguous.
+     */
+    private static void validateGeneratesPrompt(GeneratesIntent g, String name, Map<String, EntityIntent> byName, boolean crossModel,
+            List<String> issues) {
+        if (!g.hasPrompt()) {
+            return;
+        }
+        String subject = "generates [" + name + "]";
+        if (crossModel) {
+            issues.add(subject + " prompt is not supported with a cross-model target (uses [" + g.getUses()
+                    + "]) - the prompt dialog is rendered from the local target's generated detail metadata");
+            return;
+        }
+        if (!"entity".equals(g.getScope())) {
+            issues.add(subject + " prompt requires scope 'entity' - the input is collected for the selected record");
+        }
+        if (g.isEventDriven()) {
+            issues.add(subject + " prompt cannot be combined with event: - an event-driven create-from runs with nobody"
+                    + " there to answer the input form");
+        }
+        EntityIntent target = g.getTo() == null ? null : byName.get(g.getTo());
+        if (target == null) {
+            return; // an unknown target is already reported
+        }
+        String forEntity = g.getForEntity();
+        boolean childOfForEntity = false;
+        if (target.getRelations() != null) {
+            for (RelationIntent relation : target.getRelations()) {
+                if (relation.isComposition() && forEntity != null && forEntity.equals(relation.getTo())
+                        && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                    childOfForEntity = true;
+                }
+            }
+        }
+        if (!childOfForEntity) {
+            issues.add(subject + " prompt requires the target [" + g.getTo() + "] to declare a composition to-one relation to forEntity ["
+                    + forEntity + "] - the prompt dialog is rendered from the target's detail metadata on that view");
+        }
+        Set<String> seen = new HashSet<>();
+        for (PromptFieldIntent p : g.getPrompt()) {
+            String field = p.getField();
+            if (field == null || field.isBlank()) {
+                issues.add(subject + " prompt entry has no field");
+                continue;
+            }
+            if (!seen.add(field)) {
+                issues.add(subject + " prompt names [" + field + "] more than once");
+            }
+            FieldIntent targetField = fieldByName(target, field);
+            RelationIntent targetRelation = toOneRelationByName(target, field);
+            if (targetField == null && targetRelation == null) {
+                issues.add(subject + " prompt field [" + field + "] is not a field or to-one relation of the target [" + g.getTo() + "]");
+                continue;
+            }
+            if (targetField != null && "timestamp".equals(targetField.getType())) {
+                issues.add(subject + " prompt field [" + field + "] has type timestamp, which the prompt dialog does not support yet");
+            }
+            if (g.getMap()
+                 .containsKey(field)
+                    || g.getDefaults()
+                        .containsKey(field)) {
+                issues.add(subject + " prompt field [" + field + "] is also mapped or defaulted - a prompted value must have exactly one"
+                        + " writer");
+            }
         }
     }
 

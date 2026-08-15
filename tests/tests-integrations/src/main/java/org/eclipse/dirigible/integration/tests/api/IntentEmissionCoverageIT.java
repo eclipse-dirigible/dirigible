@@ -805,6 +805,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - note: "Slip {label}"
                     amount: "Total * 2"
                     when: "Total != 0"
+              # Prompted create-from (#6685): a per-record action that collects the input the source
+              # cannot derive (here: a manual line's note + amount) before creating a composition
+              # child. The prompted values are posted with the source id and set on the target after
+              # map/defaults; a missing required input answers 400 before anything is written.
+              - name: add-voucher-line
+                from: Voucher
+                to: VoucherLine
+                label: Add Manual Line
+                map:
+                  Voucher: id
+                prompt:
+                  - { field: note }
+                  - { field: amount, required: true }
 
             seeds:
               - name: people
@@ -1691,6 +1704,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // The at-most-once guard lives in the create-from, so BOTH triggers get it.
         assertTrue(generate.contains(".eq(\"Slip\", sourceId)") && generate.contains("return existing.get(0);"),
                 "an event-driven create-from must return the document already back-referencing the source");
+
+        // generates prompt (#6685): the prompted controller takes a values map, enforces the
+        // required input with a 400, and converts each posted value to the target field's Java type
+        // (decimal -> BigDecimal). The action descriptor carries the prompt so the customActions
+        // store opens the input dialog instead of the plain confirm.
+        String promptedGenerate = contentOf("gen/events/emission/AddVoucherLineGenerate.java");
+        assertTrue(promptedGenerate.contains("public java.util.Map<String, Object> values;"),
+                "a prompted create-from must accept the declared inputs in the posted body");
+        assertTrue(promptedGenerate.contains("missing required input [Amount]") && promptedGenerate.contains("Response.setStatus(400)"),
+                "a missing required prompt input must answer 400 before anything is written");
+        assertTrue(promptedGenerate.contains("new java.math.BigDecimal(String.valueOf(raw))"),
+                "a decimal prompt input must convert to the generated entity's BigDecimal field");
+        String promptedDescriptor = contentOf("add-voucher-line-generate-action.js");
+        assertTrue(promptedDescriptor.contains("\"prompt\"") && promptedDescriptor.contains("\"promptEntity\": \"VoucherLine\""),
+                "the action descriptor must carry the prompt and the target entity for the dialog's metadata lookup");
+        assertTrue(promptedDescriptor.contains("\"name\": \"Amount\""),
+                "prompt entries must carry the PascalCase property names the detail registration uses");
     }
 
     /**
@@ -1953,6 +1983,37 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             assertEquals(autoVoucherId.get(), io.restassured.path.json.JsonPath.from(voucher)
                                                                                .getInt("Id"),
                     "a click after the event must return the existing voucher, not a second one");
+        });
+
+        // generates prompt (#6685) at the outermost layer: the prompted values reach the created
+        // child, and a missing required input is a 400 that creates nothing. Runs against the
+        // voucher the create-from above just made.
+        restAssuredExecutor.execute(() -> {
+            int voucherId = generatedVoucherId.get();
+            given().contentType("application/json")
+                   .body("{\"id\":" + voucherId + ", \"values\": {\"Note\": \"no amount\"}}")
+                   .when()
+                   .post("/services/java/" + PROJECT + "/gen/events/emission/AddVoucherLineGenerate/run")
+                   .then()
+                   .statusCode(400);
+            given().contentType("application/json")
+                   .body("{\"id\":" + voucherId + ", \"values\": {\"Amount\": 7.5, \"Note\": \"manual\"}}")
+                   .when()
+                   .post("/services/java/" + PROJECT + "/gen/events/emission/AddVoucherLineGenerate/run")
+                   .then()
+                   .statusCode(200);
+            String matching = "findAll { it.Voucher == " + voucherId + " && it.Note == 'manual' }";
+            io.restassured.path.json.JsonPath lines = given().when()
+                                                             .get(API + "/voucher/VoucherLineController")
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .jsonPath();
+            assertEquals(1, lines.getList(matching)
+                                 .size(),
+                    "the prompted create-from must produce exactly one manual line (and none for the rejected 400 run)");
+            assertEquals(7.5f, lines.getFloat(matching + ".Amount[0]"), 0.001f,
+                    "the prompted decimal must reach the created child's column");
         });
 
         // #6336 pattern: a malformed e-mail must be rejected by the generated controller, and a

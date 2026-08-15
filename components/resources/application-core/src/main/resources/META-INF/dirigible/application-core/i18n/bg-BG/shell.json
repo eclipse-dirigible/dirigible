@@ -195,7 +195,12 @@
       "confirmTitle": "Изпълни действие",
       "confirmBody": "Да се изпълни ли {{name}} за избрания запис? Това създава или променя данни.",
       "confirmCancel": "Отказ",
-      "confirmRun": "Изпълни"
+      "confirmRun": "Изпълни",
+      "promptTitle": "Изпълни действие",
+      "promptMissing": "Задължителни: {{fields}}",
+      "promptCancel": "Отказ",
+      "promptRun": "Изпълни",
+      "promptSelect": "Изберете..."
     }
   }
 }

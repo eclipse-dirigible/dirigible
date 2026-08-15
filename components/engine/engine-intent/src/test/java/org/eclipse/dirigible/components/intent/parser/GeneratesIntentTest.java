@@ -621,4 +621,180 @@ class GeneratesIntentTest {
                         .get(0)
                         .hasButton());
     }
+
+    /**
+     * The canonical prompted create-from (issue #6685): manual payment allocation on an issued invoice
+     * - the two answers the source cannot derive (which payment, how much) are prompted.
+     */
+    private static final String PROMPTED_ALLOCATION = """
+            name: sales
+            entities:
+              - name: Customer
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: CustomerPayment
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Customer, kind: manyToOne, to: Customer }
+              - name: SalesInvoice
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string }
+                relations:
+                  - { name: Customer, kind: manyToOne, to: Customer }
+              - name: SalesInvoiceCustomerPayment
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal, required: true }
+                relations:
+                  - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                  - { name: Customer, kind: manyToOne, to: Customer }
+                  - { name: CustomerPayment, kind: manyToOne, to: CustomerPayment, required: true }
+            generates:
+              - name: allocate-payment
+                from: SalesInvoice
+                to: SalesInvoiceCustomerPayment
+                label: Allocate Payment
+                icon: link
+                map:
+                  SalesInvoice: id
+                  Customer: Customer
+                prompt:
+                  - { field: CustomerPayment, required: true }
+                  - { field: amount, required: true }
+            """;
+
+    @Test
+    void parsesAPromptedGenerate() {
+        IntentModel model = IntentParser.parse(PROMPTED_ALLOCATION);
+        GeneratesIntent g = model.getGenerates()
+                                 .get(0);
+        assertTrue(g.hasPrompt());
+        assertEquals(2, g.getPrompt()
+                         .size());
+        assertEquals("CustomerPayment", g.getPrompt()
+                                         .get(0)
+                                         .getField());
+        assertTrue(g.getPrompt()
+                    .get(0)
+                    .isRequired());
+        assertEquals("amount", g.getPrompt()
+                                .get(1)
+                                .getField());
+    }
+
+    @Test
+    void rejectsAPromptFieldUnknownOnTheTarget() {
+        String yaml = PROMPTED_ALLOCATION.replace("{ field: amount, required: true }", "{ field: missing }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(
+                             "prompt field [missing] is not a field or to-one relation of the target [SalesInvoiceCustomerPayment]")),
+                "got: " + ex.getIssues());
+    }
+
+    @Test
+    void rejectsADuplicatePromptField() {
+        String yaml = PROMPTED_ALLOCATION.replace("{ field: amount, required: true }", "{ field: CustomerPayment }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("prompt names [CustomerPayment] more than once")),
+                "got: " + ex.getIssues());
+    }
+
+    @Test
+    void rejectsAPromptFieldThatIsAlsoMapped() {
+        String yaml = PROMPTED_ALLOCATION.replace("{ field: amount, required: true }", "{ field: Customer }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("prompt field [Customer] is also mapped or defaulted")),
+                "got: " + ex.getIssues());
+    }
+
+    @Test
+    void rejectsAPromptOnACrossModelTarget() {
+        String yaml = """
+                name: timesheets
+                uses:
+                  - { model: sales }
+                entities:
+                  - name: ProjectTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                generates:
+                  - name: invoice-from-timesheet
+                    from: ProjectTimesheet
+                    to: SalesInvoice
+                    uses: sales
+                    prompt:
+                      - { field: amount }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("prompt is not supported with a cross-model target")),
+                "got: " + ex.getIssues());
+    }
+
+    @Test
+    void rejectsAPromptWhoseTargetIsNotACompositionChildOfForEntity() {
+        // CustomerPayment relates to Customer, not to the invoice the button lives on - there is no
+        // detail registration to render the dialog from. (The stale map/prompt leftovers do not fire
+        // their own issues: map keys are target-side and amount is a CustomerPayment field too.)
+        String yaml = PROMPTED_ALLOCATION.replace("to: SalesInvoiceCustomerPayment", "to: CustomerPayment")
+                                         .replace("- { field: CustomerPayment, required: true }\n", "");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(
+                             "prompt requires the target [CustomerPayment] to declare a composition to-one relation to forEntity"
+                                     + " [SalesInvoice]")),
+                "got: " + ex.getIssues());
+    }
+
+    @Test
+    void rejectsAPromptOnPageScope() {
+        String yaml = PROMPTED_ALLOCATION.replace("label: Allocate Payment", "label: Allocate Payment\n    scope: page");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("prompt requires scope 'entity'")),
+                "got: " + ex.getIssues());
+    }
+
+    /**
+     * An event-driven create-from runs on a message, with nobody there to answer an input form - so the
+     * combination has no reading that could work, and the generated create-from deliberately takes the
+     * prompted values only on the endpoint path.
+     */
+    @Test
+    void rejectsAPromptOnAnEventDrivenCreateFrom() {
+        String yaml = PROMPTED_ALLOCATION.replace("label: Allocate Payment",
+                "label: Allocate Payment\n    button: true\n    event: { onCreate: SalesInvoice }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("prompt cannot be combined with event:")),
+                "got: " + ex.getIssues());
+    }
+
+    @Test
+    void rejectsATimestampPromptField() {
+        String yaml = PROMPTED_ALLOCATION
+                                         .replace("- { name: amount, type: decimal, required: true }",
+                                                 "- { name: amount, type: decimal, required: true }\n"
+                                                         + "      - { name: allocatedAt, type: timestamp }")
+                                         .replace("{ field: amount, required: true }", "{ field: allocatedAt }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("prompt field [allocatedAt] has type timestamp")),
+                "got: " + ex.getIssues());
+    }
 }
