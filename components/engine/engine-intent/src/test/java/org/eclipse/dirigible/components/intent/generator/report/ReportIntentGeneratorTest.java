@@ -423,6 +423,57 @@ class ReportIntentGeneratorTest {
                 "expected an ascending-thresholds issue, got: " + ex.getIssues());
     }
 
+    /**
+     * A report has no field-level scoping, so one that sums a {@code visibleTo:} field serves that
+     * restricted figure to everyone who may open the report. Legitimate to author, so it is reported as
+     * a generation warning naming the report, the field and the roles - never silently.
+     */
+    @Test
+    void aReportOverARestrictedFieldIsReported() {
+        String yaml = """
+                name: hr
+                permissions:
+                  - { role: Payroll }
+                entities:
+                  - name: Department
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, length: 100 }
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: dailyRate, type: decimal, visibleTo: [Payroll] }
+                      - { name: headcount, type: integer }
+                    relations:
+                      - { name: Department, kind: manyToOne, to: Department }
+                reports:
+                  - name: PayrollByDepartment
+                    source: Employee
+                    dimensions: ["Department.name"]
+                    measures: ["sum(dailyRate)"]
+                  - name: HeadcountByDepartment
+                    source: Employee
+                    dimensions: ["Department.name"]
+                    measures: ["sum(headcount)"]
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        org.eclipse.dirigible.components.intent.generator.IntentGenerationContext context = TestContexts.context(model);
+        ReportIntentGenerator.buildForTest(context, model.getReports()
+                                                         .get(0));
+        assertTrue(context.getIssues()
+                          .stream()
+                          .anyMatch(issue -> issue.contains("PayrollByDepartment") && issue.contains("Employee.dailyRate")
+                                  && issue.contains("[Payroll]")),
+                "the re-exposing report should be reported, got: " + context.getIssues());
+
+        org.eclipse.dirigible.components.intent.generator.IntentGenerationContext plain = TestContexts.context(model);
+        ReportIntentGenerator.buildForTest(plain, model.getReports()
+                                                       .get(1));
+        assertTrue(plain.getIssues()
+                        .isEmpty(),
+                "a report touching no restricted field has nothing to report, got: " + plain.getIssues());
+    }
+
     @Test
     void ageingRequiresATemporalField() {
         String yaml = AGEING_INTENT.replace("ageing(due, [30, 60, 90])", "ageing(balance, [30, 60, 90])");

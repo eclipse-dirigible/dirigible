@@ -1413,6 +1413,36 @@ class EdmIntentGeneratorTest {
         assertNull(propertyByName(entityByName(entities, "VacationRequest"), "Note").get("sensitiveProperty"));
     }
 
+    /**
+     * {@code visibleTo:} is emitted as the model's own per-property read AND write roles - the pair the
+     * generated controllers already enforce - so the allow-list reaches the runtime through the same
+     * attributes a hand-modeled EDM would carry. Both sides get the same comma-separated list: a caller
+     * who may not see the value must not be able to set it either.
+     */
+    @Test
+    void visibleToBecomesThePropertyReadAndWriteRoles() {
+        String yaml = """
+                name: hr
+                permissions:
+                  - { role: Payroll }
+                  - { role: Administrator }
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                      - { name: dailyRate, type: decimal, visibleTo: [Payroll, Administrator] }
+                """;
+        Map<String, Object> employee =
+                entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "hr")), "Employee");
+
+        Map<String, Object> rate = propertyByName(employee, "DailyRate");
+        assertEquals("Payroll,Administrator", rate.get("roleRead"));
+        assertEquals("Payroll,Administrator", rate.get("roleWrite"));
+        assertNull(propertyByName(employee, "Name").get("roleRead"));
+        assertNull(propertyByName(employee, "Name").get("roleWrite"));
+    }
+
     @Test
     @SuppressWarnings("unchecked")
     void labelSynthesizesTheStoredNameAndTheTemplateParts() {

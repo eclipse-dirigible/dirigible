@@ -22,6 +22,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+## Role-scoped properties (the modeler's per-property read/write role, or the intent's `visibleTo:`
+## allow-list): stripped from this surface's responses and ignored on its writes for a caller outside
+## the roles - being the partner the record belongs to is not the same as being allowed every column.
+#foreach($property in $properties)
+#if($property.roleRead)
+#set($hasRestrictedReads = "true")
+#end
+#if($property.roleRead || $property.roleWrite)
+#set($hasRoleScopedProperties = "true")
+#end
+#end
 #if($masterLock)
 #if($partnerParent)
 #set($masterRepositoryRef = "parentRepository")
@@ -137,6 +148,14 @@ public class ${name}PartnerController {
 #foreach($sensitive in $sensitiveProperties)
         entity.${sensitive} = null;
 #end
+#foreach($property in $properties)
+#if($property.roleWrite)
+        // Role-scoped field: not writable by a caller outside its roles, here as on the power surface.
+        if (!isInAnyRole("${property.roleWrite}")) {
+            entity.${property.name} = null;
+        }
+#end
+#end
         return scrub(repository.save(entity));
     }
 
@@ -160,6 +179,14 @@ public class ${name}PartnerController {
 #foreach($sensitive in $sensitiveProperties)
         // Sensitive fields are not writable here - the stored value is kept.
         entity.${sensitive} = existing.${sensitive};
+#end
+#foreach($property in $properties)
+#if($property.roleWrite)
+        // Role-scoped field: a caller outside its roles keeps the stored value.
+        if (!isInAnyRole("${property.roleWrite}")) {
+            entity.${property.name} = existing.${property.name};
+        }
+#end
 #end
         return scrub(repository.update(entity));
     }
@@ -328,13 +355,57 @@ public class ${name}PartnerController {
     }
 #end
 
-    /** Strip sensitive fields from a response - they exist only on the power surface. */
+    /**
+     * Strip from a response what this caller may not see: the sensitive fields (absent from the partner
+     * surface for everyone) and the role-scoped ones (absent unless the caller holds one of their
+     * roles - being the partner the record belongs to does not grant them).
+     */
     private ${name}Entity scrub(${name}Entity entity) {
 #foreach($sensitive in $sensitiveProperties)
         entity.${sensitive} = null;
 #end
+#foreach($property in $properties)
+#if($property.roleRead)
+        if (!isInAnyRole("${property.roleRead}")) {
+            entity.${property.name} = null;
+        }
+#end
+#end
         return entity;
     }
+#if($hasRestrictedReads)
+
+    @Get("/restricted")
+    @Documentation("The ${name} properties withheld from the CURRENT caller (role-scoped fields) - what the generated pages leave out instead of rendering a permanently empty column; the redaction applied to every response stays authoritative")
+    public Map<String, List<String>> restricted() {
+        List<String> restricted = new java.util.ArrayList<>();
+#foreach($property in $properties)
+#if($property.roleRead)
+        if (!isInAnyRole("${property.roleRead}")) {
+            restricted.add("${property.name}");
+        }
+#end
+#end
+        return Map.of("restricted", restricted);
+    }
+#end
+#if($hasRoleScopedProperties)
+
+    /**
+     * Whether the caller holds ANY of a comma-separated role list. One role name is what the entity
+     * modeler's per-property read/write role carries; the intent's `visibleTo: [A, B]` allow-list
+     * arrives here as "A,B" and holding either of them is enough.
+     */
+    private static boolean isInAnyRole(String roles) {
+        for (String role : roles.split(",")) {
+            String name = role.trim();
+            if (!name.isEmpty() && User.isInRole(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+#end
 
     /** Whether a persistence failure is (caused by) a database constraint violation. */
     private static boolean isConstraintViolation(Throwable e) {

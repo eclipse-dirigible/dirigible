@@ -2387,4 +2387,131 @@ class IntentParserTest {
                          .orElseThrow()
                          .locksWithMaster());
     }
+
+    /** An HR model whose Employee carries a role-scoped daily rate. */
+    private static String visibleToYaml(String rateAttributes, String extraFields) {
+        return """
+                name: hr
+                permissions:
+                  - { role: Payroll }
+                  - { role: Administrator }
+                entities:
+                  - name: Employee
+                    identity: email
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: email, type: string, required: true, unique: true, length: 320 }
+                      - { name: dailyRate, type: decimal%s }
+                %s""".formatted(rateAttributes, extraFields);
+    }
+
+    @Test
+    void visibleToScopesAFieldToTheRolesItLists() {
+        IntentModel model = IntentParser.parse(visibleToYaml(", visibleTo: [Payroll, Administrator]", ""));
+
+        assertEquals(List.of("Payroll", "Administrator"), model.getEntities()
+                                                               .get(0)
+                                                               .getFields()
+                                                               .stream()
+                                                               .filter(f -> "dailyRate".equals(f.getName()))
+                                                               .findFirst()
+                                                               .orElseThrow()
+                                                               .getVisibleTo());
+    }
+
+    /**
+     * A role no permission grants would leave the field invisible to everybody, with nothing anywhere
+     * to say so - so the typo is refused, and the message names the roles the intent does declare.
+     */
+    @Test
+    void visibleToMustNameADeclaredRole() {
+        IntentValidationException ex =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(visibleToYaml(", visibleTo: [Payrol]", "")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("names role [Payrol]") && i.contains("Administrator, Payroll")),
+                "expected an undeclared-role issue naming the declared roles, got: " + ex.getIssues());
+    }
+
+    /**
+     * An empty allow-list parses identically to an absent one, so it is refused rather than ignored.
+     */
+    @Test
+    void anEmptyVisibleToIsRefused() {
+        IntentValidationException ex =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(visibleToYaml(", visibleTo: []", "")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("empty `visibleTo`")),
+                "expected an empty-allow-list issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void visibleToIsRefusedOnTheFieldsTheSurfacesNeed() {
+        String key = visibleToYaml("", "").replace("primaryKey: true, generated: true }",
+                "primaryKey: true, generated: true," + " visibleTo: [Payroll] }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(key));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("not allowed on the primary key")),
+                "expected a primary-key issue, got: " + ex.getIssues());
+
+        String identity = visibleToYaml("", "").replace("unique: true, length: 320 }", "unique: true, length: 320, visibleTo: [Payroll] }");
+        IntentValidationException ex2 = assertThrows(IntentValidationException.class, () -> IntentParser.parse(identity));
+        assertTrue(ex2.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("not allowed on the identity field")),
+                "expected an identity-field issue, got: " + ex2.getIssues());
+    }
+
+    /** The generated {@code Name} is a plain column, so a restricted field must not compose one. */
+    @Test
+    void visibleToMustNotLeakThroughALabel() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(visibleToYaml(", visibleTo: [Payroll]", "    label: \"{dailyRate}\"\n")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("restricted by visibleTo")),
+                "expected a restricted-token issue, got: " + ex.getIssues());
+    }
+
+    /**
+     * A total summed from a restricted field is that same figure on another entity, where nothing would
+     * scope it - so the derived field inherits the allow-list of its source.
+     */
+    @Test
+    void aTotalOverARestrictedFieldInheritsItsAllowList() {
+        String yaml = """
+                name: hr
+                permissions:
+                  - { role: Payroll }
+                entities:
+                  - name: Payslip
+                    function: Document
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal, aggregate: true }
+                  - name: PayslipItem
+                    function: DocumentItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal, visibleTo: [Payroll] }
+                    relations:
+                      - { name: Payslip, kind: manyToOne, to: Payslip, composition: true, required: true }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+
+        assertEquals(List.of("Payroll"), model.getEntities()
+                                              .stream()
+                                              .filter(e -> "Payslip".equals(e.getName()))
+                                              .findFirst()
+                                              .orElseThrow()
+                                              .getFields()
+                                              .stream()
+                                              .filter(f -> "total".equals(f.getName()))
+                                              .findFirst()
+                                              .orElseThrow()
+                                              .getVisibleTo(),
+                "the document total is the sum of a restricted line figure and must be scoped the same way");
+    }
 }

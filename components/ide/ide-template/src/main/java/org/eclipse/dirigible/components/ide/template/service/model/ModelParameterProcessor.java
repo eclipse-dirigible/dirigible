@@ -72,6 +72,8 @@ final class ModelParameterProcessor {
         for (Map<String, Object> entity : entities) {
             processEntity(entity, entities, parameters);
         }
+        // Before the scoped-surface passes below: they carry the flag onto the child panels they build.
+        collectRestrictedProperties(entities);
         if (truthy(parameters, "javaRuntime")) {
             inheritMasterLock(entities, parameters);
             inheritPersonalScope(entities, parameters);
@@ -632,6 +634,25 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Flags the entities carrying a read-scoped property - the entity modeler's per-property read role,
+     * or the intent's {@code visibleTo:} allow-list, which is emitted as the same attribute. The
+     * generated pages ask the controller which of those fields the caller may not see only when there
+     * is such a field, so an application that uses none of this pays nothing for it.
+     *
+     * @param entities every entity in the model
+     */
+    private static void collectRestrictedProperties(List<Map<String, Object>> entities) {
+        for (Map<String, Object> entity : entities) {
+            for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+                if (truthy(property, "roleRead")) {
+                    entity.put("hasRestrictedFields", Boolean.TRUE);
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
      * Collects, for each scoped entity, the children that inherit its scope - rendered on its form as
      * an embedded calendar or table panel.
      *
@@ -679,6 +700,9 @@ final class ModelParameterProcessor {
             if (withCalendar) {
                 panel.put("calendar", isTrue(child, "detailCalendar") ? calendarPanel(child) : null);
             }
+            // Whether this child has role-scoped columns at all: only then does the panel ask the
+            // child's own scoped controller which of them the caller in front of it may not see.
+            panel.put("restrictedFields", truthy(child, "hasRestrictedFields"));
             panel.put("columns", panelColumns(child, fkProperty));
             children.add(panel);
         }

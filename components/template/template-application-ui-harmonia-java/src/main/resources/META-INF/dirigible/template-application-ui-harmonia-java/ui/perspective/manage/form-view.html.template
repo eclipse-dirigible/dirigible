@@ -6,6 +6,11 @@
   to Close + Edit. On edit/preview the entity's registered detail collections (masters) render as
   panels below the form - the same panels as the master browse view.
 -->
+## Role-scoped field (intent `visibleTo:`): the input is rendered only for a caller the server serves
+## the value to - the page asked the controller which fields it withholds (canSee). Emits nothing for
+## an unrestricted property. The server ignoring the field on writes stays the authoritative half;
+## this only keeps an input that could never be saved off the form.
+#macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
 ## The EntityStatus relation (widget DOCUMENT_STATUS) renders as a read-only coloured badge in the
 ## title bar (same treatment as the document layout), never as an editable input.
 #set($statusProp = "")
@@ -107,7 +112,7 @@
 #if($property.widgetType == "TEXTAREA" || $property.widgetType == "CHECKBOX")#set($span = "12")#end
 #if($lookup)#set($span = "12")#end
       <!-- ${property.name} (${property.widgetType}) -->
-      <div x-h-field#if($span == "12") class="col-span-full"#else style="grid-column: span ${span};"#end :data-invalid="!!errors.${property.name}">
+      <div x-h-field#if($span == "12") class="col-span-full"#else style="grid-column: span ${span};"#end#visibleGate($property) :data-invalid="!!errors.${property.name}">
 #if($property.widgetType == "CHECKBOX")
         <div class="hbox items-center gap-3">
           <span x-h-checkbox>

@@ -144,6 +144,24 @@ class ModelParameterProcessorTest {
         assertEquals(List.of("Book"), perspective.get("views"));
     }
 
+    /**
+     * The flag the generated pages gate on: only an entity with a read-scoped property asks its
+     * controller which fields the caller may not see, so an application using none of this issues no
+     * such request at all.
+     */
+    @Test
+    void flagsOnlyTheEntitiesCarryingAReadScopedProperty() {
+        Map<String, Object> restricted = property("DailyRate", "DECIMAL");
+        restricted.put("roleRead", "Payroll,Administrator");
+        Map<String, Object> scoped = entity("Employee", "People", restricted);
+        Map<String, Object> plain = entity("Author", "Authors", property("Name", "VARCHAR"));
+
+        ModelParameterProcessor.process(model(scoped, plain), parameters());
+
+        assertEquals(Boolean.TRUE, scoped.get("hasRestrictedFields"));
+        assertFalse(plain.containsKey("hasRestrictedFields"), "an entity with no read-scoped property must not carry the flag");
+    }
+
     @Test
     void collectsTheDefaultRolesOnlyWhereTheModelAsksForThem() {
         Map<String, Object> asking = entity("Book", "Books", property("Name", "VARCHAR"));

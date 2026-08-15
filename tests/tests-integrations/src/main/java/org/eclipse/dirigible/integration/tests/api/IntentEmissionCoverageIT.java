@@ -303,6 +303,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: period, type: month }
                   - { name: rate, type: decimal, sensitive: true }
                   - { name: totalCost, type: decimal }
+                  # visibleTo: role-scoped on EVERY surface - stripped from the responses and
+                  # ignored on the writes of the power controller AND of the personal one (owning
+                  # the record is not a role), kept out of the change trail, and left off the
+                  # generated pages. Deliberately on the entity that also carries `sensitive:` and
+                  # `history:`, where the three could collide.
+                  - { name: bonus, type: decimal, visibleTo: [Payroll] }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
                   # a plain dropdown relation: the personal LIST must resolve it to a label (the
@@ -906,6 +912,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { field: note }
                   - { field: amount, required: true }
 
+            # The roles the model issues - and the ones a `visibleTo:` field may name.
+            permissions:
+              - { role: Payroll, description: May see what people are paid }
+
             seeds:
               - name: people
                 entity: Person
@@ -1302,6 +1312,34 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String ledgerTotalMy = contentOf("gen/emission/api/ledgertotal/LedgerTotalMyController.java");
         assertTrue(ledgerTotalMy.contains("entity.Total = null"),
                 "an aggregates: target summing a sensitive source field into a personal-rooted entity must be auto-scrubbed");
+        // visibleTo: the role allow-list reaches the runtime as the model's per-property read AND
+        // write roles, and every generated surface enforces it - the whole point of the keyword is
+        // that hiding the control alone would be cosmetic. Asserted on the artefacts because the
+        // ITs run as a user local basic auth answers isInRole(true) for, so the redaction cannot be
+        // provoked over HTTP here; the branch itself is covered by RoleScopedFieldControllerTemplateIT.
+        assertTrue(contentOf("emission.model").contains("\"roleRead\": \"Payroll\""),
+                "visibleTo must reach the .model as the property's read role, which every template reads");
+        String claimController = contentOf("gen/emission/api/claim/ClaimController.java");
+        assertTrue(claimController.contains("if (!isInAnyRole(\"Payroll\")) {") && claimController.contains("entity.Bonus = null;"),
+                "visibleTo must emit the response redaction in the power controller, got: " + claimController);
+        assertTrue(claimController.contains("@Get(\"/restricted\")"),
+                "visibleTo must emit the field-visibility pre-check the generated pages ask");
+        assertTrue(claimController.contains("entries.removeIf(entry -> hidden.contains("),
+                "a role-scoped field must be dropped from the change trail too - it carries the same values");
+        assertTrue(claimMy.contains("entity.Bonus = existing.Bonus;"),
+                "the personal surface must keep the stored value of a field its caller may not write");
+        String claimForm = contentOf("gen/emission/views/Claim/Claim-form.html");
+        assertTrue(claimForm.contains("canSee('Bonus')"),
+                "the generated form must gate the role-scoped input on the caller's own visibility answer");
+        String claimFormPage = contentOf("gen/emission/js/components/pages/Claim/ClaimFormPage.js");
+        assertTrue(claimFormPage.contains("loadRestrictedFields()"), "the generated page must ask which fields it may render");
+        // The personal surface hides it too, from the columns its list builds in JS.
+        String claimMyList = contentOf("gen/emission/js/components/pages/my/ClaimMyListPage.js");
+        assertTrue(claimMyList.contains("this.columns.filter(c => this.canSee(c.name))"),
+                "the personal list must drop the columns its own controller withholds");
+        assertFalse(contentOf("gen/emission/views/Person/Person-form.html").contains("canSee("),
+                "an entity with no role-scoped field must carry no visibility gate at all");
+
         String lineMy = contentOf("gen/emission/api/claim/ClaimLineMyController.java");
         assertTrue(lineMy.contains("requireMyParent"),
                 "a composition child must inherit the personal scope as an ancestor-ownership guard");

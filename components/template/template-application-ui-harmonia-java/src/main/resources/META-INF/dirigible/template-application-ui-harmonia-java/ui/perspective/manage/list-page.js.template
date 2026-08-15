@@ -50,6 +50,15 @@ document.addEventListener('alpine:init', () => {
     caView: '${name}',
 
     async init() {
+#if($hasRestrictedFields)
+      // Role-scoped fields: ask the controller which columns it withholds from this caller, so the
+      // table, its filter row and the export leave them out instead of carrying permanently empty
+      // cells. Not awaited - the table renders at once and drops the columns when the answer lands.
+      this.loadRestrictedFields().then(() => {
+        this.filterColumns = this.filterColumns.filter(c => this.canSee(c.name));
+        this.exportColumns = this.exportColumns.filter(c => this.canSee(c.name));
+      });
+#end
       await this.load();
       this.loadLookups();
       this.selectFromRoute();

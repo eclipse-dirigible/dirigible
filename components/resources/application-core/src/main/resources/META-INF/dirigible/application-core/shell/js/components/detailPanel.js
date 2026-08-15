@@ -57,6 +57,14 @@ function detailPanel(def, masterId) {
     lookups: {},   // relationship column name -> { fkValue: referencedRow }
 
     async init() {
+      // Role-scoped columns (intent `visibleTo:`): the def says whether this child has any, and its
+      // controller says which of them THIS caller may not see. Drop those before the table renders,
+      // so the panel does not carry a column the server nulls in every row. The def belongs to the
+      // shared registry, so the pruned copy is local to this panel.
+      if (this.def.restrictedFields) {
+        await this.loadRestrictedFields(this.def.apiPath);
+        this.def = { ...this.def, columns: (this.def.columns || []).filter(c => this.canSee(c.name)) };
+      }
       await this.load();
       this.loadLookups();
     },
