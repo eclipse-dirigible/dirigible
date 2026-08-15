@@ -235,7 +235,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             context.writeModelFile(fileName,
                     render(process, rolesByLowerName, context.getProjectName(), IntentNaming.eventsPackage(context), processResolvers,
                             processFieldLoads, processTimerLoads, processStepEvents, ownFieldPascalCase(process, byName),
-                            candidateGroupsExtra, writerByTask, setterByTask));
+                            candidateGroupsExtra, writerByTask, setterByTask,
+                            IntentNaming.processTaskCatalog(context.getProjectName(), context)));
         }
     }
 
@@ -304,7 +305,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, String eventsPackage,
             List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, List<StepEventSupport.Emitter> stepEvents,
             Map<String, String> ownFieldPascalCase, String candidateGroupsExtra, Map<String, String> writerByTask,
-            Map<String, String> setterByTask) {
+            Map<String, String> setterByTask, String taskLabelCatalog) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
         // mutating the shared model (the glue generator runs after this one and must still see the
@@ -407,6 +408,15 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append("\" name=\"")
           .append(escapeXmlAttribute(IntentNaming.humanize(processId)))
           .append("\" isExecutable=\"true\">\n");
+        // Where this module's user-task labels are translated. The Inbox, the notification bell and
+        // the task-form dialog are shared across every deployed app, so a task has to carry the key of
+        // its own module's catalog - this declares it once for the whole process, and the task's BPMN
+        // id (the authored step name) keys the entry within it.
+        sb.append("    <extensionElements>\n");
+        sb.append("      <flowable:property name=\"taskLabelCatalog\" value=\"")
+          .append(escapeXmlAttribute(taskLabelCatalog))
+          .append("\"></flowable:property>\n");
+        sb.append("    </extensionElements>\n");
         sb.append("    <startEvent id=\"")
           .append(START_ID)
           .append("\"></startEvent>\n");

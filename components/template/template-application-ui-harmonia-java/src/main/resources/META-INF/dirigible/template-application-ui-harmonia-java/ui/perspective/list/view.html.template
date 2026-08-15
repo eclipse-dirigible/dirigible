@@ -156,7 +156,7 @@
         <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
           <template x-for="task in $store.processTasks.getTasks(selected)" :key="task.id">
             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
-              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('$projectName:${tprefix}.processes.' + (App.config.processTaskKeys || {})[task.name], task.name)"></span>
+              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="$store.processTasks.taskName(task)"></span>
             </button>
           </template>
         </div>

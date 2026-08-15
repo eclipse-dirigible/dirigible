@@ -60,6 +60,22 @@ public final class IntentNaming {
         return project + ":" + baseName(context) + "-model.actions." + name;
     }
 
+    /**
+     * The i18n catalog the module's BPM user-task labels live in:
+     * {@code <project>:<model>-model.processes} - the {@code processes} section the translation catalog
+     * is emitted with, the sibling of {@link #customActionTranslationKey}. A task's own key is this
+     * catalog plus the task's BPMN id, which is the authored step name; the generated {@code .bpmn}
+     * declares the catalog on its {@code <process>}, so the Inbox can name a task in the user's
+     * language without knowing which module raised it.
+     *
+     * @param project the project name
+     * @param context the generation context (for the model base name)
+     * @return the catalog prefix, without a trailing dot
+     */
+    public static String processTaskCatalog(String project, IntentGenerationContext context) {
+        return project + ":" + baseName(context) + "-model.processes";
+    }
+
     public static String baseName(IntentGenerationContext context) {
         String declaredName = context.getModel()
                                      .getName();

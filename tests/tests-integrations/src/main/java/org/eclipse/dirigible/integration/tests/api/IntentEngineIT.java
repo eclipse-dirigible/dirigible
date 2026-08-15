@@ -1807,17 +1807,15 @@ class IntentEngineIT extends IntegrationTest {
         String modelCatalog = contentOf("i18n/en-US/orders.model.json");
         assertTrue(modelCatalog.contains("\"widgetSystemHealth\": \"System Health\""),
                 "the custom widget's label should land in the model catalog");
-        // BPM user-task labels land in the catalog's processes section, keyed by the authored step
-        // name, and config.js carries the baked reverse (runtime task name -> key) map: the views
-        // translate the in-record task buttons as
-        // T('<project>:<model>-model.processes.' + processTaskKeys[task.name], task.name), so an
-        // Approve / Issue / Send button follows the locale instead of always showing the English
-        // BPMN name. Everything is known at generation time - no runtime key derivation.
+        // BPM process and user-task labels land in the catalog's processes section, keyed by BPMN id
+        // (the authored process / step name). The task itself carries the key of its entry - the
+        // .bpmn declares the catalog, the inbox serves it per task - so an Approve / Issue / Send
+        // button follows the locale instead of always showing the English BPMN name, in a shell that
+        // has no idea which module raised the task. Everything is known at generation time.
         assertTrue(modelCatalog.contains("\"processes\"") && modelCatalog.contains("\"managerReview\": \"Manager Review\""),
                 "the BPM user-task labels should land in the en catalog's processes section, got: " + modelCatalog);
-        String appConfig = contentOf("gen/orders/js/config.js");
-        assertTrue(appConfig.contains("\"Manager Review\":\"managerReview\""),
-                "config.js should carry the baked task-name -> catalog-key map, got: " + appConfig);
+        assertTrue(modelCatalog.contains("\"OrderApproval\": \"Order Approval\""),
+                "the process' own name should land there too - the Inbox renders '<process> - <task>', got: " + modelCatalog);
 
         // The report-file template also emits the report's label catalog (report + columns + the
         // widget's tile label) under the '<Name>-report' translation prefix.
@@ -2850,6 +2848,12 @@ class IntentEngineIT extends IntegrationTest {
                 "the process should keep its id but carry a humanized name");
         assertTrue(body.contains("<userTask id=\"managerReview\" name=\"Manager Review\""),
                 "BPMN should map managerReview to a userTask with a humanized name");
+        // The process declares where its display names are translated. The Inbox, the notification
+        // bell and the task-form dialog are shared by every deployed app, so this is the only way a
+        // task can be named in the user's language there: the inbox serves each task the key of its
+        // entry (this catalog + the task's BPMN id, which is the authored step name).
+        assertTrue(body.contains("<flowable:property name=\"taskLabelCatalog\" value=\"intent-test:orders-model.processes\">"),
+                "the process should declare its module's label catalog, got: " + body);
         // The assignee "manager" resolves to the declared role "Manager" (case-insensitive); the
         // settings' candidateGroupsExtra (ADMINISTRATOR by default) is appended so an admin can claim.
         assertTrue(body.contains("flowable:candidateGroups=\"Manager,ADMINISTRATOR\""),

@@ -73,7 +73,7 @@
                 <tr x-h-table-row data-hoverable="true" :data-state="isSelected(task) ? 'selected' : ''" @click="select(task)" style="cursor:pointer;">
                   <td x-h-table-cell>
                     <div class="vbox gap-1">
-                      <span class="font-medium" x-text="task.processDefinitionName ? task.processDefinitionName + ' — ' + task.name : task.name"></span>
+                      <span class="font-medium" x-text="$store.processTasks.taskLabel(task)"></span>
                       <span x-h-text.muted class="text-xs">
                         <span x-h-badge :data-variant="task.mine ? 'positive' : 'outline'" data-size="sm" x-text="task.mine ? T('application-core:shell.inbox.mine', 'Mine') : T('application-core:shell.inbox.available', 'Available')"></span>
                         <span x-show="task.processInstanceBusinessKey" x-text="' · ' + T('application-core:shell.inbox.ref', 'Ref {{key}}', { key: task.processInstanceBusinessKey })"></span>
@@ -101,7 +101,7 @@
 
       <div x-show="selected" class="vbox size-full">
         <div x-h-toolbar data-variant="transparent">
-          <span x-h-toolbar-title x-text="selected ? (selected.processDefinitionName ? selected.processDefinitionName + ' — ' + selected.name : selected.name) : ''"></span>
+          <span x-h-toolbar-title x-text="selected ? $store.processTasks.taskLabel(selected) : ''"></span>
           <div x-h-toolbar-spacer></div>
           <span x-show="selected && selected.processInstanceBusinessKey" x-h-badge data-variant="information" x-text="selected ? T('application-core:shell.inbox.ref', 'Ref {{key}}', { key: selected.processInstanceBusinessKey }) : ''"></span>
           <span x-h-badge :data-variant="selected && selected.mine ? 'positive' : 'outline'" x-text="selected && selected.mine ? T('application-core:shell.inbox.assignedToMe', 'Assigned to me') : T('application-core:shell.inbox.available', 'Available')"></span>
