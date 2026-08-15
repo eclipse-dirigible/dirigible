@@ -615,6 +615,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true }
 
+              # manyToMany: materialised into the intermediate entity CourseTag - a real link table
+              # with both foreign keys, edited as a detail grid of the course. The keyword used to
+              # parse and generate NOTHING, which is why the link table + a round-tripping link row
+              # are asserted here and not only in the parser's unit test.
+              - name: Course
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+                relations:
+                  - { name: tags, kind: manyToMany, to: Tag }
+              - name: Tag
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+
             aggregates:
               - name: ledgerTotal
                 of: Ledger
@@ -1083,6 +1098,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         String schema = contentOf("gen/emission/schema/" + PROJECT + ".schema");
         assertTrue(schema.contains("EMISSION_UNIT_LANG"), "multilingual must emit the _LANG translation table into the schema");
+        // manyToMany: the link entity is an ordinary entity from parse time on, so it must reach the
+        // schema as its own table and the REST layer as its own (detail) controller. Asserting the
+        // parsed model alone is exactly what let the keyword generate nothing for so long.
+        assertTrue(schema.contains("EMISSION_COURSE_TAG"), "manyToMany must emit the intermediate entity's table into the schema");
+        String courseTagController = contentOf("gen/emission/api/course/CourseTagController.java");
+        assertTrue(courseTagController.contains("Course") && courseTagController.contains("Tag"),
+                "the link controller must carry both ends of the n:m, got: " + courseTagController);
         assertHistoryEmission(schema, entryRepository);
         String unitRepository = contentOf("gen/emission/data/settings/UnitRepository.java");
         assertTrue(unitRepository.contains("Translator"), "multilingual must emit the read-time translation overlay into the repository");
@@ -2764,7 +2786,47 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(403));
 
+        assertManyToManyRuntime();
         assertBpmEventsRuntime();
+    }
+
+    /**
+     * n:m end to end (#6718): the link entity materialised from {@code kind: manyToMany} is a real
+     * table with a working REST surface - a link row is created against both ends and comes back
+     * through the very query the master's detail grid uses. This is the layer the keyword never reached
+     * while it was parsed and dropped.
+     */
+    private void assertManyToManyRuntime() {
+        AtomicInteger tagId = new AtomicInteger();
+        AtomicInteger courseId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> tagId.set(given().contentType("application/json")
+                                                           .body("{\"Name\":\"Modeling\"}")
+                                                           .when()
+                                                           .post(API + "/tag/TagController")
+                                                           .then()
+                                                           .statusCode(200)
+                                                           .extract()
+                                                           .path("Id")));
+        restAssuredExecutor.execute(() -> courseId.set(given().contentType("application/json")
+                                                              .body("{\"Name\":\"Intent 101\"}")
+                                                              .when()
+                                                              .post(API + "/course/CourseController")
+                                                              .then()
+                                                              .statusCode(200)
+                                                              .extract()
+                                                              .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Course\":" + courseId.get() + ",\"Tag\":" + tagId.get() + "}")
+                                                 .when()
+                                                 .post(API + "/course/CourseTagController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/course/CourseTagController?Course=" + courseId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(1))
+                                                 .body("[0].Tag", equalTo(tagId.get())));
     }
 
     /**

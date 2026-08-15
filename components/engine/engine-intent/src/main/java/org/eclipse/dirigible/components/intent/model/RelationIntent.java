@@ -33,6 +33,14 @@ public class RelationIntent {
      */
     private String model;
     /**
+     * Optional name for the intermediate (link) entity a {@code manyToMany} materialises into -
+     * {@code <Declaring><Target>} when absent. Use it to give the link a domain name
+     * ({@code Enrollment} rather than {@code StudentCourse}) or to keep two n:m relations between the
+     * same pair of entities apart. Valid on {@code manyToMany} only.
+     */
+    private String through;
+
+    /**
      * Pre-rename boolean form of the status role - REJECTED by the parser with a clear migration
      * message; kept as a field only so the validator can detect it. Author {@code function:
      * EntityStatus} instead.
@@ -219,6 +227,14 @@ public class RelationIntent {
     /** Whether this relation targets an entity owned by another intent model. */
     public boolean isCrossModel() {
         return model != null && !model.isBlank();
+    }
+
+    public String getThrough() {
+        return through;
+    }
+
+    public void setThrough(String through) {
+        this.through = through;
     }
 
     public String getFunction() {

@@ -658,12 +658,34 @@ entities:
 owned across models). Generate leaf models (the owners) before their consumers so the dropdown
 resolves. Each project is its own `.intent`; all must be published to the same runtime.
 
-### Many-to-many (n:m) - an explicit intermediate entity
+### Many-to-many (n:m) - the intermediate entity
 
-There is no `manyToMany` materialization; model n:m as an **intermediate entity** that holds a
-`composition` relation to one side, a `manyToOne` to the other (which may be cross-model via
-`model:`), plus any bridge fields. Example - one invoice settled by many payments and one payment
-across many invoices, each link carrying its partial `amount`:
+An n:m is always an **intermediate (link) entity** - one row per link, holding a `composition` to
+one side and a `manyToOne` to the other (which may be cross-model via `model:`). You can either let
+`kind: manyToMany` write that entity, or author it yourself.
+
+**Plain link - use `manyToMany`.** It materializes the link entity `<Declaring><Target>` (or the
+name given by `through:`) with a generated key and both foreign keys, and the link shows as a detail
+grid with a dropdown on the declaring entity's page:
+
+```yaml
+  - name: Order
+    relations:
+      - { name: products, kind: manyToMany, to: Product }                     # -> OrderProduct
+      - { name: tags,     kind: manyToMany, to: Tag, through: OrderTag }      # named link
+      - { name: parts,    kind: manyToMany, to: Part, model: parts }          # cross-model target
+```
+
+Declare the n:m on **one** side only (declaring it from both sides is refused - it is one link
+table). The target-picker attributes `where` / `show` / `major` / `size` / `leafOnly` are allowed
+and travel onto the link's target relation; `composition`, `function`, `init`, `dependsOn`,
+`calculatedActionOn*`, `personal` and `partner` are refused on a `manyToMany` - they describe a
+hand-authored to-one.
+
+**Link with bridge data - author the entity.** When the link carries its own fields (a quantity, a
+partial amount, a valid-from date) or its own lifecycle, write it out and drop the `manyToMany`.
+Example - one invoice settled by many payments and one payment across many invoices, each link
+carrying its partial `amount`:
 
 ```yaml
   - name: SalesInvoiceCustomerPayment
@@ -2146,7 +2168,7 @@ name.
 - "expand a from-to span into day/week/month child rows / loan installments / vacation day items" -> **expansions**
 - "compute days between two dates on the form (working days / months)" -> **calculated field with a date function**
 - "reference a Customer/Country/Currency/UoM owned by another app" -> **uses + cross-model relation**
-- "many-to-many between X and Y (with extra fields)" -> **intermediate entity** (composition + manyToOne)
+- "many-to-many between X and Y" -> **`kind: manyToMany`** (materializes the intermediate entity); **with extra fields on the link** -> author the **intermediate entity** (composition + manyToOne)
 
 ### expansions - generate child rows from a date span
 
