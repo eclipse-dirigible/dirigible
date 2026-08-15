@@ -13,6 +13,7 @@ import org.eclipse.dirigible.components.api.security.ActAsFacade;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceData;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessLabelKeys;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskActionData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskDTO;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
@@ -52,11 +53,21 @@ public class BpmInboxEndpoint extends BaseEndpoint {
     @GetMapping(value = "/instance/{id}/tasks")
     public ResponseEntity<List<TaskDTO>> getProcessInstanceTasks(@PathVariable("id") String id,
             @RequestParam(value = "type", required = false) String type) {
-        List<TaskDTO> taskDTOS = bpmService.findTasks(id, extractPrincipalType(type))
-                                           .stream()
-                                           .map(this::mapToDTO)
-                                           .collect(Collectors.toList());
-        return ResponseEntity.ok(taskDTOS);
+        return ResponseEntity.ok(mapToDTOs(bpmService.findTasks(id, extractPrincipalType(type))));
+    }
+
+    /**
+     * Maps a task list, resolving each process definition's task-label catalog once - a whole inbox is
+     * typically a handful of definitions, and every task of one shares its catalog.
+     *
+     * @param tasks the tasks
+     * @return the DTOs
+     */
+    private List<TaskDTO> mapToDTOs(List<Task> tasks) {
+        Map<String, Optional<ProcessLabelKeys>> labelKeys = new HashMap<>();
+        return tasks.stream()
+                    .map(task -> mapToDTO(task, labelKeys))
+                    .collect(Collectors.toList());
     }
 
     private static PrincipalType extractPrincipalType(String type) {
@@ -69,7 +80,7 @@ public class BpmInboxEndpoint extends BaseEndpoint {
         return principalType;
     }
 
-    private TaskDTO mapToDTO(Task task) {
+    private TaskDTO mapToDTO(Task task, Map<String, Optional<ProcessLabelKeys>> labelKeys) {
         List<IdentityLink> identityLinks = bpmService.getTaskIdentityLinks(task.getId());
 
         TaskDTO dto = new TaskDTO();
@@ -91,17 +102,22 @@ public class BpmInboxEndpoint extends BaseEndpoint {
         dto.setProcessInstanceBusinessKey(processInstance.getBusinessKey());
         dto.setProcessDefinitionId(processInstance.getProcessDefinitionId());
         dto.setProcessDefinitionName(processInstance.getProcessDefinitionName());
+        // The names in the language of whoever is looking at them: the process declares the i18n
+        // catalog its module's labels live in, and a BPMN id keys them within it. Cross-project shell
+        // surfaces (the Inbox, the notification bell, the task-form dialog) have no idea which module
+        // a task came from, so the keys have to travel with the task.
+        labelKeys.computeIfAbsent(task.getProcessDefinitionId(), bpmService::getProcessLabelKeys)
+                 .ifPresent(keys -> {
+                     dto.setNameKey(keys.taskNameKey(task.getTaskDefinitionKey()));
+                     dto.setProcessDefinitionNameKey(keys.processNameKey());
+                 });
 
         return dto;
     }
 
     @GetMapping(value = "/tasks")
     public ResponseEntity<List<TaskDTO>> getTasks(@RequestParam(value = "type", required = false) String type) {
-        List<TaskDTO> taskDTOS = bpmService.findTasks(extractPrincipalType(type))
-                                           .stream()
-                                           .map(this::mapToDTO)
-                                           .collect(Collectors.toList());
-        return ResponseEntity.ok(taskDTOS);
+        return ResponseEntity.ok(mapToDTOs(bpmService.findTasks(extractPrincipalType(type))));
     }
 
     @GetMapping(value = "/tasks/{taskId}/variables")

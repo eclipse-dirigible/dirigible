@@ -47,6 +47,12 @@ public class TaskDTO {
 
     private String processInstanceBusinessKey;
 
+    /** The i18n key of the task's name, null when the process declares no catalog. */
+    private String nameKey;
+
+    /** The i18n key of the process' name, null when the process declares no catalog. */
+    private String processDefinitionNameKey;
+
     /**
      * Gets the candidate users.
      *
@@ -234,5 +240,41 @@ public class TaskDTO {
         this.processInstanceBusinessKey = processInstanceBusinessKey;
     }
 
+    /**
+     * The fully-qualified i18n key of this task's display name
+     * ({@code <project>:<model>-model.processes.<task>}), so a shell surface that has no idea which
+     * module the task came from can still render its name in the user's language. Null for a process
+     * that declares no task-label catalog, in which case the raw {@link #getName() name} is all there
+     * is.
+     *
+     * @return the translation key, or null
+     */
+    public String getNameKey() {
+        return nameKey;
+    }
+
+    /**
+     * @param nameKey the translation key of the task's name
+     */
+    public void setNameKey(String nameKey) {
+        this.nameKey = nameKey;
+    }
+
+    /**
+     * The fully-qualified i18n key of the process' display name, the counterpart of
+     * {@link #getNameKey()} for the process a task belongs to.
+     *
+     * @return the translation key, or null
+     */
+    public String getProcessDefinitionNameKey() {
+        return processDefinitionNameKey;
+    }
+
+    /**
+     * @param processDefinitionNameKey the translation key of the process' name
+     */
+    public void setProcessDefinitionNameKey(String processDefinitionNameKey) {
+        this.processDefinitionNameKey = processDefinitionNameKey;
+    }
 
 }

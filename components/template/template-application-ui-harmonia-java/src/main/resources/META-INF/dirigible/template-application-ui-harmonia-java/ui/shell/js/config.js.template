@@ -30,11 +30,5 @@ App.config = {
   // the Region & Language picker. The shared application shell compares this declaration against
   // the platform set and lists the app as a warning when translations are missing; untranslated
   // content falls back to the default language.
-  languages: ${appLanguages},
-
-  // BPM user-task label lookup: the runtime task name (the BPMN user-task name the inbox serves)
-  // -> its key in the model catalog's `processes` section. Baked at generation time from the
-  // process definition; the views translate a task button as
-  // T('<project>:<tprefix>.processes.' + processTaskKeys[task.name], task.name).
-  processTaskKeys: ${processTaskKeys}
+  languages: ${appLanguages}
 };

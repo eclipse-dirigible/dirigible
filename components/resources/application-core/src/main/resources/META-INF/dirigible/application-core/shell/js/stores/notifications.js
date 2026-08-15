@@ -50,23 +50,36 @@ document.addEventListener('alpine:init', () => {
       tasks = tasks || [];
       const taskIds = new Set(tasks.map(t => 'task:' + t.id));
       const kept = this.items.filter(n => n.source !== 'task' || taskIds.has(n.id));
+      // A notification's text is baked in when it is created, so a kept item is re-titled here: the
+      // task catalogs load asynchronously and may well not have been there when it first arrived.
+      kept.forEach(n => { if (n.source === 'task' && n.task) Object.assign(n, this.taskItemText(n.task)); });
       const existing = new Set(kept.map(n => n.id));
       const added = [];
       tasks.forEach(t => {
         const id = 'task:' + t.id;
         if (!existing.has(id)) {
-          added.push({
+          added.push(Object.assign({
             id,
             source: 'task',
             task: t,
-            title: window.T ? T('application-core:shell.notifications.newTask', 'New task: {{name}}', { name: t.name || 'Task' }) : 'New task: ' + (t.name || 'Task'),
-            description: t.processDefinitionName || '',
             variant: 'information',
             unread: true,
-          });
+          }, this.taskItemText(t)));
         }
       });
       this.items = added.concat(kept);
+    },
+
+    // What a task-derived notification reads, in the user's language — the names come from the
+    // processTasks store, the single place that knows how a task is named.
+    taskItemText(task) {
+      const tasks = Alpine.store('processTasks');
+      const name = tasks ? tasks.taskName(task) : (task.name || 'Task');
+      const process = tasks ? tasks.processName(task) : (task.processDefinitionName || '');
+      return {
+        title: window.T ? T('application-core:shell.notifications.newTask', 'New task: {{name}}', { name }) : 'New task: ' + name,
+        description: process,
+      };
     },
   });
 }, { once: true });

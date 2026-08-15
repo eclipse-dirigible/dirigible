@@ -55,7 +55,10 @@ document.addEventListener('alpine:init', () => {
     get filtered() {
       const q = this.searchTerm.trim().toLowerCase();
       if (!q) return this.tasks;
-      return this.tasks.filter(t => [t.name, t.processDefinitionName, t.processInstanceBusinessKey, t.assignee]
+      // Filter on what the row actually reads — the translated names — as well as the raw ones, so
+      // typing what is on screen finds it in any language.
+      const store = Alpine.store('processTasks');
+      return this.tasks.filter(t => [store.taskLabel(t), t.name, t.processDefinitionName, t.processInstanceBusinessKey, t.assignee]
         .some(v => v && String(v).toLowerCase().includes(q)));
     },
 

@@ -126,7 +126,7 @@ final class ModelTemplateAdapters {
 
     /**
      * Prepares the full application stack, whose UI needs the application's own caption, icon,
-     * languages, dashboard widgets and task labels.
+     * languages and dashboard widgets.
      *
      * @param modelText the raw model file
      * @param parameters the generation parameters
@@ -151,17 +151,6 @@ final class ModelTemplateAdapters {
         parameters.put("appLanguages",
                 JavaScriptJson.compact(languages.isEmpty() ? List.of(DEFAULT_APP_LANGUAGE) : new ArrayList<>(languages)));
         parameters.put("customWidgets", model.get("widgets") == null ? new ArrayList<>() : model.get("widgets"));
-        // The views resolve a task's runtime name to its catalog key by exact match, so the generated
-        // configuration gets the REVERSE of the model's step-to-name map. The task set is part of the
-        // process definition, so it is fully known here.
-        Map<String, Object> taskLabels = asMap(model.get("processTaskLabels"));
-        Map<String, Object> taskKeys = new LinkedHashMap<>();
-        if (taskLabels != null) {
-            for (Map.Entry<String, Object> entry : taskLabels.entrySet()) {
-                taskKeys.put(String.valueOf(entry.getValue()), entry.getKey());
-            }
-        }
-        parameters.put("processTaskKeys", JavaScriptJson.compact(taskKeys));
         return new PreparedModel(model, true);
     }
 

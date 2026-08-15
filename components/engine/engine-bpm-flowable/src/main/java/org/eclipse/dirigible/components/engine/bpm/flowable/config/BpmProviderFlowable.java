@@ -26,10 +26,12 @@ import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.engine.bpm.BpmProvider;
 import org.eclipse.dirigible.components.engine.bpm.flowable.TaskService;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActivityStatusData;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessLabelKeys;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.bpmn.model.Process;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.ProcessEngineConfiguration;
 import org.flowable.engine.RepositoryService;
@@ -59,6 +61,10 @@ public class BpmProviderFlowable implements BpmProvider {
 
     /** The Constant EXTENSION_BPMN20_XML. */
     private static final String EXTENSION_BPMN20_XML = "bpmn20.xml";
+
+    /** The extension element carrying a process' declarations, and the task-label-catalog one. */
+    private static final String TASK_LABEL_CATALOG_ELEMENT = "property";
+    private static final String TASK_LABEL_CATALOG_PROPERTY = "taskLabelCatalog";
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(BpmProviderFlowable.class);
@@ -327,6 +333,41 @@ public class BpmProviderFlowable implements BpmProvider {
         processDefinitionsQuery.processDefinitionTenantId(getTenantId());
 
         return processDefinitionsQuery.list();
+    }
+
+    /**
+     * Where a process declares its display names are translated - the {@code taskLabelCatalog}
+     * extension property on the {@code <process>} element:
+     *
+     * <pre>
+     * &lt;process id="Approval" ...&gt;
+     *   &lt;extensionElements&gt;
+     *     &lt;flowable:property name="taskLabelCatalog" value="sales:sales-model.processes"/&gt;
+     *   &lt;/extensionElements&gt;
+     * </pre>
+     *
+     * Names are keyed within it by BPMN id, so the whole mapping is declared at generation time and
+     * nothing is derived at runtime. Read off the deployment-cached BPMN model, so it costs no query
+     * once the definition has been touched.
+     *
+     * @param processDefinitionId the process definition id
+     * @return the declared keys, empty for a process (e.g. a hand-authored one) that declares none
+     */
+    public Optional<ProcessLabelKeys> getProcessLabelKeys(String processDefinitionId) {
+        BpmnModel bpmnModel = processEngine.getRepositoryService()
+                                           .getBpmnModel(processDefinitionId);
+        Process process = bpmnModel == null ? null : bpmnModel.getMainProcess();
+        if (process == null) {
+            return Optional.empty();
+        }
+        return process.getExtensionElements()
+                      .getOrDefault(TASK_LABEL_CATALOG_ELEMENT, List.of())
+                      .stream()
+                      .filter(element -> TASK_LABEL_CATALOG_PROPERTY.equals(element.getAttributeValue(null, "name")))
+                      .map(element -> element.getAttributeValue(null, "value"))
+                      .filter(value -> value != null && !value.isBlank())
+                      .findFirst()
+                      .map(catalog -> new ProcessLabelKeys(catalog, catalog + "." + process.getId()));
     }
 
     public ProcessDefinition getProcessDefinitionByKey(String processDefinitionKey) {

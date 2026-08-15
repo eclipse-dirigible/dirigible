@@ -742,6 +742,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static Map<String, String> buildProcessTaskLabels(IntentModel model) {
         Map<String, String> labels = new LinkedHashMap<>();
         for (ProcessIntent process : model.getProcesses()) {
+            // The process' own name too: the Inbox names a task "<process> - <task>", so translating
+            // only the task half would leave every row half-English. Keyed by the process name, which
+            // is its BPMN id - the same by-id convention the steps below use.
+            if (process.getName() != null && !process.getName()
+                                                     .isBlank()) {
+                labels.put(process.getName(), IntentNaming.humanize(process.getName()));
+            }
             for (StepIntent step : process.getSteps()) {
                 if ("userTask".equals(step.getKind()) && step.getName() != null && !step.getName()
                                                                                         .isBlank()) {
