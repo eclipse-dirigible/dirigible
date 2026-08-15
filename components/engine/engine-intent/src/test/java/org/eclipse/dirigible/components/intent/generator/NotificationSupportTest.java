@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.generator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -114,6 +115,32 @@ class NotificationSupportTest {
         assertEquals("\"Hi \" + (customer == null ? null : customer.Name) + \", review it here: \""
                 + " + org.eclipse.dirigible.sdk.core.Configurations.get(\"DIRIGIBLE_APP_BASE_URL\", \"\")" + " + \"/orders/\""
                 + " + entity.Id", plan.subjectExpression());
+    }
+
+    @Test
+    void recordUrlAndInboxUrlResolveToTemplateDeclaredLocalsAndAreReported() {
+        Map<String, EntityIntent> byName = libraryModel();
+        NotificationSupport.Plan plan = NotificationSupport.plan(notification("ops@x.com", "Order {id}: {recordUrl} - inbox {inboxUrl}"),
+                byName.get("Order"), byName, Map.of());
+
+        // Bare identifiers, NOT expressions: the locals are declared by the events template, which is
+        // the only layer that knows the generated application's routes.
+        assertEquals("\"Order \" + entity.Id + \": \" + recordUrl + \" - inbox \" + inboxUrl", plan.subjectExpression());
+        assertTrue(plan.loads()
+                       .isEmpty(),
+                "a link token is not a relation - it must not register a relation load");
+        assertTrue(plan.usesRecordUrl(), "the plan must report the record link so the template declares it");
+        assertTrue(plan.usesInboxUrl(), "the plan must report the inbox link so the template declares it");
+    }
+
+    @Test
+    void anUnusedLinkIsNotReportedSoTheTemplateDeclaresNothing() {
+        Map<String, EntityIntent> byName = libraryModel();
+        NotificationSupport.Plan plan =
+                NotificationSupport.plan(notification("ops@x.com", "Order {id}: {recordUrl}"), byName.get("Order"), byName, Map.of());
+
+        assertTrue(plan.usesRecordUrl());
+        assertFalse(plan.usesInboxUrl(), "an unreferenced link must not be declared - a generated class carries no dead local");
     }
 
     @Test

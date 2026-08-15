@@ -28,8 +28,9 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
  * {@code @Listener} pastes in. Kept free of Spring/IO so the tricky bits are unit-tested directly.
  *
  * <p>
- * A value or {@code {placeholder}} is one of: the reserved <b>{@code appUrl}</b> config token (the
- * application's external base URL, see {@link #APP_URL_TOKEN}), a <b>direct field</b> of the event
+ * A value or {@code {placeholder}} is one of: a <b>reserved link token</b> ({@code appUrl} - the
+ * application's external base URL, see {@link #APP_URL_TOKEN}; {@code recordUrl} / {@code inboxUrl}
+ * - the ready-made deep links, see {@link #RECORD_URL_TOKEN}), a <b>direct field</b> of the event
  * entity (rendered {@code entity.<PascalField>}), or a one-hop <b>{@code relation.field}</b> of a
  * to-one relation (rendered against a related entity the listener loads once by FK id - the same
  * one-hop mechanism the decision resolvers use, see {@link ProcessResolverSupport}). Multi-hop
@@ -68,6 +69,30 @@ public final class NotificationSupport {
     private static final String APP_URL_EXPRESSION =
             "org.eclipse.dirigible.sdk.core.Configurations.get(\"" + DirigibleConfig.APP_BASE_URL.getKey() + "\", \"\")";
 
+    /**
+     * The reserved {@code {recordUrl}} placeholder name - the ready-made deep link to the record the
+     * message is about ("you have an approval waiting" is useless without one), where
+     * {@link #APP_URL_TOKEN} supplies only the origin and leaves the author to type the route by hand.
+     * <p>
+     * It resolves to a bare Java identifier, not to an expression: the local is <b>declared by the
+     * events template</b>, which is the layer that knows the generated application's routes. The intent
+     * layer contributes only model facts - the entity and its key property, carried in the glue as
+     * {@code recordUrlEntity} / {@code recordUrlKeyProperty} - so the path-agnostic rule holds (see the
+     * engine-intent guide) and a change to the generated app's URL layout is a template change alone.
+     * <p>
+     * Inside a fan-out it links the <b>row</b>, like every other bare path: the row is what that
+     * message is about. The anchor record is reachable for VALUES through {@code {record.<field>}}, but
+     * not as a link - a fan-out that wants to point at its anchor should say so with {@code {appUrl}}.
+     */
+    static final String RECORD_URL_TOKEN = "recordUrl";
+
+    /**
+     * The reserved {@code {inboxUrl}} placeholder name - the deep link to the recipient's process
+     * Inbox, the other half of "a notification cannot carry a link to the record or task". Declared by
+     * the events template exactly like {@link #RECORD_URL_TOKEN}, and needing no model facts at all.
+     */
+    static final String INBOX_URL_TOKEN = "inboxUrl";
+
     private NotificationSupport() {}
 
     /**
@@ -102,9 +127,13 @@ public final class NotificationSupport {
     public record CrossModelTarget(String perspectiveName, String project, String modelAlias, java.util.Set<String> propertyNames) {
     }
 
-    /** The translated, ready-to-render shape of a notification. */
+    /**
+     * The translated, ready-to-render shape of a notification. The two {@code uses*} flags report which
+     * template-declared deep-link locals the expressions reference, so a generated handler declares
+     * only the links its message actually uses.
+     */
     public record Plan(List<RelationLoad> loads, String guardExpression, String toExpression, String subjectExpression,
-            String bodyExpression) {
+            String bodyExpression, boolean usesRecordUrl, boolean usesInboxUrl) {
     }
 
     /**
@@ -225,7 +254,8 @@ public final class NotificationSupport {
         }
         String subjectExpression = resolver.text(subject);
         String bodyExpression = resolver.text(body);
-        return new Plan(resolver.loads(), guard(when), recipient, subjectExpression, bodyExpression);
+        return new Plan(resolver.loads(), guard(when), recipient, subjectExpression, bodyExpression, resolver.usesRecordUrl(),
+                resolver.usesInboxUrl());
     }
 
     /**
@@ -279,6 +309,8 @@ public final class NotificationSupport {
         private final Set<String> settingEntities;
         private final CrossModelLookup crossModel;
         private final Map<String, RelationLoad> loads = new LinkedHashMap<>();
+        private boolean usesRecordUrl;
+        private boolean usesInboxUrl;
 
         Resolver(EntityIntent entity, EntityIntent anchor, Map<String, EntityIntent> byName, Map<String, String> compositionParents,
                 CrossModelLookup crossModel) {
@@ -292,6 +324,14 @@ public final class NotificationSupport {
 
         List<RelationLoad> loads() {
             return new ArrayList<>(loads.values());
+        }
+
+        boolean usesRecordUrl() {
+            return usesRecordUrl;
+        }
+
+        boolean usesInboxUrl() {
+            return usesInboxUrl;
         }
 
         /** A single value (the {@code to} recipient): literal, direct field, or relation.field. */
@@ -353,6 +393,17 @@ public final class NotificationSupport {
         private String access(String path, boolean recordScope) {
             if (APP_URL_TOKEN.equals(path)) {
                 return APP_URL_EXPRESSION;
+            }
+            // The two deep links are locals the events template declares - the layer that knows the
+            // generated routes. Emitting the identifier here is what keeps the route out of the intent
+            // layer; the flags tell that template which of them to declare.
+            if (RECORD_URL_TOKEN.equals(path)) {
+                usesRecordUrl = true;
+                return RECORD_URL_TOKEN;
+            }
+            if (INBOX_URL_TOKEN.equals(path)) {
+                usesInboxUrl = true;
+                return INBOX_URL_TOKEN;
             }
             if (recordScope && anchor != null && path.startsWith(NotifySupport.RECORD_SCOPE + ".")) {
                 // The anchor record of a fan-out, already loaded by the generated code: one field of it,

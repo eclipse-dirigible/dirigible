@@ -455,6 +455,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("subjectExpression", plan.subjectExpression());
             entry.put("bodyExpression", plan.bodyExpression());
             entry.putAll(NotifySupport.attachmentFields(attachment));
+            entry.putAll(NotifySupport.deepLinkFields(plan, byName.get(entity)));
             notifications.add(entry);
         }
         return notifications;
@@ -1086,6 +1087,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         // named `entity` in the templates for exactly this reason, so one expression set serves both
         // shapes), the ANCHOR record's for `attach: recordPrint`.
         fields.put("attachKeyProperty", send && attachment != null ? IntentEntities.keyFieldName(document) : "");
+        fields.putAll(NotifySupport.deepLinkFields(send ? plan : null, about));
         return fields;
     }
 
@@ -2849,9 +2851,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // engine IT keys "no trigger was generated" on trigger-only keys being absent.
             entry.put("attachKeyProperty", sourceCrossModel ? sourceTarget.keyField() : IntentEntities.keyFieldName(byName.get(entity)));
             entry.put("criteriaExpression", ScheduleSupport.criteriaExpression(schedule));
-            // The attachment keys are always present (empty for a generate schedule): an undefined
-            // Velocity variable renders as its own name, so a template must never rely on absence.
+            // The attachment and deep-link keys are always present (empty for a generate schedule): an
+            // undefined Velocity variable renders as its own name, so a template must never rely on
+            // absence.
             entry.putAll(NotifySupport.attachmentFields(null));
+            entry.putAll(NotifySupport.deepLinkFields(null, null));
 
             if (generates) {
                 // Scheduled record generation: the queried row is the source, so its create-from maps the
@@ -2902,6 +2906,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.put("subjectExpression", plan.subjectExpression());
                 entry.put("bodyExpression", plan.bodyExpression());
                 entry.putAll(NotifySupport.attachmentFields(attachment));
+                entry.putAll(NotifySupport.deepLinkFields(plan, byName.get(entity)));
             }
             schedules.add(entry);
         }

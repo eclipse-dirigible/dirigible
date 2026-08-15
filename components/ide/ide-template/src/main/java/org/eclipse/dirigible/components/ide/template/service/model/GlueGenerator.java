@@ -349,6 +349,7 @@ class GlueGenerator {
                 "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachFileNameExpression");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
+        bindDeepLinks(item, context);
         bindAttachLanguage(item, context, parameters);
     }
 
@@ -372,6 +373,7 @@ class GlueGenerator {
                 truthy(item, "sourceCrossModel") ? sanitize(item, "sourceModel") : str(parameters, "javaGenFolderName"));
         context.put("action", strOr(item, "action", "notify"));
         context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
+        bindDeepLinks(item, context);
         bindAttachLanguage(item, context, parameters);
         context.put("genToGenFolder",
                 generates ? (truthy(item, "genCrossModel") ? sanitize(item, "genToModel") : str(parameters, "javaGenFolderName")) : "");
@@ -566,6 +568,7 @@ class GlueGenerator {
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("notifyRelationLoads", relationLoads(item.get("notifyRelationLoads"), parameters));
         context.put("javaForEachPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "forEachPerspective", "")));
+        bindDeepLinks(item, context);
         bindAttachLanguage(item, context, parameters);
     }
 
@@ -584,6 +587,7 @@ class GlueGenerator {
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("notifyRelationLoads", relationLoads(item.get("notifyRelationLoads"), parameters));
         context.put("javaForEachPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "forEachPerspective", "")));
+        bindDeepLinks(item, context);
         bindAttachLanguage(item, context, parameters);
     }
 
@@ -848,6 +852,19 @@ class GlueGenerator {
                 NamingHelper.sanitizeJavaIdentifier(strOr(item, "attachLanguageTargetPerspective", "")));
         context.put("attachLanguageJavaGenFolder", truthy(item, "attachLanguageCrossModel") ? sanitize(item, "attachLanguageTargetModel")
                 : str(parameters, "javaGenFolderName"));
+    }
+
+    /**
+     * Binds the deep-link keys every notify call site carries: which of the two reserved link locals
+     * ({@code recordUrl} / {@code inboxUrl}) the message references, plus the entity and key property
+     * the record link is built from. The route itself is assembled in the template, which is the layer
+     * that knows the generated application's URL layout.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     */
+    private static void bindDeepLinks(Map<String, Object> item, Map<String, Object> context) {
+        copy(context, item, "usesRecordUrl", "usesInboxUrl", "recordUrlEntity", "recordUrlKeyProperty");
     }
 
     /**

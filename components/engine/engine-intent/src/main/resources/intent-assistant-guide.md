@@ -116,12 +116,16 @@ not as an apology.
   `to` / `subject` / `body` (+ `channel: email`), with `{field}` / `{relation.field}` interpolation in
   the subject and body, plus the optional **`attach: print`** that mails the record's own rendered
   document - see *send a document by e-mail*.
-- **`{appUrl}` is a reserved config token, not a field.** It resolves to the application's external
-  base URL (`DIRIGIBLE_APP_BASE_URL`, tenant-overridable), so a body can compose a deep link by hand,
-  e.g. `body: "Review it here: {appUrl}/orders/{id}"`. It supplies only the origin - the intent layer
-  does not know the generated app's routes, so the rest of the path is plain text plus other
-  placeholders, same as any other literal. Because `appUrl` is reserved, an entity must not declare a
-  field literally named `appUrl` (it would be shadowed in every notify block).
+- **`{recordUrl}` and `{inboxUrl}` are the ready-made deep links - prefer them.** `{recordUrl}` is the
+  link to the record the message is about (`body: "Approve it here: {recordUrl}"`), `{inboxUrl}` the
+  link to the recipient's process Inbox. Both are assembled for you, so **never hand-type a route** -
+  the intent layer does not know the generated app's URLs, and a path typed into a body would break
+  the day the generated layout changes. In a fan-out (`forEach:`) `{recordUrl}` links the ROW, like
+  every other bare path, while `{record.<field>}` reads the anchor record.
+- **`{appUrl}` is the raw origin** (`DIRIGIBLE_APP_BASE_URL`, tenant-overridable) - reach for it only
+  for a link the two above cannot express, e.g. a page of your own: `"{appUrl}/services/web/..."`.
+  All three names are reserved, so an entity must not declare a field literally named `appUrl`,
+  `recordUrl` or `inboxUrl` (it would be shadowed in every notify block).
 - **A recipient that cannot be resolved is surfaced, not silent.** If `to` names a field/relation that
   does not exist, that notification or schedule is dropped and reported in the generate response's
   `warnings` (as well as the server log) - fix the reference so the glue is emitted.
