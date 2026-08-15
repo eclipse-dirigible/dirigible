@@ -89,11 +89,13 @@
 ## editable inputs here - they render in the read-only details block below, above the buttons. They
 ## still stay in the form model so they round-trip on edit. Calculated fields remain inline (read-only).
 ## The EntityStatus FK (DOCUMENT_STATUS) is excluded too - it renders as the title-bar badge above.
-## The COMPOSITION-parent FK is never an input: a detail is created from its master's panel, which
-## presets the FK via the create query param (and an edit round-trips it) - exactly like every other
-## master-detail surface (items dialog, detail tables). Offering the parent as a dropdown invites
-## re-parenting by accident and is redundant inside the detail dialog.
-#if(!$property.dataAutoIncrement && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && $property.relationshipType != "COMPOSITION" && !($property.auditType && $property.auditType != "NONE"))
+## A relation whose value the NAVIGATION CONTEXT already implies (the composition parent, when the
+## form was opened from that master's panel) is NOT excluded - it renders as a locked label, see the
+## DROPDOWN branch below: showing which parent the record is being filed under is the point, while a
+## free dropdown there would let the record be re-pointed mid-flow. A composition parent that is not
+## a lookup (an .edm authored with a TEXTBOX on the master FK) has no label to show and only a raw id
+## to offer, so it stays out of the grid entirely.
+#if(!$property.dataAutoIncrement && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && !($property.relationshipType == "COMPOSITION" && $property.widgetType != "DROPDOWN") && !($property.auditType && $property.auditType != "NONE"))
 ## Read-only only when DERIVED - an expression, or an update-time recompute. A field whose only
 ## calculated aspect is calculatedActionOnCreate is a server-side DEFAULT (Due, Currency, a tax
 ## event date): pre-filled, but the user's pick is respected - it must stay editable (#6696).
@@ -116,12 +118,24 @@
 #else
         <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
 #if($property.widgetType == "DROPDOWN")
-        <!-- Combobox per the Harmonia select contract (see codbex-athena-app forms): x-model on the
+        <!-- Context-locked: the URL that opened this form already names ${property.name} (a master's
+             detail panel presets its FK, a create-from flow presets its source), so the value is
+             implied by where the user is standing, not a choice. It renders as the referenced
+             record's label, read-only - a dropdown here would let the record be re-pointed
+             mid-flow. x-if, not a disabled select: the Harmonia select's trigger is a span, so a
+             disabled input would still open the list. The value stays in the form model and is
+             saved exactly as before. With no such param (the entity's own top-level create) the
+             normal combobox renders.
+             Combobox per the Harmonia select contract (see codbex-athena-app forms): x-model on the
              x-h-select-input holds the VALUE (the option data-value), a string; the input shows the
              matched option's label. data-filter enables type-to-search; x-h-select-search adds the
              in-dropdown search box for longer option lists. A non-setting association ($lookup) is laid
              out on one row with an "Add new" button (opens the target's own create page in an iframe
              dialog) and a Refresh button. -->
+        <template x-if="isContextLocked('${property.name}')">
+          <input x-h-input type="text" id="f_${property.name}" readonly :value="contextLabel(form.${property.name}, options${property.name})" />
+        </template>
+        <template x-if="!isContextLocked('${property.name}')">
 #if($lookup)
         <div class="hbox gap-1 items-center">
           <div x-h-select data-filter="contains" class="grow">
@@ -149,6 +163,7 @@
           </div>
         </div>
 #end
+        </template>
 #elseif($property.widgetType == "NUMBER")
         <!-- step="any": without it the browser default step=1 rejects fractional input on DECIMAL fields. -->
         <div x-h-input-number>
