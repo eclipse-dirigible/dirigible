@@ -190,11 +190,7 @@ ${importsCode}
 @Component("${javaGenFolderName}_${name}Repository")
 public class ${name}Repository extends JavaRepository<${name}Entity> {
 
-    public ${name}Repository() {
-        super(${name}Entity.class);
-    }
 #if($history == "true")
-
     /** The base table whose shadow ${tablePrefix}${dataName}_HISTORY table carries the change trail. */
     private static final String HISTORY_TABLE = "${tablePrefix}${dataName}";
 
@@ -205,7 +201,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      */
 #set($historyFirst = true)
     private static final java.util.List<String> HISTORY_PROPERTIES = java.util.List.of(#foreach($property in $properties)#if(!$property.dataPrimaryKey && (!$property.auditType || $property.auditType == "NONE"))#if($historyFirst)#set($historyFirst = false)#else, #end"${property.name}"#end#end);
+
 #end
+    public ${name}Repository() {
+        super(${name}Entity.class);
+    }
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
