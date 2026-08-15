@@ -1033,6 +1033,30 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void historyEntityCarriesTheModelAttribute() {
+        String yaml = """
+                name: legal
+                entities:
+                  - name: Contract
+                    audit: true
+                    history: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                  - name: Note
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: text, type: string }
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        List<Map<String, Object>> entities = entities(EdmIntentGenerator.buildModelJsonForTest(parsed, "legal"));
+
+        assertEquals("true", entityByName(entities, "Contract").get("history"),
+                "a historized entity should carry the EDM history attribute - the schema, DAO and UI templates all key on it");
+        assertNull(entityByName(entities, "Note").get("history"), "an entity that did not ask for a history must not carry the attribute");
+    }
+
+    @Test
     void multilingualEntityAndLanguagesFlowIntoTheModel() {
         String yaml = """
                 name: uoms

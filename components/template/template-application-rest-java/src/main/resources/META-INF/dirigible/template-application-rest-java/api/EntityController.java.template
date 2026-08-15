@@ -131,6 +131,23 @@ public class ${name}Controller {
         return Map.of("mutable", isMutable(entity));
     }
 #end
+#if($history == "true")
+
+    @Get("/{id}/history")
+    @Documentation("The change history of ${name} {id} - one entry per property whose value changed, newest first")
+    public List<Map<String, Object>> history(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        // 404 on an unknown row rather than an empty trail, so the caller cannot read "nothing ever
+        // happened" out of "no such record".
+        repository.findOne(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
+        // Read-only by design: the shadow table has no create/update/delete verb anywhere, which is
+        // what makes the trail append-only.
+        return org.eclipse.dirigible.sdk.db.History.read("${tablePrefix}${dataName}", id);
+    }
+#end
 
     @Post
     @Documentation("Create ${name}")

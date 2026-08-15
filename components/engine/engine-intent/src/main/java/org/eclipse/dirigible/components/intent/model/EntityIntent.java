@@ -60,6 +60,19 @@ public class EntityIntent {
      */
     private Boolean audit;
     /**
+     * Whether the generator keeps a full change history for this entity in a shadow table (a sibling
+     * {@code
+     *
+    <TABLE>
+     * _HISTORY}, like the multilingual {@code _LANG} table). Where {@link #audit} records only the LAST
+     * writer and time in four columns of the row itself, the history records every write as field-level
+     * deltas - property, old value, new value, who, when, and whether the write came from a user or
+     * from the system (a roll-up, a workflow write-back). The generated repository appends the rows on
+     * every write it performs and the record's form shows them in a read-only History panel; nothing
+     * offers a write path to the shadow table. Absent (the default) → no history.
+     */
+    private Boolean history;
+    /**
      * Optional navigation-group id. When set, the generated perspective for this entity carries this as
      * its {@code groupId}, so the shared application shell nests it under the matching navigation group
      * (defined once, e.g. in a dedicated navigation-groups project). Absent → the perspective is
@@ -402,6 +415,19 @@ public class EntityIntent {
 
     public void setAudit(Boolean audit) {
         this.audit = audit;
+    }
+
+    /** Whether this entity keeps a full field-level change history in a shadow table. */
+    public boolean isHistorized() {
+        return Boolean.TRUE.equals(history);
+    }
+
+    public Boolean getHistory() {
+        return history;
+    }
+
+    public void setHistory(Boolean history) {
+        this.history = history;
     }
 
     public String getGroup() {

@@ -143,6 +143,9 @@ import org.eclipse.dirigible.sdk.security.User;
 import java.util.List;
 import java.util.Map;
 #end
+#if($history == "true")
+import org.eclipse.dirigible.sdk.db.History;
+#end
 #if($haveCalculatedPropertyExpression)
 import org.eclipse.dirigible.sdk.utils.Calc;
 #end
@@ -187,6 +190,19 @@ ${importsCode}
 @Component("${javaGenFolderName}_${name}Repository")
 public class ${name}Repository extends JavaRepository<${name}Entity> {
 
+#if($history == "true")
+    /** The base table whose shadow ${tablePrefix}${dataName}_HISTORY table carries the change trail. */
+    private static final String HISTORY_TABLE = "${tablePrefix}${dataName}";
+
+    /**
+     * The properties whose changes are recorded. The primary key never changes and the audit columns
+     * say what the history row already says (who and when), so both are left out - everything else,
+     * calculated fields and foreign keys included, is part of what the row was at a point in time.
+     */
+#set($historyFirst = true)
+    private static final java.util.List<String> HISTORY_PROPERTIES = java.util.List.of(#foreach($property in $properties)#if(!$property.dataPrimaryKey && (!$property.auditType || $property.auditType == "NONE"))#if($historyFirst)#set($historyFirst = false)#else, #end"${property.name}"#end#end);
+
+#end
     public ${name}Repository() {
         super(${name}Entity.class);
     }
@@ -243,6 +259,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         enforceChecks(entity);
 #end
         ${name}Entity saved = super.save(entity);
+#if($history == "true")
+        // Change history: the initial state as a null -> value delta per property, attributed to the
+        // user whose request created the row.
+        History.recordCreate(HISTORY_TABLE, saved.${pkPropertyName}, History.USER, saved, HISTORY_PROPERTIES);
+#end
         // Publish the create event so listeners (e.g. intent process triggers / reactions under gen/events) can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}", Json.stringify(saved));
 #if($documentItem)
@@ -306,7 +327,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
 #end
+#if($history == "true")
+        // Change history: the before-image is read through the BASE find (super), never this class's
+        // overridden one - on a multilingual entity the overridden read overlays the caller's language,
+        // and a translated value diffed against the stored one would report an edit nobody made.
+        ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+#end
         ${name}Entity updated = super.update(entity);
+#if($history == "true")
+        History.recordUpdate(HISTORY_TABLE, updated.${pkPropertyName}, History.USER, historyBefore, updated, HISTORY_PROPERTIES);
+#end
         // Publish the update event (suffixed topic) so intent reactions under gen/events can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-updated", Json.stringify(updated));
 #if($aggregateKeys && $aggregateKeys.size() > 0)
@@ -346,13 +376,23 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // the gate check makes an unbalanced document fail the transition, not silently post.
         enforceChecks(entity);
 #end
+#if($history == "true")
+        ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+        ${name}Entity historyAfter = super.update(entity);
+        // A system write (no user event), recorded as such so the trail separates what the application
+        // did from what a person did.
+        History.recordUpdate(HISTORY_TABLE, historyAfter.${pkPropertyName}, History.SYSTEM, historyBefore, historyAfter, HISTORY_PROPERTIES);
+        return historyAfter;
+#else
         return super.update(entity);
+#end
     }
-#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges)
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || $history == "true")
 
     /**
-     * Targeted single-column write with the document semantics preserved: routed through
-     * {@link #updateProperties} so the gate checks (and the stored label Name) still run.
+     * Targeted single-column write with this entity's semantics preserved: routed through
+     * {@link #updateProperties}, which is where they are applied. The base implementation writes the
+     * column directly, so a plain pass-through would skip them.
      */
     @Override
     public int updateProperty(Object id, String property, Object value) {
@@ -362,7 +402,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     }
 
     /**
-     * Targeted multi-column write with the document semantics preserved: the incoming values are
+     * Targeted multi-column write with this entity's semantics preserved: the incoming values are
      * applied to a FRESH copy of the row first, so the declarative gate checks (and the stored label
      * Name) see the row as it will be after the write - then only the named columns (plus a changed
      * Name) are persisted in one statement. The workflow setters/writers come through here; a plain
@@ -373,6 +413,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         if (values == null || values.isEmpty()) {
             return 0;
         }
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges)
         ${name}Entity entity = findOne(id).orElse(null);
         if (entity != null) {
 #if($lifecycleEdges)
@@ -407,7 +448,20 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             enforceChecks(entity);
 #end
         }
+#end
+#if($history == "true")
+        // Change history for the targeted write: it is how the system writes (a roll-up total, a
+        // workflow write-back, a stamped number), so the trail attributes it to SYSTEM - a person
+        // reading the record must be able to tell those apart from an edit somebody made.
+        ${name}Entity historyBefore = super.findById(id);
+        int historyUpdated = super.updateProperties(id, values);
+        if (historyUpdated > 0) {
+            History.recordUpdate(HISTORY_TABLE, id, History.SYSTEM, historyBefore, super.findById(id), HISTORY_PROPERTIES);
+        }
+        return historyUpdated;
+#else
         return super.updateProperties(id, values);
+#end
     }
 #end
 
@@ -561,7 +615,15 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public void delete(${name}Entity entity) {
+#if($history == "true")
+        // The caller's argument may be a partial snapshot; the trail must carry what was actually
+        // stored, so read the row (untranslated) before it is gone.
+        ${name}Entity historyDeleted = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+#end
         super.delete(entity);
+#if($history == "true")
+        History.recordDelete(HISTORY_TABLE, entity.${pkPropertyName}, History.USER, historyDeleted, HISTORY_PROPERTIES);
+#end
         // Publish the delete event (suffixed topic) so intent reactions under gen/events can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-deleted", Json.stringify(entity));
 #if($documentItem)
@@ -573,7 +635,13 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     @Override
     public void deleteById(Object id) {
         ${name}Entity entity = findById(id);
+#if($history == "true")
+        ${name}Entity historyDeleted = super.findById(id);
+#end
         super.deleteById(id);
+#if($history == "true")
+        History.recordDelete(HISTORY_TABLE, id, History.USER, historyDeleted, HISTORY_PROPERTIES);
+#end
         if (entity != null) {
             Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-deleted", Json.stringify(entity));
 #if($documentItem)
@@ -688,7 +756,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         totals.put("${property.name}", entity.${property.name});
 #end
 #end
+#if($history == "true")
+        // Recalculation deliberately goes to the BASE targeted write (it has already computed the row,
+        // so it must not re-run the gate), which means the history has to be recorded here rather than
+        // in the override - a document whose totals move with every line must show that in its trail.
+        ${name}Entity historyBefore = super.findById(id);
+#end
         super.updateProperties(id, totals);
+#if($history == "true")
+        History.recordUpdate(HISTORY_TABLE, id, History.SYSTEM, historyBefore, super.findById(id), HISTORY_PROPERTIES);
+#end
         return entity;
     }
 #end

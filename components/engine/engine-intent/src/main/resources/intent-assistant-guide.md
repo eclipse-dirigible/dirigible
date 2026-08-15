@@ -485,6 +485,27 @@ document numbers.
 **Audit columns:** `audit: true` on an entity adds the four standard audit columns (`CreatedAt`,
 `CreatedBy`, `UpdatedAt`, `UpdatedBy`), populated by the platform's audit annotations.
 
+**Change history (`history: true`):** where `audit: true` keeps only the LAST writer and time, this
+keeps the whole trail. The entity gets a shadow `<TABLE>_HISTORY` table (a sibling, like the
+multilingual `_LANG` table) and every write through the generated repository appends one row per
+property whose value actually changed - property, old value, new value, who, when, and whether the
+write came from a user or from the system (a roll-up total, a workflow write-back). A create is
+recorded as `null -> value`, a delete as `value -> null`. The record's form shows the trail in a
+read-only **History** panel; there is no write path to the shadow table on any surface, so it is
+append-only by construction. Use it for entities a regulated domain must be able to reconstruct
+(contracts, payments, anything a supervisory audit asks about) - and only for those: it multiplies
+the write volume of the entity.
+
+```yaml
+entities:
+  - name: Contract
+    audit: true
+    history: true
+    fields:
+      - { name: id, type: integer, primaryKey: true }
+      - { name: amount, type: decimal }
+```
+
 **Duplicate action (`duplicable: true`):** on a **document** entity (a master owning a composition
 child whose name ends in `Item`) this adds a built-in **Duplicate** button to the document view. It
 clones the current document - header plus its line items - into a new draft and opens it, cloning

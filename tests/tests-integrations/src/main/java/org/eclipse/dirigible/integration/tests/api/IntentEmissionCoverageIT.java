@@ -14,6 +14,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -144,7 +145,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: payload, type: string, length: 500 }
 
               # The document master: immutable once POSTED (status 2), post gated by document checks.
+              # history: the trail has to separate what a person did (the create, the status hop)
+              # from what the application did (the totals recomputed when a line was added).
               - name: Entry
+                history: true
                 immutableWhen: "Status == 2"
                 checks:
                   - { kind: itemsMin, count: 1, status: 2, message: "Entry needs at least one line" }
@@ -273,8 +277,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # the schedule's `Period: now` below emitting the string shape (not LocalDate).
               # audit: the act-as assertions below prove a delegated write carries the ACTING
               # owner while CreatedBy keeps the REAL user.
+              # history: the shadow EMISSION_CLAIM_HISTORY trail. Claim carries BOTH interactions the
+              # keyword has to get right - it is audited (the audit columns must stay OUT of the
+              # tracked property list, they say what the history row already says) and it owns a
+              # sensitive field (so the personal surface must expose no history endpoint at all).
               - name: Claim
                 audit: true
+                history: true
                 label: "{note} ({Person.name}) {period|yyyy MMMM}"
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
@@ -1036,6 +1045,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         String schema = contentOf("gen/emission/schema/" + PROJECT + ".schema");
         assertTrue(schema.contains("EMISSION_UNIT_LANG"), "multilingual must emit the _LANG translation table into the schema");
+        assertHistoryEmission(schema, entryRepository);
         String unitRepository = contentOf("gen/emission/data/settings/UnitRepository.java");
         assertTrue(unitRepository.contains("Translator"), "multilingual must emit the read-time translation overlay into the repository");
 
@@ -1683,6 +1693,58 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "an event-driven create-from must return the document already back-referencing the source");
     }
 
+    /**
+     * {@code history: true} - the shadow trail, across every layer it has to reach: the schema's
+     * sibling table, the repository's append on each write path (with the user/system attribution), the
+     * read-only endpoint, the panel on the record's form, and the two interactions the keyword had to
+     * specify - the audit columns stay out of the tracked set, and a surface that hides a sensitive
+     * field is offered no history endpoint at all.
+     */
+    private void assertHistoryEmission(String schema, String entryRepository) {
+        assertTrue(schema.contains("EMISSION_ENTRY_HISTORY") && schema.contains("EMISSION_CLAIM_HISTORY"),
+                "history: true must emit the sibling _HISTORY shadow table into the schema");
+        assertTrue(
+                schema.contains("\"name\": \"OldValue\"") && schema.contains("\"name\": \"NewValue\"")
+                        && schema.contains("\"name\": \"Source\""),
+                "the shadow table must carry the delta, the actor and the write's source");
+
+        // Every write path appends, and the SOURCE is what separates an edit somebody made from a
+        // total the application recomputed. A repository that recorded only user writes would leave a
+        // record silently changing between two entries in its own trail.
+        assertTrue(
+                entryRepository.contains("History.recordCreate(") && entryRepository.contains("History.recordUpdate(")
+                        && entryRepository.contains("History.recordDelete("),
+                "history: true must append on the create, update and delete paths");
+        assertTrue(entryRepository.contains("History.USER") && entryRepository.contains("History.SYSTEM"),
+                "the trail must attribute user writes and system writes differently");
+        assertTrue(entryRepository.contains("super.findById(entity.Id)"),
+                "the before-image must be read through the BASE find - the overridden one overlays translations");
+
+        // The audit columns say exactly what the history row itself says (who and when), and the
+        // primary key never changes: tracking either is noise in every single entry.
+        String claimRepository = contentOf("gen/emission/data/claim/ClaimRepository.java");
+        String tracked = claimRepository.substring(claimRepository.indexOf("HISTORY_PROPERTIES"));
+        tracked = tracked.substring(0, tracked.indexOf(");"));
+        assertTrue(tracked.contains("\"Note\"") && tracked.contains("\"Rate\"") && tracked.contains("\"Person\""),
+                "the tracked set must carry the entity's own fields and foreign keys, got: " + tracked);
+        assertFalse(tracked.contains("\"CreatedAt\"") || tracked.contains("\"UpdatedBy\"") || tracked.contains("\"Id\""),
+                "the tracked set must exclude the audit columns and the primary key, got: " + tracked);
+
+        // The read is read-only and power-surface only. A scoped surface strips a sensitive field from
+        // its responses, so handing it a trail carrying that field's old and new values would leak
+        // exactly what the scoping hides - the personal controller therefore has no history verb.
+        assertTrue(contentOf("gen/emission/api/claim/ClaimController.java").contains("/{id}/history"),
+                "history: true must emit the read-only history endpoint on the power controller");
+        assertFalse(contentOf("gen/emission/api/claim/ClaimMyController.java").contains("history"),
+                "the personal surface must expose no history endpoint - a sensitive field's deltas must not reach it");
+
+        // The panel: the record's own form shows the trail, read-only.
+        assertTrue(contentOf("gen/emission/js/components/pages/Entry/EntryFormPage.js").contains("loadHistory()"),
+                "the record form must load its change trail");
+        assertTrue(contentOf("gen/emission/views/Entry/Entry-form.html").contains("historyLabel(entry.Property)"),
+                "the record form must render the change trail as a read-only panel");
+    }
+
     /** Layer 2 (the outermost): the published app enforces the features over REST. */
     private void assertRuntimeEnforcement() {
         // Seeds imported COMPLETELY - both account rows incl. the one with the relation column
@@ -1991,6 +2053,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("mutable", equalTo(false)));
 
+        // history: the whole life of the record is readable from one endpoint - the create, and the
+        // status hop the user made with both sides of it recorded, so "who changed this from what"
+        // has an answer. The audit columns and the key stay out: they restate what the entry carries.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryController/" + entryId + "/history")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.Operation == 'CREATE' && it.Property == 'Account' }.Source",
+                                                         hasItem("USER"))
+                                                 .body("findAll { it.Property == 'Status' && it.NewValue == '2' }.OldValue", hasItem("1"))
+                                                 .body("findAll { it.Property == 'Status' && it.NewValue == '2' }.Source", hasItem("USER"))
+                                                 .body("Property", not(hasItem("Id"))));
+        // A trail is only meaningful for a record that exists - an unknown id is a 404, never an empty
+        // history a caller could read as "nothing ever happened here".
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryController/999999/history")
+                                                 .then()
+                                                 .statusCode(404));
+
         // immutable: true (append-only): a snapshot can be created, then never edited or deleted.
         AtomicInteger snapshot = new AtomicInteger();
         restAssuredExecutor.execute(() -> snapshot.set(given().contentType("application/json")
@@ -2267,18 +2348,35 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("[0].Rate", equalTo(50.0F)));
 
         // Writes force the owner and ignore the sensitive field, whatever the client sends.
-        restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body("{\"Note\":\"spoofed\",\"Person\":2,\"Rate\":999,\"Period\":\"2026-07\"}")
-                                                 .when()
-                                                 .post(API + "/claim/ClaimMyController")
+        AtomicInteger ownClaim = new AtomicInteger();
+        restAssuredExecutor.execute(() -> ownClaim.set(given().contentType("application/json")
+                                                              .body("{\"Note\":\"spoofed\",\"Person\":2,\"Rate\":999,\"Period\":\"2026-07\"}")
+                                                              .when()
+                                                              .post(API + "/claim/ClaimMyController")
+                                                              .then()
+                                                              .statusCode(200)
+                                                              .body("Person", equalTo(1))
+                                                              .body("Rate", nullValue())
+                                                              // label: the stored display name computed on write -
+                                                              // "{note} ({Person.name}) {period|yyyy MMMM}"; the month
+                                                              // value formats through the pattern, never the raw 2026-07.
+                                                              .body("Name", equalTo("spoofed (Admin) 2026 July"))
+                                                              .extract()
+                                                              .path("Id")));
+
+        // history, the other half of the trail: the SYSTEM attribution. Creating this claim started
+        // its process, and the trigger wrote the instance id back onto the record - a write no person
+        // made. Without the source column that write is indistinguishable in the trail from the user's
+        // own edit one row above it, which is the first thing a supervisory audit asks about.
+        // (Asynchronous: the trigger reacts to the create event, hence the retry.)
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/claim/ClaimController/" + ownClaim.get() + "/history")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("Person", equalTo(1))
-                                                 .body("Rate", nullValue())
-                                                 // label: the stored display name computed on write -
-                                                 // "{note} ({Person.name}) {period|yyyy MMMM}"; the month
-                                                 // value formats through the pattern, never the raw 2026-07.
-                                                 .body("Name", equalTo("spoofed (Admin) 2026 July")));
+                                                 .body("findAll { it.Property == 'ProcessId' }.Source", hasItem("SYSTEM"))
+                                                 .body("findAll { it.Operation == 'CREATE' && it.Property == 'Note' }.Source",
+                                                         hasItem("USER")),
+                30);
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Note\":\"edited\",\"Person\":2,\"Rate\":999}")
                                                  .when()

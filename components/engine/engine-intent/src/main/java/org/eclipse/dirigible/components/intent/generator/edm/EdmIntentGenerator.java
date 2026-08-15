@@ -396,6 +396,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (entity.isMultilingual()) {
                 entityMap.put("multilingual", "true");
             }
+            // history: every write through the generated repository is recorded as field-level deltas in
+            // a sibling <TABLE>_HISTORY table. The schema template generates that table, the Java DAO
+            // template appends to it, and the generated form shows it as a read-only History panel.
+            // Where audit: true keeps only the last writer in four columns of the row, this keeps the
+            // whole trail - which is what a regulated domain has to be able to answer.
+            if (entity.isHistorized()) {
+                entityMap.put("history", "true");
+            }
             // A file-child: mark it so the generated controller emits the download (and, when editable,
             // upload/delete) verbs and the Harmonia master/document view renders it as a Files panel
             // (a composition detail already, so the master-detail wiring is unchanged). A Snapshot is

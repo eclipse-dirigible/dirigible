@@ -203,6 +203,14 @@ document.addEventListener('alpine:init', () => {
     printError: null,
 
     apiPath: '/${javaPerspectiveName}/${name}Controller',
+#if($history == "true")
+
+    // Change history (intent `history: true`): the document's field-level trail, read from the
+    // controller's GET /{id}/history. Read-only - nothing here writes to the shadow table.
+    history: [],
+#set($historyFirst = true)
+    historyLabels: {#foreach($property in $properties)#if(!$property.dataPrimaryKey && (!$property.auditType || $property.auditType == "NONE"))#if($property.widgetLabel)#set($hlabel = $property.widgetLabel)#else#set($hlabel = $property.name)#end#if($historyFirst)#set($historyFirst = false)#else, #end'${property.name}': ['$projectName:${tprefix}.t.${property.dataName}', '${hlabel}']#end#end},
+#end
 #if($immutableStatusProperty || $immutableAlways)
 
     // Immutability pre-check (intent `immutable`/`immutableWhen:`), asked from the controller's
@@ -351,6 +359,9 @@ document.addEventListener('alpine:init', () => {
           // An immutable document opened on the /edit route renders as preview - header, items and
           // panels all read-only, exactly as if Preview had been chosen (or the URL said /preview).
           if (!this.mutable && this.isEdit) this.mode = 'preview';
+#end
+#if($history == "true")
+          await this.loadHistory();
 #end
           this.state = 'ready';
           await this.loadItems();
@@ -545,6 +556,35 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+#if($history == "true")
+    // Load the document's change trail. It must never keep the document from opening, so a failure
+    // leaves the panel empty and is reported to the console only.
+    async loadHistory() {
+      try {
+        this.history = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id) + '/history') || [];
+      } catch (e) {
+        this.history = [];
+        console.error('[${name}DocumentPage] history load failed', e);
+      }
+    },
+
+    // A history row names the model PROPERTY; label it exactly as the form labels that field, so the
+    // trail and the document read as one record.
+    historyLabel(property) {
+      const entry = this.historyLabels[property];
+      return entry ? T(entry[0], entry[1]) : property;
+    },
+
+    historyValue(value) {
+      return (value === null || value === undefined || value === '') ? '—' : String(value);
+    },
+
+    historyWho(entry) {
+      const when = window.HarmoniaFormat.date(entry.ChangedAt);
+      return entry.ChangedBy ? entry.ChangedBy + ' · ' + when : when;
+    },
+
+#end
     // Convert a value to the fixed shape its <input> needs — NOT pattern-driven (shell format.js).
     toDateInput(value, widget) {
       return window.HarmoniaFormat.toDateInput(value, widget);
