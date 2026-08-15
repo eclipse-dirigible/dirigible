@@ -1713,11 +1713,16 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(documentView.contains("openHref(row)"),
                 "the files panel rows must offer the inline Open action for stored snapshot versions");
 
-        // A detail's form never offers its COMPOSITION-parent FK as an input: the detail is created
-        // from its master's panel, which presets the FK via the create query param - offering the
-        // parent as a dropdown invites re-parenting by accident and is redundant in the dialog.
+        // A detail's parent FK is context-locked, never a free dropdown: the detail is created and
+        // edited from its master's panel, which names the FK in the URL, so the form shows the
+        // parent's label read-only. A free dropdown there would let the record be re-pointed
+        // mid-flow; free selection survives only where nothing implies the parent.
         String itemForm = contentOf("gen/orders/views/Order/OrderItem-form.html");
-        assertFalse(itemForm.contains("f_Order\""), "the composition-parent FK must not render as a form input, got a f_Order control");
+        assertTrue(itemForm.contains("isContextLocked('Order')"), "the composition-parent FK must render context-aware, got: " + itemForm);
+        assertTrue(itemForm.contains("contextLabel(form.Order, optionsOrder)"),
+                "a context-locked parent must render the referenced record's label read-only");
+        assertTrue(itemForm.contains("<template x-if=\"!isContextLocked('Order')\">"),
+                "the parent combobox must be confined to the un-implied branch");
         assertTrue(itemForm.contains("f_Quantity\""), "the detail's own fields still render as inputs");
 
         // The generic item-dialog machinery is model-independent but must be present for line items.
