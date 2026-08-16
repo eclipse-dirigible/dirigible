@@ -46,12 +46,17 @@ import com.google.gson.GsonBuilder;
  * files to drift.
  *
  * <p>
- * The manifest is intent-owned and scrub-managed like every other model file (extension
- * {@code .test} — a free extension; JS {@code *.test.js} files carry extension {@code js}, so there
- * is no clash). It is regenerated on every Generate
- * ({@link IntentGenerationContext#writeModelFile(String, String)}), never hand-edited: the
- * per-module {@code test/} harness (a few files at the repo root) references it but does not own
- * it.
+ * The manifest carries the {@code .test} extension — a free extension; JS {@code *.test.js} files
+ * carry extension {@code js}, so there is no clash — and is written <b>once</b>
+ * ({@link IntentGenerationContext#keepExistingModelFile(String)} guards
+ * {@link IntentGenerationContext#writeModelFile(String, String)}), like the {@code .print} document
+ * template: Generate scaffolds it for a new module, and from then on it belongs to the developer. A
+ * behavioural test is the one artifact that must NOT be re-derived from the intent by the same
+ * toolchain that generates the code — a test built from the parsed model inherits the generator's
+ * blind spots and so passes precisely when the generator is consistently wrong. It is worth
+ * something only when a human states independently what the module must do, which means the file
+ * has to be hand-enhanceable, which means Generate must not clobber it (dirigible #6755). An
+ * existing manifest is also kept out of the stale-output scrub, which owns the extension.
  *
  * <p>
  * Runs at {@code @Order(900)} — after the {@code EdmIntentGenerator} (200) has written the
@@ -80,6 +85,15 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
     public void generate(IntentGenerationContext context) {
         IntentModel model = context.getModel();
         String baseName = IntentNaming.baseName(context);
+        String fileName = baseName + ".test";
+        // Write-once: the manifest is a scaffold the developer owns once it exists, so a regeneration
+        // neither rewrites it nor lets the scrub take it. Checked before anything is built - there is
+        // no output to produce for a module that already has its manifest.
+        if (context.keepExistingModelFile(fileName)) {
+            LOGGER.debug("Keeping the existing app-test manifest [{}] — it is developer-owned after the first Generate", fileName);
+            return;
+        }
+
         Map<String, Map<String, Object>> edmEntities = readModelEntities(context, baseName);
         if (edmEntities.isEmpty()) {
             LOGGER.debug("Skipping app-test manifest for [{}] — no .model entities to describe", baseName);
@@ -87,8 +101,8 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         }
 
         Map<String, Object> manifest = buildManifest(baseName, context.getProjectName(), model, edmEntities, context);
-        context.writeModelFile(baseName + ".test", GSON.toJson(manifest) + "\n");
-        LOGGER.debug("Generated app-test manifest [{}.test]", baseName);
+        context.writeModelFile(fileName, GSON.toJson(manifest) + "\n");
+        LOGGER.debug("Generated app-test manifest [{}]", fileName);
     }
 
     /**

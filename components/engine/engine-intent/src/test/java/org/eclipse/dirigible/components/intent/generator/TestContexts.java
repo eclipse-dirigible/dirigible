@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.generator;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.repository.api.IRepository;
 
 /**
  * Test-only factory for the package-private {@link IntentGenerationContext}, so generator tests in
@@ -23,5 +24,19 @@ public final class TestContexts {
     /** A repository-less context over the given model. */
     public static IntentGenerationContext context(IntentModel model) {
         return new IntentGenerationContext(model, "/proj", "proj", "workspace", "app", null);
+    }
+
+    /**
+     * A context backed by a real repository, for exercising the write surface itself (what a generator
+     * creates, overwrites, or leaves alone) rather than only the content it builds.
+     *
+     * @param model the parsed intent model
+     * @param repository the repository the context writes through
+     * @param projectRoot the repository-absolute project root
+     * @param fallbackName the base name for single-file outputs
+     * @return the context
+     */
+    public static IntentGenerationContext context(IntentModel model, IRepository repository, String projectRoot, String fallbackName) {
+        return new IntentGenerationContext(model, projectRoot, "proj", "workspace", fallbackName, repository);
     }
 }

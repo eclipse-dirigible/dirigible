@@ -124,6 +124,25 @@ public final class IntentGenerationContext {
     }
 
     /**
+     * Claim an already-present, developer-owned model file: it is neither written nor scrubbed by this
+     * pass. This is the write-once counterpart for a generator that cannot always produce content — it
+     * lets the generator bail out early (before building output it would only discard) while still
+     * keeping the existing file out of the post-pass scrub, which owns the extension.
+     *
+     * @param fileName bare file name including extension, e.g. {@code library.test}
+     * @return {@code true} when the file exists and is now recorded as kept, {@code false} when it is
+     *         absent and the generator should produce it
+     */
+    public boolean keepExistingModelFile(String fileName) {
+        if (!repository.getResource(projectRoot + "/" + fileName)
+                       .exists()) {
+            return false;
+        }
+        writtenFileNames.add(fileName);
+        return true;
+    }
+
+    /**
      * The bare file names emitted through {@link #writeModelFile(String, String)} so far.
      *
      * @return an unmodifiable view of the written file names
