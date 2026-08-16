@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -40,10 +41,13 @@ import com.google.gson.annotations.SerializedName;
  * <p>
  * The known keys are read from the model classes themselves (declared fields, honouring
  * {@link SerializedName}), so the check can never drift from what the parser actually maps. The
- * walk follows typed structure only: a {@code Map}-valued property (a step's {@code args}, a
- * {@code map:} / {@code defaults:} projection, a relation's {@code where:}) carries author-chosen
- * keys and is deliberately opaque here - those are validated by the per-feature validators that
- * know their vocabulary.
+ * walk follows typed structure only, with one addition: a {@code Map}-valued property whose keys
+ * are a <b>closed vocabulary</b> (a process {@code trigger:}, a glue {@code event:} binding, a
+ * posting's {@code rule:}) is registered in {@link #MAP_KEYS} and checked against that vocabulary.
+ * A map whose keys come from the model being described (a {@code map:} / {@code defaults:}
+ * projection, a relation's {@code where:}, a widget's {@code at:}, a delegate's {@code fields:})
+ * stays opaque, as does a step's {@code args:} - its vocabulary depends on the sibling {@code kind}
+ * and is checked by {@code IntentParser.validateStepArgs}.
  */
 final class UnknownKeyValidator {
 
@@ -52,6 +56,37 @@ final class UnknownKeyValidator {
 
     /** Declared key -> field, per model class. Reflection is done once per class. */
     private static final Map<Class<?>, Map<String, Field>> KEYS = new ConcurrentHashMap<>();
+
+    /** The entity-lifecycle / process-step axes a notification or an integration may bind to. */
+    private static final Set<String> GLUE_EVENT_KEYS =
+            Set.of("onCreate", "onUpdate", "onDelete", "onStepReached", "onStepCompleted", "when");
+
+    /**
+     * Author-facing maps whose keys are a closed vocabulary, keyed by {@code <SimpleClassName>#<field>}
+     * - and by {@code <SimpleClassName>#<field>.<key>} for a map nested one level inside one (a
+     * step-event binding's {@code { process, step }}).
+     *
+     * <p>
+     * These are AUTHORED lists, unlike the reflected ones: every entry mirrors what the readers of that
+     * map actually consult, so adding a key to a map-shaped feature means adding it here too. A key the
+     * readers reject with a better message of their own (a {@code generates} event's {@code model})
+     * stays listed here, so the author gets that message rather than "unknown key".
+     */
+    private static final Map<String, Set<String>> MAP_KEYS = Map.ofEntries(
+            Map.entry("ProcessIntent#trigger", Set.of("onCreate", "onUpdate", "onDelete", "when", "businessKey", "businessKeyStrategy")),
+            Map.entry("ProcessIntent#abortOn", Set.of("status", "then")), Map.entry("NotificationIntent#event", GLUE_EVENT_KEYS),
+            Map.entry("NotificationIntent#event.onStepReached", Set.of("process", "step")),
+            Map.entry("NotificationIntent#event.onStepCompleted", Set.of("process", "step")),
+            Map.entry("IntegrationIntent#event", GLUE_EVENT_KEYS),
+            Map.entry("IntegrationIntent#event.onStepReached", Set.of("process", "step")),
+            Map.entry("IntegrationIntent#event.onStepCompleted", Set.of("process", "step")),
+            Map.entry("PostingIntent#event", Set.of("onTransition", "onCreate", "when", "model")),
+            Map.entry("PostingIntent#rule", Set.of("entity", "match")),
+            Map.entry("GeneratesIntent#event", Set.of("onTransition", "onCreate", "when", "model")),
+            Map.entry("GenerateChildIntent#forEach", Set.of("entity", "days", "model", "match")),
+            Map.entry("ResolveIntent#event", Set.of("onCreate", "onUpdate", "when")),
+            Map.entry("ResolveIntent#between", Set.of("start", "end", "value")), Map.entry("ResolveIntent#found", Set.of("setStatus")),
+            Map.entry("ResolveIntent#notFound", Set.of("setStatus")), Map.entry("ResolveIntent#ambiguous", Set.of("setStatus")));
 
     private UnknownKeyValidator() {}
 
@@ -118,7 +153,34 @@ final class UnknownKeyValidator {
                 issues.add("unknown key [" + key + "] " + at(path) + suggestion(key, declared.keySet()));
                 continue;
             }
-            descend(entry.getValue(), field.getGenericType(), path.isEmpty() ? key : path + "." + key, issues);
+            String childPath = path.isEmpty() ? key : path + "." + key;
+            Set<String> vocabulary = MAP_KEYS.get(type.getSimpleName() + "#" + key);
+            if (vocabulary != null) {
+                walkMap(entry.getValue(), vocabulary, type.getSimpleName() + "#" + key, childPath, issues);
+                continue;
+            }
+            descend(entry.getValue(), field.getGenericType(), childPath, issues);
+        }
+    }
+
+    /**
+     * Check a closed-vocabulary map, and any registered map nested one level inside it (a step-event
+     * binding's {@code { process, step }} under {@code event: { onStepReached: ... }}).
+     */
+    private static void walkMap(Object node, Set<String> vocabulary, String registration, String path, List<String> issues) {
+        if (!(node instanceof Map<?, ?> map)) {
+            return; // a wrong-shaped node is reported by the feature's own validator
+        }
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            String key = String.valueOf(entry.getKey());
+            if (!vocabulary.contains(key)) {
+                issues.add("unknown key [" + key + "] " + at(path) + suggestion(key, vocabulary));
+                continue;
+            }
+            Set<String> nested = MAP_KEYS.get(registration + "." + key);
+            if (nested != null) {
+                walkMap(entry.getValue(), nested, registration + "." + key, path + "." + key, issues);
+            }
         }
     }
 

@@ -445,6 +445,41 @@ class IntentEngineIT extends IntegrationTest {
                                                          "seed [rates] row references [scheme] which is not a field or a to-one relation of [Rate] - did you mean [Scheme]? (names are case-sensitive)")));
     }
 
+    /**
+     * The map-shaped half of the same rule (#6749): a step's {@code args:}, a process {@code trigger:}
+     * and a glue {@code event:} binding have no typed class to reflect a key set off, so an invented
+     * key, a mis-cased one, or one belonging to another step kind used to be accepted and read by
+     * nothing - the BPMN emitted, the task created, only the behaviour missing.
+     */
+    @Test
+    void parse_rejects_an_unknown_step_arg_and_an_unknown_trigger_key() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                forms:
+                  - { name: ApproveInvoice, forEntity: Invoice, fields: [id], actions: [approve] }
+                processes:
+                  - name: InvoiceApproval
+                    trigger: { onCreate: Invoice, businesskey: id }
+                    steps:
+                      - { name: approve, kind: userTask, args: { assigne: manager, form: ApproveInvoice, if: "1 == 1" } }
+                      - { name: done, kind: end }
+                """;
+        restAssuredExecutor.execute(() -> given().contentType("text/plain")
+                                                 .body(yaml)
+                                                 .when()
+                                                 .post(PARSE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("issues", hasItems(
+                                                         "process [InvoiceApproval] step [approve] declares unknown arg [assigne] - did you mean [assignee]?",
+                                                         "process [InvoiceApproval] step [approve] declares arg [if] but is a userTask - if is a decision argument",
+                                                         "unknown key [businesskey] at [processes[InvoiceApproval].trigger] - did you mean [businessKey]? (names are case-sensitive)")));
+    }
+
     @Test
     void parse_rejects_a_trigger_to_an_unknown_entity() {
         String yaml = """
