@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,11 @@ import org.springframework.test.annotation.DirtiesContext;
 public class MonitoringShellIT extends UserInterfaceIntegrationTest {
 
     private static final String MONITORING_PATH = "/services/web/monitoring/index.html";
+
+    /**
+     * The configuration key the version endpoint - and therefore the sidebar - reports as the product.
+     */
+    private static final String DIRIGIBLE_PRODUCT_NAME = "DIRIGIBLE_PRODUCT_NAME";
 
     @Test
     void overviewRendersTheInstanceState() {
@@ -69,8 +75,11 @@ public class MonitoringShellIT extends UserInterfaceIntegrationTest {
         browser.clickOnElementById("monitoring-nav-system");
         browser.assertElementExistsByIdAndContainsText("monitoring-system-version", "Product");
         browser.assertElementExistsByIdAndContainsText("monitoring-system-version", "Version");
-        // The same figures condensed onto the sidebar, where every page shows them.
-        browser.assertElementExistsByIdAndContainsText("monitoring-build", "Eclipse Dirigible");
+        // The same figures condensed onto the sidebar, where every page shows them. The expected name is
+        // read from the configuration the sidebar itself renders, not hard-coded: this IT ships in
+        // dirigible-tests-integrations for downstream editions to reuse, and a rebranded assembly names
+        // its own build here - hard-coding "Eclipse Dirigible" made the test unpassable for them.
+        browser.assertElementExistsByIdAndContainsText("monitoring-build", Configuration.get(DIRIGIBLE_PRODUCT_NAME));
     }
 
     /**
