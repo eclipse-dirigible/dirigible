@@ -17,13 +17,17 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
     #if($property.isCalculatedProperty && ($property.calculatedActionOnCreate || $property.calculatedActionOnUpdate))
         #set($haveCalculatedPropertyAction = "true")
     #end
-    ## System-owned columns a user update must never take from the payload (consumed by update()):
-    ## platform-managed read-only fields (an author's readOnly, roll-up targets, the document number
-    ## and uuid) and aggregate footer fields (an invoice's Net/Total/Paid). An aggregate that is
-    ## recomputed on update (an expressionUpdate such as Balance) is exempt here - update() reassigns
-    ## it AFTER recalculate(), from the resummed aggregates and the preserved values. A calculated
-    ## create-only field that stays user-editable (a defaulted Currency relation) carries neither
-    ## flag, so a user's edit of it is respected.
+## The comments below start at column 0 on purpose: Velocity gobbles the indentation of a line that
+## holds only a directive, but NOT of a line that holds only a ## comment - it emits the leading
+## whitespace and swallows the rest. Indented inside this loop they contributed 28 characters per
+## property to the output, which landed in front of the first import (#6754).
+## System-owned columns a user update must never take from the payload (consumed by update()):
+## platform-managed read-only fields (an author's readOnly, roll-up targets, the document number
+## and uuid) and aggregate footer fields (an invoice's Net/Total/Paid). An aggregate that is
+## recomputed on update (an expressionUpdate such as Balance) is exempt here - update() reassigns
+## it AFTER recalculate(), from the resummed aggregates and the preserved values. A calculated
+## create-only field that stays user-editable (a defaulted Currency relation) carries neither
+## flag, so a user's edit of it is respected.
     #if(!$property.dataPrimaryKey && ($property.isReadOnlyProperty || ($property.aggregate && !$property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)))
         #set($ignore = $preservedOnUpdate.add($property))
     #end

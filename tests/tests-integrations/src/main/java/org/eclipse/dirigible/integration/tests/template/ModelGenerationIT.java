@@ -103,6 +103,15 @@ class ModelGenerationIT extends IntegrationTest {
     private static final Pattern UNRESOLVED_REFERENCE = Pattern.compile("\\$\\{(?!JavaTask\\b)[A-Za-z]\\w*\\}?");
 
     /**
+     * An indented {@code package} or {@code import}, which Java never has. It is what template
+     * whitespace looks like once it reaches the output: Velocity gobbles the indentation of a line
+     * holding only a directive but not of a line holding only a {@code ##} comment, so an indented
+     * comment inside a loop emits its leading spaces once per iteration and they flush in front of the
+     * next literal the template renders - the first import (#6754).
+     */
+    private static final Pattern INDENTED_TOP_LEVEL_DECLARATION = Pattern.compile("^([ \\t]+)(package|import)[ \\t]", Pattern.MULTILINE);
+
+    /**
      * A member access whose member is missing - {@code parent. == null}, {@code target. = row.X} or
      * {@code derived.put("X", parent.)} - which is what an emitted-code helper produces when the field
      * name it interpolates is empty. Deliberately same-line only: generated code breaks a chained call
@@ -346,7 +355,10 @@ class ModelGenerationIT extends IntegrationTest {
      * the binder forgot to put in the context (it was {@code fromGenFolder}) becomes a syntax error
      * rather than a missing value;</li>
      * <li>a dangling {@code .} - what an emitted-code helper produces when a field name it interpolates
-     * is the empty string, which is what the intent glue writes for an unused optional field.</li>
+     * is the empty string, which is what the intent glue writes for an unused optional field;</li>
+     * <li>an indented {@code package} or {@code import} - template whitespace that leaked into the
+     * output. It still compiles, but {@code gen/} is committed so that template changes are diffable,
+     * and a leak puts a run of spaces into every generated file of every module.</li>
      * </ul>
      *
      * @param label the case label
@@ -368,6 +380,12 @@ class ModelGenerationIT extends IntegrationTest {
             problems.add("[" + label + "] " + path + " emitted a member access with no member, so an interpolated field name was"
                     + " empty: " + dangling.group()
                                            .trim());
+        }
+        Matcher indented = INDENTED_TOP_LEVEL_DECLARATION.matcher(content);
+        while (indented.find()) {
+            problems.add("[" + label + "] " + path + " preceded its " + indented.group(2) + " with " + indented.group(1)
+                                                                                                               .length()
+                    + " characters of whitespace, so a template leaked its indentation into the output");
         }
         return problems;
     }
