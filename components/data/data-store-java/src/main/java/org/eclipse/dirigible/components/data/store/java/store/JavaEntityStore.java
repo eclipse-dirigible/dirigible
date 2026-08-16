@@ -206,17 +206,17 @@ public class JavaEntityStore {
     private static final Pattern PLAIN_PROPERTY = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
     /**
-     * Find by id. Throws {@link IllegalArgumentException} when not found — use {@link #findOne} for the
-     * optional variant.
+     * Find by id, or {@code null} when there is no such row — an absent id is an ordinary outcome of a
+     * lookup, not a failure. Callers that require the row to exist use {@link #findOne} and decide the
+     * failure themselves (a {@code 404} at a controller boundary, a skip in an event handler).
      *
      * @param <T> the entity type
      * @param type the entity class
      * @param id the primary key
-     * @return the entity
+     * @return the entity, or {@code null} if not found
      */
     public <T> T findById(Class<T> type, Object id) {
-        return findOne(type, id).orElseThrow(
-                () -> new IllegalArgumentException("No entity [" + type.getSimpleName() + "] with id [" + id + "]"));
+        return findOne(type, id).orElse(null);
     }
 
     /**

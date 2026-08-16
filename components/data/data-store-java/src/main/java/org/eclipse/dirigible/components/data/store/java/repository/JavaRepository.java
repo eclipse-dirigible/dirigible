@@ -111,7 +111,11 @@ public abstract class JavaRepository<T> {
     }
 
     /**
-     * Look up an entity by primary key.
+     * Look up an entity by primary key. An absent id is an ordinary outcome — a dangling foreign key an
+     * event handler should skip, a path parameter a controller should answer {@code 404} for — so it
+     * reads back as {@code null} rather than as a thrown exception. Callers that require the row to
+     * exist use {@link #findOne(Object)} and choose their own failure, e.g.
+     * {@code findOne(id).orElseThrow(() -> new ResponseStatusException(NOT_FOUND))}.
      *
      * @param id the primary-key value
      * @return the entity, or {@code null} if not found
@@ -121,7 +125,9 @@ public abstract class JavaRepository<T> {
     }
 
     /**
-     * Look up an entity by primary key.
+     * Look up an entity by primary key — the {@link Optional} variant of {@link #findById(Object)}, for
+     * callers that chain the absent case (an {@code orElseThrow} carrying their own status, an
+     * {@code orElseGet} default).
      *
      * @param id the primary-key value
      * @return an optional carrying the entity if it exists
