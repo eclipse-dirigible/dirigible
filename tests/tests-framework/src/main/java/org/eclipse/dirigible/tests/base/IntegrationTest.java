@@ -48,6 +48,14 @@ public abstract class IntegrationTest {
     }
 
     @BeforeAll
+    static void useIsolatedDependenciesFolders() {
+        // keep the boot-time maven dependency resolution off the developer's real ~/.dirigible
+        // and ~/.m2 - both land under the dirigible folder the cleaner wipes
+        Configuration.set("DIRIGIBLE_DEPENDENCIES_DIR", "target/dirigible/resolved-modules");
+        Configuration.set("DIRIGIBLE_MAVEN_LOCAL_REPO", "target/dirigible/m2");
+    }
+
+    @BeforeAll
     static void cleanBeforeTestClassExecution() {
         DirigibleCleaner.deleteDirigibleFolder();
     }

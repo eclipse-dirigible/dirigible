@@ -31,6 +31,7 @@
         <module>core/core-tracing</module>
         <module>core/core-java</module>
         <module>core/core-liquibase</module>
+        <module>core/core-dependencies</module>
 
         <!-- Security -->
         <module>security/security-basic</module>
@@ -661,6 +662,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-core-project</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-core-dependencies</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

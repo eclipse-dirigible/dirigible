@@ -149,6 +149,31 @@ public enum DirigibleConfig {
     /** Default JDWP port the Java debug adapter attaches to. */
     JAVA_DEBUG_JDWP_PORT("DIRIGIBLE_JAVA_DEBUG_JDWP_PORT", "8000"),
 
+    /** Whether dynamic dependency resolution of project.json maven declarations is enabled. */
+    DEPENDENCIES_DYNAMIC_ENABLED("DIRIGIBLE_DEPENDENCIES_DYNAMIC", Boolean.TRUE.toString()),
+
+    /**
+     * Directory the resolved dependency JARs are linked into; blank means [user
+     * home]/.dirigible/resolved-modules.
+     */
+    DEPENDENCIES_DIR("DIRIGIBLE_DEPENDENCIES_DIR", null),
+
+    /**
+     * Maven local repository; blank means [user home]/.m2/repository when it exists, else [user
+     * home]/.dirigible/m2.
+     */
+    MAVEN_LOCAL_REPO("DIRIGIBLE_MAVEN_LOCAL_REPO", null),
+
+    /**
+     * Remote Maven repositories as comma-separated id=url pairs. An entry with id central overrides the
+     * default Maven Central URL; other entries are added to it. Credentials go in the
+     * DIRIGIBLE_MAVEN_[ID]_USERNAME / DIRIGIBLE_MAVEN_[ID]_PASSWORD pair for the entry's uppercased id.
+     */
+    MAVEN_REPOSITORIES("DIRIGIBLE_MAVEN_REPOSITORIES", null),
+
+    /** Whether Maven dependency resolution runs offline (local repository only). */
+    MAVEN_OFFLINE("DIRIGIBLE_MAVEN_OFFLINE", Boolean.FALSE.toString()),
+
     /** Milliseconds the platform waits for a started native-app process to start accepting TCP. */
     NATIVE_APP_READY_TIMEOUT_MS("DIRIGIBLE_NATIVE_APP_READY_TIMEOUT_MS", "30000"),
 
