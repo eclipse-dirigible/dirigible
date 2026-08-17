@@ -39,6 +39,11 @@ public interface ApplicationListenersOrder {
         /** The synchronization intializer. */
         int SYNCHRONIZATION_INTIALIZER = 40;
 
+        /**
+         * The dependencies initializer - after synchronization, so project.json files are in the registry.
+         */
+        int DEPENDENCIES_INITIALIZER = 45;
+
         /** The jobs initializer. */
         int JOBS_INITIALIZER = 50;
 

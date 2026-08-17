@@ -9,10 +9,18 @@
  */
 package org.eclipse.dirigible.components.project;
 
+import java.util.List;
+
 /**
  * The ProjectMetadataDependency serialization object.
  */
 public class ProjectMetadataDependency {
+
+    /** Dependency type of a sibling git repository, consumed by the IDE workspace. */
+    public static final String TYPE_GIT = "git";
+
+    /** Dependency type of a Maven artifact, resolved by the platform's dependency resolver. */
+    public static final String TYPE_MAVEN = "maven";
 
     /** The guid. */
     private String guid;
@@ -25,6 +33,17 @@ public class ProjectMetadataDependency {
 
     /** The branch. */
     private String branch;
+
+    /** The Maven coordinate as a single groupId:artifactId:version string (maven type only). */
+    private String id;
+
+    /** The scope - module (default) or platform (maven type only). */
+    private String scope;
+
+    /**
+     * The exclusions as groupId:artifactId entries, artifactId may be the * wildcard (maven type only).
+     */
+    private List<String> exclusions;
 
     /**
      * Gets the guid.
@@ -96,6 +115,60 @@ public class ProjectMetadataDependency {
      */
     public void setBranch(String branch) {
         this.branch = branch;
+    }
+
+    /**
+     * Gets the Maven coordinate.
+     *
+     * @return the coordinate as groupId:artifactId:version
+     */
+    public String getId() {
+        return id;
+    }
+
+    /**
+     * Sets the Maven coordinate.
+     *
+     * @param id the coordinate as groupId:artifactId:version
+     */
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    /**
+     * Gets the scope.
+     *
+     * @return the scope
+     */
+    public String getScope() {
+        return scope;
+    }
+
+    /**
+     * Sets the scope.
+     *
+     * @param scope the new scope
+     */
+    public void setScope(String scope) {
+        this.scope = scope;
+    }
+
+    /**
+     * Gets the exclusions.
+     *
+     * @return the exclusions as groupId:artifactId entries
+     */
+    public List<String> getExclusions() {
+        return exclusions;
+    }
+
+    /**
+     * Sets the exclusions.
+     *
+     * @param exclusions the exclusions as groupId:artifactId entries
+     */
+    public void setExclusions(List<String> exclusions) {
+        this.exclusions = exclusions;
     }
 
 }
