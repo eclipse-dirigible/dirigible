@@ -5,6 +5,10 @@ A minimal intent project exercising **declarative step resilience**
 `retry: { count, every }` and `onError:` on delegate service tasks, the `{error}` placeholder, and
 declared step data (`vars:` + `produces:`/`uses:`/`clearAfter`).
 
+This folder is both the **manual-testing project** (import it into a workspace and follow "Run it"
+below) and the fixture of **`IntentResilienceSampleIT`**, which deploys it and asserts the same two
+outcomes automatically - so the sample can never silently rot.
+
 One process, two hand-written delegates, both outcomes reachable from the UI:
 
 - **`SchemaProvisioner`** fails its first two attempts per tenant and succeeds on the third — the
