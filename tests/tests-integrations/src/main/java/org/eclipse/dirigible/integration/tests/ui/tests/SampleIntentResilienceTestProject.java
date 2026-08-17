@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.integration.tests.api;
+package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.allOf;
@@ -15,29 +15,28 @@ import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.eclipse.dirigible.tests.base.IntegrationTest;
-import org.eclipse.dirigible.tests.base.ProjectDeployer;
+import org.eclipse.dirigible.tests.base.BaseTestProject;
 import org.eclipse.dirigible.tests.base.ProjectUtil;
+import org.eclipse.dirigible.tests.framework.ide.EdmView;
+import org.eclipse.dirigible.tests.framework.ide.IDE;
+import org.eclipse.dirigible.tests.framework.ide.IntentEditorView;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
 
 /**
- * The {@code sample-intent-resilience} fixture project (dirigible #6762), deployed and exercised
- * exactly as a developer would use it manually: copy into the workspace, run the intent Generate,
- * publish, and drive the generated app over REST. The fixture doubles as the manual-testing sample
- * (see its README), so this IT is what keeps the sample from silently rotting - it asserts both
- * outcomes the sample was built to demonstrate:
+ * The {@code sample-intent-resilience} fixture project (dirigible #6762), configured exactly as a
+ * developer would in the browser IDE - copy into the workspace, open {@code app.intent} in the
+ * Intent Editor and click its Generate, then Publish all from the Workbench - and verified over
+ * REST. The fixture doubles as the manual-testing sample (see its README), so this project is what
+ * keeps the sample from silently rotting - it asserts both outcomes the sample was built to
+ * demonstrate:
  *
  * <ul>
  * <li>a tenant titled normally recovers by RETRY: the schema delegate fails its first two attempts,
@@ -49,13 +48,12 @@ import org.springframework.beans.factory.annotation.Autowired;
  * attempt's message on the record via {@code {error}} - instead of a dead-letter incident.
  * </ul>
  */
-@Tag("slow")
-class IntentResilienceSampleIT extends IntegrationTest {
+@Lazy
+@Component
+class SampleIntentResilienceTestProject extends BaseTestProject {
 
     private static final String PROJECT = "sample-intent-resilience";
-    private static final String WORKSPACE = "workspace";
-    private static final String GENERATE_URL =
-            "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
+    private static final String INTENT_FILE = "app.intent";
     private static final String TENANT_API =
             "/services/java/" + PROJECT + "/gen/provisioning/api/tenantapplication/" + "TenantApplicationController";
 
@@ -63,34 +61,28 @@ class IntentResilienceSampleIT extends IntegrationTest {
     private static final int STATUS_PROVISIONED = 2;
     private static final int STATUS_FAILED = 3;
 
-    @Autowired
-    private ProjectUtil projectUtil;
-    @Autowired
-    private ProjectDeployer projectDeployer;
-    @Autowired
-    private RestAssuredExecutor restAssuredExecutor;
+    private final IntentEditorView intentEditorView;
+    private final RestAssuredExecutor restAssuredExecutor;
 
-    @Test
-    void the_sample_recovers_by_retry_and_records_the_exhausted_failure() {
-        // The manual flow, automated: copy the fixture into the workspace, run the intent Generate
-        // (models AND code in one call - assert every recipe succeeded, or the failure is named
-        // instead of surfacing later as a missing controller), then publish + synchronize. The
-        // deployer's re-copy is idempotent - identical fixture bytes, generated files untouched.
-        projectUtil.copyResourceProjectToDefaultUserWorkspace(PROJECT);
-        AtomicReference<List<Map<String, Object>>> plan = new AtomicReference<>();
-        restAssuredExecutor.execute(() -> plan.set(given().when()
-                                                          .post(GENERATE_URL)
-                                                          .then()
-                                                          .statusCode(200)
-                                                          .extract()
-                                                          .jsonPath()
-                                                          .getList("codeGenerations")));
-        for (Map<String, Object> codeGeneration : plan.get()) {
-            assertEquals(Boolean.TRUE, codeGeneration.get("generated"),
-                    "generating code from " + codeGeneration.get("path") + " failed: " + codeGeneration.get("error"));
-        }
-        projectDeployer.deploy(PROJECT);
+    SampleIntentResilienceTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, IntentEditorView intentEditorView,
+            RestAssuredExecutor restAssuredExecutor) {
+        super(PROJECT, ide, projectUtil, edmView);
+        this.intentEditorView = intentEditorView;
+        this.restAssuredExecutor = restAssuredExecutor;
+    }
 
+    @Override
+    public void configure() {
+        copyToWorkspace();
+        // Opening the workbench logs into the IDE and binds the browser session - the same prologue
+        // BaseTestProject.generateEDM performs before driving its editor view.
+        getIde().openWorkbench();
+        intentEditorView.generate(getProjectResourcesFolder(), INTENT_FILE);
+        publish();
+    }
+
+    @Override
+    public void verify() {
         // Both tenants up front, so their retry cycles run concurrently.
         AtomicInteger recovering = new AtomicInteger();
         AtomicInteger doomed = new AtomicInteger();

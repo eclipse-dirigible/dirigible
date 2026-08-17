@@ -6,8 +6,9 @@ A minimal intent project exercising **declarative step resilience**
 declared step data (`vars:` + `produces:`/`uses:`/`clearAfter`).
 
 This folder is both the **manual-testing project** (import it into a workspace and follow "Run it"
-below) and the fixture of **`IntentResilienceSampleIT`**, which deploys it and asserts the same two
-outcomes automatically - so the sample can never silently rot.
+below) and the fixture of **`IntentResilienceSampleIT`**, which drives the very same journey through
+the browser IDE - opens `app.intent` in the Intent Editor, clicks Generate, publishes via the
+Workbench - and asserts the same two outcomes automatically, so the sample can never silently rot.
 
 One process, two hand-written delegates, both outcomes reachable from the UI:
 
