@@ -22,7 +22,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.engine.java.component.ComponentContainer;
-import org.eclipse.dirigible.engine.java.handler.JavaHandler;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.slf4j.Logger;
@@ -60,6 +59,7 @@ public class JavaLoader {
 
     private final JavaSourceCompiler compiler;
     private final ClientClassLoaderHolder loaderHolder;
+    private final ModulesClassLoaderHolder modulesLoaderHolder;
     private final ComponentContainer componentContainer;
     private final List<JavaClassConsumer> consumers;
     private final JavaCompiledOutputDirectory outputDirectory;
@@ -86,10 +86,12 @@ public class JavaLoader {
     private final Map<String, byte[]> currentBytecode = new HashMap<>();
 
     @Autowired
-    public JavaLoader(JavaSourceCompiler compiler, ClientClassLoaderHolder loaderHolder, ComponentContainer componentContainer,
-            List<JavaClassConsumer> consumers, JavaCompiledOutputDirectory outputDirectory, ApplicationEventPublisher eventPublisher) {
+    public JavaLoader(JavaSourceCompiler compiler, ClientClassLoaderHolder loaderHolder, ModulesClassLoaderHolder modulesLoaderHolder,
+            ComponentContainer componentContainer, List<JavaClassConsumer> consumers, JavaCompiledOutputDirectory outputDirectory,
+            ApplicationEventPublisher eventPublisher) {
         this.compiler = compiler;
         this.loaderHolder = loaderHolder;
+        this.modulesLoaderHolder = modulesLoaderHolder;
         this.componentContainer = componentContainer;
         this.consumers = consumers;
         this.outputDirectory = outputDirectory;
@@ -137,9 +139,10 @@ public class JavaLoader {
         }
         effectiveBytecode.putAll(batch.bytecode());
 
-        // Build the new ClientClassLoader from the effective bytecode. Parent is the platform CL so
-        // user code sees JavaHandler, our annotations, Spring, Hibernate, etc.
-        ClassLoader parent = JavaHandler.class.getClassLoader();
+        // Build the new ClientClassLoader from the effective bytecode. Parent is the current modules
+        // classloader generation - its own parent is the platform CL, so user code sees the project's
+        // maven dependency jars AND JavaHandler, our annotations, Spring, Hibernate, etc.
+        ClassLoader parent = modulesLoaderHolder.current();
         ClientClassLoader nextLoader = new ClientClassLoader(parent, effectiveBytecode);
 
         // Resolve every primary (top-level) FQN in the new generation through the new loader. The
@@ -263,10 +266,10 @@ public class JavaLoader {
             }
         }
         // No runtime-compiled client code yet → give the holder an empty ClientClassLoader whose parent
-        // (the platform / application classloader) already resolves the compiled-module classes.
+        // chain (modules loader → platform classloader) already resolves the compiled-module classes.
         ClientClassLoader loader = loaderHolder.current();
         if (loader == null) {
-            loader = new ClientClassLoader(JavaHandler.class.getClassLoader(), Map.of());
+            loader = new ClientClassLoader(modulesLoaderHolder.current(), Map.of());
         }
         return applyGeneration(mergedGeneration(), loader);
     }

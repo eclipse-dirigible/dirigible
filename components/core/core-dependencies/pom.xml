@@ -33,6 +33,18 @@
             <artifactId>dirigible-components-core-repository</artifactId>
         </dependency>
 
+        <!-- Java runtime - the swappable modules classloader layer -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-java</artifactId>
+        </dependency>
+
+        <!-- Initializers - the per-jar registry payload expander -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-initializers</artifactId>
+        </dependency>
+
         <!-- Maven Artifact Resolver - the supplier wires a complete RepositorySystem
              (impl, basic connector, file/http transports, POM reading via maven-resolver-provider) -->
         <dependency>

@@ -21,7 +21,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * The maven dependency resolution surface - the current declared / resolved state and the on-demand
- * union resolution. The resolved jars join the application classpath on the next restart.
+ * union resolution. The resolved jars take effect immediately through the swappable modules
+ * classloader; no restart is required.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_CORE + "dependencies")

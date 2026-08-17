@@ -23,11 +23,15 @@ import java.util.Map;
  *        groupId:artifactId
  * @param failures the per-coordinate failure messages
  * @param localRepository the local repository, null before the first resolution
- * @param resolvedModulesDirectory the directory the resolved jars are linked into
+ * @param resolvedModulesDirectory the directory the resolved jars are linked into (the launch-time
+ *        seed; at runtime the jars are served by the modules classloader directly)
+ * @param classLoaderGeneration the installed modules-classloader generation number
+ * @param retiredClassLoaders how many retired generations are still pinned by live references
  * @param resolvedAt when the state was resolved, null before the first resolution
  */
 record DependenciesState(boolean enabled, List<String> declared, List<String> artifacts, Map<String, String> mediated,
-        Map<String, String> failures, String localRepository, String resolvedModulesDirectory, Instant resolvedAt) {
+        Map<String, String> failures, String localRepository, String resolvedModulesDirectory, int classLoaderGeneration,
+        int retiredClassLoaders, Instant resolvedAt) {
 
     /**
      * The state before the first resolution.
@@ -37,17 +41,20 @@ record DependenciesState(boolean enabled, List<String> declared, List<String> ar
      * @return the empty state
      */
     static DependenciesState empty(boolean enabled, String resolvedModulesDirectory) {
-        return new DependenciesState(enabled, List.of(), List.of(), Map.of(), Map.of(), null, resolvedModulesDirectory, null);
+        return new DependenciesState(enabled, List.of(), List.of(), Map.of(), Map.of(), null, resolvedModulesDirectory, 0, 0, null);
     }
 
     /**
-     * The same state with the enabled flag re-read.
+     * The same state with the enabled flag and the classloader counters re-read.
      *
-     * @param value the current flag value
+     * @param enabled the current flag value
+     * @param classLoaderGeneration the current generation number
+     * @param retiredClassLoaders the current pinned retired-generation count
      * @return the state
      */
-    DependenciesState withEnabled(boolean value) {
-        return new DependenciesState(value, declared, artifacts, mediated, failures, localRepository, resolvedModulesDirectory, resolvedAt);
+    DependenciesState refreshed(boolean enabled, int classLoaderGeneration, int retiredClassLoaders) {
+        return new DependenciesState(enabled, declared, artifacts, mediated, failures, localRepository, resolvedModulesDirectory,
+                classLoaderGeneration, retiredClassLoaders, resolvedAt);
     }
 
 }

@@ -20,6 +20,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.JarURLConnection;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -104,7 +105,6 @@ public class ClasspathExpander {
      * @throws IOException Signals that an I/O exception has occurred.
      */
     private void handleJarURLConnection(String root, URLConnection urlConnection) throws IOException {
-        String jarRoot = "META-INF/" + root;
         JarURLConnection jarUrlConnection = (JarURLConnection) urlConnection;
         // A cached JarURLConnection hands out the JVM-wide shared JarFile - the very instance the
         // application class loader reads resources from. Closing it breaks every read of that JAR
@@ -113,22 +113,64 @@ public class ClasspathExpander {
         // Opting out of the cache yields a handle this method exclusively owns and may close.
         jarUrlConnection.setUseCaches(false);
         try (JarFile jar = jarUrlConnection.getJarFile()) {
-            Enumeration<JarEntry> entries = jar.entries();
-            JarEntry maybeSkip = jar.getJarEntry("META-INF/dirigible/.skip");
-            if (maybeSkip != null) {
-                return;
-            }
-            while (entries.hasMoreElements()) {
-                JarEntry entry = entries.nextElement();
-                if (entry.getName()
-                         .startsWith(jarRoot)) {
-                    if (!entry.isDirectory()) {
-                        byte[] content = IOUtils.toByteArray(jar.getInputStream(entry));
-                        String registryPath = entry.getName()
-                                                   .substring(jarRoot.length());
-                        repository.createResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + IRepository.SEPARATOR + registryPath,
-                                content);
-                    }
+            copyRegistryContent(root, jar);
+        }
+    }
+
+    /**
+     * Lays a single jar's {@code META-INF/dirigible/**} payload into the registry - the per-jar
+     * counterpart of the startup sweep, used when a module jar joins the running system without a
+     * restart. The {@code .skip} marker is honored exactly as at startup.
+     *
+     * @param jarPath the jar to expand
+     */
+    public void expand(Path jarPath) {
+        try (JarFile jar = new JarFile(jarPath.toFile())) {
+            copyRegistryContent("dirigible", jar);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to expand the registry content of [" + jarPath + "]", e);
+        }
+    }
+
+    /**
+     * Removes a project's content from the registry - the inverse of {@link #expand(Path)}, used when
+     * the module jar carrying the project leaves the running system. The per-artefact synchronizers
+     * clean up the runtime state of the removed files on their next pass.
+     *
+     * @param project the project name directly under the registry root
+     */
+    public void remove(String project) {
+        String path = IRepositoryStructure.PATH_REGISTRY_PUBLIC + IRepository.SEPARATOR + project;
+        if (repository.hasCollection(path)) {
+            repository.removeCollection(path);
+            LOGGER.info("Removed the registry content of project [{}]", project);
+        }
+    }
+
+    /**
+     * Copies every entry under {@code META-INF/<root>/} into the registry, honoring the {@code .skip}
+     * marker.
+     *
+     * @param root the root under META-INF, e.g. dirigible
+     * @param jar the open jar
+     * @throws IOException on a read failure
+     */
+    private void copyRegistryContent(String root, JarFile jar) throws IOException {
+        String jarRoot = "META-INF/" + root;
+        Enumeration<JarEntry> entries = jar.entries();
+        JarEntry maybeSkip = jar.getJarEntry("META-INF/dirigible/.skip");
+        if (maybeSkip != null) {
+            return;
+        }
+        while (entries.hasMoreElements()) {
+            JarEntry entry = entries.nextElement();
+            if (entry.getName()
+                     .startsWith(jarRoot)) {
+                if (!entry.isDirectory()) {
+                    byte[] content = IOUtils.toByteArray(jar.getInputStream(entry));
+                    String registryPath = entry.getName()
+                                               .substring(jarRoot.length());
+                    repository.createResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + IRepository.SEPARATOR + registryPath, content);
                 }
             }
         }
