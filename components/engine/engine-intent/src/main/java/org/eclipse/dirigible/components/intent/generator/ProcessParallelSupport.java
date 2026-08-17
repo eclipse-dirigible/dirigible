@@ -165,9 +165,10 @@ public final class ProcessParallelSupport {
 
     /**
      * The steps a step routes on to: a decision's {@code then} and {@code else}, any other step's
-     * {@code next}, plus the {@code then} of a user task's {@code timeout} / {@code expire} boundary
-     * timer. A {@code parallel} step's branches are deliberately NOT routing targets - they belong to
-     * the fork's own branches, not to the chain the fork sits on.
+     * {@code next}, the {@code then} of a user task's {@code timeout} / {@code expire} boundary timer,
+     * plus a delegate service task's {@code onError} error route. A {@code parallel} step's branches
+     * are deliberately NOT routing targets - they belong to the fork's own branches, not to the chain
+     * the fork sits on.
      */
     public static List<String> routingTargets(StepIntent step) {
         List<String> targets = new ArrayList<>(2);
@@ -179,6 +180,7 @@ public final class ProcessParallelSupport {
         }
         addIfPresent(targets, timerTarget(step, "timeout"));
         addIfPresent(targets, timerTarget(step, "expire"));
+        addIfPresent(targets, stringArg(step, "onError"));
         return targets;
     }
 

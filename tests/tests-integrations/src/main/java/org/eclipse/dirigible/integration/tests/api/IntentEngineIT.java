@@ -1057,6 +1057,131 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void step_resilience_emits_retry_cycle_error_boundary_clear_listener_and_error_glue() {
+        // Declarative step resilience (#6762): a delegate serviceTask's `retry: { count, every }`
+        // becomes a Flowable failed-job retry cycle (R<count+1> - the R number counts TOTAL attempts),
+        // `onError:` an error boundary event catching the INTENT_STEP_FAILED error the
+        // engine-bpm-flowable conversion raises for the final failed attempt, a `setField` value of
+        // {error} a read of the published failure-message variable, and a var's `clearAfter` an
+        // end-listener removing the value (a generated credential must not survive in the history).
+        String yaml =
+                """
+                        name: provisioning
+                        entities:
+                          - name: ProvisioningStatus
+                            function: Setting
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: name, type: string }
+                          - name: TenantApplication
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: failureMessage, type: string }
+                            relations:
+                              - { name: Status, kind: manyToOne, to: ProvisioningStatus, function: EntityStatus, init: 1 }
+                        processes:
+                          - name: TenantProvisioning
+                            trigger: { onCreate: TenantApplication }
+                            vars:
+                              - { name: dbPassword, clearAfter: provisionApp }
+                            steps:
+                              - { name: createSchema, kind: serviceTask, args: { delegate: custom.SchemaProvisioner, produces: [dbPassword], retry: { count: 3, every: PT30S }, onError: recordFailure } }
+                              - { name: provisionApp, kind: serviceTask, args: { delegate: custom.AppProvisioner, uses: [dbPassword], retry: { count: 5, every: PT1M }, onError: recordFailure, next: done } }
+                              - { name: recordFailure, kind: serviceTask, args: { setField: failureMessage, value: "{error}", next: markFailed } }
+                              - { name: markFailed, kind: serviceTask, args: { setRelationField: Status, value: 3, next: end } }
+                              - { name: done, kind: end }
+                        """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // BPMN: the retry cycle rides the delegate task's extensionElements; count is FURTHER
+        // attempts, so count: 3 = R4 (four total) and count: 5 = R6.
+        String bpmn = contentOf("TenantProvisioning.bpmn");
+        assertTrue(bpmn.contains("<flowable:failedJobRetryTimeCycle>R4/PT30S</flowable:failedJobRetryTimeCycle>"),
+                "retry count: 3 should emit an R4 failed-job retry cycle");
+        assertTrue(bpmn.contains("<flowable:failedJobRetryTimeCycle>R6/PT1M</flowable:failedJobRetryTimeCycle>"),
+                "retry count: 5 should emit an R6 failed-job retry cycle");
+
+        // onError: one <error> definition plus a cancelling boundary event per declaring step, each
+        // flowing to the declared error route like a decision branch.
+        assertTrue(bpmn.contains("<error id=\"intentStepError\" name=\"Intent Step Error\" errorCode=\"INTENT_STEP_FAILED\"></error>"),
+                "onError should declare the intent error once at the definitions level");
+        assertTrue(
+                bpmn.contains("<boundaryEvent id=\"createSchemaError\" attachedToRef=\"createSchema\" cancelActivity=\"true\">")
+                        && bpmn.contains("<errorEventDefinition errorRef=\"intentStepError\"></errorEventDefinition>"),
+                "each onError step should carry a cancelling error boundary event");
+        assertTrue(
+                bpmn.contains("sourceRef=\"createSchemaError\" targetRef=\"recordFailure\"")
+                        && bpmn.contains("sourceRef=\"provisionAppError\" targetRef=\"recordFailure\""),
+                "each error boundary should flow to the onError step");
+        assertFalse(bpmn.contains("sourceRef=\"provisionApp\" targetRef=\"recordFailure\""),
+                "the main flow must route around the error steps");
+        assertTrue(bpmn.contains("BPMNShape_createSchemaError") && bpmn.contains("BPMNEdge_flow_createSchemaError_then"),
+                "the error boundary needs its DI shape and edge or the modeler opens it detached");
+
+        // clearAfter: an end-listener on the completing step removes the credential from the
+        // instance data (and thereby from the history).
+        assertTrue(bpmn.contains(
+                "<flowable:executionListener event=\"end\" expression=\"${execution.removeVariable('dbPassword')}\"></flowable:executionListener>"),
+                "clearAfter should emit an end-listener clearing the declared var");
+
+        // Glue: the {error} setter is flagged so the template reads the failure-message variable.
+        String glue = contentOf("provisioning.glue");
+        assertTrue(glue.contains("\"errorMessage\": \"true\""), "the {error} setter should carry the errorMessage flag");
+
+        // Generated handler: the recordFailure setter reads the variable the runtime conversion
+        // published just before it raised the caught BPMN error; the literal setter path is untouched.
+        generateFromModel("template-application-events-java/template/template.js", "provisioning.glue");
+        String setter = contentOf("gen/events/provisioning/TenantProvisioningRecordFailure.java");
+        assertTrue(setter.contains("execution.getVariable(\"__errorMessage\")"),
+                "the {error} setter should read the published failure message");
+        assertFalse(setter.contains("\"{error}\""), "the {error} token must never be written as a literal");
+        String relationSetter = contentOf("gen/events/provisioning/TenantProvisioningMarkFailed.java");
+        assertTrue(relationSetter.contains("updateProperty") && relationSetter.contains(", \"Status\", 3)"),
+                "the relation setter keeps assigning the unquoted seed id");
+    }
+
+    @Test
+    void parse_rejects_malformed_step_resilience_and_undeclared_vars() {
+        // The resilience vocabulary is validated like every other step arg: a typo inside retry, a
+        // dangling onError, an undeclared produces/uses name, a clearAfter to nowhere and an {error}
+        // no route ever reaches are all parse errors - reported together, with exact positions.
+        String yaml =
+                """
+                        name: provisioning
+                        entities:
+                          - name: TenantApplication
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: failureMessage, type: string }
+                        processes:
+                          - name: TenantProvisioning
+                            trigger: { onCreate: TenantApplication }
+                            vars:
+                              - { name: dbPassword, clearAfter: nowhere }
+                            steps:
+                              - { name: createSchema, kind: serviceTask, args: { delegate: custom.SchemaProvisioner, produces: [dbPasword], retry: { cout: 3, every: 30seconds }, onError: recordFailur } }
+                              - { name: recordFailure, kind: serviceTask, args: { setField: failureMessage, value: "{error}", next: end } }
+                        """;
+        restAssuredExecutor.execute(() -> given().contentType("text/plain")
+                                                 .body(yaml)
+                                                 .when()
+                                                 .post(PARSE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("issues", hasItems(
+                                                         "process [TenantProvisioning] step [createSchema] retry declares unknown key [cout] - did you mean [count]?",
+                                                         "process [TenantProvisioning] step [createSchema] retry `every` [30seconds] is not an ISO-8601 duration (e.g. PT30S, PT1M)",
+                                                         "process [TenantProvisioning] step [createSchema] `onError` references unknown step [recordFailur]",
+                                                         "process [TenantProvisioning] step [createSchema] produces names undeclared var [dbPasword] - declare it under the process `vars:`",
+                                                         "process [TenantProvisioning] var [dbPassword] clearAfter references unknown step [nowhere]",
+                                                         "process [TenantProvisioning] step [recordFailure] setField value {error} is only resolvable on a step reachable from an onError route")));
+    }
+
+    @Test
     void abort_on_emits_an_interrupting_event_subprocess_and_correlating_glue() {
         // BPM events wave 2 (#6340): abortOn cancels the in-flight instance when the trigger entity
         // transitions into a listed status - an interrupting message event subprocess (terminate end)
