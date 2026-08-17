@@ -1350,6 +1350,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(campaignMasterView.contains("statusVariant(lookupText('Status', row.Status))"),
                 "the master table must render the EntityStatus column as a resolved badge, not a raw id");
 
+        // #6693: a record that owns detail collections is not finished at create - its children are
+        // the next step of the same working session and can only be added from the record's own
+        // page, so the create lands there instead of on the list. A flat record has nothing left to
+        // do on its page and still returns to the list.
+        String campaignFormPage = contentOf("gen/emission/js/components/pages/Campaign/CampaignFormPage.js");
+        assertTrue(
+                campaignFormPage.contains("App.detailsFor('Campaign').length")
+                        && campaignFormPage.contains("window.PineconeRouter.navigate('/Campaign/' + encodeURIComponent(newId) + '/edit')"),
+                "a create on an entity with detail children must land on the record page, got: " + campaignFormPage);
+        assertTrue(campaignFormPage.contains("!this.returnToParam() && App.detailsFor"),
+                "an explicit returnTo must still win - the create was launched from somewhere expecting the user back");
+
         // Every list surface exports/prints its rows: the manage list and the master list emit the
         // column metadata + toolbar actions wired to the shared basePage CSV/print helpers, with
         // cells resolved like the table (FK labels, formatted dates - never raw ids).
