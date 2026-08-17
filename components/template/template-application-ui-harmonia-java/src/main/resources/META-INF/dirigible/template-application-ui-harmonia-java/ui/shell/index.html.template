@@ -590,6 +590,7 @@
     <script src="/services/web/application-core/shell/js/components/pages/basePage.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/baseFormPage.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/detailPanel.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/relatedPanel.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/processTasks.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/customActions.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/reports.js" defer></script>
@@ -632,6 +633,11 @@
 #end
 #if($entity.type == "REPORT")
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}ReportPage.js" defer></script>
+#end
+#if($entity.relatedEntities)
+    <!-- the records REFERENCING this entity: one read-only register per declaration, rendered by
+         its own form / document / master pages off the runtime registry -->
+    <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}.related.js" defer></script>
 #end
 #if($entity.personalProperty && $entity.calendarView == "true")
     <script src="./js/components/pages/my/${entity.name}MyCalendarPage.js" defer></script>

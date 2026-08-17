@@ -45,6 +45,7 @@ import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.LifecycleEdgeIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleStages;
+import org.eclipse.dirigible.components.intent.model.RelatedIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
@@ -180,6 +181,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
 
         EdmDocument document = new EdmDocument();
         List<Map<String, Object>> entityList = new ArrayList<>();
+        // The built map of every entity, by name - read back by the related-register sweep below.
+        Map<String, Map<String, Object>> builtByName = new LinkedHashMap<>();
         List<Map<String, Object>> perspectiveList = new ArrayList<>();
         String tablePrefix = IntentNaming.upperSnake(intentName);
         String projectName = context != null && notBlank(context.getProjectName()) ? context.getProjectName() : intentName;
@@ -635,10 +638,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             entityMap.put("properties", properties);
             entityList.add(entityMap);
+            builtByName.put(name, entityMap);
             if (!relations.isEmpty()) {
                 document.relationsByEntity.put(name, relations);
             }
         }
+        // Read-only registers of the records REFERENCING an entity, resolved in their own sweep: a
+        // same-model source may be declared after the entity that lists it, so every entity has to be
+        // built before any register can read one.
+        buildRelatedRegisters(context, entities, builtByName, usesByAlias);
         // Append the synthesized PROJECTION entities (read-only cross-model references). They carry no
         // perspective so they stay out of this app's navigation, and downstream filters skip them for
         // table / DAO / controller / role generation.
@@ -1817,6 +1825,216 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                               .matches("-?\\d+")) {
             entityMap.put("lifecycleInitialStatus", status.getInit());
         }
+    }
+
+    /** The property keys a related register's column carries into the {@code .model}. */
+    private static final List<String> RELATED_COLUMN_KEYS = List.of("name", "widgetLabel", "dataName", "dataType", "dataScale",
+            "widgetType", "widgetPattern", "widgetDropDownKey", "widgetDropDownValue", "relationshipEntityName",
+            "relationshipEntityPerspectiveName", "sensitiveProperty", "referencedModel");
+
+    /**
+     * Emits each entity's {@code related:} declarations as the {@code relatedEntities} model attribute
+     * - a read-only register of the records that reference it, filtered to the open record.
+     *
+     * <p>
+     * A List, so it lives only in the {@code .model} twin (the scalar-only {@code .edm} XML skips it
+     * via the Iterable guard). The entry carries FACTS, never URLs: which entity, where it lives, its
+     * key, the foreign key back here, and the property metadata its columns render from. The generation
+     * parameters turn those into the controller / application URLs, exactly as they do for a dropdown -
+     * an intent generator must stay ignorant of the paths a downstream template publishes.
+     *
+     * @param context the generation context, for resolving a cross-model source
+     * @param entities the authored entities
+     * @param builtByName every built entity map, by name
+     * @param usesByAlias the declared {@code uses:} entries, by alias
+     */
+    private static void buildRelatedRegisters(IntentGenerationContext context, List<EntityIntent> entities,
+            Map<String, Map<String, Object>> builtByName, Map<String, UsesIntent> usesByAlias) {
+        for (EntityIntent entity : entities) {
+            if (entity.getRelated()
+                      .isEmpty()) {
+                continue;
+            }
+            Map<String, Object> entityMap = builtByName.get(entity.getName());
+            if (entityMap == null) {
+                continue; // an unnamed / skipped entity
+            }
+            List<Map<String, Object>> registers = new ArrayList<>();
+            for (RelatedIntent related : entity.getRelated()) {
+                Map<String, Object> register =
+                        related.isCrossModel() ? crossModelRelatedRegister(context, entity, related, usesByAlias.get(related.getModel()))
+                                : localRelatedRegister(entity, related, builtByName.get(related.getEntity()));
+                if (register != null) {
+                    registers.add(register);
+                }
+            }
+            if (!registers.isEmpty()) {
+                entityMap.put("relatedEntities", registers);
+            }
+        }
+    }
+
+    /**
+     * A register whose source entity is declared in this same model - every fact is already built, so
+     * nothing is read from disk.
+     */
+    private static Map<String, Object> localRelatedRegister(EntityIntent entity, RelatedIntent related, Map<String, Object> source) {
+        if (source == null) {
+            LOGGER.warn("Skipping related register [{}] of [{}] - the source entity was not generated", related.getEntity(),
+                    entity.getName());
+            return null;
+        }
+        List<Map<String, Object>> properties = propertiesOf(source);
+        String fkProperty = relatedForeignKey(properties, entity.getName(), related);
+        if (fkProperty == null) {
+            return null; // reported by the parser
+        }
+        String perspectiveName = notBlank(str(source.get("perspectiveName"))) ? str(source.get("perspectiveName")) : related.getEntity();
+        String dataName = notBlank(str(source.get("dataName"))) ? str(source.get("dataName")) : null;
+        Map<String, Object> register = relatedRegister(related, perspectiveName, dataName, relatedPrimaryKey(properties), fkProperty);
+        register.put("properties", relatedColumns(properties, related.getShow(), fkProperty));
+        return register;
+    }
+
+    /**
+     * A register whose source entity is owned by another model: its facts are read from that model's
+     * generated {@code .model} (workspace or registry), the same resolution every other cross-model
+     * reference uses - and failing as loudly when it is not there.
+     */
+    private static Map<String, Object> crossModelRelatedRegister(IntentGenerationContext context, EntityIntent entity,
+            RelatedIntent related, UsesIntent uses) {
+        if (uses == null) {
+            LOGGER.warn("Skipping related register [{}] of [{}] - model [{}] is not in uses:", related.getEntity(), entity.getName(),
+                    related.getModel());
+            return null;
+        }
+        CrossModelSupport.RelatedSourceInfo info =
+                CrossModelSupport.resolveRelatedSource(context, uses, related.getEntity(), entity.getName(), related.getVia());
+        if (info == null) {
+            // No repository to resolve against (a unit-test harness). The register is still declared, with
+            // the columns the author named and no type metadata - there is nothing else to know here.
+            Map<String, Object> register = relatedRegister(related, related.getEntity(), null, "Id", null);
+            register.put("referencedModel", "/" + uses.resolveProject() + "/" + uses.getModel() + ".model");
+            register.put("properties", relatedColumns(List.of(), related.getShow(), null));
+            return register;
+        }
+        Map<String, Object> register =
+                relatedRegister(related, info.perspectiveName(), info.dataName(), info.primaryKey(), info.fkProperty());
+        register.put("referencedModel", "/" + uses.resolveProject() + "/" + uses.getModel() + ".model");
+        register.put("properties", relatedColumns(info.properties(), related.getShow(), info.fkProperty()));
+        return register;
+    }
+
+    /** The shared scalar part of a register entry. */
+    private static Map<String, Object> relatedRegister(RelatedIntent related, String perspectiveName, String dataName, String primaryKey,
+            String fkProperty) {
+        Map<String, Object> register = new LinkedHashMap<>();
+        register.put("entity", related.getEntity());
+        register.put("label",
+                notBlank(related.getLabel()) ? related.getLabel() : IntentNaming.pluralize(IntentNaming.humanize(related.getEntity())));
+        register.put("perspectiveName", perspectiveName);
+        if (dataName != null) {
+            // The source's table name keys its label catalog, so a same-project register can translate
+            // its heading through the entry the source's own navigation already contributes.
+            register.put("dataName", dataName);
+        }
+        register.put("primaryKey", primaryKey);
+        if (fkProperty != null) {
+            register.put("fkProperty", fkProperty);
+        }
+        return register;
+    }
+
+    /**
+     * The source property holding the foreign key back at the referenced entity - the one named by
+     * {@code via:}, else its only relation pointing here. The parser has already reported both failure
+     * modes for a same-model source, so this returns null rather than raising a second voice.
+     */
+    private static String relatedForeignKey(List<Map<String, Object>> properties, String referencedEntity, RelatedIntent related) {
+        List<String> candidates = new ArrayList<>();
+        for (Map<String, Object> property : properties) {
+            if (referencedEntity.equals(str(property.get("relationshipEntityName")))) {
+                candidates.add(str(property.get("name")));
+            }
+        }
+        if (notBlank(related.getVia())) {
+            String wanted = IntentNaming.pascalCase(related.getVia());
+            return candidates.contains(wanted) ? wanted : null;
+        }
+        return candidates.size() == 1 ? candidates.get(0) : null;
+    }
+
+    /** The source's primary-key property name. */
+    private static String relatedPrimaryKey(List<Map<String, Object>> properties) {
+        for (Map<String, Object> property : properties) {
+            if ("true".equals(String.valueOf(property.get("dataPrimaryKey")))) {
+                return str(property.get("name"));
+            }
+        }
+        return "Id";
+    }
+
+    /**
+     * The register's columns: the properties the author named in {@code show:}, in that order, else the
+     * source's own list columns. The default drops what a list drops anyway - the generated identifier,
+     * the audit trail, the process back-reference, a property kept off list tables - plus the foreign
+     * key back to the record the register already belongs to.
+     */
+    private static List<Map<String, Object>> relatedColumns(List<Map<String, Object>> properties, List<String> show, String fkProperty) {
+        List<Map<String, Object>> columns = new ArrayList<>();
+        if (!show.isEmpty()) {
+            for (String wanted : show) {
+                Map<String, Object> property = null;
+                for (Map<String, Object> candidate : properties) {
+                    if (wanted.trim()
+                              .equalsIgnoreCase(str(candidate.get("name")))) {
+                        property = candidate;
+                        break;
+                    }
+                }
+                columns.add(property != null ? relatedColumn(property) : namedRelatedColumn(wanted));
+            }
+            return columns;
+        }
+        for (Map<String, Object> property : properties) {
+            String name = str(property.get("name"));
+            String auditType = str(property.get("auditType"));
+            boolean excluded = "true".equals(String.valueOf(property.get("dataAutoIncrement"))) || name.equals(fkProperty)
+                    || "ProcessId".equals(name) || "false".equals(String.valueOf(property.get("widgetIsMajor")))
+                    || (auditType != null && !auditType.isEmpty() && !"NONE".equals(auditType));
+            if (!excluded) {
+                columns.add(relatedColumn(property));
+            }
+        }
+        return columns;
+    }
+
+    /** One column: the property metadata a register's cell renders from, and nothing else. */
+    private static Map<String, Object> relatedColumn(Map<String, Object> property) {
+        Map<String, Object> column = new LinkedHashMap<>();
+        for (String key : RELATED_COLUMN_KEYS) {
+            Object value = property.get(key);
+            if (value != null && !String.valueOf(value)
+                                        .isEmpty()) {
+                column.put(key, value);
+            }
+        }
+        return column;
+    }
+
+    /**
+     * A column known only by the name the author wrote - the no-repository fallback, where the source's
+     * property metadata was never read. It renders as plain text.
+     */
+    private static Map<String, Object> namedRelatedColumn(String name) {
+        Map<String, Object> column = new LinkedHashMap<>();
+        column.put("name", IntentNaming.pascalCase(name.trim()));
+        return column;
+    }
+
+    /** A map value as a string, empty when absent. */
+    private static String str(Object value) {
+        return value == null ? "" : String.valueOf(value);
     }
 
     /** The entity's {@code function: EntityStatus} relation, or null. */

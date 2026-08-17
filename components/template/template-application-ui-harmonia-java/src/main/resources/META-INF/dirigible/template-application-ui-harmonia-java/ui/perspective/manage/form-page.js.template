@@ -132,6 +132,11 @@ document.addEventListener('alpine:init', () => {
     // previously the ONLY place details showed up.
     detailDefs: [],
 
+    // Read-only registers of the records REFERENCING this one (empty unless the model declares any).
+    // Rendered below the detail panels: the listed records are owned by their own entities, so this
+    // is a window onto them, not a collection this page manages.
+    relatedDefs: [],
+
     // Form model — one entry per editable property (auto-increment PK excluded).
     form: {
 #foreach($property in $properties)
@@ -214,6 +219,7 @@ document.addEventListener('alpine:init', () => {
       const routePath = (window.location.hash || '').split('?')[0];
       this.mode = this.id == null ? 'create' : (routePath.endsWith('/preview') ? 'preview' : 'edit');
       this.detailDefs = this.id != null ? App.detailsFor('${name}') : [];
+      this.relatedDefs = this.id != null ? App.relatedFor('${name}') : [];
 
 #if($hasDropdowns)
       await this.loadOptions();

@@ -2514,4 +2514,76 @@ class IntentParserTest {
                                               .getVisibleTo(),
                 "the document total is the sum of a restricted line figure and must be scoped the same way");
     }
+
+    @Test
+    // A register through a source that references the entity twice has no defensible default, so the
+    // parser asks which relation to list through rather than picking one; naming it resolves it.
+    void relatedRequiresViaWhenTheSourceReferencesTheEntityMoreThanOnce() {
+        String ambiguous = """
+                name: billing
+                entities:
+                  - name: Company
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    related:
+                      - { entity: Invoice }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: issuer, kind: manyToOne, to: Company }
+                      - { name: recipient, kind: manyToOne, to: Company }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(ambiguous));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("via:")),
+                "an ambiguous register must ask for via:, got: " + ex.getIssues());
+
+        IntentModel model = IntentParser.parse(ambiguous.replace("{ entity: Invoice }", "{ entity: Invoice, via: issuer }"));
+        assertEquals("issuer", model.getEntities()
+                                    .get(0)
+                                    .getRelated()
+                                    .get(0)
+                                    .getVia());
+    }
+
+    @Test
+    // A register's source must actually reference the entity, its show: names must be its own, and a
+    // composition child is refused: it is already edited in place as a detail / items collection.
+    void relatedRejectsAnUnrelatedSourceAnUnknownColumnAndACompositionChild() {
+        String yaml = """
+                name: library
+                entities:
+                  - name: Member
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    related:
+                      - entity: Book
+                      - entity: Loan
+                        show: [borrowedOn]
+                  - name: Book
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Loan
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: loanedOn, type: date }
+                    relations:
+                      - { name: member, kind: manyToOne, to: Member, composition: true, required: true }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("[Book]") && i.contains("nothing to list")),
+                "a source that does not reference the entity must be reported, got: " + ex.getIssues());
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("borrowedOn")),
+                "a show: name that is not a property of the source must be reported, got: " + ex.getIssues());
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("composition child")),
+                "a composition child is already an editable collection, got: " + ex.getIssues());
+    }
 }

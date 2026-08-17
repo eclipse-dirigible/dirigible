@@ -52,6 +52,7 @@ import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.PermissionIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
+import org.eclipse.dirigible.components.intent.model.RelatedIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ResolveIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
@@ -2438,8 +2439,156 @@ public final class IntentParser {
                     validateCheck(entity, check, byName, model.getAggregates(), issues);
                 }
             }
+            if (!entity.getRelated()
+                       .isEmpty()) {
+                validateRelated(entity, byName, usesAliases, issues);
+            }
         }
         return entityNames;
+    }
+
+    /**
+     * {@code related:} declares read-only registers of the records REFERENCING this entity. Each entry
+     * must name a referencing entity; a cross-model one must name a declared {@code uses:} alias and is
+     * resolved against the owner's {@code .model} at generation time (like every other cross-model
+     * reference), so only its shape is checked here. A same-model entry is checked in full: the source
+     * must be declared, must not be a composition child of this entity (that collection is already
+     * rendered as an editable detail / items pane, and a second read-only copy of it is a modelling
+     * mistake, not a view), it must have a to-one relation pointing here - named by {@code via:} when
+     * it has several - and every {@code show:} name must be one of the source's own fields / relations.
+     *
+     * @param entity the referenced entity carrying the registers
+     * @param byName every entity of this model, by name
+     * @param usesAliases the declared {@code uses:} aliases
+     * @param issues the collecting issue list
+     */
+    private static void validateRelated(EntityIntent entity, Map<String, EntityIntent> byName, Set<String> usesAliases,
+            List<String> issues) {
+        Set<String> seen = new HashSet<>();
+        for (RelatedIntent related : entity.getRelated()) {
+            String subject = "entity [" + entity.getName() + "] related";
+            if (isBlank(related.getEntity())) {
+                issues.add(subject + " has an entry without an entity");
+                continue;
+            }
+            subject = subject + " [" + related.getEntity() + "]";
+            if (!seen.add(related.getEntity() + "#" + (related.getVia() == null ? "" : related.getVia()))) {
+                issues.add(subject + " is declared more than once - a second register of the same reference shows the same rows twice");
+            }
+            if (related.isCrossModel()) {
+                if (!usesAliases.contains(related.getModel())) {
+                    issues.add(subject + " references undeclared model [" + related.getModel() + "] - add it to uses:");
+                }
+                continue;
+            }
+            EntityIntent source = byName.get(related.getEntity());
+            if (source == null) {
+                issues.add(subject + " is not a declared entity (add model: <alias> when it is owned by another model)");
+                continue;
+            }
+            List<RelationIntent> pointingHere = new ArrayList<>();
+            for (RelationIntent relation : source.getRelations()) {
+                if (!relation.isCrossModel() && entity.getName()
+                                                      .equals(relation.getTo())
+                        && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                    pointingHere.add(relation);
+                }
+            }
+            RelationIntent via = resolveRelatedVia(subject, related, pointingHere, issues);
+            if (via == null) {
+                continue;
+            }
+            if (via.isComposition()) {
+                issues.add(subject + " is a composition child of [" + entity.getName()
+                        + "] - it is already rendered as an editable detail / items collection, which a read-only register would duplicate");
+            }
+            validateRelatedShow(subject, related, source, issues);
+        }
+    }
+
+    /**
+     * Picks the referencing relation a register lists through: the one named by {@code via:}, or - when
+     * the source points here exactly once - that single relation. Anything else is an error rather than
+     * a guess: a source referencing this entity twice (an invoice's issuer and recipient company) has
+     * no defensible default.
+     *
+     * @param subject the message prefix
+     * @param related the register
+     * @param pointingHere the source's to-one relations targeting the referenced entity
+     * @param issues the collecting issue list
+     * @return the relation to filter by, or null when it could not be resolved
+     */
+    private static RelationIntent resolveRelatedVia(String subject, RelatedIntent related, List<RelationIntent> pointingHere,
+            List<String> issues) {
+        if (!isBlank(related.getVia())) {
+            for (RelationIntent relation : pointingHere) {
+                if (related.getVia()
+                           .equals(relation.getName())) {
+                    return relation;
+                }
+            }
+            issues.add(subject + " via [" + related.getVia() + "] is not a to-one relation of [" + related.getEntity()
+                    + "] targeting this entity");
+            return null;
+        }
+        if (pointingHere.isEmpty()) {
+            issues.add(subject + " declares no to-one relation targeting this entity, so there is nothing to list");
+            return null;
+        }
+        if (pointingHere.size() > 1) {
+            List<String> names = new ArrayList<>();
+            for (RelationIntent relation : pointingHere) {
+                names.add(relation.getName());
+            }
+            issues.add(subject + " references this entity through " + pointingHere.size() + " relations " + names
+                    + " - name the one to list through with via:");
+            return null;
+        }
+        return pointingHere.get(0);
+    }
+
+    /**
+     * Every {@code show:} name must be one of the source's own fields or relations (matched
+     * case-insensitively, like {@code order:}), and may be listed only once.
+     *
+     * @param subject the message prefix
+     * @param related the register
+     * @param source the referencing entity
+     * @param issues the collecting issue list
+     */
+    private static void validateRelatedShow(String subject, RelatedIntent related, EntityIntent source, List<String> issues) {
+        if (related.getShow()
+                   .isEmpty()) {
+            return;
+        }
+        Set<String> known = new HashSet<>();
+        for (FieldIntent field : source.getFields()) {
+            if (field.getName() != null) {
+                known.add(field.getName()
+                               .toLowerCase(Locale.ROOT));
+            }
+        }
+        for (RelationIntent relation : source.getRelations()) {
+            if (relation.getName() != null) {
+                known.add(relation.getName()
+                                  .toLowerCase(Locale.ROOT));
+            }
+        }
+        Set<String> seen = new HashSet<>();
+        for (String token : related.getShow()) {
+            if (isBlank(token)) {
+                issues.add(subject + " show has a blank entry");
+                continue;
+            }
+            String key = token.trim()
+                              .toLowerCase(Locale.ROOT);
+            if (!seen.add(key)) {
+                issues.add(subject + " show lists [" + token + "] more than once");
+            }
+            if (!known.contains(key)) {
+                issues.add(subject + " show references [" + token + "] which is not a field or relation of [" + related.getEntity() + "]");
+            }
+        }
     }
 
     /** The compiled shape of one {@code immutableWhen} term: {@code <Status> == <seed id>}. */

@@ -122,6 +122,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # a parent node server-side.
               - name: Account
                 hierarchy: Parent
+                # related: the reverse of an incoming to-one association. Account is the TARGET of
+                # Entry.Account, so its own record page lists the entries booked against it -
+                # read-only, because an Entry has its own lifecycle, its own page and its own
+                # process. Declared HERE, on the referenced side, which is the only side that can
+                # know: a referencing model may be generated later and never sees this one.
+                related:
+                  - entity: Entry
+                    label: Journal Entries
+                    show: [date, debit, credit, Status]
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string,  required: true, length: 100 }
@@ -1119,6 +1128,37 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the browse page must gate row Edit/Delete on the baked per-row immutability check");
         assertTrue(entryController.contains("must reference a leaf"),
                 "leafOnly must emit the server-side children check in the REST controller");
+
+        // related: the read-only register of the records REFERENCING Account. The registration is
+        // emitted for the REFERENCED entity (the referencing one may be generated separately, in
+        // another project), and it carries the resolved coordinates the panel calls: the source's
+        // controller, the foreign key it filters by, and the lookup that turns its Status FK into a
+        // label. The URL is built by the generation parameters, not by the intent generator - which
+        // is exactly why the .model entry carries facts and this file carries paths.
+        String accountRegister = contentOf("gen/emission/js/components/pages/Account/Account.related.js");
+        assertTrue(accountRegister.contains("App.registerRelated('Account'"),
+                "a related declaration must register under the REFERENCED entity, got: " + accountRegister);
+        assertTrue(accountRegister.contains("entity: 'Entry'") && accountRegister.contains("label: 'Journal Entries'"),
+                "the register must name its source entity and its authored heading, got: " + accountRegister);
+        assertTrue(accountRegister.contains("fkProperty: 'Account'"),
+                "the register must filter by the source's foreign key back to this entity, got: " + accountRegister);
+        assertTrue(accountRegister.contains("apiPath: '" + API + "/entry/EntryController'"),
+                "the register's controller URL must resolve to the source's own controller, got: " + accountRegister);
+        assertTrue(accountRegister.contains("lookup: { url: '" + API + "/settings/EntryStatusController'"),
+                "a relation column must carry the lookup its label resolves through, got: " + accountRegister);
+        // show: picks the columns and their order - the generated identifier and the foreign key back
+        // here are not among them.
+        assertTrue(
+                accountRegister.indexOf("name: 'Date'") < accountRegister.indexOf("name: 'Status'")
+                        && !accountRegister.contains("name: 'Id'"),
+                "the register's columns must be the authored ones, got: " + accountRegister);
+        // ... and the referenced entity's own page renders them.
+        String accountFormPage = contentOf("gen/emission/js/components/pages/Account/AccountFormPage.js");
+        assertTrue(accountFormPage.contains("App.relatedFor('Account')"),
+                "the referenced entity's form page must read its registers from the runtime registry");
+        String accountForm = contentOf("gen/emission/views/Account/Account-form.html");
+        assertTrue(accountForm.contains("relatedPanel(r, id)") && accountForm.contains("openRow(row)"),
+                "the referenced entity's form must render one related panel per register, whose only row action opens the source record");
 
         // #6336 pattern: the server-side regex check and the client-side HTML pattern attribute.
         String personController = contentOf("gen/emission/api/person/PersonController.java");
@@ -2322,6 +2362,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                              .extract()
                                                              .path("Id")));
         int entryId = created.get();
+
+        // related, at runtime: the register's data path is the source controller's generic search,
+        // filtered on the foreign key back to the open record - there is no master-filter query
+        // parameter outside a composition detail, so this is the whole mechanism. Account 2 must
+        // answer with the entry just booked against it, and account 1 (a parent node, referenced by
+        // nothing) with none: a register that returned every row would look right on a fixture with
+        // one account and be wrong everywhere else.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"equals\":{\"Account\":2}}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Id", hasItem(entryId)));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"equals\":{\"Account\":1}}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(0)));
 
         // checks: itemsMin - carrying the gate status with no lines must be rejected.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
