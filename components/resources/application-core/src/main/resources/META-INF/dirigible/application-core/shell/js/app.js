@@ -56,4 +56,18 @@ window.App = {
   detailsFor(masterEntity) {
     return this.details[masterEntity] || [];
   },
+
+  // Related-records registry. An entity that declares registers of the records REFERENCING it
+  // registers them here under its own name; its form / document / master pages render one
+  // read-only relatedPanel per entry. Unlike a detail (whose registration is contributed by the
+  // CHILD), a register is contributed by the entity being referenced - the referencing entity may
+  // live in another project entirely and knows nothing about this one.
+  // See js/components/relatedPanel.js.
+  related: {},
+  registerRelated(entity, def) {
+    (this.related[entity] = this.related[entity] || []).push(def);
+  },
+  relatedFor(entity) {
+    return this.related[entity] || [];
+  },
 };

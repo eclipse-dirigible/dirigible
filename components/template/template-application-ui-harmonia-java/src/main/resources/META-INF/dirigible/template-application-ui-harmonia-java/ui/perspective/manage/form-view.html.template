@@ -371,6 +371,54 @@
       </template>
     </div>
 
+    <div class="vbox gap-4 w-full" x-show="(isEdit || isPreview) && relatedDefs.length && state !== 'loading' && state !== 'load-failure'">
+      <!-- ===== Related registers: the records that REFERENCE this one, read-only. Those records are
+           owned by their own entities - own lifecycle, own pages, own processes - so this is a
+           window onto them and never an editor: a row opens the source's own record page in the
+           shared dialog (the source may live in another application entirely). ===== -->
+      <template x-for="r in relatedDefs" :key="r.entity + ':' + id">
+        <div x-data="relatedPanel(r, id)" x-h-card class="w-full">
+          <div x-h-card-header>
+            <h3 x-h-card-title x-text="title"></h3>
+          </div>
+          <div x-h-card-content>
+            <div x-show="state === 'loading'"><div x-h-spinner></div></div>
+            <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
+            <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
+            <div x-show="state === 'default'" x-h-table-container.scroll style="max-height: 320px">
+              <table x-h-table data-borders="rows">
+                <thead x-h-table-header>
+                  <tr x-h-table-row>
+                    <template x-for="col in def.columns" :key="col.name">
+                      <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="columnHeader(col)"></th>
+                    </template>
+                    <th x-h-table-head scope="col"></th>
+                  </tr>
+                </thead>
+                <tbody x-h-table-body>
+                  <template x-for="row in rows" :key="row[def.primaryKey]">
+                    <tr x-h-table-row data-hoverable="true">
+                      <template x-for="col in def.columns" :key="col.name">
+                        <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+                          <template x-if="col.number"><span x-text="cellValue(col, row)"></span></template>
+                          <template x-if="!col.number">
+                            <div style="white-space: normal; overflow-wrap: break-word; max-width: 28rem;" x-text="cellValue(col, row)"></div>
+                          </template>
+                        </td>
+                      </template>
+                      <td x-h-table-cell data-row-actions>
+                        <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="openRow(row)" :aria-label="T('$projectName:${tprefix}.defaults.open', 'Open')"><i role="img" x-h-lucide data-lucide="external-link"></i></button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
     <!-- Action footer at the very bottom of the main column (below the detail panels), matching the
          document view. BPM user-task buttons on the LEFT; Cancel + Save/Create on the RIGHT. Save is
          type=button @click=save() because it lives outside the header <form>. -->

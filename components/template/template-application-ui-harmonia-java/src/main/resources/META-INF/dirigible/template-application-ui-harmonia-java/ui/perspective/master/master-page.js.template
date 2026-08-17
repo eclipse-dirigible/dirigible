@@ -30,6 +30,8 @@ document.addEventListener('alpine:init', () => {
     searchTerm: '',
     selected: null,
     detailDefs: [],
+    // Read-only registers of the records REFERENCING the selected master (empty unless declared).
+    relatedDefs: [],
 
     deleteOpen: false,
     deleteTarget: null,
@@ -44,6 +46,7 @@ document.addEventListener('alpine:init', () => {
       });
 #end
       this.detailDefs = App.detailsFor('${name}');
+      this.relatedDefs = App.relatedFor('${name}');
       await this.load();
       this.loadLookups();
       this.selectFromRoute();

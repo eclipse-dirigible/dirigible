@@ -204,6 +204,15 @@ public class EntityIntent {
     private List<CheckIntent> checks;
 
     /**
+     * Optional read-only registers of the records that REFERENCE this entity - the reverse of an
+     * incoming to-one association. Each entry lists a referencing entity's records, filtered to the
+     * open record, on this entity's own page (a project-month showing its per-employee timesheet lines,
+     * a customer showing its invoices). Declared here, on the referenced side, because the referencing
+     * model may be generated later and in general is unknown to this one. See {@link RelatedIntent}.
+     */
+    private List<RelatedIntent> related = new ArrayList<>();
+
+    /**
      * Optional declarative state machine over the entity's {@code function: EntityStatus} relation: the
      * whole set of legal status edges, enforced on EVERY status write (user form, workflow setter,
      * transition button, custom action) instead of only on the flips that happen to go through a
@@ -492,6 +501,14 @@ public class EntityIntent {
 
     public void setChecks(List<CheckIntent> checks) {
         this.checks = checks;
+    }
+
+    public List<RelatedIntent> getRelated() {
+        return related;
+    }
+
+    public void setRelated(List<RelatedIntent> related) {
+        this.related = related == null ? new ArrayList<>() : related;
     }
 
     public LifecycleIntent getLifecycle() {

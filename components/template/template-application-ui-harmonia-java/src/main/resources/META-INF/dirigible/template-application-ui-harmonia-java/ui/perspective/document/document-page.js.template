@@ -233,6 +233,9 @@ document.addEventListener('alpine:init', () => {
     // Any OTHER composition child of this master (not the line-items entity) renders as a normal panel —
     // like the line items, only once the document (header) exists (nothing to allocate against on Create).
     get secondaryDetails() { return this.itemsEnabled ? App.detailsFor('${name}').filter(d => d.entity !== '${documentItemsEntity}') : []; },
+    // Read-only registers of the records REFERENCING this document (empty unless the model declares
+    // any). Available once the document exists, like the detail panels.
+    get relatedDefs() { return this.itemsEnabled ? App.relatedFor('${name}') : []; },
 
     // ===== Print: the .print template lives in the CMS (Templates/${name}/Print/<lang>/), where it
     // can be customized via the Documents perspective. One language prints directly; several ask.

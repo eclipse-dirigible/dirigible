@@ -661,6 +661,10 @@ class ModelGenerator {
         collections.put("uiCalendarModels",
                 select(entities, e -> "true".equals(str(e, "calendarView")) && "PRIMARY".equals(str(e, "type"))));
         collections.put("uiSlotsModels", select(entities, e -> "true".equals(str(e, "slotsView")) && "PRIMARY".equals(str(e, "type"))));
+        // An entity that lists the records REFERENCING it contributes one registration file its own
+        // pages read the registers from - so the register metadata is emitted once per entity rather
+        // than repeated in every page template that renders it.
+        collections.put("uiRelatedModels", select(entities, e -> !asMaps(e.get("relatedEntities")).isEmpty()));
 
         // The personal surface: entities the logged-in user owns, either through a direct personal
         // relation or through the scope inherited from their composition parent.

@@ -675,6 +675,45 @@ entities:
 owned across models). Generate leaf models (the owners) before their consumers so the dropdown
 resolves. Each project is its own `.intent`; all must be published to the same runtime.
 
+### related - list the records that REFERENCE this entity (read-only register)
+
+**Use when:** an entity is the *target* of an association and its own page should show the records
+pointing at it - a project-month and its per-employee timesheet lines, a customer and its invoices,
+an account and its journal entries, a supplier and its purchase orders. Without it those records
+are only reachable from their own perspective, by filtering.
+
+Declare it on the **referenced** entity (the one the relation points at), never on the referencing
+one:
+
+```yaml
+  - name: ProjectTimesheet
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+    related:
+      - entity: EmployeeTimesheet          # the referencing entity
+        model: employee-timesheets         # omit when it is declared in THIS model
+        via: projectTimesheet              # omit when it has exactly one relation pointing here
+        label: Employee Timesheets         # omit for the pluralized entity name
+        show: [number, employee, totalHours, status]   # omit for the source's own list columns
+```
+
+The register renders as a read-only grid on the referenced record's form / document / master page,
+filtered to that record, and each row opens the source's own record page - **there is no add, edit
+or delete**: the listed records have their own lifecycle, pages and processes. That is the whole
+difference from a composition child, which IS edited in place as a detail / document-items
+collection - so a composition child is refused here rather than listed twice.
+
+**Why the referenced side declares it:** generation is per model and leaf-first, so the model being
+referenced is generated before - and generally knows nothing about - the models that reference it.
+Only the referenced side can say "show these here". A cross-model source is resolved against the
+owner model's generated model file (workspace, else the published registry copy) exactly like a
+cross-model relation, and fails loudly when that model is not there.
+
+**Rules:** `entity` is required; a cross-model `model:` must be listed in `uses:`; `via:` is
+required only when the source references this entity through more than one relation (an invoice
+naming the same company as both issuer and recipient) - anything else is refused rather than
+guessed; every `show:` name must be a field or relation of the source.
+
 ### Many-to-many (n:m) - the intermediate entity
 
 An n:m is always an **intermediate (link) entity** - one row per link, holding a `composition` to
@@ -2232,6 +2271,7 @@ name.
 | entity `function` | `Document`, `DocumentItem`, `Master`, `Detail`, `List`, `Setting`, `Calendar` (reserved-and-rejected: `Board`, `Gantt`, `Timeline`) |
 | field `function` | `DocumentTitle` |
 | relation `function` | `EntityStatus` |
+| entity `related` | `{ entity, model?, via?, label?, show? }` - a read-only register of the records REFERENCING this entity; `via:` is required only when the source points here more than once, and a composition child is refused (it is already an editable detail) |
 | entity `view` | `calendar`, `range`, `slots` |
 | report `kind` | `balance` |
 | report `chart` | `bar`, `line`, `pie`, `doughnut`, `polarArea`, `radar` |
@@ -2272,6 +2312,7 @@ name.
 - "expand a from-to span into day/week/month child rows / loan installments / vacation day items" -> **expansions**
 - "compute days between two dates on the form (working days / months)" -> **calculated field with a date function**
 - "reference a Customer/Country/Currency/UoM owned by another app" -> **uses + cross-model relation**
+- "show the invoices / timesheet lines / journal entries that reference THIS record, on its own page" -> **`related:`** on the referenced entity (read-only; a composition child is a detail instead)
 - "many-to-many between X and Y" -> **`kind: manyToMany`** (materializes the intermediate entity); **with extra fields on the link** -> author the **intermediate entity** (composition + manyToOne)
 
 ### expansions - generate child rows from a date span

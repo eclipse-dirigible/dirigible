@@ -87,6 +87,7 @@
         "create": "Create",
         "edit": "Edit",
         "preview": "Preview",
+        "open": "Open",
         "readOnly": "Read-only",
         "update": "Update",
         "delete": "Delete",
