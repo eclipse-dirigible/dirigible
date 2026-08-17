@@ -2047,6 +2047,40 @@ integrations:
 
 **Rules:** exactly one event of the event axis; `method` from the allowed list; `url` required.
 
+**`payload:` - the declared envelope (use it whenever the receiver has a contract).** Without it the
+request body is the record as stored, which makes every column a public contract and cannot express
+an envelope (a type, a version, an idempotency key, a tenant). With it, the body is exactly what you
+declare:
+
+```yaml
+integrations:
+  - name: requestUserAssignment
+    event: { onCreate: UserInvitation }
+    method: POST                          # a payload needs POST / PUT / PATCH - the rest send no body
+    url: "@config:ASSIGNMENT_URL"
+    payload:
+      type: "user.assignment.requested"   # literal
+      version: 1
+      messageId: "{uuid}"                 # minted per message
+      tenantId: "{tenant}"                # execution context
+      appId: "@config:APP_ID"             # configuration, resolved server-side
+      email: email                        # a field of the record
+      role: role.name                     # one hop off a to-one relation
+      requestedAt: "{now}"
+```
+
+A value is a **literal**, a **direct field**, or a **one-hop `relation.field`** of a to-one relation -
+the same three forms `notify` resolves, and multi-hop (`a.b.c`) is rejected the same way. `@config:KEY`
+reads the configuration. The context tokens are a **closed set** - `{uuid}`, `{now}` (an ISO-8601
+instant), `{tenant}`, `{user}` - and an unknown one is a parse **error**, never an empty value in a
+shipped message. A payload value is one whole value: there is no interpolation (`"Order {id} placed"`
+is rejected) and no nested object or list. A bare word that names no field is a **literal**; brace it
+(`"{email}"`) when you mean a reference and want the parser to check it. Keys keep their authored
+order.
+
+If a contract needs more than this it is an algorithm, not a payload - say so and hand off to a
+hand-written handler rather than stretching the block.
+
 ### the event axis - what a notification / integration binds to
 
 **Both** `notifications` and `integrations` declare **exactly one** `event:`, either

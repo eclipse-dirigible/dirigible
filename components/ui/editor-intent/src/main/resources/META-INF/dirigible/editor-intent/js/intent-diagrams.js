@@ -366,6 +366,13 @@ window.IntentDiagrams = (() => {
         return 'POST ' + (ingest.path || '');
     };
 
+    // A declared payload is a contract, so the card says so - the alternative (the record as stored)
+    // is a different promise entirely and must not look the same on the diagram.
+    const integrationDetail = (integration) => {
+        const declared = Object.keys(integration.payload || {}).length;
+        return (integration.method || 'POST') + ' ' + eventVerb(integration.event) + (declared ? ' • payload' : '');
+    };
+
     // The roll-up's parent entity is the target of its `via` to-one relation on the counted child entity.
     const rollupParent = (model, rollup) => {
         const child = model.entities.find(e => e && e.name === rollup.entity);
@@ -388,7 +395,7 @@ window.IntentDiagrams = (() => {
             { list: model.reports, icon: ICON.report, color: COLOR.output, entity: r => r.source, detail: r => r.widget ? 'report • KPI ' + (r.widget.kind || (r.widget.value ? 'value' : 'count')) : 'report' },
             { list: model.notifications, icon: ICON.notification, color: COLOR.glue, entity: n => eventEntity(model, n.event), detail: n => eventVerb(n.event) + ' → email' },
             { list: model.schedules, icon: ICON.schedule, color: COLOR.glue, entity: s => s.model ? null : s.entity, detail: s => (s.model ? s.model + '.' + s.entity + ' • ' : '') + (s.cron || 'scheduled') },
-            { list: model.integrations, icon: ICON.integration, color: COLOR.glue, entity: i => eventEntity(model, i.event), detail: i => (i.method || 'POST') + ' ' + eventVerb(i.event) },
+            { list: model.integrations, icon: ICON.integration, color: COLOR.glue, entity: i => eventEntity(model, i.event), detail: integrationDetail },
             { list: model.inbound, icon: ICON.inbound, color: COLOR.glue, entity: w => w.create, detail: inboundDetail },
             { list: model.rollups, icon: ICON.rollup, color: COLOR.glue, entity: r => r.entity, detail: r => '→ ' + (rollupParent(model, r) || '?') + '.' + (r.field || '') }
         ];

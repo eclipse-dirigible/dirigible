@@ -423,7 +423,12 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindIntegration(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "name", "className", "entity", "perspective", "topicSuffix", "clientMethod", "hasBody", "urlExpression");
+        copy(context, item, "name", "className", "entity", "perspective", "topicSuffix", "clientMethod", "hasBody", "urlExpression",
+                "hasPayload", "payloadFields");
+        // The declared payload reads the record and, for a one-hop value, a related record - the same
+        // loads a notification performs, so the same package resolution applies.
+        context.put("javaPerspective", sanitize(item, "perspective"));
+        context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
     }
 
     /**

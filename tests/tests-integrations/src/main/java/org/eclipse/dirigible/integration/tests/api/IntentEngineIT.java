@@ -271,6 +271,24 @@ class IntentEngineIT extends IntegrationTest {
                 method: POST
                 url: "@config:WAREHOUSE_URL"
 
+              # A declared payload: the envelope this application sends, instead of the record as
+              # stored. Literals, a minted key, the two context tokens, a configuration value, a field
+              # and a one-hop relation walk - the whole vocabulary in one contract.
+              - name: announceOrder
+                event: { onCreate: Order }
+                method: POST
+                url: "@config:ANNOUNCE_URL"
+                payload:
+                  type: "order.placed"
+                  version: 1
+                  messageId: "{uuid}"
+                  tenantId: "{tenant}"
+                  placedBy: "{user}"
+                  placedAt: "{now}"
+                  source: "@config:APP_ID"
+                  orderId: id
+                  customer: customer.name
+
             inbound:
               - name: ingestOrder
                 path: /ingest
@@ -725,9 +743,40 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(integration.contains("String url = Configurations.get(\"WAREHOUSE_URL\")"),
                 "an @config: URL should resolve through the configuration at run time");
         assertTrue(
-                integration.contains("HttpClient.post(url, Json.stringify(options))")
-                        && integration.contains("options.put(\"text\", message)"),
-                "a POST integration should forward the entity JSON as the request body");
+                integration.contains("HttpClient.post(url, Json.stringify(options))") && integration.contains("String body = message;")
+                        && integration.contains("options.put(\"text\", body)"),
+                "a POST integration without a declared payload should forward the entity JSON as the request body");
+
+        // A declared payload replaces that raw record with the envelope the intent spells out - every
+        // value form in one generated method, so a contract is expressible without a hand-written
+        // publisher (and adding an entity column no longer changes what the outside world receives).
+        String announce = contentOf("gen/events/orders/AnnounceOrderIntegration.java");
+        assertTrue(announce.contains("OrderEntity entity = Json.parse(message, OrderEntity.class)"),
+                "a payload-bearing integration should read the record the values resolve against");
+        assertTrue(
+                announce.contains(
+                        "CustomerEntity customer = entity.Customer == null ? null : new CustomerRepository().findById(entity.Customer)"),
+                "a one-hop value should load the related record once, exactly as a notification does");
+        assertTrue(announce.contains("payload.put(\"type\", \"order.placed\")") && announce.contains("payload.put(\"version\", 1)"),
+                "literals should land verbatim: " + announce);
+        assertTrue(
+                announce.contains("payload.put(\"messageId\", java.util.UUID.randomUUID().toString())")
+                        && announce.contains("payload.put(\"placedAt\", java.time.Instant.now().toString())")
+                        && announce.contains("payload.put(\"tenantId\", org.eclipse.dirigible.sdk.core.Tenant.getId())")
+                        && announce.contains("payload.put(\"placedBy\", org.eclipse.dirigible.sdk.security.User.getName())"),
+                "the four context tokens should each resolve to their run-time source");
+        assertTrue(announce.contains("payload.put(\"source\", Configurations.get(\"APP_ID\"))"),
+                "an @config: value should resolve through the configuration, as the URL does");
+        assertTrue(
+                announce.contains("payload.put(\"orderId\", entity.Id)")
+                        && announce.contains("payload.put(\"customer\", (customer == null ? null : customer.Name))"),
+                "a field and a one-hop relation.field should read the record and the loaded relation");
+        assertTrue(announce.contains("String body = Json.stringify(payload)") && announce.contains("options.put(\"text\", body)"),
+                "the declared payload, not the record, should be the request body");
+        assertTrue(
+                announce.indexOf("payload.put(\"type\"") < announce.indexOf("payload.put(\"version\"")
+                        && announce.indexOf("payload.put(\"version\"") < announce.indexOf("payload.put(\"messageId\""),
+                "the envelope should keep the order it was authored in");
 
         // The inbound webhook is a @Controller that ingests a posted JSON payload as the entity.
         String webhook = contentOf("gen/events/orders/IngestOrderWebhook.java");
@@ -2748,6 +2797,10 @@ class IntentEngineIT extends IntegrationTest {
                 && glue.contains("\"clientMethod\": \"post\""), "glue should carry the pushOrderToWarehouse integration as a POST");
         assertTrue(glue.contains("Configurations.get(\\\"WAREHOUSE_URL\\\")"),
                 "glue should carry the integration URL as a config lookup expression");
+        assertTrue(
+                glue.contains("\"name\": \"announceOrder\"") && glue.contains("\"hasPayload\": true")
+                        && glue.contains("\"key\": \"messageId\""),
+                "glue should carry the declared payload of the announceOrder integration");
         // Inbound: one per webhook, carrying the path + the entity to create.
         assertTrue(glue.contains("\"inbound\"") && glue.contains("\"name\": \"ingestOrder\"") && glue.contains("\"path\": \"/ingest\""),
                 "glue should carry the ingestOrder inbound webhook with its path");
