@@ -106,8 +106,12 @@ class ResilientClassDelegateEngineTest {
         configuration.setJdbcUrl("jdbc:h2:mem:resilience-test;DB_CLOSE_DELAY=1000");
         configuration.setActivityBehaviorFactory(new DefaultActivityBehaviorFactory(new ResilientClassDelegateFactory()));
         configuration.setAsyncExecutorActivate(true);
-        configuration.setAsyncExecutorDefaultAsyncJobAcquireWaitTime(100);
-        configuration.setAsyncExecutorDefaultTimerJobAcquireWaitTime(100);
+        // Tight acquire cycles so the PT1S retry waits dominate the test's wall clock, via the
+        // executor configuration object (the flat setAsyncExecutorDefault* setters are deprecated).
+        configuration.getAsyncExecutorConfiguration()
+                     .setDefaultAsyncJobAcquireWaitTime(Duration.ofMillis(100));
+        configuration.getAsyncExecutorConfiguration()
+                     .setDefaultTimerJobAcquireWaitTime(Duration.ofMillis(100));
         engine = configuration.buildProcessEngine();
     }
 
