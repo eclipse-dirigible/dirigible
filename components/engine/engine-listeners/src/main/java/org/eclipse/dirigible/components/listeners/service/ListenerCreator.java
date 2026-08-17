@@ -13,7 +13,10 @@ import org.eclipse.dirigible.components.listeners.domain.ListenerKind;
 import org.springframework.stereotype.Component;
 
 /**
- * The Class ListenerCreator.
+ * Turns a {@code .listener} artefact into the descriptor its subscription is started from. Called
+ * from the multitenant listener synchronizer, i.e. once per provisioned tenant, which is how this
+ * path satisfies the "one subscription per tenant" half of the contract documented on
+ * {@link DestinationNameManager}.
  */
 @Component
 class ListenerCreator {
