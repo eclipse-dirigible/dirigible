@@ -12,6 +12,7 @@ package org.eclipse.dirigible.engine.java.listener;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -65,6 +66,20 @@ class ListenerClassConsumerTenantSubscriptionTest {
         }
     }
 
+    /** A typed listener on a destination shared with another deployment. */
+    static class GlobalOrdersHandler implements MessageHandler {
+
+        @Override
+        public String destination() {
+            return DestinationNameManager.GLOBAL_MARKER + "codbex.orders";
+        }
+
+        @Override
+        public void onMessage(String message) {
+            // The subscription, not the dispatch, is what this test is about.
+        }
+    }
+
     private static final String DEFAULT_TENANT_ID = "default-tenant";
 
     /** The tenants {@code executeForEachTenant} fans out over; mutable, so a test can add one. */
@@ -84,6 +99,7 @@ class ListenerClassConsumerTenantSubscriptionTest {
 
         ComponentContainer componentContainer = mock(ComponentContainer.class);
         when(componentContainer.instanceOf(OrdersHandler.class)).thenReturn(Optional.of(new OrdersHandler()));
+        when(componentContainer.instanceOf(GlobalOrdersHandler.class)).thenReturn(Optional.of(new GlobalOrdersHandler()));
 
         ActiveMQConnectionArtifactsFactory connectionFactory = mock(ActiveMQConnectionArtifactsFactory.class);
         Connection connection = mock(Connection.class);
@@ -106,11 +122,15 @@ class ListenerClassConsumerTenantSubscriptionTest {
             return List.of();
         });
 
-        // Stands in for the real rule: the default tenant keeps the logical name, everyone else is
-        // prefixed. DestinationNameManagerTest owns that rule; here it only has to be applied.
+        // Stands in for the real rule: a global name loses its marker and nothing else, the default
+        // tenant keeps the logical name, everyone else is prefixed. DestinationNameManagerTest owns
+        // that rule; here it only has to be applied.
         DestinationNameManager destinationNameManager = mock(DestinationNameManager.class);
         when(destinationNameManager.toTenantName(anyString())).thenAnswer(invocation -> {
             String logicalName = invocation.getArgument(0);
+            if (DestinationNameManager.isGlobal(logicalName)) {
+                return logicalName.substring(DestinationNameManager.GLOBAL_MARKER.length());
+            }
             String tenantId = currentTenantId.get();
             return DEFAULT_TENANT_ID.equals(tenantId) ? logicalName : tenantId + "###" + logicalName;
         });
@@ -153,6 +173,29 @@ class ListenerClassConsumerTenantSubscriptionTest {
         verify(session, times(1)).createQueue("acme###orders");
     }
 
+    /**
+     * The mirror image of the rule above: a global destination is one physical queue, so fanning it out
+     * per tenant would put N consumers on it — competing for one queue's messages, and handling one
+     * topic's message once per tenant.
+     */
+    @Test
+    void aGlobalDestinationIsSubscribedOnceForTheDeploymentNotOncePerTenant() throws Exception {
+        loadGlobalListener();
+
+        verify(session, times(1)).createQueue("codbex.orders");
+        verify(session, never()).createQueue("acme###" + DestinationNameManager.GLOBAL_MARKER + "codbex.orders");
+    }
+
+    @Test
+    void aTenantProvisionedLaterDoesNotAddASecondGlobalSubscription() throws Exception {
+        loadGlobalListener();
+
+        addTenant("beta");
+        consumer.execute();
+
+        verify(session, times(1)).createQueue("codbex.orders");
+    }
+
     private void addTenant(String tenantId) {
         Tenant tenant = mock(Tenant.class);
         when(tenant.getId()).thenReturn(tenantId);
@@ -163,5 +206,10 @@ class ListenerClassConsumerTenantSubscriptionTest {
     private void loadListener() {
         consumer.onClassLoaded(
                 new LoadedClass("sample", OrdersHandler.class.getName(), OrdersHandler.class, OrdersHandler.class.getClassLoader()));
+    }
+
+    private void loadGlobalListener() {
+        consumer.onClassLoaded(new LoadedClass("sample", GlobalOrdersHandler.class.getName(), GlobalOrdersHandler.class,
+                GlobalOrdersHandler.class.getClassLoader()));
     }
 }

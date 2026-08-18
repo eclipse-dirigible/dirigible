@@ -51,15 +51,39 @@ public class TenantPropertyManager {
     }
 
     /**
-     * Sets the current tenant.
+     * Stamp the message with the tenant that is current at send time, which is the tenant its
+     * destination is scoped to.
      *
-     * @param message the new current tenant
+     * @param message the message
      * @throws JMSException the JMS exception
      */
     void setCurrentTenant(Message message) throws JMSException {
-        String tenantId = getCurrentTenantId();
+        setTenant(message, getCurrentTenantId());
+    }
+
+    /**
+     * Stamp the message with the default tenant, for a message published to a global destination. Such
+     * a destination carries no tenant of its own (see {@link DestinationNameManager}), so the stamp
+     * says explicitly what a consumer would otherwise have to fall back to - including a consumer in
+     * another deployment, which has never heard of this one's tenants.
+     *
+     * @param message the message
+     * @throws JMSException the JMS exception
+     */
+    void setDefaultTenant(Message message) throws JMSException {
+        setTenant(message, defualtTenant.getId());
+    }
+
+    /**
+     * Sets the tenant id property.
+     *
+     * @param message the message
+     * @param tenantId the tenant id
+     * @throws JMSException the JMS exception
+     */
+    private void setTenant(Message message, String tenantId) throws JMSException {
         LOGGER.debug("Will set tenant id [{}].", tenantId);
-        message.setObjectProperty(TENANT_ID_PARAM_NAME, getCurrentTenantId());
+        message.setObjectProperty(TENANT_ID_PARAM_NAME, tenantId);
     }
 
     /**

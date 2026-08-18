@@ -73,6 +73,15 @@ import jakarta.jms.TextMessage;
  * default tenant.
  *
  * <p>
+ * <b>A global destination is subscribed once.</b> A name marked {@code global:} is a contract with
+ * something outside this deployment and is never tenant-scoped (again
+ * {@link DestinationNameManager}), so fanning it out would open one consumer per tenant on the very
+ * same physical destination - competing for one queue's messages, or handling one topic's message
+ * once per tenant. Those subscriptions are therefore opened once for the whole deployment, and the
+ * tenant a message is handled in comes from its {@code tenant_id} stamp, which for a global
+ * destination is the default tenant.
+ *
+ * <p>
  * Tenants also outlive a generation: this consumer is a {@link TenantPostProvisioningStep}, so a
  * tenant provisioned after the last client-Java rebuild is topped up without disturbing the
  * subscriptions already open. A tenant that goes away leaves its subscriptions behind until the
@@ -184,7 +193,24 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
         stopExisting(fqn);
         Registration registration = new Registration(subscriptions);
         registrations.put(fqn, registration);
+        subscribeGlobal(registration);
         subscribeMissingTenants(fqn, registration);
+    }
+
+    /**
+     * Open this class's global subscriptions - once for the deployment, not once per tenant. Runs on
+     * the loading thread, which has no tenant of its own, and needs none: a global destination resolves
+     * to the same physical name everywhere.
+     */
+    private void subscribeGlobal(Registration registration) {
+        List<Connection> opened = new ArrayList<>();
+        for (Subscription subscription : registration.globalSubscriptions()) {
+            Connection connection = subscribe(subscription, "all tenants (global destination)");
+            if (connection != null) {
+                opened.add(connection);
+            }
+        }
+        registration.globalSubscribed(opened);
     }
 
     /**
@@ -202,8 +228,8 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
                 }
                 List<Connection> opened = new ArrayList<>();
                 boolean complete = true;
-                for (Subscription subscription : registration.subscriptions()) {
-                    Connection connection = subscribe(subscription, tenantId);
+                for (Subscription subscription : registration.tenantSubscriptions()) {
+                    Connection connection = subscribe(subscription, "tenant [" + tenantId + "]");
                     if (connection == null) {
                         complete = false;
                     } else {
@@ -226,12 +252,15 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
     }
 
     /**
-     * Open one subscription. Runs inside the target tenant's context, so the physical destination is
-     * the very name a producer in that tenant computes for the same logical one.
+     * Open one subscription. A tenant-scoped one runs inside the target tenant's context, so the
+     * physical destination is the very name a producer in that tenant computes for the same logical
+     * one; a global one resolves to the bare name regardless.
      *
+     * @param subscription what to subscribe to
+     * @param scope what this subscription covers, for the log
      * @return the connection it opened, or {@code null} if the broker refused the subscription
      */
-    private Connection subscribe(Subscription subscription, String tenantId) {
+    private Connection subscribe(Subscription subscription, String scope) {
         String label = subscription.label();
         String destinationName = destinationNameManager.toTenantName(subscription.destination());
         try {
@@ -242,10 +271,10 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
                     subscription.kind() == ListenerKind.TOPIC ? session.createTopic(destinationName) : session.createQueue(destinationName);
             MessageConsumer consumer = session.createConsumer(destination);
             consumer.setMessageListener(msg -> dispatch(msg, subscription.dispatcher(), label));
-            LOGGER.info("Java @Listener [{}] connected to {} '{}' for tenant [{}].", label, subscription.kind(), destinationName, tenantId);
+            LOGGER.info("Java @Listener [{}] connected to {} '{}' for {}.", label, subscription.kind(), destinationName, scope);
             return connection;
         } catch (JMSException e) {
-            LOGGER.error("Failed to start listener for [{}] in tenant [{}]: {}", label, tenantId, e.getMessage(), e);
+            LOGGER.error("Failed to start listener for [{}] for {}: {}", label, scope, e.getMessage(), e);
             return null;
         }
     }
@@ -331,7 +360,8 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
 
     /**
      * One subscription a loaded class asks for: the <em>logical</em> destination, its kind, and how a
-     * message on it is dispatched. Tenant-independent — the same spec is opened once per tenant.
+     * message on it is dispatched. Tenant-independent — the same spec is opened once per tenant, or
+     * once for the deployment when the destination is global.
      */
     private record Subscription(String destination, ListenerKind kind, Dispatcher dispatcher, String label) {
     }
@@ -339,17 +369,37 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
     /** What one loaded class declared, plus the connections open for it in each tenant. */
     private static final class Registration {
 
-        private final List<Subscription> subscriptions;
+        /** Subscriptions opened once per provisioned tenant. */
+        private final List<Subscription> tenantSubscriptions;
+
+        /** Subscriptions opened once for the whole deployment. */
+        private final List<Subscription> globalSubscriptions;
 
         /** tenant id → the JMS connections open for this class in that tenant. */
         private final Map<String, List<Connection>> connectionsByTenant = new HashMap<>();
 
+        /** The JMS connections open for this class's global destinations. */
+        private List<Connection> globalConnections = List.of();
+
         Registration(List<Subscription> subscriptions) {
-            this.subscriptions = List.copyOf(subscriptions);
+            this.tenantSubscriptions = subscriptions.stream()
+                                                    .filter(subscription -> !DestinationNameManager.isGlobal(subscription.destination()))
+                                                    .toList();
+            this.globalSubscriptions = subscriptions.stream()
+                                                    .filter(subscription -> DestinationNameManager.isGlobal(subscription.destination()))
+                                                    .toList();
         }
 
-        List<Subscription> subscriptions() {
-            return subscriptions;
+        List<Subscription> tenantSubscriptions() {
+            return tenantSubscriptions;
+        }
+
+        List<Subscription> globalSubscriptions() {
+            return globalSubscriptions;
+        }
+
+        void globalSubscribed(List<Connection> connections) {
+            this.globalConnections = List.copyOf(connections);
         }
 
         boolean isSubscribed(String tenantId) {
@@ -361,7 +411,7 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
         }
 
         List<Connection> openConnections() {
-            List<Connection> all = new ArrayList<>();
+            List<Connection> all = new ArrayList<>(globalConnections);
             connectionsByTenant.values()
                                .forEach(all::addAll);
             return all;
