@@ -23,6 +23,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -49,7 +50,7 @@ class DependencyResolverTest {
         MavenResolverConfig config = new MavenResolverConfig(localRepository, List.of(new MavenRepository("fixture", repositoryDir.toUri()
                                                                                                                                   .toString(),
                 null, null)), false, null);
-        resolver = new MavenDependencyResolver(() -> config);
+        resolver = new MavenDependencyResolver(() -> config, () -> new ProvidedBom(Map.of()));
     }
 
     @AfterEach

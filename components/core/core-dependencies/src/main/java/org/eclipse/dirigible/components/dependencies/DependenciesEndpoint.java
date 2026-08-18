@@ -52,14 +52,15 @@ class DependenciesEndpoint {
     }
 
     /**
-     * Runs the union resolution on demand.
+     * Runs the union resolution on demand - in frozen mode this re-activates the locked set and
+     * surfaces any declaration the lock does not carry.
      *
      * @return the resolved state
      */
     @PostMapping("resolve")
     @RolesAllowed({"ADMINISTRATOR", "OPERATOR"})
     ResponseEntity<DependenciesState> resolve() {
-        if (!dependenciesService.isDynamicEnabled()) {
+        if (!dependenciesService.isDynamicEnabled() && !dependenciesService.isFrozen()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Dynamic dependency resolution is disabled - set DIRIGIBLE_DEPENDENCIES_DYNAMIC=true to enable it");
         }

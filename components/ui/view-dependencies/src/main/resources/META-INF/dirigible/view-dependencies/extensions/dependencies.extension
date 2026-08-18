@@ -1,0 +1,5 @@
+{
+    "module": "view-dependencies/configs/dependencies-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Dependencies View"
+}

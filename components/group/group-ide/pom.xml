@@ -192,6 +192,10 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-view-dependencies</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-view-jvm-monitoring</artifactId>
         </dependency>
         <dependency>

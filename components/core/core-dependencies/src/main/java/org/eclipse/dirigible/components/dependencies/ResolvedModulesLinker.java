@@ -83,6 +83,24 @@ class ResolvedModulesLinker {
     }
 
     /**
+     * Removes one artifact's link from the resolved-modules directory - the eviction path for an
+     * artifact whose integrity verification failed, so the next launch's classpath never carries it.
+     *
+     * @param localRepository the local repository the artifact lives in
+     * @param artifact the artifact path inside it
+     */
+    void remove(Path localRepository, Path artifact) {
+        Path link = directory().resolve(linkName(localRepository, artifact));
+        try {
+            if (Files.deleteIfExists(link)) {
+                LOGGER.warn("Evicted [{}] from the resolved-modules directory - its integrity verification failed", link.getFileName());
+            }
+        } catch (IOException e) {
+            LOGGER.warn("Could not evict the dependency jar [{}]", link, e);
+        }
+    }
+
+    /**
      * The link name - the groupId prefixes the artifact file name so equally named artifacts of
      * different groups never collide.
      *

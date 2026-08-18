@@ -76,6 +76,23 @@ class LauncherAgentDeliveryIT {
     }
 
     @Test
+    void the_executable_jar_carries_the_provided_bom() throws IOException {
+        try (JarFile jar = new JarFile(executableJar().toFile())) {
+            // the ZIP-layout repackage keeps the original jar's META-INF at the ROOT, where the
+            // system classloader sees it on -jar launches
+            ZipEntry bom = jar.getEntry("META-INF/dirigible-provided-bom.xml");
+            assertNotNull(bom, "the provided-BOM must ship inside the artifact - the resolver's shadowing detection reads it");
+            String content = new String(jar.getInputStream(bom)
+                                           .readAllBytes(),
+                    StandardCharsets.UTF_8);
+            assertTrue(content.contains("<artifactId>dirigible-provided-bom</artifactId>"),
+                    "the embedded BOM must be the standard dependencyManagement POM");
+            assertTrue(content.contains("<groupId>com.google.code.gson</groupId>"),
+                    "the BOM must enumerate the platform's BOOT-INF/lib inventory");
+        }
+    }
+
+    @Test
     void a_jar_launch_installs_the_agent_before_main() throws IOException, InterruptedException {
         Path workingDirectory = Files.createDirectories(tempDir.resolve("launch"));
         ProcessBuilder builder = new ProcessBuilder("java", "-jar", executableJar().toAbsolutePath()
