@@ -53,6 +53,8 @@ import org.eclipse.dirigible.components.intent.model.LifecycleEdgeIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
+import org.eclipse.dirigible.components.intent.model.OutboundIntent;
+import org.eclipse.dirigible.components.intent.model.OutboundTargetIntent;
 import org.eclipse.dirigible.components.intent.model.PermissionIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessVarIntent;
@@ -70,6 +72,7 @@ import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.eclipse.dirigible.components.intent.model.TransitionIntent;
+import org.eclipse.dirigible.components.intent.model.UniqueIntent;
 import org.eclipse.dirigible.components.intent.model.WidgetIntent;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -296,6 +299,7 @@ public final class IntentParser {
         validateSchedules(model, entityNames, usesAliases, issues);
         validateIntegrations(model, entityNames, issues);
         validateInbound(model, entityNames, issues);
+        validateOutbound(model, entityNames, issues);
         validateRollups(model, issues);
         validateExpansions(model, issues);
         validateSettlements(model, issues);
@@ -1504,6 +1508,47 @@ public final class IntentParser {
     }
 
     /**
+     * Each outbound departure must have a unique name, bind to exactly one event of the glue event
+     * axis, and name exactly one channel to leave on. A departure declaring no channel is a promise
+     * with nowhere to land, and one declaring two is two departures wearing one name - both fail here
+     * rather than generating a publisher that picks a channel for the author.
+     */
+    private static void validateOutbound(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Set<String> names = new HashSet<>();
+        for (OutboundIntent outbound : model.getOutbound()) {
+            String name = outbound.getName();
+            if (name == null || name.isBlank()) {
+                issues.add("outbound has no name");
+                continue;
+            }
+            if (!names.add(name)) {
+                issues.add("duplicate outbound [" + name + "]");
+            }
+            String subject = "outbound [" + name + "]";
+            String eventEntity = validateEventBinding(outbound.getEvent(), subject, entityNames, model, issues);
+            validateOutboundTarget(outbound.getTo(), subject, issues);
+            // A message always carries a body, so - unlike an integration - there is no method to
+            // check the payload against; only the value forms need validating.
+            if (!outbound.getPayload()
+                         .isEmpty()) {
+                EntityIntent record = eventEntity == null ? null : entityByName(model, eventEntity);
+                PayloadSupport.validate(outbound.getPayload(), record, IntentEntities.byName(model), subject, issues);
+            }
+        }
+    }
+
+    /** A departure leaves on exactly one channel: a queue or a topic. */
+    private static void validateOutboundTarget(OutboundTargetIntent target, String subject, List<String> issues) {
+        boolean queue = target != null && target.getQueue() != null && !target.getQueue()
+                                                                              .isBlank();
+        boolean topic = target != null && target.getTopic() != null && !target.getTopic()
+                                                                              .isBlank();
+        if (queue == topic) {
+            issues.add(subject + " to must declare exactly one of queue/topic");
+        }
+    }
+
+    /**
      * Each effective-dated register lookup must bind to exactly one create/update event of a declared
      * entity, fill a to-one of that entity, read a register declared in this model, and name the match
      * keys and the validity period. The register must carry exactly one to-one to the same target as
@@ -2520,12 +2565,84 @@ public final class IntentParser {
                     validateCheck(entity, check, byName, model.getAggregates(), issues);
                 }
             }
+            if (!entity.getUnique()
+                       .isEmpty()) {
+                validateUnique(entity, issues);
+            }
             if (!entity.getRelated()
                        .isEmpty()) {
                 validateRelated(entity, byName, usesAliases, issues);
             }
         }
         return entityNames;
+    }
+
+    /**
+     * {@code unique:} declares the business keys spanning more than one column - what a row IS when no
+     * single field says it. Every name must resolve to an own field or an own <b>to-one</b> relation of
+     * the entity: a to-one contributes its foreign-key column, which is what a pair like
+     * {@code (tenant, application)} means, while a to-many has no column on this side to constrain. A
+     * cross-model relation is rejected outright - the consumer stores a projection of the target, so
+     * there is no local column either. And a single-name key is rejected naming the field attribute it
+     * duplicates, because two ways to say the same thing is how the two drift apart.
+     *
+     * @param entity the entity carrying the keys
+     * @param issues the collecting issue list
+     */
+    private static void validateUnique(EntityIntent entity, List<String> issues) {
+        Map<String, RelationIntent> relations = new HashMap<>();
+        for (RelationIntent relation : entity.getRelations()) {
+            if (!isBlank(relation.getName())) {
+                relations.put(relation.getName(), relation);
+            }
+        }
+        Set<String> fields = new HashSet<>();
+        for (FieldIntent field : entity.getFields()) {
+            if (!isBlank(field.getName())) {
+                fields.add(field.getName());
+            }
+        }
+        Set<String> keys = new HashSet<>();
+        for (UniqueIntent unique : entity.getUnique()) {
+            String subject = "entity [" + entity.getName() + "] unique";
+            List<String> names = unique.getFields();
+            if (names.isEmpty()) {
+                issues.add(subject + " names no fields");
+                continue;
+            }
+            if (names.size() == 1) {
+                issues.add(subject + " [" + names.get(0) + "] spans a single field - declare unique: true on the field itself");
+                continue;
+            }
+            if (!keys.add(String.join(",", names))) {
+                issues.add(subject + " [" + String.join(", ", names) + "] is declared twice");
+            }
+            Set<String> seen = new HashSet<>();
+            for (String name : names) {
+                if (isBlank(name)) {
+                    issues.add(subject + " names a blank field");
+                    continue;
+                }
+                if (!seen.add(name)) {
+                    issues.add(subject + " names [" + name + "] twice - a key constrains each column once");
+                    continue;
+                }
+                RelationIntent relation = relations.get(name);
+                if (relation != null) {
+                    if (!("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                        issues.add(subject + " names [" + name + "], which is a " + relation.getKind()
+                                + " relation - only a field or a to-one relation has a column on this entity to constrain");
+                    } else if (relation.isCrossModel()) {
+                        issues.add(subject + " names the cross-model relation [" + name
+                                + "] - a cross-model target is stored as a projection, so this entity has no column for it");
+                    }
+                    continue;
+                }
+                if (!fields.contains(name)) {
+                    issues.add(subject + " names [" + name + "], which is not a field or to-one relation of [" + entity.getName() + "]");
+                }
+            }
+        }
     }
 
     /**

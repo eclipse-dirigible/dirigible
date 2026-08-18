@@ -202,6 +202,12 @@ public class EntityIntent {
      * two gated on an EntityStatus seed id so drafting stays unconstrained. See {@link CheckIntent}.
      */
     private List<CheckIntent> checks;
+    /**
+     * Optional business keys spanning more than one column - the composite counterpart of a field's
+     * {@code unique}. Each entry names the fields and/or to-one relations the key spans and the message
+     * a colliding write is answered with. Absent (the default) → the entity has no composite key.
+     */
+    private List<UniqueIntent> unique;
 
     /**
      * Optional read-only registers of the records that REFERENCE this entity - the reverse of an
@@ -493,6 +499,15 @@ public class EntityIntent {
 
     public void setHierarchy(String hierarchy) {
         this.hierarchy = hierarchy;
+    }
+
+    /**
+     * Gets the composite business keys.
+     *
+     * @return the unique declarations, never null
+     */
+    public List<UniqueIntent> getUnique() {
+        return unique == null ? List.of() : unique;
     }
 
     public List<CheckIntent> getChecks() {

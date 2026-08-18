@@ -24,7 +24,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     $scope.errorMessage = '';
     $scope.changed = false;
     $scope.text = '';
-    $scope.model = { entities: [], processes: [], forms: [], reports: [], permissions: [], seeds: [], notifications: [], schedules: [], integrations: [], inbound: [], rollups: [] };
+    $scope.model = { entities: [], processes: [], forms: [], reports: [], permissions: [], seeds: [], notifications: [], schedules: [], integrations: [], inbound: [], outbound: [], rollups: [] };
     $scope.issues = [];
     // Non-fatal notes from the last Generate ("warnings" in its response): glue that could not be
     // emitted, or a report aggregating over a lifecycle entity without a scope. Kept apart from
@@ -245,6 +245,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         model.schedules = model.schedules || [];
         model.integrations = model.integrations || [];
         model.inbound = model.inbound || [];
+        model.outbound = model.outbound || [];
         model.rollups = model.rollups || [];
         return model;
     };

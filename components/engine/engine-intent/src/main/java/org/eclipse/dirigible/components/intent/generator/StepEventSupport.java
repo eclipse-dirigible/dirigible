@@ -20,6 +20,7 @@ import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
+import org.eclipse.dirigible.components.intent.model.OutboundIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 
@@ -34,8 +35,8 @@ import org.eclipse.dirigible.components.intent.model.StepIntent;
  * the id in the (clear-D) process context and publishes its JSON to a step-scoped topic. That topic
  * is the entity's own topic plus {@link #topicSuffix(Map) a step suffix}, so every consumer the
  * lifecycle events already feed - notifications with their relation loads, guards and print
- * attachments, integrations - binds to it and reads the payload unchanged. The action vocabulary is
- * therefore reused literally, not re-implemented per event kind.
+ * attachments, integrations, outbound departures - binds to it and reads the payload unchanged. The
+ * action vocabulary is therefore reused literally, not re-implemented per event kind.
  *
  * <p>
  * The record a step event is about is the process's trigger entity: a process runs on one record,
@@ -76,7 +77,8 @@ public final class StepEventSupport {
     /**
      * One generated emitter: the {@code JavaDelegate} the BPMN generator inserts at a step boundary to
      * publish the trigger entity on the step topic. Emitters are deduplicated per (process, step,
-     * kind), so any number of notifications and integrations bound to the same moment share one.
+     * kind), so any number of notifications, integrations and departures bound to the same moment share
+     * one.
      *
      * @param process the process the step belongs to
      * @param step the step whose boundary the emitter sits at
@@ -255,6 +257,9 @@ public final class StepEventSupport {
         }
         for (IntegrationIntent integration : model.getIntegrations()) {
             events.add(integration.getEvent());
+        }
+        for (OutboundIntent outbound : model.getOutbound()) {
+            events.add(outbound.getEvent());
         }
         return events;
     }

@@ -1,22 +1,23 @@
 package gen.events.${javaGenFolderName};
 
-import java.util.HashMap;
 #if($hasPayload)
 import java.util.LinkedHashMap;
-#end
 import java.util.Map;
 
+#end
 import org.eclipse.dirigible.sdk.component.Component;
+#if($hasPayload)
 import org.eclipse.dirigible.sdk.core.Configurations;
-import org.eclipse.dirigible.sdk.http.HttpClient;
+#end
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
-import org.eclipse.dirigible.sdk.utils.Json;
+import org.eclipse.dirigible.sdk.messaging.Producer;
 #if($hasPayload || $hasGuard)
+import org.eclipse.dirigible.sdk.utils.Json;
 
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
-#end
-#if($hasPayload)
 #foreach($load in $relationLoads)
 import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity;
 import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository;
@@ -24,22 +25,25 @@ import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targe
 #end
 
 /**
- * Forwards a ${entity} event to an external endpoint via ${clientMethod}.
+ * Outbound ${name}: emits a ${entity} event on the ${channel} ${destination}.
  *
- * Generated from the intent integrations block - do not edit; it is re-generated with the
- * application. The target URL comes from the intent (a literal or a configuration value).
+ * Generated from the intent outbound block - do not edit; it is re-generated with the application.
+ * Subscribes to the topic the ${entity} repository already publishes its events on and re-publishes
 #if($hasPayload)
- * The request body is the payload declared in the intent - the contract this application sends,
- * built from literals, record fields, one-hop relation values and the context tokens.
+ * the payload declared in the intent - the contract this application sends, built from literals,
+ * record fields, one-hop relation values and the context tokens.
 #else
- * The event payload (the entity JSON) is sent as the request body.
+ * the record's own JSON, unchanged.
 #end
-#if($hasGuard)
- * The event's `when` guard decides per record whether the call is made at all.
-#end
+ *
+ * The write that raised the event is already persisted by the time the message arrives here, so the
+ * departure is NOT transactional with it: a failed publish is logged and the write stands. There is
+ * no outbox, no exactly-once delivery and no ordering guarantee.
  */
-@Component("${javaGenFolderName}_${className}Integration")
-public class ${className}Integration implements MessageHandler {
+@Component("${javaGenFolderName}_${className}Publisher")
+public class ${className}Publisher implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Publisher");
 
     @Override
     public String destination() {
@@ -53,13 +57,10 @@ public class ${className}Integration implements MessageHandler {
 
     @Override
     public void onMessage(String message) {
-        String url = ${urlExpression};
-        if (url == null || url.isBlank()) {
-            return;
-        }
 #if($hasPayload || $hasGuard)
         ${entity}Entity entity = Json.parse(message, ${entity}Entity.class);
         if (entity == null) {
+            LOG.warn("Outbound ${name}: an empty or invalid ${entity} event arrived - nothing published");
             return;
         }
 #end
@@ -77,20 +78,13 @@ public class ${className}Integration implements MessageHandler {
         payload.put(${field.keyLiteral}, ${field.expression});
 #end
         String body = Json.stringify(payload);
-#elseif($hasBody)
+#else
         String body = message;
 #end
         try {
-#if($hasBody)
-            Map<String, Object> options = new HashMap<>();
-            options.put("text", body);
-            options.put("contentType", "application/json");
-            HttpClient.${clientMethod}(url, Json.stringify(options));
-#else
-            HttpClient.${clientMethod}(url, null);
-#end
+            Producer.${producerMethod}("${destination}", body);
         } catch (Exception ex) {
-            throw new RuntimeException("Integration ${name} failed", ex);
+            LOG.error("Outbound ${name}: publishing to [${destination}] failed - the ${entity} write stands", ex);
         }
     }
 }
