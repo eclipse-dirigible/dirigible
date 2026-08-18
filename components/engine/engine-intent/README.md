@@ -603,6 +603,23 @@ schedules:
       defaults: { Period: now }
 ```
 
+A `where` value is a literal or a **moment**: `CURRENT_DATE` / `CURRENT_TIMESTAMP` (`NOW`), optionally
+offset by a single signed ISO-8601 duration resolved against the clock of the run that fires - which is
+what makes a staleness sweep expressible:
+
+```yaml
+    where:
+      - { field: provisioningStatus, op: eq, value: Provisioning }
+      - { field: changedAt,          op: lt, value: "CURRENT_TIMESTAMP-PT30M" }   # stuck for 30 minutes
+      - { field: sentOn,             op: lt, value: "CURRENT_DATE-P7D" }          # unanswered for a week
+```
+
+Exactly one offset on one token - a moment vocabulary, not an expression language. The comparison
+happens in the queried field's own shape, so a `date` field takes `CURRENT_DATE` and a date-only amount
+(`P7D`/`P1M`/`P1Y`) while a `timestamp` field takes `CURRENT_TIMESTAMP` and any amount; a mismatched
+token, a time offset on a date, a second offset, or a moment on a non-temporal field is an authoring
+error rather than a query that silently never matches.
+
 ## integrations - outbound HTTP
 
 ```yaml

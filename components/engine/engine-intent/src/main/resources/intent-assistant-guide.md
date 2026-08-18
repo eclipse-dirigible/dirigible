@@ -1973,6 +1973,32 @@ schedules:
       # add `attach: print` to carry the row's own rendered document (dunning with the invoice)
 ```
 
+**A `where` value may be a moment relative to now** - which is what makes the archetypal schedule, a
+**staleness sweep**, expressible at all ("stuck provisioning for 30 minutes", "unanswered for a week",
+"abandoned for an hour"). Write the moment token with one signed ISO-8601 offset; it resolves against
+the clock of the run that fires, not of the generation:
+
+```yaml
+schedules:
+  - name: stuckProvisioning
+    cron: "0 */5 * * * ?"
+    entity: TenantApplication
+    where:
+      - { field: provisioningStatus, op: eq, value: Provisioning }
+      - { field: changedAt,          op: lt, value: "CURRENT_TIMESTAMP-PT30M" }
+    notify: { to: ops@example.com, subject: "Application {id} has been provisioning for over 30 minutes" }
+```
+
+**Rules.** The forward form (`+`) is admitted symmetrically, for "falls due within the next week". The
+comparison happens in the **queried field's own shape**: a `date` field takes `CURRENT_DATE` and a
+date-only amount (`P7D` / `P1M` / `P1Y`), a `timestamp` field takes `CURRENT_TIMESTAMP` (or `NOW`) and
+any amount (`PT30M`, `PT12H`, `P7D`, `P1M`). It is a moment vocabulary, not an expression language -
+**exactly one offset on one token**, no arithmetic between fields, no nesting. Each of these is an
+authoring **error**, never a comparison that silently never matches: a token of the other shape than
+the field, a time offset on a date field, a second offset, an offset that is not an ISO-8601 duration
+(`-30M`), and a moment compared with a non-temporal field. Do NOT model the clock into the data (a
+stored "deadline" column every writer must maintain) to work around this - the moment is the value.
+
 **generate** (scheduled record generation) - e.g. "on the 1st of every month, create an
 EmployeeTimesheet for each active employee". Per matching row, a new target record is created and
 saved through the target's generated repository, so its create-time logic (document numbering, status
