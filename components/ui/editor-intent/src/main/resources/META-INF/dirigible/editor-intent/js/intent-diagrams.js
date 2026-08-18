@@ -40,7 +40,7 @@ window.IntentDiagrams = (() => {
         terminal: '#708090', // slate  - start / end events
         edge: '#7a8896',     // mid-gray - relations and sequence flows, visible on both themes
         output: '#9141ac',   // purple - authoring outputs (forms, reports)
-        glue: '#c64600',     // rust   - declarative glue (notifications, schedules, integrations, inbound, rollups)
+        glue: '#c64600',     // rust   - declarative glue (notifications, schedules, integrations, inbound, outbound, rollups)
         label: '#ffffff'     // white  - on-shape text
     };
 
@@ -56,6 +56,7 @@ window.IntentDiagrams = (() => {
         schedule: 'sap-icon--date-time',
         integration: 'sap-icon--chain-link',
         inbound: 'sap-icon--inbox',
+        outbound: 'sap-icon--outbox',
         rollup: 'sap-icon--sum'
     };
 
@@ -378,6 +379,13 @@ window.IntentDiagrams = (() => {
         return 'POST ' + (ingest.path || '');
     };
 
+    // Where an outbound departure leaves on, and whether it carries a declared contract.
+    const outboundDetail = (departure) => {
+        const to = departure.to || {};
+        const channel = to.queue ? 'queue ' + to.queue : to.topic ? 'topic ' + to.topic : '?';
+        return channel + (Object.keys(departure.payload || {}).length ? ' \u2022 payload' : '');
+    };
+
     // A declared payload is a contract, so the card says so - the alternative (the record as stored)
     // is a different promise entirely and must not look the same on the diagram.
     const integrationDetail = (integration) => {
@@ -398,9 +406,9 @@ window.IntentDiagrams = (() => {
         + (detail ? `<div style="font-size:11px;opacity:.9">${escapeHtml(detail)}</div>` : '');
 
     // One section diagramming the artifacts that hang off the entities - authoring outputs (forms,
-    // reports) and the declarative glue (notifications, schedules, integrations, inbound webhooks,
-    // roll-ups). Each is an icon card edged to the entity it binds to, so the "express the integration
-    // as intent" story is visible alongside the ER and process diagrams.
+    // reports) and the declarative glue (notifications, schedules, integrations, inbound arrivals,
+    // outbound departures, roll-ups). Each is an icon card edged to the entity it binds to, so the
+    // "express the integration as intent" story is visible alongside the ER and process diagrams.
     const renderGlue = (model, newSection) => {
         const categories = [
             { list: model.forms, icon: ICON.form, color: COLOR.output, entity: f => f.forEntity, detail: () => 'form' },
@@ -409,6 +417,7 @@ window.IntentDiagrams = (() => {
             { list: model.schedules, icon: ICON.schedule, color: COLOR.glue, entity: s => s.model ? null : s.entity, detail: s => (s.model ? s.model + '.' + s.entity + ' • ' : '') + (s.cron || 'scheduled') },
             { list: model.integrations, icon: ICON.integration, color: COLOR.glue, entity: i => eventEntity(model, i.event), detail: integrationDetail },
             { list: model.inbound, icon: ICON.inbound, color: COLOR.glue, entity: w => w.create, detail: inboundDetail },
+            { list: model.outbound, icon: ICON.outbound, color: COLOR.glue, entity: o => eventEntity(model, o.event), detail: outboundDetail },
             { list: model.rollups, icon: ICON.rollup, color: COLOR.glue, entity: r => r.entity, detail: r => '→ ' + (rollupParent(model, r) || '?') + '.' + (r.field || '') }
         ];
 
@@ -456,7 +465,7 @@ window.IntentDiagrams = (() => {
     const normalize = (model) => {
         model = model || {};
         for (const key of ['entities', 'processes', 'forms', 'reports', 'permissions', 'seeds',
-            'notifications', 'schedules', 'integrations', 'inbound', 'rollups']) {
+            'notifications', 'schedules', 'integrations', 'inbound', 'outbound', 'rollups']) {
             model[key] = model[key] || [];
         }
         return model;

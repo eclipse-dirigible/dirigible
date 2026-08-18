@@ -52,6 +52,8 @@ import org.eclipse.dirigible.components.intent.model.LifecycleEdgeIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
+import org.eclipse.dirigible.components.intent.model.OutboundIntent;
+import org.eclipse.dirigible.components.intent.model.OutboundTargetIntent;
 import org.eclipse.dirigible.components.intent.model.PermissionIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessVarIntent;
@@ -295,6 +297,7 @@ public final class IntentParser {
         validateSchedules(model, entityNames, usesAliases, issues);
         validateIntegrations(model, entityNames, issues);
         validateInbound(model, entityNames, issues);
+        validateOutbound(model, entityNames, issues);
         validateRollups(model, issues);
         validateExpansions(model, issues);
         validateSettlements(model, issues);
@@ -1449,6 +1452,47 @@ public final class IntentParser {
         }
         if (!folder && cron) {
             issues.add(subject + " source declares a cron, which only a folder source polls on");
+        }
+    }
+
+    /**
+     * Each outbound departure must have a unique name, bind to exactly one event of the glue event
+     * axis, and name exactly one channel to leave on. A departure declaring no channel is a promise
+     * with nowhere to land, and one declaring two is two departures wearing one name - both fail here
+     * rather than generating a publisher that picks a channel for the author.
+     */
+    private static void validateOutbound(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Set<String> names = new HashSet<>();
+        for (OutboundIntent outbound : model.getOutbound()) {
+            String name = outbound.getName();
+            if (name == null || name.isBlank()) {
+                issues.add("outbound has no name");
+                continue;
+            }
+            if (!names.add(name)) {
+                issues.add("duplicate outbound [" + name + "]");
+            }
+            String subject = "outbound [" + name + "]";
+            String eventEntity = validateEventBinding(outbound.getEvent(), subject, entityNames, model, issues);
+            validateOutboundTarget(outbound.getTo(), subject, issues);
+            // A message always carries a body, so - unlike an integration - there is no method to
+            // check the payload against; only the value forms need validating.
+            if (!outbound.getPayload()
+                         .isEmpty()) {
+                EntityIntent record = eventEntity == null ? null : entityByName(model, eventEntity);
+                PayloadSupport.validate(outbound.getPayload(), record, IntentEntities.byName(model), subject, issues);
+            }
+        }
+    }
+
+    /** A departure leaves on exactly one channel: a queue or a topic. */
+    private static void validateOutboundTarget(OutboundTargetIntent target, String subject, List<String> issues) {
+        boolean queue = target != null && target.getQueue() != null && !target.getQueue()
+                                                                              .isBlank();
+        boolean topic = target != null && target.getTopic() != null && !target.getTopic()
+                                                                              .isBlank();
+        if (queue == topic) {
+            issues.add(subject + " to must declare exactly one of queue/topic");
         }
     }
 

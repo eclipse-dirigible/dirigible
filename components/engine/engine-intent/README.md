@@ -45,6 +45,7 @@ filters) are covered at the generation layer by `IntentEngineIT` and the parser 
 | [`schedules`](#schedules--cron) | cron: notify or generate records per matching row |
 | [`integrations`](#integrations--outbound-http) | outbound HTTP on a data change |
 | [`inbound`](#inbound--webhooks) | webhook that creates records |
+| [`outbound`](#outbound--emit-on-a-queue-or-topic) | emit a record on a queue or topic on an event |
 | [`permissions`](#permissions--roles) | roles |
 | [Planned](#planned--recognised-but-not-yet-implemented) | recognised, not yet implemented |
 
@@ -616,6 +617,31 @@ inbound:
   - { name: leadHook, path: /webhooks/lead, create: Lead }
 ```
 
+## outbound - emit on a queue or topic
+
+The mirror of `inbound`: when an event fires, emit a message. `to:` names exactly one of
+`queue`/`topic`; without a `payload:` the body is the record's own JSON.
+
+```yaml
+outbound:
+  - name: publishOrder
+    event: { onCreate: Order }
+    to: { queue: "codbex.orders" }
+  - name: announceActivation
+    event: { onStepCompleted: { process: OrderApproval, step: activate }, when: "channel != internal" }
+    to: { topic: "codbex.order-activations" }
+    payload:                                  # the declared envelope, as on integrations
+      type: "order.activated"
+      messageId: "{uuid}"
+      reference: number
+```
+
+The message is published after the write that raised the event is persisted and is **not**
+transactional with it - a failed publish is logged and the write stands. No outbox, no exactly-once,
+no ordering. A destination name is application-owned, so it is tenant-scoped: two separate
+deployments sharing one broker need the platform's external-contract destination marker
+([#6766](https://github.com/eclipse-dirigible/dirigible/issues/6766)).
+
 ## permissions - roles
 
 ```yaml
@@ -638,10 +664,9 @@ UI-test manifest, and its perspective in the generated Harmonia SPA + the shared
 - **Bridge fields on a generated `manyToMany` link** - the materialized link entity carries only its
   key and the two FKs; a link with its own data is authored as an explicit intermediate entity.
 - **Declarative glue actions beyond the current set** (see CLAUDE.md "Planned: declarative glue"):
-  `publish`/consume message, `generateDocument` (PDF), `assign`, process-step events, inbound
-  message/file events. Today's implemented glue: triggers, decision/form resolvers,
-  notifications, schedules, integrations, inbound webhooks, rollups, settlements, expansions,
-  generates, postings.
+  `generateDocument` (PDF), `assign`. Today's implemented glue: triggers, decision/form resolvers,
+  notifications, schedules, integrations, inbound arrivals (webhook / queue-topic / drop folder),
+  outbound departures, rollups, settlements, expansions, generates, postings.
 - **Cross-model schedule SOURCE** - a schedule's `entity` must be local (the generate target may
   be cross-model).
 - ~~`generates` completion hook~~ - LANDED (#6237): `sourceStatus` flips the source's
