@@ -31,6 +31,21 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-ide-workspace</artifactId>
 		</dependency>
+		<!-- The Workbench assistant validates a proposed custom/ class by really compiling it -->
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-engine-java</artifactId>
+		</dependency>
+		<!-- Generate runs the model-to-code plan in-process, through the generation pipeline -->
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-ide-template</artifactId>
+		</dependency>
+		<!-- The logged-in user each stored conversation message is attributed to -->
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-api-security</artifactId>
+		</dependency>
 		<!-- Test: parse-validate the generated .print templates with the document-template parser -->
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>

@@ -14,12 +14,17 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -28,8 +33,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.google.gson.Gson;
 
+import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
@@ -39,6 +44,7 @@ import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -53,17 +59,29 @@ import org.springframework.beans.factory.annotation.Autowired;
  * row), and a stale registry template generates feature-less code - all with every pipeline step
  * returning success. A feature's test must therefore assert the OUTERMOST observable layer (the
  * generated token at minimum, the runtime behavior where reachable), never only the parsed model.
- * Covered here: {@code immutableWhen} / {@code immutable} (409 on write/delete), {@code checks}
- * (exactlyOne / itemsMin / itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual}
- * (read-time overlay), seed rows carrying a RELATION column, aggregate totals, first-class
- * {@code number:} stamping from an authored {@code .numbers} series declaration,
- * {@code transitions} (the guarded on-demand status flip: allowed-status 200, wrong-status/guard
- * 409), {@code postings} with {@code reverses} (post on a transition; red-storno reversal on void -
- * negated amounts, storno link, fail-soft), the {@code notify} block with {@code attach: print}
- * (send the document itself by e-mail - on a transition and on a process step; the fail-soft
- * contract), and the personal (my) surface ({@code identity}/{@code personal}/{@code sensitive}:
- * scoped reads, forced owner, stripped fields).
+ * Covered here: {@code immutableWhen} / {@code immutable} (409 on write/delete, and the lock
+ * inherited by a composition child - a line of a locked document is refused while a child that
+ * declared {@code locksWithMaster: false} keeps its writes), {@code checks} (exactlyOne / itemsMin
+ * / itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual} (the read-time overlay
+ * on an entity read, and its SQL counterpart on a report grouping by that nomenclature - the two
+ * must agree on the same value in the same language), seed rows carrying a RELATION column,
+ * aggregate totals, first-class {@code number:} stamping from an authored {@code .numbers} series
+ * declaration, {@code transitions} (the guarded on-demand status flip: allowed-status 200,
+ * wrong-status/guard 409), {@code lifecycle} (the declarative state machine: the graph walked
+ * through its transitions, an unmodeled flip and a create filed mid-lifecycle both refused through
+ * the plain REST surface no transition guard covers), {@code postings} with {@code reverses} (post
+ * on a transition; red-storno reversal on void - negated amounts, storno link, fail-soft), the
+ * {@code notify} block with {@code attach: print} (send the document itself by e-mail - on a
+ * transition and on a process step; the fail-soft contract), {@code calculatedActionOnCreate} on a
+ * to-one RELATION (the FK resolved server-side by a hand-written {@code custom/} action: assigned
+ * in the repository, and at runtime both defaulted when omitted and left alone when the caller
+ * supplied one), the event-driven {@code generates} (posting the source mints the whole document
+ * with nobody clicking, and a click afterwards returns that same document - the at-most-once
+ * back-reference guard), and the personal (my) surface
+ * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
+ * fields).
  */
+@Tag("slow")
 class IntentEmissionCoverageIT extends IntegrationTest {
 
     private static final String PROJECT = "emission-test";
@@ -72,6 +90,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     private static final String GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
     private static final String API = "/services/java/" + PROJECT + "/gen/emission/api";
+    /** A standalone report owns its own gen folder, named after the report file. */
+    private static final String REPORT_API = "/services/java/" + PROJECT + "/gen/claimsbyunit/api/reports";
     /** What a {@code type: text} field's column is sized to (EdmIntentGenerator's TEXT_LENGTH). */
     private static final int TEXT_COLUMN_LENGTH = 4000;
 
@@ -102,11 +122,41 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # a parent node server-side.
               - name: Account
                 hierarchy: Parent
+                # related: the reverse of an incoming to-one association. Account is the TARGET of
+                # Entry.Account, so its own record page lists the entries booked against it -
+                # read-only, because an Entry has its own lifecycle, its own page and its own
+                # process. Declared HERE, on the referenced side, which is the only side that can
+                # know: a referencing model may be generated later and never sees this one.
+                related:
+                  - entity: Entry
+                    label: Journal Entries
+                    show: [date, debit, credit, Status]
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string,  required: true, length: 100 }
                 relations:
                   - { name: Parent, kind: manyToOne, to: Account }
+
+              # calculatedActionOnCreate on a to-one RELATION: the FK is resolved SERVER-SIDE at
+              # insert by a hand-written action, for the "default read off ANOTHER record" case no
+              # other hook covers (init: is a literal seed id; dependsOn is a UI-only cascade that
+              # never fires on a server-side create). Tariff carries a `base` flag the action looks
+              # the default up by - deliberately NOT the first row, so the assertion below cannot
+              # pass on an accidental default landing in the column.
+              - name: Tariff
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string,  required: true, length: 100 }
+                  - { name: base, type: boolean }
+
+              - name: Quote
+                imports: |
+                  import custom.QuoteTariffAction;
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 200 }
+                relations:
+                  - { name: Tariff, kind: manyToOne, to: Tariff, calculatedActionOnCreate: QuoteTariffAction }
 
               # Append-only (immutable: true): e.g. the snapshot stored when a document is sent -
               # user writes and deletes are rejected from the moment a record is created.
@@ -117,7 +167,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: payload, type: string, length: 500 }
 
               # The document master: immutable once POSTED (status 2), post gated by document checks.
+              # history: the trail has to separate what a person did (the create, the status hop)
+              # from what the application did (the totals recomputed when a line was added).
               - name: Entry
+                history: true
                 immutableWhen: "Status == 2"
                 checks:
                   - { kind: itemsMin, count: 1, status: 2, message: "Entry needs at least one line" }
@@ -140,7 +193,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
               # postings source: PostDoc flips it POSTED (posting fires), VoidDoc flips it
               # CANCELLED (the reverses posting fires - red storno).
+              #
+              # lifecycle: the WHOLE legal status graph, enforced by the repository on every status
+              # write - the two transitions above are exactly its two edges, and anything else (a
+              # REST write jumping DRAFT straight to CANCELLED, a create filed as POSTED) is refused
+              # whoever attempts it.
               - name: Doc
+                lifecycle:
+                  edges:
+                    - { from: DRAFT,  to: [POSTED] }
+                    - { from: POSTED, to: [CANCELLED] }
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: date,   type: date, required: true }
@@ -204,13 +266,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # layout must resolve the status FK to a label lookup and render it as a badge in
               # the table column and the detail pane, exactly like the list layout does.
               - name: Campaign
+                immutableWhen: "Status == 2"
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 100 }
                 relations:
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
 
+              # locksWithMaster: false - the deliberate post-lock collection (#6700). It is the
+              # negative control for the inherited lock below: notes keep their writes after the
+              # campaign froze, while EntryLine (which says nothing) inherits the lock.
               - name: CampaignNote
+                locksWithMaster: false
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
@@ -237,8 +304,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # the schedule's `Period: now` below emitting the string shape (not LocalDate).
               # audit: the act-as assertions below prove a delegated write carries the ACTING
               # owner while CreatedBy keeps the REAL user.
+              # history: the shadow EMISSION_CLAIM_HISTORY trail. Claim carries BOTH interactions the
+              # keyword has to get right - it is audited (the audit columns must stay OUT of the
+              # tracked property list, they say what the history row already says) and it owns a
+              # sensitive field (so the personal surface must expose no history endpoint at all).
               - name: Claim
                 audit: true
+                history: true
                 label: "{note} ({Person.name}) {period|yyyy MMMM}"
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
@@ -246,6 +318,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: period, type: month }
                   - { name: rate, type: decimal, sensitive: true }
                   - { name: totalCost, type: decimal }
+                  # visibleTo: role-scoped on EVERY surface - stripped from the responses and
+                  # ignored on the writes of the power controller AND of the personal one (owning
+                  # the record is not a role), kept out of the change trail, and left off the
+                  # generated pages. Deliberately on the entity that also carries `sensitive:` and
+                  # `history:`, where the three could collide.
+                  - { name: bonus, type: decimal, visibleTo: [Payroll] }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
                   # a plain dropdown relation: the personal LIST must resolve it to a label (the
@@ -312,6 +390,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: date,      type: date, required: true }
                 relations:
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1, required: true }
+                  # The event-driven create-from's back-reference (#6711): what makes minting the
+                  # voucher at-most-once, and the only way the generated code recognizes its own output.
+                  - { name: Slip, kind: manyToOne, to: Slip }
               - name: VoucherLine
                 function: DocumentItem
                 fields:
@@ -323,11 +404,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
               # Source of the computed create-from below (#6555): a Voucher is generated from a Slip
               # with ONE synthetic line whose cells are expressions over the Slip (not a 1:1 mirror).
+              # It carries a status lifecycle so the SAME create-from can also be fired by a
+              # transition of the Slip instead of a click (#6711).
               - name: Slip
                 fields:
                   - { name: id,    type: integer, primaryKey: true, generated: true }
                   - { name: label, type: string }
                   - { name: total, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
 
               # documentItemsLayout: chat - the document master's line-items child renders as a
               # conversation thread (x-h-chat bubbles + a composer) instead of the editable table;
@@ -452,6 +537,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Rfq, kind: manyToOne, to: Rfq, composition: true, required: true }
 
+              # The non-HTTP inbound arrivals (#6537) ingest into an entity of their own: an ingested
+              # record must not start a process, or the queue/file scenarios would seed extra Inbox
+              # tasks the RFQ scenarios pick up by name.
+              - name: Signal
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 200 }
+
               # BPM events wave 2 (abortOn): an approval whose confirm task is cancelled the moment
               # the record is voided via the CancelApproval transition (reusing the EntryStatus seeds:
               # DRAFT 1 / CANCELLED 3). Closes the orphaned-Inbox-task hole.
@@ -473,6 +566,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # `attach: print` is authored on a transition AND on a process step (below).
               - name: Bill
                 function: Document
+                # SENT (status 2) freezes the document: the assertions below add the line write that
+                # would otherwise rewrite the totals the sent PDF was rendered from (#6695).
+                immutableWhen: "Status == 2"
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: note,   type: string,  length: 200 }
@@ -494,6 +590,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # an item-level to-one: the print feeder must feed it per row so an items-table
                   # column can render {{Unit}} (the label, translated) or {{Unit.Name}}
                   - { name: Unit, kind: manyToOne, to: Unit }
+              # the RECIPIENT LIST of a bill: rows that are nobody's document - they only say who
+              # gets the bill's own PDF (attach: recordPrint, one document to many recipients).
+              - name: BillRecipient
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: Bill,   kind: manyToOne, to: Bill, required: true }
+                  - { name: Person, kind: manyToOne, to: Person }
 
               # keyed cross-entity aggregate: a signed ledger summed per (Person, Unit) into a
               # materialised total row keyed by the same two FKs. Ledger.amount is SENSITIVE and
@@ -552,6 +656,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: remaining, type: decimal }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true }
+
+              # manyToMany: materialised into the intermediate entity CourseTag - a real link table
+              # with both foreign keys, edited as a detail grid of the course. The keyword used to
+              # parse and generate NOTHING, which is why the link table + a round-tripping link row
+              # are asserted here and not only in the parser's unit test.
+              - name: Course
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+                relations:
+                  - { name: tags, kind: manyToMany, to: Tag }
+              - name: Tag
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
 
             aggregates:
               - name: ledgerTotal
@@ -643,8 +762,52 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         to: Person.email
                         subject: "Bill {note}"
                         body: "Dear {Person.name}, your bill totals {amount}."
+                      next: shareBill
+                  # the MIRROR of the per-row fan-out: the rows are only the recipient list, and the
+                  # document is the BILL's - rendered once (and not at all when nobody is invited,
+                  # which is the path this test's Bills take) and attached to every message.
+                  - name: shareBill
+                    kind: serviceTask
+                    args:
+                      notify:
+                        forEach: BillRecipient
+                        to: Person.email
+                        subject: "Bill {record.note}"
+                        # {recordUrl} in a fan-out links the ROW - what THIS message is about -
+                        # while {record.note} above reads the anchor. Two different scopes, both
+                        # explicit.
+                        body: "Dear {Person.name}, the bill is attached. Your copy: {recordUrl}"
+                        attach: recordPrint
                       next: end
                   - { name: end, kind: end }
+
+            # The glue EVENT AXIS (#6537): a notification and an integration bound to a process STEP
+            # rather than to an entity lifecycle event. The emitter inserted at the step boundary
+            # publishes the RFQ on the step topic, and these ordinary listeners consume it - so the
+            # emitter sits in the middle of the RfqFlow scenarios below: were it broken, the review
+            # task would never appear and the timeout/expire/wait assertions would fail. The recipient
+            # is a LITERAL so the send is really attempted and cannot succeed (no SMTP on this
+            # instance) - the flow must run through the step regardless. The integration's URL comes
+            # from a configuration key that is not set here, which is the listener's documented no-op.
+            notifications:
+              - name: rfqReviewPending
+                event: { onStepReached: { process: RfqFlow, step: review } }
+                to: ops@example.com
+                subject: "RFQ {title} awaits review"
+                body: "A reviewer must handle it."
+
+            integrations:
+              - name: pushRfqReplied
+                event: { onStepCompleted: { process: RfqFlow, step: markReplied } }
+                method: POST
+                url: "@config:EMISSION_RFQ_WEBHOOK"
+
+            # The non-HTTP inbound arrivals (#6537): the same JSON record, saved through the same
+            # repository, arriving on a queue or dropped as a file into a polled folder.
+            inbound:
+              - { name: signalHook,  path: /signal, create: Signal }
+              - { name: signalQueue, source: { queue: emission-signals }, create: Signal }
+              - { name: signalDrop,  source: { folder: target/inbox-emission, cron: "0/2 * * * * ?" }, create: Signal }
 
             # transitions: the guarded on-demand status flip - Cancel is allowed only on a DRAFT
             # entry with nothing paid (Calc semantics: a null field reads as 0, so a never-paid
@@ -675,6 +838,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 setStatus: 3
                 label: Cancel
                 icon: ban
+              # The transition the event-driven create-from below listens for (#6711): posting the slip
+              # is what mints the voucher - the test never calls the create-from to get one.
+              - name: PostSlip
+                forEntity: Slip
+                from: [DRAFT]
+                setStatus: POSTED
+                label: Post
+                icon: check
               # send-document: the transition mails AFTER the flip commits, with the bill's own print
               # rendered to PDF and attached. The recipient is a LITERAL so the runtime always gets past
               # the recipient check and actually attempts the attachment - which cannot succeed on this
@@ -689,7 +860,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 notify:
                   to: ops@example.com
                   subject: "Bill {note}"
-                  body: "Please find the bill attached."
+                  body: "Please find the bill attached. Open it here: {recordUrl}"
                   attach: print
                   # languageFrom: the counterparty decides the language the attached print renders in.
                   languageFrom: Person.locale
@@ -725,10 +896,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             # synthetic line from EXPRESSIONS over the source Slip - a Calc amount, a {} interpolated
             # string, and a when guard - instead of mirroring a source child 1:1. The target items child
             # (VoucherLine) is resolved automatically. Enforcement lives in the generated Generate.java.
+            #
+            # It is ALSO event-driven (#6711): posting a Slip mints the Voucher with nobody clicking,
+            # while `button: true` keeps the click as the second trigger - so both halves must share one
+            # at-most-once guard (the Voucher.Slip back-reference the map writes). The status is named,
+            # not numbered.
             generates:
               - name: voucher-from-slip
                 from: Slip
                 to: Voucher
+                event: { onTransition: Slip, when: "Status == POSTED" }
+                button: true
+                map:
+                  Slip: id
                 defaults:
                   refNumber: "AUTO"
                   date: now
@@ -736,6 +916,32 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - note: "Slip {label}"
                     amount: "Total * 2"
                     when: "Total != 0"
+              # Prompted create-from (#6685): a per-record action that collects the input the source
+              # cannot derive (here: a manual line's note + amount) before creating a composition
+              # child. The prompted values are posted with the source id and set on the target after
+              # map/defaults; a missing required input answers 400 before anything is written.
+              - name: add-voucher-line
+                from: Voucher
+                to: VoucherLine
+                label: Add Manual Line
+                map:
+                  Voucher: id
+                prompt:
+                  - { field: note }
+                  - { field: amount, required: true }
+
+            # The roles the model issues - and the ones a `visibleTo:` field may name.
+            permissions:
+              - { role: Payroll, description: May see what people are paid }
+
+            reports:
+              # A report grouping by a MULTILINGUAL nomenclature: its label column must be translated
+              # for the caller's Accept-Language exactly as the entity list page next to it is, or the
+              # two disagree on the same value (dirigible #6544).
+              - name: ClaimsByUnit
+                source: Claim
+                dimensions: [Unit]
+                measures: ["count(*)"]
 
             seeds:
               - name: people
@@ -743,11 +949,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 rows:
                   - { id: 1, name: Admin, email: admin }
                   - { id: 2, name: Other, email: other@example.com }
+              # The base tariff is row 2, NOT row 1: a calculated FK that resolved to 1 could be a
+              # coincidence (a first row, a stray default), one that resolves to 2 can only be the
+              # action having run and matched on `base`.
+              - name: tariffs
+                entity: Tariff
+                rows:
+                  - { id: 1, name: Promotional, base: false }
+                  - { id: 2, name: Standard,    base: true }
               - name: claims
                 entity: Claim
                 rows:
-                  - { id: 1, note: mine,    rate: 50, Person: 1 }
-                  - { id: 2, note: foreign, rate: 70, Person: 2 }
+                  - { id: 1, note: mine,    rate: 50, Person: 1, Unit: 1 }
+                  - { id: 2, note: foreign, rate: 70, Person: 2, Unit: 1 }
               - name: parties
                 entity: Party
                 rows:
@@ -793,13 +1007,57 @@ class IntentEmissionCoverageIT extends IntegrationTest {
      */
     private static final String NUMBERS_JSON = "{\"series\": [{\"name\": \"Emission Receipt\", \"prefix\": \"ER-\", \"size\": 8}]}";
 
+    /**
+     * The hand-written half of a calculated action: the contract is that the developer authors the
+     * class under {@code custom/} (never {@code gen/}, which is wiped on regeneration) and the
+     * generated repository calls it. Written here as the fixture's own source so the IT exercises the
+     * REAL arrangement - an action resolved as a Spring bean that reads another table - rather than
+     * asserting a call to a class that does not exist. A generated repository referencing a missing
+     * class would fail the whole client-Java batch and with it every REST assertion in this gate.
+     *
+     * <p>
+     * Returning an already-set value unchanged is part of the documented contract, not defensive
+     * coding: the action runs on EVERY create, so without it a caller's explicit pick would be
+     * overwritten. Both directions are asserted at runtime.
+     */
+    private static final String TARIFF_ACTION_JAVA = """
+            package custom;
+
+            import java.util.List;
+
+            import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+            import org.eclipse.dirigible.sdk.component.Component;
+            import org.eclipse.dirigible.sdk.db.CalculatedField;
+
+            import gen.emission.data.quote.QuoteEntity;
+            import gen.emission.data.tariff.TariffEntity;
+            import gen.emission.data.tariff.TariffRepository;
+
+            @Component
+            public class QuoteTariffAction implements CalculatedField<Object, Integer> {
+
+                @Override
+                public Integer calculate(Object entity) {
+                    QuoteEntity quote = (QuoteEntity) entity;
+                    if (quote.Tariff != null) {
+                        return quote.Tariff;
+                    }
+                    List<TariffEntity> base = new TariffRepository().findAll(Criteria.create()
+                                                                                    .eq("Base", true));
+                    return base.isEmpty() ? null : base.get(0).Id;
+                }
+            }
+            """;
+
     @Test
     void generated_code_contains_every_feature_enforcement_and_the_published_app_enforces_it() {
         writeIntent(INTENT_YAML);
         writeProjectFile("emission.numbers", NUMBERS_JSON);
-        // Drive model-to-code from the generate response's OWN plan (template + parameters per
-        // entry) - the production path. Hardcoding empty parameters silently skips every
-        // parameter-gated producer (e.g. javaRuntime gates the leafOnly repository class).
+        writeProjectFile("custom/QuoteTariffAction.java", TARIFF_ACTION_JAVA);
+        // Generate: the models AND the code from them, in one call - the production path. The engine
+        // runs each recipe with the template and parameters the project's .settings declare, so a
+        // parameter-gated producer (javaRuntime gates the leafOnly repository class, say) is exercised
+        // exactly as it is for a developer.
         AtomicReference<List<Map<String, Object>>> plan = new AtomicReference<>();
         restAssuredExecutor.execute(() -> plan.set(given().when()
                                                           .post(GENERATE_URL)
@@ -808,11 +1066,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                           .extract()
                                                           .jsonPath()
                                                           .getList("codeGenerations")));
+        // The intent engine runs the model-to-code recipes itself, in the same call: assert each one
+        // succeeded instead of replaying them from here.
         for (Map<String, Object> codeGeneration : plan.get()) {
-            String template = String.valueOf(codeGeneration.get("templateId"));
-            String modelPath = String.valueOf(codeGeneration.get("path"));
-            String parameters = new Gson().toJson(codeGeneration.get("parameters"));
-            generateFromModel(template, modelPath, parameters);
+            assertEquals(Boolean.TRUE, codeGeneration.get("generated"),
+                    "generating code from " + codeGeneration.get("path") + " failed: " + codeGeneration.get("error"));
         }
 
         assertEmission();
@@ -871,6 +1129,37 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(entryController.contains("must reference a leaf"),
                 "leafOnly must emit the server-side children check in the REST controller");
 
+        // related: the read-only register of the records REFERENCING Account. The registration is
+        // emitted for the REFERENCED entity (the referencing one may be generated separately, in
+        // another project), and it carries the resolved coordinates the panel calls: the source's
+        // controller, the foreign key it filters by, and the lookup that turns its Status FK into a
+        // label. The URL is built by the generation parameters, not by the intent generator - which
+        // is exactly why the .model entry carries facts and this file carries paths.
+        String accountRegister = contentOf("gen/emission/js/components/pages/Account/Account.related.js");
+        assertTrue(accountRegister.contains("App.registerRelated('Account'"),
+                "a related declaration must register under the REFERENCED entity, got: " + accountRegister);
+        assertTrue(accountRegister.contains("entity: 'Entry'") && accountRegister.contains("label: 'Journal Entries'"),
+                "the register must name its source entity and its authored heading, got: " + accountRegister);
+        assertTrue(accountRegister.contains("fkProperty: 'Account'"),
+                "the register must filter by the source's foreign key back to this entity, got: " + accountRegister);
+        assertTrue(accountRegister.contains("apiPath: '" + API + "/entry/EntryController'"),
+                "the register's controller URL must resolve to the source's own controller, got: " + accountRegister);
+        assertTrue(accountRegister.contains("lookup: { url: '" + API + "/settings/EntryStatusController'"),
+                "a relation column must carry the lookup its label resolves through, got: " + accountRegister);
+        // show: picks the columns and their order - the generated identifier and the foreign key back
+        // here are not among them.
+        assertTrue(
+                accountRegister.indexOf("name: 'Date'") < accountRegister.indexOf("name: 'Status'")
+                        && !accountRegister.contains("name: 'Id'"),
+                "the register's columns must be the authored ones, got: " + accountRegister);
+        // ... and the referenced entity's own page renders them.
+        String accountFormPage = contentOf("gen/emission/js/components/pages/Account/AccountFormPage.js");
+        assertTrue(accountFormPage.contains("App.relatedFor('Account')"),
+                "the referenced entity's form page must read its registers from the runtime registry");
+        String accountForm = contentOf("gen/emission/views/Account/Account-form.html");
+        assertTrue(accountForm.contains("relatedPanel(r, id)") && accountForm.contains("openRow(row)"),
+                "the referenced entity's form must render one related panel per register, whose only row action opens the source record");
+
         // #6336 pattern: the server-side regex check and the client-side HTML pattern attribute.
         String personController = contentOf("gen/emission/api/person/PersonController.java");
         assertTrue(personController.contains(".matches(") && personController.contains("does not match the required pattern"),
@@ -889,6 +1178,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(receiptRepository.contains("DocumentNumbers.next(\"Emission Receipt\")"),
                 "number: stampOn: create must emit the insert-time allocation from the named series into the repository");
 
+        // calculatedActionOnCreate on a to-one RELATION: the FK must be assigned from the action in the
+        // generated repository, exactly as for a field. This is the whole regression - a relation IS an
+        // ordinary property in the .model, but only FIELDS used to carry the calculated attributes into
+        // it, so the keyword parsed, validated and reached the .intent while the emitted repository
+        // contained no assignment at all: the create stored null with every pipeline step green.
+        // Asserting the .model attribute alone would NOT have caught it (that layer was fine), and
+        // asserting the runtime alone could pass on a coincidental default - hence all three layers,
+        // here and in assertRuntimeEnforcement.
+        String quoteRepository = contentOf("gen/emission/data/quote/QuoteRepository.java");
+        assertTrue(quoteRepository.contains("entity.Tariff = Beans.get(QuoteTariffAction.class).calculate(entity);"),
+                "calculatedActionOnCreate on a to-one relation must assign the FK from the action in the repository, got: "
+                        + quoteRepository);
+        assertTrue(quoteRepository.contains("import custom.QuoteTariffAction;"),
+                "the entity's imports: must be decoded into the generated repository so the action resolves by simple name");
+        assertTrue(contentOf("emission.model").contains("\"calculatedActionOnCreate\": \"QuoteTariffAction\""),
+                "the relation's calculated action must reach the .model property every downstream template reads");
+
         String entryRepository = contentOf("gen/emission/data/entry/EntryRepository.java");
         assertTrue(entryRepository.contains("Entry needs at least one line"),
                 "checks: itemsMin must emit its authored message into the repository gate");
@@ -904,11 +1210,50 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String lineController = contentOf("gen/emission/api/entry/EntryLineController.java");
         assertTrue(lineController.contains("Exactly one of debit/credit"),
                 "checks: exactlyOne must emit its authored message into the row-level REST validation");
+        // #6695: the master's immutability reaches its LINES. A child declares no immutability of its
+        // own, yet its writes recompute the master's totals - so without this the lock had an
+        // unguarded back door through the child's controller, which the UI never offers but REST did.
+        assertTrue(lineController.contains("requireMasterMutable"),
+                "a composition child of an immutable master must emit the inherited lock into its REST controller");
+        assertTrue(lineController.contains("EntryRepository masterRepository"),
+                "the inherited lock must consult the MASTER's repository, got: " + lineController);
+        // The document's own line items are the same story through a different layout - and it is the
+        // one where the child literally resums the master (BillLineRepository -> BillRepository).
+        assertTrue(contentOf("gen/emission/api/bill/BillLineController.java").contains("requireMasterMutable"),
+                "a document ITEM of an immutable master must emit the inherited lock into its REST controller");
+        // ...and the opt-out really opts out: the settlement-style collection keeps its writes.
+        String campaignNoteController = contentOf("gen/emission/api/campaign/CampaignNoteController.java");
+        assertFalse(campaignNoteController.contains("requireMasterMutable"),
+                "locksWithMaster: false must leave the child's REST writes unguarded");
 
         String schema = contentOf("gen/emission/schema/" + PROJECT + ".schema");
         assertTrue(schema.contains("EMISSION_UNIT_LANG"), "multilingual must emit the _LANG translation table into the schema");
+        // manyToMany: the link entity is an ordinary entity from parse time on, so it must reach the
+        // schema as its own table and the REST layer as its own (detail) controller. Asserting the
+        // parsed model alone is exactly what let the keyword generate nothing for so long.
+        assertTrue(schema.contains("EMISSION_COURSE_TAG"), "manyToMany must emit the intermediate entity's table into the schema");
+        String courseTagController = contentOf("gen/emission/api/course/CourseTagController.java");
+        assertTrue(courseTagController.contains("Course") && courseTagController.contains("Tag"),
+                "the link controller must carry both ends of the n:m, got: " + courseTagController);
+        assertHistoryEmission(schema, entryRepository);
         String unitRepository = contentOf("gen/emission/data/settings/UnitRepository.java");
         assertTrue(unitRepository.contains("Translator"), "multilingual must emit the read-time translation overlay into the repository");
+
+        // A report reading that nomenclature's label overlays it in SQL instead - the report backend
+        // never loads an entity, so the Translator cannot reach it. The join is LEFT and the column a
+        // COALESCE so an untranslated row keeps its base value, and the language is a bound parameter
+        // (never interpolated) that the report repository fills from the request.
+        String claimsByUnitReport = contentOf("ClaimsByUnit.report");
+        assertTrue(claimsByUnitReport.contains(
+                "LEFT JOIN \\\"EMISSION_UNIT_LANG\\\" as Unit_LANG ON Unit_LANG.\\\"Id\\\" = Unit.\\\"UNIT_ID\\\" AND Unit_LANG.\\\"Language\\\" = :language"),
+                "a translated report dimension must join the language table for the request language: " + claimsByUnitReport);
+        assertTrue(claimsByUnitReport.contains("COALESCE(Unit_LANG.\\\"Name\\\", Unit.\\\"UNIT_NAME\\\")"),
+                "a translated report dimension must fall back to its base value: " + claimsByUnitReport);
+        String claimsByUnitRepository = contentOf("gen/claimsbyunit/data/reports/ClaimsByUnitRepository.java");
+        assertTrue(claimsByUnitRepository.contains("parameter(\"language\", \"VARCHAR\", language())"),
+                "the report repository must bind the language parameter its query uses");
+        assertTrue(claimsByUnitRepository.contains("User.getLanguage()"),
+                "the report's language must come from the caller's Accept-Language, like every entity read");
 
         // The seed's RELATION key (Parent: 1) must survive into the CSV as the FK column - an
         // unknown/mis-cased key is dropped silently and CSVIM then skips the rows.
@@ -1005,6 +1350,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(campaignMasterView.contains("statusVariant(lookupText('Status', row.Status))"),
                 "the master table must render the EntityStatus column as a resolved badge, not a raw id");
 
+        // #6693: a record that owns detail collections is not finished at create - its children are
+        // the next step of the same working session and can only be added from the record's own
+        // page, so the create lands there instead of on the list. A flat record has nothing left to
+        // do on its page and still returns to the list.
+        String campaignFormPage = contentOf("gen/emission/js/components/pages/Campaign/CampaignFormPage.js");
+        assertTrue(
+                campaignFormPage.contains("App.detailsFor('Campaign').length")
+                        && campaignFormPage.contains("window.PineconeRouter.navigate('/Campaign/' + encodeURIComponent(newId) + '/edit')"),
+                "a create on an entity with detail children must land on the record page, got: " + campaignFormPage);
+        assertTrue(campaignFormPage.contains("!this.returnToParam() && App.detailsFor"),
+                "an explicit returnTo must still win - the create was launched from somewhere expecting the user back");
+
         // Every list surface exports/prints its rows: the manage list and the master list emit the
         // column metadata + toolbar actions wired to the shared basePage CSV/print helpers, with
         // cells resolved like the table (FK labels, formatted dates - never raw ids).
@@ -1041,6 +1398,34 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String ledgerTotalMy = contentOf("gen/emission/api/ledgertotal/LedgerTotalMyController.java");
         assertTrue(ledgerTotalMy.contains("entity.Total = null"),
                 "an aggregates: target summing a sensitive source field into a personal-rooted entity must be auto-scrubbed");
+        // visibleTo: the role allow-list reaches the runtime as the model's per-property read AND
+        // write roles, and every generated surface enforces it - the whole point of the keyword is
+        // that hiding the control alone would be cosmetic. Asserted on the artefacts because the
+        // ITs run as a user local basic auth answers isInRole(true) for, so the redaction cannot be
+        // provoked over HTTP here; the branch itself is covered by RoleScopedFieldControllerTemplateIT.
+        assertTrue(contentOf("emission.model").contains("\"roleRead\": \"Payroll\""),
+                "visibleTo must reach the .model as the property's read role, which every template reads");
+        String claimController = contentOf("gen/emission/api/claim/ClaimController.java");
+        assertTrue(claimController.contains("if (!isInAnyRole(\"Payroll\")) {") && claimController.contains("entity.Bonus = null;"),
+                "visibleTo must emit the response redaction in the power controller, got: " + claimController);
+        assertTrue(claimController.contains("@Get(\"/restricted\")"),
+                "visibleTo must emit the field-visibility pre-check the generated pages ask");
+        assertTrue(claimController.contains("entries.removeIf(entry -> hidden.contains("),
+                "a role-scoped field must be dropped from the change trail too - it carries the same values");
+        assertTrue(claimMy.contains("entity.Bonus = existing.Bonus;"),
+                "the personal surface must keep the stored value of a field its caller may not write");
+        String claimForm = contentOf("gen/emission/views/Claim/Claim-form.html");
+        assertTrue(claimForm.contains("canSee('Bonus')"),
+                "the generated form must gate the role-scoped input on the caller's own visibility answer");
+        String claimFormPage = contentOf("gen/emission/js/components/pages/Claim/ClaimFormPage.js");
+        assertTrue(claimFormPage.contains("loadRestrictedFields()"), "the generated page must ask which fields it may render");
+        // The personal surface hides it too, from the columns its list builds in JS.
+        String claimMyList = contentOf("gen/emission/js/components/pages/my/ClaimMyListPage.js");
+        assertTrue(claimMyList.contains("this.columns.filter(c => this.canSee(c.name))"),
+                "the personal list must drop the columns its own controller withholds");
+        assertFalse(contentOf("gen/emission/views/Person/Person-form.html").contains("canSee("),
+                "an entity with no role-scoped field must carry no visibility gate at all");
+
         String lineMy = contentOf("gen/emission/api/claim/ClaimLineMyController.java");
         assertTrue(lineMy.contains("requireMyParent"),
                 "a composition child must inherit the personal scope as an ancestor-ownership guard");
@@ -1113,6 +1498,42 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String timerLoader = contentOf("gen/events/emission/LoadRfqFlowReviewExpire.java");
         assertTrue(timerLoader.contains("execution.setVariable(\"__reviewExpireDate\", due)"),
                 "the expire date loader must publish the variable the boundary timer arms from");
+
+        // The glue event axis (#6537), step half: the emitter delegate is wired INTO the flow (before
+        // the observed task, after the observed service task, carrying its routing), it publishes the
+        // trigger record on the step topic, and the consumers bind to that exact topic. A wrong topic
+        // on either side is the silent failure mode - the app runs and nobody is ever notified.
+        assertTrue(
+                rfqBpmn.contains("<serviceTask id=\"rfqFlowReviewReached\"")
+                        && rfqBpmn.contains("<sequenceFlow id=\"flow_rfqFlowReviewReached_review\""),
+                "onStepReached must insert its emitter right before the observed task");
+        assertTrue(
+                rfqBpmn.contains("<serviceTask id=\"rfqFlowMarkRepliedCompleted\"")
+                        && rfqBpmn.contains("<sequenceFlow id=\"flow_markReplied_rfqFlowMarkRepliedCompleted\""),
+                "onStepCompleted must insert its emitter right after the observed step");
+        String reachedEmitter = contentOf("gen/events/emission/RfqFlowReviewReached.java");
+        assertTrue(reachedEmitter.contains("execution.getVariable(\"Id\")") && reachedEmitter.contains("new RfqRepository()"),
+                "the emitter must load the trigger record by the id in the process context");
+        assertTrue(reachedEmitter.contains("-step-RfqFlow-review-reached") && reachedEmitter.contains("Process.executeAfterCommit"),
+                "the emitter must publish the step topic after the chain commits");
+        String stepNotification = contentOf("gen/events/emission/RfqReviewPendingNotification.java");
+        assertTrue(stepNotification.contains("-step-RfqFlow-review-reached"),
+                "a step-bound notification must bind to the topic its emitter publishes to");
+        String stepIntegration = contentOf("gen/events/emission/PushRfqRepliedIntegration.java");
+        assertTrue(stepIntegration.contains("-step-RfqFlow-markReplied-completed"),
+                "a step-bound integration must bind to the topic its emitter publishes to");
+
+        // The glue event axis, inbound half: the same ingest, three arrivals.
+        String consumer = contentOf("gen/events/emission/SignalQueueConsumer.java");
+        assertTrue(consumer.contains("return \"emission-signals\";") && consumer.contains("ListenerKind.QUEUE"),
+                "a queue source must emit a MessageHandler bound to that queue");
+        assertTrue(consumer.contains("Json.parse(message, SignalEntity.class)") && consumer.contains("new SignalRepository().save(entity)"),
+                "a message ingest must save the record through the repository, like the webhook does");
+        String fileImport = contentOf("gen/events/emission/SignalDropFileImport.java");
+        assertTrue(fileImport.contains("return \"0/2 * * * * ?\";") && fileImport.contains("Paths.get(\"target/inbox-emission\")"),
+                "a folder source must emit a JobHandler polling that folder on the declared cron");
+        assertTrue(fileImport.contains("SignalEntity[].class") && fileImport.contains("Files.move"),
+                "a file ingest must accept a batch and move every read file out of the drop folder");
 
         // abortOn (wave 2): the interrupting event subprocess + the correlating listener.
         String approvalBpmn = contentOf("ApprovalFlow.bpmn");
@@ -1353,6 +1774,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(transitionExtension.contains("-custom-action"),
                 "the transition button must contribute to the app's custom-action extension point");
 
+        // lifecycle: the state machine is compiled into the REPOSITORY - the one choke point every
+        // status write passes through - not into the transition controllers, which would leave every
+        // other writer (a REST update, a workflow setter, a glue action) free to jump anywhere.
+        String docRepository = contentOf("gen/emission/data/doc/DocRepository.java");
+        assertTrue(docRepository.contains("\"1>2,2>3\".split(\",\")"), "the lifecycle must emit the whole legal edge set");
+        assertTrue(docRepository.contains("1=DRAFT,2=POSTED,3=CANCELLED"),
+                "the seeded status names must ride along so a rejection names statuses, not positional ids");
+        assertTrue(docRepository.contains("enforceLifecycle(entity);"), "a full-row update must be validated against the graph");
+        assertTrue(docRepository.contains("enforceLifecycleMove(lifecyclePrevious, entity.Status);"),
+                "a targeted write (transition button, workflow setter) must be validated against the graph too");
+        assertTrue(docRepository.contains("enforceLifecycleStart(entity.Status);"),
+                "with a declared init, a record must not be created mid-lifecycle");
+
         // send a document by e-mail: the notify block, at two of its call sites.
         //
         // (1) On a TRANSITION - the mail goes out after the flip, with the record's own print
@@ -1387,6 +1821,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the item relation map carries the __label the binder renders for a bare {{Unit}}");
         assertTrue(billFeeder.contains("im.put(\"Unit\", itemUnitMap)"), "the map is hung under the relation's own key on the row");
         assertTrue(sendBill.contains("catch (Exception"), "a transition's mail must be fail-soft - the status flip has already committed");
+        // {recordUrl}: the notification carries the link back to the record, and the ROUTE is composed
+        // in the template - the only layer that knows it. This is also the compile proof: an
+        // undeclared local would fail the whole client-Java batch, taking every REST assertion below
+        // with it.
+        assertTrue(sendBill.contains("\"/services/web/emission-test/gen/emission/index.html#/Bill/\" + entity.Id"),
+                "the transition's mail must compose the record's deep link from the project, gen folder, entity and key");
 
         // (2) On a PROCESS STEP - a JavaDelegate whose work IS the message: it re-loads the trigger
         // record through the generated repository, resolves the recipient, and sends. The BPMN must
@@ -1407,6 +1847,31 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String billBpmn = contentOf("BillFlow.bpmn");
         assertTrue(billBpmn.contains("gen.events.emission.BillFlowMailBillSend"),
                 "the BPMN service task must bind the generated sender delegate");
+
+        // (3) The FAN-OUT mirror - one document, many recipients (#6717). The rows are only the
+        // recipient list, so the recipient still resolves against the ROW while the attachment is the
+        // ANCHOR record's, rendered ONCE outside the loop and handed to every message.
+        String shareBill = contentOf("gen/events/emission/BillFlowShareBillSend.java");
+        assertTrue(shareBill.contains("Map document = rows.isEmpty() ? null : renderDocument(source);"),
+                "a recordPrint fan-out must render the document once, before the loop - and not at all with no recipients");
+        assertTrue(
+                shareBill.contains("private Map renderDocument(BillEntity source)")
+                        && shareBill.contains("new BillPrintFeeder().feed(source.Id)"),
+                "the rendered document must be the ANCHOR record's, fed with the anchor's key: " + shareBill);
+        assertEquals(1, shareBill.split("Print\\.render\\(", -1).length - 1,
+                "one document for the whole fan-out means exactly one render call");
+        assertTrue(shareBill.contains("private boolean send(BillEntity source, BillRecipientEntity entity, Map document)"),
+                "the per-row send must take the anchor (a placeholder quotes it) and the rendered document");
+        assertTrue(shareBill.contains("(Person == null ? null : Person.Email)"),
+                "the recipient must still resolve against the ROW - the rows ARE the recipient list");
+        assertTrue(shareBill.contains("\"Bill \" + source.Note"),
+                "a {record.<field>} placeholder must read the anchor record, not the row: " + shareBill);
+        // The deep link follows the SAME scoping rule as every other bare path: it links the ROW the
+        // message is about, not the anchor whose document rides along.
+        assertTrue(shareBill.contains("\"/services/web/emission-test/gen/emission/index.html#/BillRecipient/\" + entity.Id"),
+                "a fan-out's {recordUrl} must link the ROW, not the anchor record: " + shareBill);
+        assertTrue(billBpmn.contains("gen.events.emission.BillFlowShareBillSend"),
+                "the BPMN service task must bind the generated fan-out sender delegate too");
         assertFalse(repository.getResource(PROJECT_PATH + "/custom/MailBill.java")
                               .exists(),
                 "a notify serviceTask must NOT also scaffold a custom stub (it would never be invoked)");
@@ -1522,6 +1987,92 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "an item-line when cell must emit a null-safe Calc row guard");
         assertTrue(generate.contains("VoucherLineEntity item") && generate.contains("item.Voucher = saved.Id;"),
                 "the computed line must write into the auto-resolved target items child and re-point it at the saved master");
+
+        // generates event: (#6711): the create-from also runs by itself. The listener binds the SOURCE's
+        // -transitioned topic (the channel every status write publishes), guards on the status, and
+        // delegates to the SAME create-from the button calls - it must not carry a mapping of its own, or
+        // the two triggers would drift. `button: true` keeps the endpoint as the second trigger.
+        String generateOnEvent = contentOf("gen/events/emission/VoucherFromSlipGenerateOnEvent.java");
+        assertTrue(generateOnEvent.contains("implements MessageHandler"), "the event-driven create-from must be a message handler");
+        assertTrue(generateOnEvent.contains("-Slip-transitioned"),
+                "an onTransition create-from must bind the source's -transitioned topic");
+        assertTrue(generateOnEvent.contains("source.Status != 2"), "the listener must guard on the status the seeded name resolved to");
+        assertTrue(generateOnEvent.contains("new VoucherFromSlipGenerate().create("),
+                "the listener must delegate to the create-from rather than re-implement the mapping");
+        assertFalse(generateOnEvent.contains("VoucherLineEntity"), "the listener must carry no mapping of its own");
+        assertTrue(generate.contains("@Post(\"/run\")"), "button: true must keep the endpoint alongside the event trigger");
+        // The at-most-once guard lives in the create-from, so BOTH triggers get it.
+        assertTrue(generate.contains(".eq(\"Slip\", sourceId)") && generate.contains("return existing.get(0);"),
+                "an event-driven create-from must return the document already back-referencing the source");
+
+        // generates prompt (#6685): the prompted controller takes a values map, enforces the
+        // required input with a 400, and converts each posted value to the target field's Java type
+        // (decimal -> BigDecimal). The action descriptor carries the prompt so the customActions
+        // store opens the input dialog instead of the plain confirm.
+        String promptedGenerate = contentOf("gen/events/emission/AddVoucherLineGenerate.java");
+        assertTrue(promptedGenerate.contains("public java.util.Map<String, Object> values;"),
+                "a prompted create-from must accept the declared inputs in the posted body");
+        assertTrue(promptedGenerate.contains("missing required input [Amount]") && promptedGenerate.contains("Response.setStatus(400)"),
+                "a missing required prompt input must answer 400 before anything is written");
+        assertTrue(promptedGenerate.contains("new java.math.BigDecimal(String.valueOf(raw))"),
+                "a decimal prompt input must convert to the generated entity's BigDecimal field");
+        String promptedDescriptor = contentOf("add-voucher-line-generate-action.js");
+        assertTrue(promptedDescriptor.contains("\"prompt\"") && promptedDescriptor.contains("\"promptEntity\": \"VoucherLine\""),
+                "the action descriptor must carry the prompt and the target entity for the dialog's metadata lookup");
+        assertTrue(promptedDescriptor.contains("\"name\": \"Amount\""),
+                "prompt entries must carry the PascalCase property names the detail registration uses");
+    }
+
+    /**
+     * {@code history: true} - the shadow trail, across every layer it has to reach: the schema's
+     * sibling table, the repository's append on each write path (with the user/system attribution), the
+     * read-only endpoint, the panel on the record's form, and the two interactions the keyword had to
+     * specify - the audit columns stay out of the tracked set, and a surface that hides a sensitive
+     * field is offered no history endpoint at all.
+     */
+    private void assertHistoryEmission(String schema, String entryRepository) {
+        assertTrue(schema.contains("EMISSION_ENTRY_HISTORY") && schema.contains("EMISSION_CLAIM_HISTORY"),
+                "history: true must emit the sibling _HISTORY shadow table into the schema");
+        assertTrue(
+                schema.contains("\"name\": \"OldValue\"") && schema.contains("\"name\": \"NewValue\"")
+                        && schema.contains("\"name\": \"Source\""),
+                "the shadow table must carry the delta, the actor and the write's source");
+
+        // Every write path appends, and the SOURCE is what separates an edit somebody made from a
+        // total the application recomputed. A repository that recorded only user writes would leave a
+        // record silently changing between two entries in its own trail.
+        assertTrue(
+                entryRepository.contains("History.recordCreate(") && entryRepository.contains("History.recordUpdate(")
+                        && entryRepository.contains("History.recordDelete("),
+                "history: true must append on the create, update and delete paths");
+        assertTrue(entryRepository.contains("History.USER") && entryRepository.contains("History.SYSTEM"),
+                "the trail must attribute user writes and system writes differently");
+        assertTrue(entryRepository.contains("super.findById(entity.Id)"),
+                "the before-image must be read through the BASE find - the overridden one overlays translations");
+
+        // The audit columns say exactly what the history row itself says (who and when), and the
+        // primary key never changes: tracking either is noise in every single entry.
+        String claimRepository = contentOf("gen/emission/data/claim/ClaimRepository.java");
+        String tracked = claimRepository.substring(claimRepository.indexOf("HISTORY_PROPERTIES"));
+        tracked = tracked.substring(0, tracked.indexOf(");"));
+        assertTrue(tracked.contains("\"Note\"") && tracked.contains("\"Rate\"") && tracked.contains("\"Person\""),
+                "the tracked set must carry the entity's own fields and foreign keys, got: " + tracked);
+        assertFalse(tracked.contains("\"CreatedAt\"") || tracked.contains("\"UpdatedBy\"") || tracked.contains("\"Id\""),
+                "the tracked set must exclude the audit columns and the primary key, got: " + tracked);
+
+        // The read is read-only and power-surface only. A scoped surface strips a sensitive field from
+        // its responses, so handing it a trail carrying that field's old and new values would leak
+        // exactly what the scoping hides - the personal controller therefore has no history verb.
+        assertTrue(contentOf("gen/emission/api/claim/ClaimController.java").contains("/{id}/history"),
+                "history: true must emit the read-only history endpoint on the power controller");
+        assertFalse(contentOf("gen/emission/api/claim/ClaimMyController.java").contains("history"),
+                "the personal surface must expose no history endpoint - a sensitive field's deltas must not reach it");
+
+        // The panel: the record's own form shows the trail, read-only.
+        assertTrue(contentOf("gen/emission/js/components/pages/Entry/EntryFormPage.js").contains("loadHistory()"),
+                "the record form must load its change trail");
+        assertTrue(contentOf("gen/emission/views/Entry/Entry-form.html").contains("historyLabel(entry.Property)"),
+                "the record form must render the change trail as a read-only panel");
     }
 
     /** Layer 2 (the outermost): the published app enforces the features over REST. */
@@ -1542,6 +2093,54 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("[0].Name", equalTo("Брой")));
+
+        // ... and a REPORT grouping by that nomenclature agrees with the list page it sits next to:
+        // the same request language, the same value. A report is raw SQL over the base tables, so
+        // before the language-table overlay reached the SELECT list this row read "Piece" while the
+        // list beside it read "Брой" (dirigible #6544).
+        restAssuredExecutor.execute(() -> given().header("Accept-Language", "bg")
+                                                 .when()
+                                                 .get(REPORT_API + "/ClaimsByUnitController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("[0].Unit", equalTo("Брой"))
+                                                 // The report backend answers generic JSON, so every
+                                                 // number comes back as a float - the group is both
+                                                 // claim rows, so the join did not multiply them.
+                                                 .body("[0].Count", equalTo(2.0F)),
+                30);
+        // The fallback half: no translation for the caller's language leaves the base value - which
+        // is what makes the join LEFT and the column a COALESCE rather than a plain translated read.
+        restAssuredExecutor.execute(() -> given().header("Accept-Language", "de")
+                                                 .when()
+                                                 .get(REPORT_API + "/ClaimsByUnitController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("[0].Unit", equalTo("Piece")));
+
+        // calculatedActionOnCreate on a to-one relation, end to end: a create that OMITS the FK comes
+        // back carrying the one the action resolved. Tariff 2 is the row flagged `base` - not the first
+        // row and not any default the column could otherwise acquire - so this can only pass if the
+        // action actually ran on the server. Before the relation carried the calculated attributes into
+        // the .model this returned null, silently.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Note\":\"defaulted\"}")
+                                                 .when()
+                                                 .post(API + "/quote/QuoteController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Tariff", equalTo(2)));
+
+        // The other half of the contract: the action runs on EVERY create, so it must return an
+        // already-set value unchanged - a caller's explicit pick always wins. Without this the feature
+        // would silently overwrite whatever the caller chose.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Note\":\"explicit\",\"Tariff\":1}")
+                                                 .when()
+                                                 .post(API + "/quote/QuoteController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Tariff", equalTo(1)));
 
         // First-class numbering end-to-end: publish provisioned the authored .numbers series for
         // the tenant, and the generated DAO stamps prefix + zero-padded sequence at insert -
@@ -1645,6 +2244,102 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             assertEquals("Slip March", lines.getString(matching + ".Note[0]"));
         });
 
+        // generates event: (#6711) at the outermost layer, and the capability that did not exist:
+        // NOBODY calls the create-from here. A second Slip is posted through its transition, and the
+        // Voucher has to appear by itself - with its computed line, so the whole create-from ran and not
+        // just an empty header.
+        AtomicInteger postedSlip = new AtomicInteger();
+        restAssuredExecutor.execute(() -> postedSlip.set(given().contentType("application/json")
+                                                                .body("{\"Label\":\"April\",\"Total\":7}")
+                                                                .when()
+                                                                .post(API + "/slip/SlipController")
+                                                                .then()
+                                                                .statusCode(200)
+                                                                .extract()
+                                                                .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + postedSlip.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/PostSlipTransition/run")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(2)));
+        AtomicInteger autoVoucherId = new AtomicInteger();
+        // The listener runs asynchronously off the -transitioned topic, so retry until it lands.
+        restAssuredExecutor.execute(() -> {
+            String matching = "findAll { it.Slip == " + postedSlip.get() + " }";
+            io.restassured.path.json.JsonPath vouchers = given().when()
+                                                                .get(API + "/voucher/VoucherController")
+                                                                .then()
+                                                                .statusCode(200)
+                                                                .extract()
+                                                                .jsonPath();
+            assertEquals(1, vouchers.getList(matching)
+                                    .size(),
+                    "posting the slip must mint exactly one voucher back-referencing it");
+            autoVoucherId.set(vouchers.getInt(matching + ".Id[0]"));
+        }, 60);
+        restAssuredExecutor.execute(() -> {
+            String matching = "findAll { it.Voucher == " + autoVoucherId.get() + " }";
+            io.restassured.path.json.JsonPath lines = given().when()
+                                                             .get(API + "/voucher/VoucherLineController")
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .jsonPath();
+            assertEquals(1, lines.getList(matching)
+                                 .size(),
+                    "the event-driven create-from must run the WHOLE create-from, computed line included");
+            assertEquals(14.0f, lines.getFloat(matching + ".Amount[0]"), 0.001f);
+        }, 60);
+        // At-most-once, across both triggers: clicking the button for a slip the event already generated
+        // for hands back the SAME voucher instead of minting a second one. Without the back-reference
+        // guard an event redelivery would do the same damage silently.
+        restAssuredExecutor.execute(() -> {
+            String voucher = given().contentType("application/json")
+                                    .body("{\"id\":" + postedSlip.get() + "}")
+                                    .when()
+                                    .post("/services/java/" + PROJECT + "/gen/events/emission/VoucherFromSlipGenerate/run")
+                                    .then()
+                                    .statusCode(200)
+                                    .extract()
+                                    .asString();
+            assertEquals(autoVoucherId.get(), io.restassured.path.json.JsonPath.from(voucher)
+                                                                               .getInt("Id"),
+                    "a click after the event must return the existing voucher, not a second one");
+        });
+
+        // generates prompt (#6685) at the outermost layer: the prompted values reach the created
+        // child, and a missing required input is a 400 that creates nothing. Runs against the
+        // voucher the create-from above just made.
+        restAssuredExecutor.execute(() -> {
+            int voucherId = generatedVoucherId.get();
+            given().contentType("application/json")
+                   .body("{\"id\":" + voucherId + ", \"values\": {\"Note\": \"no amount\"}}")
+                   .when()
+                   .post("/services/java/" + PROJECT + "/gen/events/emission/AddVoucherLineGenerate/run")
+                   .then()
+                   .statusCode(400);
+            given().contentType("application/json")
+                   .body("{\"id\":" + voucherId + ", \"values\": {\"Amount\": 7.5, \"Note\": \"manual\"}}")
+                   .when()
+                   .post("/services/java/" + PROJECT + "/gen/events/emission/AddVoucherLineGenerate/run")
+                   .then()
+                   .statusCode(200);
+            String matching = "findAll { it.Voucher == " + voucherId + " && it.Note == 'manual' }";
+            io.restassured.path.json.JsonPath lines = given().when()
+                                                             .get(API + "/voucher/VoucherLineController")
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .jsonPath();
+            assertEquals(1, lines.getList(matching)
+                                 .size(),
+                    "the prompted create-from must produce exactly one manual line (and none for the rejected 400 run)");
+            assertEquals(7.5f, lines.getFloat(matching + ".Amount[0]"), 0.001f,
+                    "the prompted decimal must reach the created child's column");
+        });
+
         // #6336 pattern: a malformed e-mail must be rejected by the generated controller, and a
         // well-formed one accepted - the regex authored in the intent is what actually runs.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -1680,6 +2375,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                              .path("Id")));
         int entryId = created.get();
 
+        // related, at runtime: the register's data path is the source controller's generic search,
+        // filtered on the foreign key back to the open record - there is no master-filter query
+        // parameter outside a composition detail, so this is the whole mechanism. Account 2 must
+        // answer with the entry just booked against it, and account 1 (a parent node, referenced by
+        // nothing) with none: a register that returned every row would look right on a fixture with
+        // one account and be wrong everywhere else.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"equals\":{\"Account\":2}}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Id", hasItem(entryId)));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"equals\":{\"Account\":1}}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(0)));
+
         // checks: itemsMin - carrying the gate status with no lines must be rejected.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Id\":" + entryId + ",\"Date\":\"2026-01-15\",\"Account\":2,\"Status\":2}")
@@ -1711,12 +2427,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(400));
 
         // Balance the entry -> POSTED is accepted...
-        restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body("{\"Entry\":" + entryId + ",\"Credit\":100}")
-                                                 .when()
-                                                 .post(API + "/entry/EntryLineController")
-                                                 .then()
-                                                 .statusCode(200));
+        AtomicInteger creditLine = new AtomicInteger();
+        restAssuredExecutor.execute(() -> creditLine.set(given().contentType("application/json")
+                                                                .body("{\"Entry\":" + entryId + ",\"Credit\":100}")
+                                                                .when()
+                                                                .post(API + "/entry/EntryLineController")
+                                                                .then()
+                                                                .statusCode(200)
+                                                                .extract()
+                                                                .path("Id")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Id\":" + entryId + ",\"Date\":\"2026-01-15\",\"Account\":2,\"Status\":2}")
                                                  .when()
@@ -1742,6 +2461,84 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("mutable", equalTo(false)));
+
+        // ...and so are the document's LINES (#6695): a line write recomputes the master's totals, so
+        // the lock has to reach the child's own controller too - otherwise the one operation the lock
+        // exists to prevent stays reachable, and rewrites the totals after the ledger posted from them.
+        int lineId = creditLine.get();
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Entry\":" + entryId + ",\"Debit\":50}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryLineController")
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + lineId + ",\"Entry\":" + entryId + ",\"Credit\":500}")
+                                                 .when()
+                                                 .put(API + "/entry/EntryLineController/" + lineId)
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(API + "/entry/EntryLineController/" + lineId)
+                                                 .then()
+                                                 .statusCode(409));
+        // ...and the collection is exactly as the entry left it - the refusals wrote nothing.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryLineController?Entry=" + entryId)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(2))
+                                                 .body("find { it.Id == " + lineId + " }.Credit", equalTo(100.0f)));
+
+        // ...while the collection that declared `locksWithMaster: false` keeps its writes past the
+        // master's lock - the settlement case (#6700), which is why the inherited lock has an opt-out
+        // rather than being unconditional.
+        AtomicInteger campaign = new AtomicInteger();
+        restAssuredExecutor.execute(() -> campaign.set(given().contentType("application/json")
+                                                              .body("{\"Name\":\"Spring\"}")
+                                                              .when()
+                                                              .post(API + "/campaign/CampaignController")
+                                                              .then()
+                                                              .statusCode(200)
+                                                              .extract()
+                                                              .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + campaign.get() + ",\"Name\":\"Spring\",\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/campaign/CampaignController/" + campaign.get())
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + campaign.get() + ",\"Name\":\"Summer\",\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/campaign/CampaignController/" + campaign.get())
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Campaign\":" + campaign.get() + ",\"Note\":\"called the sponsor\"}")
+                                                 .when()
+                                                 .post(API + "/campaign/CampaignNoteController")
+                                                 .then()
+                                                 .statusCode(200));
+
+        // history: the whole life of the record is readable from one endpoint - the create, and the
+        // status hop the user made with both sides of it recorded, so "who changed this from what"
+        // has an answer. The audit columns and the key stay out: they restate what the entry carries.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryController/" + entryId + "/history")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.Operation == 'CREATE' && it.Property == 'Account' }.Source",
+                                                         hasItem("USER"))
+                                                 .body("findAll { it.Property == 'Status' && it.NewValue == '2' }.OldValue", hasItem("1"))
+                                                 .body("findAll { it.Property == 'Status' && it.NewValue == '2' }.Source", hasItem("USER"))
+                                                 .body("Property", not(hasItem("Id"))));
+        // A trail is only meaningful for a record that exists - an unknown id is a 404, never an empty
+        // history a caller could read as "nothing ever happened here".
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryController/999999/history")
+                                                 .then()
+                                                 .statusCode(404));
 
         // immutable: true (append-only): a snapshot can be created, then never edited or deleted.
         AtomicInteger snapshot = new AtomicInteger();
@@ -1864,6 +2661,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Status", equalTo(2)));
+        // ...and the send froze the document, LINES INCLUDED (#6695). This is the whole point of the
+        // inherited lock: a line write recomputes the header's totals, so accepting one here would
+        // move the amount the mailed PDF was rendered from, on a document nobody may edit any more.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Amount\":999,\"Bill\":" + bill.get() + "}")
+                                                 .when()
+                                                 .post(API + "/bill/BillLineController")
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> {
+            Object amount = given().when()
+                                   .get(API + "/bill/BillController/" + bill.get())
+                                   .then()
+                                   .statusCode(200)
+                                   .extract()
+                                   .path("Amount");
+            assertTrue(amount instanceof Number && Math.abs(((Number) amount).doubleValue() - 250.0) < 0.001,
+                    "a refused line write must leave the locked document's total untouched, got: " + amount);
+        });
 
         // postings: posting a Doc creates the balanced Entry (async handler - poll)...
         AtomicInteger doc = new AtomicInteger();
@@ -1933,6 +2749,39 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("findAll { it.Entry == " + reversalEntry.get() + " && it.Party == 1 }.size()",
                                                          equalTo(1)));
 
+        // lifecycle at the outermost layer: the two transitions above walked the graph (DRAFT ->
+        // POSTED -> CANCELLED) and both returned 200. What the declaration adds is everything ELSE
+        // being refused - through the plain REST surface, which no transition guard covers.
+        //
+        // (1) A move no edge declares: the voided Doc dragged back to DRAFT.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + doc.get() + ",\"Date\":\"2026-01-17\",\"Amount\":250,\"Status\":1}")
+                                                 .when()
+                                                 .put(API + "/doc/DocController/" + doc.get())
+                                                 .then()
+                                                 .statusCode(400));
+        // The record is untouched - a rejected move must not half-write.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/doc/DocController/" + doc.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(3)));
+        // (2) A move the graph DOES declare still goes through the same guard: an edit that leaves
+        // the status where it stands is not a move at all.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + doc.get() + ",\"Date\":\"2026-01-17\",\"Amount\":260,\"Status\":3}")
+                                                 .when()
+                                                 .put(API + "/doc/DocController/" + doc.get())
+                                                 .then()
+                                                 .statusCode(200));
+        // (3) Entering the lifecycle anywhere but at its declared start: a Doc filed as POSTED.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-19\",\"Amount\":10,\"Status\":2}")
+                                                 .when()
+                                                 .post(API + "/doc/DocController")
+                                                 .then()
+                                                 .statusCode(400));
+
         // postings onCreate (#6421): a booked Payment has no status lifecycle - its INSERT posts
         // the balanced Entry (async handler - poll), back-referenced through Entry.Payment.
         AtomicInteger payment = new AtomicInteger();
@@ -1986,18 +2835,35 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("[0].Rate", equalTo(50.0F)));
 
         // Writes force the owner and ignore the sensitive field, whatever the client sends.
-        restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body("{\"Note\":\"spoofed\",\"Person\":2,\"Rate\":999,\"Period\":\"2026-07\"}")
-                                                 .when()
-                                                 .post(API + "/claim/ClaimMyController")
+        AtomicInteger ownClaim = new AtomicInteger();
+        restAssuredExecutor.execute(() -> ownClaim.set(given().contentType("application/json")
+                                                              .body("{\"Note\":\"spoofed\",\"Person\":2,\"Rate\":999,\"Period\":\"2026-07\"}")
+                                                              .when()
+                                                              .post(API + "/claim/ClaimMyController")
+                                                              .then()
+                                                              .statusCode(200)
+                                                              .body("Person", equalTo(1))
+                                                              .body("Rate", nullValue())
+                                                              // label: the stored display name computed on write -
+                                                              // "{note} ({Person.name}) {period|yyyy MMMM}"; the month
+                                                              // value formats through the pattern, never the raw 2026-07.
+                                                              .body("Name", equalTo("spoofed (Admin) 2026 July"))
+                                                              .extract()
+                                                              .path("Id")));
+
+        // history, the other half of the trail: the SYSTEM attribution. Creating this claim started
+        // its process, and the trigger wrote the instance id back onto the record - a write no person
+        // made. Without the source column that write is indistinguishable in the trail from the user's
+        // own edit one row above it, which is the first thing a supervisory audit asks about.
+        // (Asynchronous: the trigger reacts to the create event, hence the retry.)
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/claim/ClaimController/" + ownClaim.get() + "/history")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("Person", equalTo(1))
-                                                 .body("Rate", nullValue())
-                                                 // label: the stored display name computed on write -
-                                                 // "{note} ({Person.name}) {period|yyyy MMMM}"; the month
-                                                 // value formats through the pattern, never the raw 2026-07.
-                                                 .body("Name", equalTo("spoofed (Admin) 2026 July")));
+                                                 .body("findAll { it.Property == 'ProcessId' }.Source", hasItem("SYSTEM"))
+                                                 .body("findAll { it.Operation == 'CREATE' && it.Property == 'Note' }.Source",
+                                                         hasItem("USER")),
+                30);
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Note\":\"edited\",\"Person\":2,\"Rate\":999}")
                                                  .when()
@@ -2218,7 +3084,89 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(403));
 
+        assertManyToManyRuntime();
+        assertInboundSourcesRuntime();
         assertBpmEventsRuntime();
+    }
+
+    /**
+     * The non-HTTP inbound arrivals end to end (#6537): a JSON record sent to the declared queue, and
+     * one dropped as a file into the polled folder, both turn into rows through the entity's own
+     * repository. This is the layer the declaration is about - the generated listener actually being
+     * subscribed, and the generated job actually polling - which no amount of asserting the emitted
+     * source can show.
+     */
+    private void assertInboundSourcesRuntime() {
+        String signalApi = API + "/signal/SignalController";
+
+        MessagingFacade.sendToQueue("emission-signals", "{\"Note\":\"from the queue\"}");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(signalApi)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Note", hasItem("from the queue")),
+                60);
+
+        // The drop folder is relative to the running instance's working directory, exactly as the
+        // intent declares it. A file is only read once it has been untouched for the generated
+        // handler's stability window, so the poll below is generous.
+        Path dropFolder = Paths.get("target/inbox-emission");
+        try {
+            Files.createDirectories(dropFolder);
+            // A batch, so the array form of the payload is exercised too.
+            Files.writeString(dropFolder.resolve("signals.json"), "[{\"Note\":\"from the file\"},{\"Note\":\"from the file too\"}]");
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to drop the ingest file into " + dropFolder.toAbsolutePath(), ex);
+        }
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(signalApi)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Note", hasItem("from the file"))
+                                                 .body("Note", hasItem("from the file too")),
+                120);
+        // Every read file leaves the drop folder, so the next tick cannot ingest it again.
+        assertTrue(Files.exists(dropFolder.resolve("processed/signals.json")),
+                "an ingested file must be moved out of the drop folder, into processed/");
+    }
+
+    /**
+     * n:m end to end (#6718): the link entity materialised from {@code kind: manyToMany} is a real
+     * table with a working REST surface - a link row is created against both ends and comes back
+     * through the very query the master's detail grid uses. This is the layer the keyword never reached
+     * while it was parsed and dropped.
+     */
+    private void assertManyToManyRuntime() {
+        AtomicInteger tagId = new AtomicInteger();
+        AtomicInteger courseId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> tagId.set(given().contentType("application/json")
+                                                           .body("{\"Name\":\"Modeling\"}")
+                                                           .when()
+                                                           .post(API + "/tag/TagController")
+                                                           .then()
+                                                           .statusCode(200)
+                                                           .extract()
+                                                           .path("Id")));
+        restAssuredExecutor.execute(() -> courseId.set(given().contentType("application/json")
+                                                              .body("{\"Name\":\"Intent 101\"}")
+                                                              .when()
+                                                              .post(API + "/course/CourseController")
+                                                              .then()
+                                                              .statusCode(200)
+                                                              .extract()
+                                                              .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Course\":" + courseId.get() + ",\"Tag\":" + tagId.get() + "}")
+                                                 .when()
+                                                 .post(API + "/course/CourseTagController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/course/CourseTagController?Course=" + courseId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(1))
+                                                 .body("[0].Tag", equalTo(tagId.get())));
     }
 
     /**
@@ -2435,18 +3383,6 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 StandardCharsets.UTF_8);
     }
 
-    /** Run a language template against a generated model through the real generation service. */
-    private void generateFromModel(String templateModule, String modelFile, String parametersJson) {
-        String payload = "{\"template\":\"" + templateModule + "\",\"parameters\":" + parametersJson + "}";
-        restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body(payload)
-                                                 .when()
-                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
-                                                         + "?path=" + modelFile)
-                                                 .then()
-                                                 .statusCode(201));
-    }
-
     @AfterEach
     void cleanup() {
         // Unpublish leniently - the run may fail before publish ever happened.
@@ -2456,6 +3392,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(greaterThanOrEqualTo(200)));
         if (repository.hasCollection(PROJECT_PATH)) {
             repository.removeCollection(PROJECT_PATH);
+        }
+        removeDropFolder();
+    }
+
+    /** The inbound drop folder is outside the repository - clear it so a rerun starts empty. */
+    private void removeDropFolder() {
+        Path dropFolder = Paths.get("target/inbox-emission");
+        if (!Files.isDirectory(dropFolder)) {
+            return;
+        }
+        try (java.util.stream.Stream<Path> tree = Files.walk(dropFolder)) {
+            for (Path path : tree.sorted(java.util.Comparator.reverseOrder())
+                                 .toList()) {
+                Files.deleteIfExists(path);
+            }
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to clear the inbound drop folder " + dropFolder.toAbsolutePath(), ex);
         }
     }
 

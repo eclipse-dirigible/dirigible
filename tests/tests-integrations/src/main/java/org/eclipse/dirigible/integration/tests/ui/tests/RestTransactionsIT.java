@@ -15,13 +15,16 @@ import org.eclipse.dirigible.components.tenants.domain.User;
 import org.eclipse.dirigible.components.tenants.service.UserService;
 import org.eclipse.dirigible.database.sql.DataType;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
+import org.eclipse.dirigible.database.sql.SqlFactory;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.annotation.DirtiesContext;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -33,6 +36,10 @@ import static io.restassured.RestAssured.given;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 
+// One Dirigible boot for the whole class: the database outlives a test method, so cleanupTestData
+// removes what a method commits (the TESTTABLE rows and the test user) instead of relying on the
+// per-method context reset inherited from IntegrationTest.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Import(RestTransactionsITConfig.class)
 public class RestTransactionsIT extends UserInterfaceIntegrationTest {
 
@@ -41,6 +48,25 @@ public class RestTransactionsIT extends UserInterfaceIntegrationTest {
 
     @Autowired
     private DataSourcesManager dataSourcesManager;
+
+    @AfterEach
+    void cleanupTestData() throws SQLException {
+        DirigibleDataSource dataSource = dataSourcesManager.getDefaultDataSource();
+        ISqlDialect dialect = SqlDialectFactory.getDialect(dataSource);
+        try (Connection connection = dataSource.getConnection()) {
+            if (SqlFactory.getNative(connection)
+                          .existsTable(connection, RestTransactionsITConfig.TestRest.TEST_TABLE)) {
+                try (PreparedStatement dropStatement = connection.prepareStatement(dialect.drop()
+                                                                                          .table(RestTransactionsITConfig.TestRest.TEST_TABLE)
+                                                                                          .build())) {
+                    dropStatement.executeUpdate();
+                }
+            }
+        }
+        userService.findUserByUsernameAndTenantId(RestTransactionsITConfig.TestRest.TEST_USERNAME, DirigibleTestTenant.createDefaultTenant()
+                                                                                                                      .getId())
+                   .ifPresent(user -> userService.deleteUser(user.getId()));
+    }
 
     @Test
     void testCommitByDefaultForSystemDb() {

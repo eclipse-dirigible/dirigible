@@ -9,12 +9,14 @@
  */
 package org.eclipse.dirigible.components.intent.generator;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.ide.template.service.model.ModelGenerationService;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
@@ -51,10 +53,13 @@ public class IntentGenerationService {
 
     private final List<IntentTargetGenerator> generators;
     private final IRepository repository;
+    private final ModelGenerationService modelGenerationService;
 
-    public IntentGenerationService(List<IntentTargetGenerator> generators, IRepository repository) {
+    public IntentGenerationService(List<IntentTargetGenerator> generators, IRepository repository,
+            ModelGenerationService modelGenerationService) {
         this.generators = generators;
         this.repository = repository;
+        this.modelGenerationService = modelGenerationService;
     }
 
     /** Maps a generated model file's extension to its {@code .settings} generation-recipe key. */
@@ -68,13 +73,15 @@ public class IntentGenerationService {
 
     /**
      * Outcome of a generation pass: the files emitted, the stale files scrubbed, and the model-to-code
-     * generation plan (which template + parameters to run against each generated model file, from the
-     * project's {@code .settings}). The editor's Generate replays the plan via the generation service.
+     * generations it ran (which template + parameters against which generated model file, from the
+     * project's {@code .settings}) with the outcome of each.
      *
      * @param written bare names of the model files this pass produced
      * @param scrubbed bare names of previously generated files removed because the intent no longer
      *        declares their slice
-     * @param codeGenerations ordered plan entries, each {@code {path, templateId, parameters}}
+     * @param codeGenerations ordered entries, each {@code {path, templateId, parameters, generated}}
+     *        plus an {@code error} when that one failed - the pass runs them itself, so this is a
+     *        report of what it did, not a plan for the caller to replay
      * @param issues non-fatal generation issues (glue that could not be emitted) - the pass still
      *        succeeded, but a caller should surface these so the drop is not silent (dirigible #6360)
      */
@@ -130,14 +137,50 @@ public class IntentGenerationService {
         }
         List<String> scrubbed = scrubStaleModelFiles(projectRoot, context.getWrittenFileNames());
         List<Map<String, Object>> plan = buildCodeGenerationPlan(context.getSettings(), context.getWrittenFileNames());
+        runCodeGenerations(plan, workspaceName, projectName);
         return new GenerationResult(new ArrayList<>(context.getWrittenFileNames()), scrubbed, plan, context.getIssues());
+    }
+
+    /**
+     * Run the model-to-code plan, one generation per generated model file, in the recipe order.
+     *
+     * <p>
+     * Each entry records its own outcome ({@code generated}, and {@code error} when it failed) rather
+     * than aborting the pass: the model files are already on disk at this point, so a template that
+     * cannot render is a partial result the caller has to be told about - not a reason to report the
+     * whole Generate as failed. A failure is isolated to its entry, so one broken recipe does not cost
+     * the others their code.
+     *
+     * @param plan the plan entries, each mutated with its outcome
+     * @param workspaceName the workspace the project lives in
+     * @param projectName the project the models were written into
+     */
+    private void runCodeGenerations(List<Map<String, Object>> plan, String workspaceName, String projectName) {
+        for (Map<String, Object> entry : plan) {
+            String path = String.valueOf(entry.get("path"));
+            String templateId = String.valueOf(entry.get("templateId"));
+            // A copy: the pipeline derives its whole parameter graph into the map it is handed, and this
+            // entry goes back to the caller as the recipe it was, not as the derivation.
+            @SuppressWarnings("unchecked")
+            Map<String, Object> recipeParameters = (Map<String, Object>) entry.get("parameters");
+            Map<String, Object> parameters = recipeParameters == null ? new LinkedHashMap<>() : new LinkedHashMap<>(recipeParameters);
+            try {
+                modelGenerationService.generate(workspaceName, projectName, path, templateId, parameters);
+                entry.put("generated", Boolean.TRUE);
+            } catch (IOException | RuntimeException e) {
+                LOGGER.error("Failed to generate code from [{}/{}] with template [{}]", sanitizeForLog(projectName), sanitizeForLog(path),
+                        sanitizeForLog(templateId), e);
+                entry.put("generated", Boolean.FALSE);
+                entry.put("error", e.getMessage());
+            }
+        }
     }
 
     /**
      * The model-to-code plan: for each generated model file whose type has a recipe in the
      * {@code .settings}, an entry naming the template + parameters to run against it. Ordered so the
-     * full-stack {@code model} runs first. Replayed by the editor's Generate via the generation
-     * service.
+     * full-stack {@code model} runs first, since it creates the entities and repositories the rest
+     * builds on.
      */
     private List<Map<String, Object>> buildCodeGenerationPlan(IntentSettings settings, Set<String> written) {
         List<Map<String, Object>> plan = new ArrayList<>();
@@ -215,4 +258,19 @@ public class IntentGenerationService {
         int dot = fileName.lastIndexOf('.');
         return dot >= 0 && INTENT_OWNED_EXTENSIONS.contains(fileName.substring(dot));
     }
+
+    /**
+     * Strip CR/LF (and stray control characters) from a value that arrives in a user-controlled URL
+     * segment before it reaches the log, so a crafted request cannot forge log entries.
+     *
+     * @param value the value
+     * @return the value, with anything that could break a log line replaced
+     */
+    private static String sanitizeForLog(String value) {
+        if (value == null) {
+            return "null";
+        }
+        return value.replaceAll("[\\r\\n\\t]", "_");
+    }
+
 }

@@ -9,12 +9,16 @@
  */
 package org.eclipse.dirigible.components.intent.agent;
 
+import java.util.List;
+
 /**
  * The assistant's response for one turn.
  *
  * @param reply the assistant's text reply (explanation or answer)
  * @param proposedYaml the complete proposed intent YAML when the assistant proposed an edit, else
  *        {@code null}
+ * @param boundaries the requirements the proposal could <em>not</em> express, each naming the
+ *        extension point that carries it; empty when the request fit entirely inside the DSL
  */
-record AgentReply(String reply, String proposedYaml) {
+record AgentReply(String reply, String proposedYaml, List<AgentBoundary> boundaries) {
 }

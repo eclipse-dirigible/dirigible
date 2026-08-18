@@ -57,6 +57,14 @@ function detailPanel(def, masterId) {
     lookups: {},   // relationship column name -> { fkValue: referencedRow }
 
     async init() {
+      // Role-scoped columns (intent `visibleTo:`): the def says whether this child has any, and its
+      // controller says which of them THIS caller may not see. Drop those before the table renders,
+      // so the panel does not carry a column the server nulls in every row. The def belongs to the
+      // shared registry, so the pruned copy is local to this panel.
+      if (this.def.restrictedFields) {
+        await this.loadRestrictedFields(this.def.apiPath);
+        this.def = { ...this.def, columns: (this.def.columns || []).filter(c => this.canSee(c.name)) };
+      }
       await this.load();
       this.loadLookups();
     },
@@ -147,19 +155,26 @@ function detailPanel(def, masterId) {
     openForm(route, title) {
       Alpine.store('related').create(window.location.pathname + '?embedded=1#' + route, title, () => this.load());
     },
+    // The master FK as a query param. On create it PRESETS the value; on edit/preview it carries the
+    // navigation context, which is what makes the form render the parent control locked (the record
+    // is being worked on from inside its master, so re-pointing it here is never the intent).
+    masterQuery() {
+      return encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId);
+    },
     addRow() {
-      const q = '?' + encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId)
-              + '&embedded=1&dialog=1';
+      const q = '?' + this.masterQuery() + '&embedded=1&dialog=1';
       this.openForm('/' + this.def.entity + '/create' + q,
           (window.T ? T('application-core:shell.related.addNew', 'Add new') : 'Add new'));
     },
     editRow(row) {
-      this.openForm('/' + this.def.entity + '/' + encodeURIComponent(row[this.def.primaryKey]) + '/edit?embedded=1&dialog=1',
+      this.openForm('/' + this.def.entity + '/' + encodeURIComponent(row[this.def.primaryKey])
+              + '/edit?' + this.masterQuery() + '&embedded=1&dialog=1',
           (window.T ? T(this.def.tkey, this.def.label) : this.def.label));
     },
     // Read-only view of the detail record (the routed form page in preview mode).
     previewRow(row) {
-      this.openForm('/' + this.def.entity + '/' + encodeURIComponent(row[this.def.primaryKey]) + '/preview?embedded=1&dialog=1',
+      this.openForm('/' + this.def.entity + '/' + encodeURIComponent(row[this.def.primaryKey])
+              + '/preview?' + this.masterQuery() + '&embedded=1&dialog=1',
           (window.T ? T(this.def.tkey, this.def.label) : this.def.label));
     },
 
@@ -234,13 +249,13 @@ function detailPanel(def, masterId) {
     onEventClick(e) {
       const id = e && e.detail && e.detail.event ? e.detail.event.id : null;
       if (!id) return;
-      this.openForm('/' + this.def.entity + '/' + encodeURIComponent(id) + '/edit?embedded=1&dialog=1',
+      this.openForm('/' + this.def.entity + '/' + encodeURIComponent(id) + '/edit?' + this.masterQuery()
+              + '&embedded=1&dialog=1',
           (window.T ? T(this.def.tkey, this.def.label) : this.def.label));
     },
     onDateClick(e) {
       const cal = this.def.calendar;
-      let q = '?' + encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId)
-            + '&embedded=1&dialog=1';
+      let q = '?' + this.masterQuery() + '&embedded=1&dialog=1';
       const d = e && e.detail ? e.detail.date : null;
       if (d instanceof Date && !isNaN(d.getTime())) {
         const p = n => String(n).padStart(2, '0');

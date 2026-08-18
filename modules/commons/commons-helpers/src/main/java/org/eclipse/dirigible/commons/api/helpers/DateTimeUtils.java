@@ -13,9 +13,11 @@ import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.DateTimeException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
@@ -90,13 +92,48 @@ public class DateTimeUtils {
     /**
      * Parses the date time.
      *
+     * <p>
+     * A value carrying an explicit UTC/offset marker (e.g. the ISO-8601 {@code 2024-11-21T13:15:10Z}
+     * that {@code Instant}/{@code OffsetDateTime} produce) is resolved to its real instant first.
+     * Without this, {@code datetimeFormatter}'s {@code ['Z']} is a literal character to strip, not the
+     * zone designator - the result was a zone-less {@link LocalDateTime} that
+     * {@link Timestamp#valueOf(LocalDateTime)} then anchored to the JVM's default time zone, silently
+     * shifting every such value by that zone's UTC offset (e.g. -2h on a server running with
+     * {@code TZ=Europe/Sofia}) instead of preserving the moment the value actually named. A value with
+     * no zone marker keeps the previous, zone-less behavior.
+     *
      * @param value the value
      * @return the timestamp
      */
     public static Timestamp parseDateTime(String value) {
         value = sanitize(value);
+        Instant instant = tryParseAsInstant(value);
+        if (instant != null) {
+            return Timestamp.from(instant);
+        }
         value = timezonize(value);
         return Timestamp.valueOf(LocalDateTime.parse(value, datetimeFormatter));
+    }
+
+    /**
+     * Try to resolve a value that carries an explicit UTC/offset marker to its real instant, e.g.
+     * {@code 2024-11-21T13:15:10Z} or {@code 2024-11-21T13:15:10+02:00}.
+     *
+     * @param value the value
+     * @return the instant, or {@code null} if the value carries no zone/offset marker
+     */
+    private static Instant tryParseAsInstant(String value) {
+        try {
+            return Instant.parse(value);
+        } catch (DateTimeParseException ex) {
+            // not the plain "...Z" ISO instant form - fall through to try an explicit offset
+        }
+        try {
+            return OffsetDateTime.parse(value)
+                                 .toInstant();
+        } catch (DateTimeParseException ex) {
+            return null;
+        }
     }
 
     /**

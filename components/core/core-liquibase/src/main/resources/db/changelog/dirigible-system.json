@@ -9622,6 +9622,290 @@
           }
         ]
       }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_INTENT_CONVERSATIONS",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_INTENT_CONVERSATIONS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_INTENT_CONVERSATIONS"
+                    },
+                    "name": "INTENTCONVERSATION_ID",
+                    "type": "BIGINT"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "INTENTCONVERSATION_TENANT_ID",
+                    "type": "VARCHAR(255)"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "INTENTCONVERSATION_PROJECT",
+                    "type": "VARCHAR(255)"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "INTENTCONVERSATION_SURFACE",
+                    "type": "VARCHAR(32)"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "INTENTCONVERSATION_PATH",
+                    "type": "VARCHAR(512)"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "INTENTCONVERSATION_CREATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "INTENTCONVERSATION_UPDATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_INTENT_CONVERSATIONS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_INTENT_CONVERSATION_MESSAGES",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_INTENT_CONVERSATION_MESSAGES"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_INTENT_CONVERSATION_MESSAGES"
+                    },
+                    "name": "INTENTMESSAGE_ID",
+                    "type": "BIGINT"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "INTENTMESSAGE_CONVERSATION_ID",
+                    "type": "BIGINT"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "INTENTMESSAGE_SEQUENCE",
+                    "type": "INT"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "INTENTMESSAGE_ROLE",
+                    "type": "VARCHAR(16)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "INTENTMESSAGE_CONTENT",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "INTENTMESSAGE_CREATED_BY",
+                    "type": "VARCHAR(255)"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "INTENTMESSAGE_CREATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_INTENT_CONVERSATION_MESSAGES"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_INTENT_CONVERSATIONS_KEY",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "constraintName": "UK_DIRIGIBLE_INTENT_CONVERSATIONS_KEY",
+                  "tableName": "DIRIGIBLE_INTENT_CONVERSATIONS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "INTENTCONVERSATION_TENANT_ID, INTENTCONVERSATION_PROJECT, INTENTCONVERSATION_SURFACE, INTENTCONVERSATION_PATH",
+              "constraintName": "UK_DIRIGIBLE_INTENT_CONVERSATIONS_KEY",
+              "tableName": "DIRIGIBLE_INTENT_CONVERSATIONS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_INTENT_CONVERSATION_MESSAGES_SEQUENCE",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "constraintName": "UK_DIRIGIBLE_INTENT_CONVERSATION_MESSAGES_SEQUENCE",
+                  "tableName": "DIRIGIBLE_INTENT_CONVERSATION_MESSAGES"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "INTENTMESSAGE_CONVERSATION_ID, INTENTMESSAGE_SEQUENCE",
+              "constraintName": "UK_DIRIGIBLE_INTENT_CONVERSATION_MESSAGES_SEQUENCE",
+              "tableName": "DIRIGIBLE_INTENT_CONVERSATION_MESSAGES"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "FK_DIRIGIBLE_INTENT_CONVERSATION_MESSAGES__CONVERSATION_ID",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_INTENT_CONVERSATION_MESSAGES__CONVERSATION_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_INTENT_CONVERSATION_MESSAGES"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addForeignKeyConstraint": {
+              "baseColumnNames": "INTENTMESSAGE_CONVERSATION_ID",
+              "baseTableName": "DIRIGIBLE_INTENT_CONVERSATION_MESSAGES",
+              "constraintName": "FK_DIRIGIBLE_INTENT_CONVERSATION_MESSAGES__CONVERSATION_ID",
+              "deferrable": false,
+              "initiallyDeferred": false,
+              "onDelete": "CASCADE",
+              "onUpdate": "RESTRICT",
+              "referencedColumnNames": "INTENTCONVERSATION_ID",
+              "referencedTableName": "DIRIGIBLE_INTENT_CONVERSATIONS",
+              "validate": true
+            }
+          }
+        ]
+      }
     }
   ]
 }

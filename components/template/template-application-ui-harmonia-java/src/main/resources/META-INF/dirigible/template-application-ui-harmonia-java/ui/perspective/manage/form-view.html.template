@@ -6,6 +6,11 @@
   to Close + Edit. On edit/preview the entity's registered detail collections (masters) render as
   panels below the form - the same panels as the master browse view.
 -->
+## Role-scoped field (intent `visibleTo:`): the input is rendered only for a caller the server serves
+## the value to - the page asked the controller which fields it withholds (canSee). Emits nothing for
+## an unrestricted property. The server ignoring the field on writes stays the authoritative half;
+## this only keeps an input that could never be saved off the form.
+#macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
 ## The EntityStatus relation (widget DOCUMENT_STATUS) renders as a read-only coloured badge in the
 ## title bar (same treatment as the document layout), never as an editable input.
 #set($statusProp = "")
@@ -89,12 +94,17 @@
 ## editable inputs here - they render in the read-only details block below, above the buttons. They
 ## still stay in the form model so they round-trip on edit. Calculated fields remain inline (read-only).
 ## The EntityStatus FK (DOCUMENT_STATUS) is excluded too - it renders as the title-bar badge above.
-## The COMPOSITION-parent FK is never an input: a detail is created from its master's panel, which
-## presets the FK via the create query param (and an edit round-trips it) - exactly like every other
-## master-detail surface (items dialog, detail tables). Offering the parent as a dropdown invites
-## re-parenting by accident and is redundant inside the detail dialog.
-#if(!$property.dataAutoIncrement && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && $property.relationshipType != "COMPOSITION" && !($property.auditType && $property.auditType != "NONE"))
-#set($readonly = ($property.isCalculatedProperty == "true"))
+## A relation whose value the NAVIGATION CONTEXT already implies (the composition parent, when the
+## form was opened from that master's panel) is NOT excluded - it renders as a locked label, see the
+## DROPDOWN branch below: showing which parent the record is being filed under is the point, while a
+## free dropdown there would let the record be re-pointed mid-flow. A composition parent that is not
+## a lookup (an .edm authored with a TEXTBOX on the master FK) has no label to show and only a raw id
+## to offer, so it stays out of the grid entirely.
+#if(!$property.dataAutoIncrement && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && !($property.relationshipType == "COMPOSITION" && $property.widgetType != "DROPDOWN") && !($property.auditType && $property.auditType != "NONE"))
+## Read-only only when DERIVED - an expression, or an update-time recompute. A field whose only
+## calculated aspect is calculatedActionOnCreate is a server-side DEFAULT (Due, Currency, a tax
+## event date): pre-filled, but the user's pick is respected - it must stay editable (#6696).
+#set($readonly = ($property.isCalculatedProperty == "true" && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate || $property.calculatedActionOnUpdate)))
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
 #if($property.widgetLabel)#set($label = $property.widgetLabel)#else#set($label = $property.name)#end
@@ -102,7 +112,7 @@
 #if($property.widgetType == "TEXTAREA" || $property.widgetType == "CHECKBOX")#set($span = "12")#end
 #if($lookup)#set($span = "12")#end
       <!-- ${property.name} (${property.widgetType}) -->
-      <div x-h-field#if($span == "12") class="col-span-full"#else style="grid-column: span ${span};"#end :data-invalid="!!errors.${property.name}">
+      <div x-h-field#if($span == "12") class="col-span-full"#else style="grid-column: span ${span};"#end#visibleGate($property) :data-invalid="!!errors.${property.name}">
 #if($property.widgetType == "CHECKBOX")
         <div class="hbox items-center gap-3">
           <span x-h-checkbox>
@@ -113,12 +123,24 @@
 #else
         <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
 #if($property.widgetType == "DROPDOWN")
-        <!-- Combobox per the Harmonia select contract (see codbex-athena-app forms): x-model on the
+        <!-- Context-locked: the URL that opened this form already names ${property.name} (a master's
+             detail panel presets its FK, a create-from flow presets its source), so the value is
+             implied by where the user is standing, not a choice. It renders as the referenced
+             record's label, read-only - a dropdown here would let the record be re-pointed
+             mid-flow. x-if, not a disabled select: the Harmonia select's trigger is a span, so a
+             disabled input would still open the list. The value stays in the form model and is
+             saved exactly as before. With no such param (the entity's own top-level create) the
+             normal combobox renders.
+             Combobox per the Harmonia select contract (see codbex-athena-app forms): x-model on the
              x-h-select-input holds the VALUE (the option data-value), a string; the input shows the
              matched option's label. data-filter enables type-to-search; x-h-select-search adds the
              in-dropdown search box for longer option lists. A non-setting association ($lookup) is laid
              out on one row with an "Add new" button (opens the target's own create page in an iframe
              dialog) and a Refresh button. -->
+        <template x-if="isContextLocked('${property.name}')">
+          <input x-h-input type="text" id="f_${property.name}" readonly :value="contextLabel(form.${property.name}, options${property.name})" />
+        </template>
+        <template x-if="!isContextLocked('${property.name}')">
 #if($lookup)
         <div class="hbox gap-1 items-center">
           <div x-h-select data-filter="contains" class="grow">
@@ -146,6 +168,7 @@
           </div>
         </div>
 #end
+        </template>
 #elseif($property.widgetType == "NUMBER")
         <!-- step="any": without it the browser default step=1 rejects fractional input on DECIMAL fields. -->
         <div x-h-input-number>
@@ -227,7 +250,7 @@
         <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id)" x-h-card>
           <div x-h-card-header>
             <h3 x-h-card-title x-text="d.label"></h3>
-            <div x-h-card-action x-show="!isPreview && !def.files">
+            <div x-h-card-action x-show="(!isPreview || def.locksWithMaster === false) && !def.files">
               <button type="button" x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" x-h-lucide data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
             </div>
           </div>
@@ -299,7 +322,7 @@
                     <template x-for="col in def.columns" :key="col.name">
                       <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label || col.name)"></th>
                     </template>
-                    <th x-h-table-head scope="col" x-show="!isPreview"></th>
+                    <th x-h-table-head scope="col" x-show="!isPreview || def.locksWithMaster === false"></th>
                   </tr>
                 </thead>
                 <tbody x-h-table-body>
@@ -313,7 +336,7 @@
                           </template>
                         </td>
                       </template>
-                      <td x-h-table-cell data-row-actions x-show="!isPreview">
+                      <td x-h-table-cell data-row-actions x-show="!isPreview || def.locksWithMaster === false">
                         <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" x-h-lucide data-lucide="ellipsis"></i></button>
                         <ul x-h-menu data-align="bottom-end">
                           <li x-h-menu-item @click="previewRow(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
@@ -348,6 +371,54 @@
       </template>
     </div>
 
+    <div class="vbox gap-4 w-full" x-show="(isEdit || isPreview) && relatedDefs.length && state !== 'loading' && state !== 'load-failure'">
+      <!-- ===== Related registers: the records that REFERENCE this one, read-only. Those records are
+           owned by their own entities - own lifecycle, own pages, own processes - so this is a
+           window onto them and never an editor: a row opens the source's own record page in the
+           shared dialog (the source may live in another application entirely). ===== -->
+      <template x-for="r in relatedDefs" :key="r.entity + ':' + id">
+        <div x-data="relatedPanel(r, id)" x-h-card class="w-full">
+          <div x-h-card-header>
+            <h3 x-h-card-title x-text="title"></h3>
+          </div>
+          <div x-h-card-content>
+            <div x-show="state === 'loading'"><div x-h-spinner></div></div>
+            <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
+            <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
+            <div x-show="state === 'default'" x-h-table-container.scroll style="max-height: 320px">
+              <table x-h-table data-borders="rows">
+                <thead x-h-table-header>
+                  <tr x-h-table-row>
+                    <template x-for="col in def.columns" :key="col.name">
+                      <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="columnHeader(col)"></th>
+                    </template>
+                    <th x-h-table-head scope="col"></th>
+                  </tr>
+                </thead>
+                <tbody x-h-table-body>
+                  <template x-for="row in rows" :key="row[def.primaryKey]">
+                    <tr x-h-table-row data-hoverable="true">
+                      <template x-for="col in def.columns" :key="col.name">
+                        <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+                          <template x-if="col.number"><span x-text="cellValue(col, row)"></span></template>
+                          <template x-if="!col.number">
+                            <div style="white-space: normal; overflow-wrap: break-word; max-width: 28rem;" x-text="cellValue(col, row)"></div>
+                          </template>
+                        </td>
+                      </template>
+                      <td x-h-table-cell data-row-actions>
+                        <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="openRow(row)" :aria-label="T('$projectName:${tprefix}.defaults.open', 'Open')"><i role="img" x-h-lucide data-lucide="external-link"></i></button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
     <!-- Action footer at the very bottom of the main column (below the detail panels), matching the
          document view. BPM user-task buttons on the LEFT; Cancel + Save/Create on the RIGHT. Save is
          type=button @click=save() because it lives outside the header <form>. -->
@@ -356,7 +427,7 @@
       <!-- Actionable BPM user-task buttons (edit only, hidden in read-only preview), left-aligned. -->
       <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
         <button type="button" x-h-button data-variant="primary" x-show="!isPreview" @click="$store.processTasks.openTask(task)">
-          <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('$projectName:${tprefix}.processes.' + (App.config.processTaskKeys || {})[task.name], task.name)"></span>
+          <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="$store.processTasks.taskName(task)"></span>
         </button>
       </template>
 #end
@@ -390,8 +461,9 @@
 #foreach($property in $properties)
 #if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))#set($hasReadOnly = true)#end
 #end
-#if($hasReadOnly)
+#if($hasReadOnly || $history == "true")
     <div class="vbox gap-4 shrink-0" style="width: 18rem;" x-show="isEdit || isPreview">
+#if($hasReadOnly)
       <div x-h-card>
         <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.defaults.details', 'Details')"></h3></div>
         <div x-h-card-content>
@@ -412,6 +484,32 @@
           </div>
         </div>
       </div>
+#end
+#if($history == "true")
+      <!-- Change history (intent `history: true`): the record's field-level trail, newest first.
+           Read-only everywhere - the shadow table has no write verb on any surface. -->
+      <div x-h-card x-show="history.length">
+        <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.defaults.history', 'History')"></h3></div>
+        <div x-h-card-content>
+          <div class="vbox gap-3">
+            <template x-for="entry in history" :key="entry.GUID">
+              <div class="vbox gap-0">
+                <div class="hbox items-center gap-2">
+                  <span class="text-xs font-medium" x-text="historyLabel(entry.Property)"></span>
+                  <span x-h-badge data-variant="outline" x-show="entry.Source === 'SYSTEM'" x-text="T('$projectName:${tprefix}.defaults.system', 'System')"></span>
+                </div>
+                <span class="text-sm break-all">
+                  <span class="text-muted-foreground line-through" x-show="entry.OldValue" x-text="entry.OldValue"></span>
+                  <span x-show="entry.OldValue"> &rarr; </span>
+                  <span x-text="historyValue(entry.NewValue)"></span>
+                </span>
+                <span class="text-xs text-muted-foreground" x-text="historyWho(entry)"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+#end
     </div>
 #end
   </div>

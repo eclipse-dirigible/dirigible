@@ -9,14 +9,20 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
-import org.junit.jupiter.api.Tag;
 import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-@Tag("smoke")
+/**
+ * The FULL new-file sweep: every {@link NewFileOption} creates its file and opens its editor. At
+ * ~20 editors x (create dialog + editor bring-up) this is the single longest IT, so it runs in the
+ * nightly/master {@code ui} shard only; the per-PR smoke gate runs {@link CreateNewFileSmokeIT},
+ * which covers one representative option per heavyweight editor family.
+ */
+@Tag("slow")
 public class CreateNewFileIT extends UserInterfaceIntegrationTest {
 
     @Test

@@ -19,6 +19,10 @@ import java.util.Map;
  * ({@link #uses}) - e.g. generate a {@code SalesInvoice} from a {@code ProjectTimesheet}.
  *
  * <p>
+ * The trigger is a click, an {@link #event} of the source, or both - see {@link #event} for the
+ * at-most-once semantics an event-driven create-from carries.
+ *
+ * <p>
  * It generates two halves:
  * <ul>
  * <li>a client button contributed onto the {@link #forEntity} view via the app's
@@ -100,6 +104,30 @@ public class GeneratesIntent {
     /** {@code entity} (per-record, default - it needs a source id) or {@code page}. */
     private String scope = "entity";
 
+    /**
+     * Optional event trigger (issue #6711): the create-from runs by itself when the SOURCE reaches a
+     * state, instead of waiting for a click. {@code onTransition} (a status write; a {@code when}
+     * status guard is mandatory) or {@code onCreate} (the source's insert; the guard is optional) names
+     * the source entity - the same one {@link #from} declares, repeated for symmetry with
+     * {@code postings}' event axis and validated against it. The owning model is NOT repeated here:
+     * {@link #fromUses} already declares it.
+     *
+     * <p>
+     * An event-driven create-from is <b>at-most-once</b>: the target's back-reference to the source
+     * (the {@link #map} entry copying the source's primary key) is checked before anything is created,
+     * so an event redelivery - and a click on a button that is still declared - is a no-op that returns
+     * the document that already exists.
+     */
+    private Map<String, Object> event;
+
+    /**
+     * Whether the client button is contributed. Defaults to {@code true} without an {@link #event} (a
+     * create-from with no trigger at all would generate nothing) and to {@code false} with one: the
+     * point of declaring an event is that no one has to click. Set it explicitly to {@code true} to
+     * keep both affordances - the button then shares the event's at-most-once guard.
+     */
+    private Boolean button;
+
     /** Optional ordering hint among the contributed actions of a view. */
     private Integer order;
     /**
@@ -139,6 +167,15 @@ public class GeneratesIntent {
      * month). See {@code GenerateChildIntent}.
      */
     private java.util.List<GenerateChildIntent> children;
+
+    /**
+     * Optional declared input form (issue #6685): a small set of the TARGET's properties the user
+     * supplies before the target is created - the values that cannot be derived from the source (which
+     * payment, how much). Entries name fields / to-one relations of {@link #to}; the values are posted
+     * with the source id and set on the target after {@link #map} / {@link #defaults}. See
+     * {@link PromptFieldIntent}.
+     */
+    private List<PromptFieldIntent> prompt;
 
     public String getName() {
         return name;
@@ -217,6 +254,32 @@ public class GeneratesIntent {
         this.scope = scope == null || scope.isBlank() ? "entity" : scope;
     }
 
+    public Map<String, Object> getEvent() {
+        return event;
+    }
+
+    public void setEvent(Map<String, Object> event) {
+        this.event = event;
+    }
+
+    /** Whether this create-from is triggered by a source event rather than only by a click. */
+    public boolean isEventDriven() {
+        return event != null && !event.isEmpty();
+    }
+
+    public Boolean getButton() {
+        return button;
+    }
+
+    public void setButton(Boolean button) {
+        this.button = button;
+    }
+
+    /** Whether the client button is contributed (see {@link #button}). */
+    public boolean hasButton() {
+        return button == null ? !isEventDriven() : button;
+    }
+
     public Integer getOrder() {
         return order;
     }
@@ -271,5 +334,18 @@ public class GeneratesIntent {
 
     public void setChildren(java.util.List<GenerateChildIntent> children) {
         this.children = children;
+    }
+
+    public List<PromptFieldIntent> getPrompt() {
+        return prompt;
+    }
+
+    public void setPrompt(List<PromptFieldIntent> prompt) {
+        this.prompt = prompt;
+    }
+
+    /** Whether this action declares a {@code prompt:} input form. */
+    public boolean hasPrompt() {
+        return prompt != null && !prompt.isEmpty();
     }
 }

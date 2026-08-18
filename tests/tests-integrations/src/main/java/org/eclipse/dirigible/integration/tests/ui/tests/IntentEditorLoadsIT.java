@@ -10,9 +10,15 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import org.junit.jupiter.api.Tag;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.awaitility.Awaitility;
+import org.eclipse.dirigible.components.intent.conversation.ConversationRole;
+import org.eclipse.dirigible.components.intent.conversation.ConversationSurface;
+import org.eclipse.dirigible.components.intent.conversation.IntentConversationService;
+import org.eclipse.dirigible.components.intent.conversation.IntentConversationService.ConversationKey;
+import org.eclipse.dirigible.components.intent.conversation.IntentConversationService.MessageDraft;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
@@ -36,7 +42,7 @@ import org.openqa.selenium.By;
  * (a missing {@code ng-editor} platform-links category, or the config script not being loaded, both
  * leave the services green while the editor is dead). This test clones the
  * {@code dirigiblelabs/sample-intent-model} sample project (the same clone-a-real-repo pattern the
- * {@code SampleProjectRepositoryIT} subclasses use), opens its {@code app.intent}, and asserts:
+ * {@code SampleProjectsIT} subclasses use), opens its {@code app.intent}, and asserts:
  * <ul>
  * <li>the file is routed to the Intent Editor (the editor tab appears),</li>
  * <li>the AngularJS {@code intentEditor} module actually bootstrapped (its injector resolves -
@@ -44,6 +50,9 @@ import org.openqa.selenium.By;
  * <li>the Monaco source editor and the live mxGraph diagram render - including the parsed entity's
  * label inside the diagram - so the {@code /parse} round-trip and the mxGraph rendering both work
  * end to end inside the iframe,</li>
+ * <li>the assistant pane restores this intent file's stored conversation (seeded before the editor
+ * is ever opened, so the bubble can only have come from the server - the editor keeps no transcript
+ * in the browser),</li>
  * <li>clicking Generate writes the model files into the workspace project.</li>
  * </ul>
  * The diagram uses fixed brand colours that read on both the light and dark themes (like the
@@ -56,12 +65,22 @@ public class IntentEditorLoadsIT extends UserInterfaceIntegrationTest {
     private static final String PROJECT = "sample-intent-model";
     private static final String INTENT_FILE = "app.intent";
     private static final String GENERATED_EDM_PATH = IRepositoryStructure.PATH_USERS + "/admin/workspace/" + PROJECT + "/library.edm";
+    /** Seeded into the stored conversation, so the chat pane can only show it by restoring it. */
+    private static final String RESTORED_MESSAGE = "add a country field to Member";
 
     @Autowired
     private IRepository repository;
 
+    @Autowired
+    private IntentConversationService conversationService;
+
     @Test
     void intentEditor_opens_bootstraps_and_generates() {
+        // A conversation this project already had - stored before the editor is ever opened, so what the
+        // chat pane shows below can only have been restored from the server.
+        conversationService.append(new ConversationKey(PROJECT, ConversationSurface.INTENT_EDITOR, INTENT_FILE),
+                List.of(new MessageDraft(ConversationRole.USER, RESTORED_MESSAGE)));
+
         ide.openHomePage();
         GitPerspective gitPerspective = ide.openGitPerspective();
         gitPerspective.cloneRepository(REPOSITORY_URL);
@@ -91,6 +110,15 @@ public class IntentEditorLoadsIT extends UserInterfaceIntegrationTest {
         // The "Glue & Outputs" diagram visualizes the declarative glue: the sample's loanUpdated
         // notification appears as an icon card, proving the glue collections are diagrammed too.
         Selenide.$(By.xpath("//div[contains(@class, 'intent-diagram')]//*[contains(text(), 'loanUpdated')]"))
+                .shouldBe(Condition.visible);
+
+        // The assistant pane restores this intent file's stored conversation. Nothing in the editor keeps
+        // the transcript in the browser, so a bubble carrying the seeded message came from the server -
+        // which is the continuity this editor never had (a reload used to lose the whole dialogue).
+        Selenide.$(By.cssSelector("button[title='AI assistant']"))
+                .shouldBe(Condition.enabled)
+                .click();
+        Selenide.$(By.xpath("//div[contains(@class, 'intent-chat-msg') and contains(text(), '" + RESTORED_MESSAGE + "')]"))
                 .shouldBe(Condition.visible);
 
         // Generate writes the model files into the workspace project.

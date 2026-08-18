@@ -132,6 +132,11 @@ document.addEventListener('alpine:init', () => {
     // previously the ONLY place details showed up.
     detailDefs: [],
 
+    // Read-only registers of the records REFERENCING this one (empty unless the model declares any).
+    // Rendered below the detail panels: the listed records are owned by their own entities, so this
+    // is a window onto them, not a collection this page manages.
+    relatedDefs: [],
+
     // Form model — one entry per editable property (auto-increment PK excluded).
     form: {
 #foreach($property in $properties)
@@ -173,6 +178,14 @@ document.addEventListener('alpine:init', () => {
     // Controller path for ${name}, relative to App.config.restBase
     // (the default base api.* prepends): <restBase>/<perspective>/<Entity>Controller.
     apiPath: '/${javaPerspectiveName}/${name}Controller',
+#if($history == "true")
+
+    // Change history (intent `history: true`): the record's field-level trail, read from the
+    // controller's GET /{id}/history. Read-only - nothing here writes to the shadow table.
+    history: [],
+#set($historyFirst = true)
+    historyLabels: {#foreach($property in $properties)#if(!$property.dataPrimaryKey && (!$property.auditType || $property.auditType == "NONE"))#if($property.widgetLabel)#set($hlabel = $property.widgetLabel)#else#set($hlabel = $property.name)#end#if($historyFirst)#set($historyFirst = false)#else, #end'${property.name}': ['$projectName:${tprefix}.t.${property.dataName}', '${hlabel}']#end#end},
+#end
 #if($immutableStatusProperty || $immutableAlways)
 
     // Immutability pre-check (intent `immutable`/`immutableWhen:`), asked from the controller's
@@ -192,6 +205,12 @@ document.addEventListener('alpine:init', () => {
 #end
 
     async init() {
+#if($hasRestrictedFields)
+      // Role-scoped fields: ask the controller which ones it withholds from this caller, so the form
+      // leaves those inputs out rather than offering a control whose value is never served and never
+      // saved. Not awaited - the inputs disappear as soon as the answer lands.
+      this.loadRestrictedFields();
+#end
       // The edit/preview routes are /${name}/{id}/edit|preview — Pinecone exposes the param as `id`.
       // Read the live hash, not PineconeRouter.context.path: for these routes Pinecone can fire
       // pinecone:end before the context is assigned, but the hash is already updated.
@@ -200,57 +219,14 @@ document.addEventListener('alpine:init', () => {
       const routePath = (window.location.hash || '').split('?')[0];
       this.mode = this.id == null ? 'create' : (routePath.endsWith('/preview') ? 'preview' : 'edit');
       this.detailDefs = this.id != null ? App.detailsFor('${name}') : [];
+      this.relatedDefs = this.id != null ? App.relatedFor('${name}') : [];
 
 #if($hasDropdowns)
       await this.loadOptions();
 #end
 
       if (this.isEdit || this.isPreview) {
-        this.state = 'loading';
-        try {
-          const record = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
-          // Copy only known form fields so server-only props don't leak into the body.
-          for (const key of Object.keys(this.form)) {
-            if (record[key] !== undefined) this.form[key] = record[key];
-          }
-          // Date/time widgets need the HTML input format, not the backend's serialized value.
-#foreach($property in $properties)
-#if($property.isDateType)
-          if (this.form.${property.name} != null) this.form.${property.name} = this.toDateInput(this.form.${property.name}, '${property.widgetType}');
-#end
-#end
-          // Relationship (dropdown) values must be STRINGS to match the option's data-value (an HTML
-          // attribute is always a string); a numeric FK from the record would otherwise match no
-          // option and the combobox would render empty on edit.
-#foreach($property in $properties)
-#if($property.widgetType == "DROPDOWN")
-          if (this.form.${property.name} != null) this.form.${property.name} = String(this.form.${property.name});
-#end
-#end
-#foreach($property in $properties)
-#if($property.widgetOptionsFilterBy && $property.widgetType == "DROPDOWN")
-          // Static option filter (intent `where:`): a value stored before/outside the filter is absent
-          // from the filtered chooser list, so its label would not resolve on edit. Splice in that one
-          // row by id - the filter still governs what may be newly picked (mirrors the items dialog,
-          // which keeps the full set for label resolution alongside the filtered chooser set).
-          await this.ensureFilteredCurrent('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.widgetDropDownKey}', '${property.widgetDropDownValue}');
-#end
-#end
-#if($immutableStatusProperty || $immutableAlways)
-          try {
-            const m = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id) + '/mutable');
-            this.mutable = !m || m.mutable !== false;
-          } catch (e) {
-            console.error('[${name}FormPage] mutable pre-check failed', e);
-          }
-          // An immutable record opened on the /edit route renders as preview - the whole form is
-          // read-only, exactly as if Preview had been chosen (or the URL typed said /preview).
-          if (!this.mutable && this.isEdit) this.mode = 'preview';
-#end
-          this.state = 'ready';
-        } catch (e) {
-          this.applyLoadError(e, { fallbackMessage: 'Could not load the ${name} record.' });
-        }
+        await this.loadRecord();
       } else {
         // Prefill any form field whose name is supplied as a query param — used by
         // master-detail "Add" to preset the FK to the master (e.g. ?Customer=3).
@@ -281,6 +257,60 @@ document.addEventListener('alpine:init', () => {
       this.recalcCalculated();
 #end
       this.refreshIcons();
+    },
+
+    // Load the record behind the edit/preview route into the form. Also re-run after a create that
+    // lands on the record page, so server-assigned values (document numbers, defaults, calculated
+    // fields, the initial status) are the ones the user sees.
+    async loadRecord() {
+      this.state = 'loading';
+      try {
+        const record = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
+        // Copy only known form fields so server-only props don't leak into the body.
+        for (const key of Object.keys(this.form)) {
+          if (record[key] !== undefined) this.form[key] = record[key];
+        }
+        // Date/time widgets need the HTML input format, not the backend's serialized value.
+#foreach($property in $properties)
+#if($property.isDateType)
+        if (this.form.${property.name} != null) this.form.${property.name} = this.toDateInput(this.form.${property.name}, '${property.widgetType}');
+#end
+#end
+        // Relationship (dropdown) values must be STRINGS to match the option's data-value (an HTML
+        // attribute is always a string); a numeric FK from the record would otherwise match no
+        // option and the combobox would render empty on edit.
+#foreach($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+        if (this.form.${property.name} != null) this.form.${property.name} = String(this.form.${property.name});
+#end
+#end
+#foreach($property in $properties)
+#if($property.widgetOptionsFilterBy && $property.widgetType == "DROPDOWN")
+        // Static option filter (intent `where:`): a value stored before/outside the filter is absent
+        // from the filtered chooser list, so its label would not resolve on edit. Splice in that one
+        // row by id - the filter still governs what may be newly picked (mirrors the items dialog,
+        // which keeps the full set for label resolution alongside the filtered chooser set).
+        await this.ensureFilteredCurrent('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.widgetDropDownKey}', '${property.widgetDropDownValue}');
+#end
+#end
+#if($immutableStatusProperty || $immutableAlways)
+        try {
+          const m = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id) + '/mutable');
+          this.mutable = !m || m.mutable !== false;
+        } catch (e) {
+          console.error('[${name}FormPage] mutable pre-check failed', e);
+        }
+        // An immutable record opened on the /edit route renders as preview - the whole form is
+        // read-only, exactly as if Preview had been chosen (or the URL typed said /preview).
+        if (!this.mutable && this.isEdit) this.mode = 'preview';
+#end
+#if($history == "true")
+        await this.loadHistory();
+#end
+        this.state = 'ready';
+      } catch (e) {
+        this.applyLoadError(e, { fallbackMessage: 'Could not load the ${name} record.' });
+      }
     },
 
 #if($hasDropdowns)
@@ -520,10 +550,25 @@ document.addEventListener('alpine:init', () => {
           }
         } else {
           const created = await App.services.api.post(this.apiPath, payload);
+          const newId = created && (created.${primaryKeysString} != null ? created.${primaryKeysString} : created.id);
           // Only when opened as an FK "Add" iframe dialog: report the new record to the opener and stop
           // here (the parent closes the dialog and selects it). Otherwise fall through to the list.
           if (this.isDialog) {
-            this.emitCreated(created && (created.${primaryKeysString} != null ? created.${primaryKeysString} : created.id));
+            this.emitCreated(newId);
+            return;
+          }
+          // A record that owns detail collections is not done at create: its children are the natural
+          // next step of the same working session, and they can only be added from the record's own
+          // page. Land there rather than on the list, which would make the user hunt for the row they
+          // just created (the document layout already works this way). An explicit returnTo wins - the
+          // create was launched from somewhere that expects the user back - and a flat record has
+          // nothing left to do on its page, so it still goes to the list.
+          if (newId != null && !this.returnToParam() && App.detailsFor('${name}').length) {
+            this.id = newId;
+            this.mode = 'edit';
+            this.detailDefs = App.detailsFor('${name}');
+            window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(newId) + '/edit');
+            await this.loadRecord();
             return;
           }
         }
@@ -536,6 +581,35 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+#if($history == "true")
+    // Load the record's change trail. It must never keep the record from opening, so a failure
+    // leaves the panel empty and is reported to the console only.
+    async loadHistory() {
+      try {
+        this.history = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id) + '/history') || [];
+      } catch (e) {
+        this.history = [];
+        console.error('[${name}FormPage] history load failed', e);
+      }
+    },
+
+    // A history row names the model PROPERTY; label it exactly as the form labels that field, so the
+    // trail and the form read as one record.
+    historyLabel(property) {
+      const entry = this.historyLabels[property];
+      return entry ? T(entry[0], entry[1]) : property;
+    },
+
+    historyValue(value) {
+      return (value === null || value === undefined || value === '') ? '—' : String(value);
+    },
+
+    historyWho(entry) {
+      const when = window.HarmoniaFormat.date(entry.ChangedAt);
+      return entry.ChangedBy ? entry.ChangedBy + ' · ' + when : when;
+    },
+
+#end
     // Backend temporal -> the value an HTML date/time input expects (by widget), so an edited
     // record's dates populate the fields. The Java REST controller serializes java.time via Jackson
     // as an ARRAY ([y,m,d] or [y,m,d,h,mi,s,ns]) and java.time.Instant as a numeric epoch — NOT an
@@ -551,9 +625,11 @@ document.addEventListener('alpine:init', () => {
     //     as ProcessId null on create, so a process trigger's `ProcessId != null` guard fires (an
     //     empty string would trip it and the process would never start); on edit a populated value
     //     round-trips unchanged.
-    //  2. Date/time widgets -> the backend java.time format: an HTML date/datetime value (local, no
-    //     zone) becomes a full ISO instant (…Z) so an Instant/Timestamp binds; a bare TIME ("16:04",
-    //     not a valid Date) passes through so a LocalTime still parses.
+    //  2. Date/time widgets -> the backend java.time format via HarmoniaFormat.toPayload: an HTML
+    //     date/datetime value (local, no zone) becomes a full ISO instant (…Z) so an Instant/Timestamp
+    //     binds — including a space-separated "2026-08-10 12:30" (normalized before parsing; WebKit's
+    //     new Date() rejects the space form); a bare TIME ("16:04", not a valid Date) passes through
+    //     so a LocalTime still parses.
     toPayload() {
       const payload = { ...this.form };
       for (const _k of Object.keys(payload)) {
@@ -561,10 +637,7 @@ document.addEventListener('alpine:init', () => {
       }
 #foreach($property in $properties)
 #if($property.isDateType)
-      if (payload.${property.name} != null) {
-        const _d${property.name} = new Date(payload.${property.name});
-        if (!isNaN(_d${property.name}.getTime())) payload.${property.name} = _d${property.name}.toISOString();
-      }
+      payload.${property.name} = window.HarmoniaFormat.toPayload(payload.${property.name}, '${property.widgetType}');
 #end
 #end
       return payload;

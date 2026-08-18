@@ -334,7 +334,10 @@ document.addEventListener('alpine:init', () => {
     // ---- Act as (delegated entry) - the Applications-shell entry point -------------------
     // An entitled user (ADMINISTRATOR) arms an acting identity here and lands in the My shell
     // as that person - the manager-does-the-entry mode. Server-side session + entitlement.
-    actAs: { entitled: false, acting: null },
+    // The armed state is honoured by every surface, back-office included, so this shell shows it
+    // too: arming here and walking back into the applications used to leave no trace on screen at
+    // all, and a forgotten arming then hid the real user's own inbox tasks (#6694).
+    actAs: { entitled: false, acting: null, expiresAt: null },
     actAsDialog: false,
     actAsInput: '',
     async loadActAs() {
@@ -342,11 +345,21 @@ document.addEventListener('alpine:init', () => {
         const res = await fetch('/services/core/actas', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
         if (res.ok) {
           const s = await res.json();
-          this.actAs = { entitled: !!s.entitled, acting: s.actingAs || null };
+          this.actAs = { entitled: !!s.entitled, acting: s.actingAs || null, expiresAt: s.expiresAt || null };
         }
       } catch (e) {
         console.error('Failed to load the act-as state', e);
       }
+    },
+    // The arming expires on its own; show when, so the banner is a deadline and not just a state.
+    actAsUntil() {
+      if (!this.actAs.expiresAt) return '';
+      try { return new Date(this.actAs.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+      catch (_) { return ''; }
+    },
+    async disarmActAs() {
+      const res = await fetch('/services/core/actas', { method: 'DELETE', credentials: 'same-origin' });
+      if (res.ok) window.location.reload();
     },
     async armActAs() {
       const username = (this.actAsInput || '').trim();
@@ -366,6 +379,9 @@ document.addEventListener('alpine:init', () => {
 
     async init() {
       this.loadActAs(); // fire-and-forget: the menu entry appears when the state arrives
+      // The arming expires server-side; re-read it when the tab comes back so the banner is not
+      // still claiming an identity the platform has already dropped.
+      window.addEventListener('focus', () => this.loadActAs());
       const projectionsLoaded = this.loadProjections();
       try {
         const res = await fetch(PERSPECTIVES_URL, { headers: { 'Accept': 'application/json' } });
@@ -423,12 +439,17 @@ document.addEventListener('alpine:init', () => {
           // Fire-and-forget: load the contributing apps' i18n catalogs so the sidebar / dashboard /
           // Settings entries translate. Each perspective's tkey is '<project>:<path>' - the project
           // is the catalog namespace, which the shell (having no project of its own) must add.
+          const hostedProjects = [...new Set(all.flatMap(g => Array.isArray(g.items) ? g.items : [g])
+            .map(it => (it.tkey || '').split(':')[0])
+            .filter(ns => ns && ns !== 'application-core'))];
           if (window.AppI18nAddNamespaces) {
-            const namespaces = [...new Set(all.flatMap(g => Array.isArray(g.items) ? g.items : [g])
-              .map(it => (it.tkey || '').split(':')[0])
-              .filter(ns => ns && ns !== 'application-core'))];
-            AppI18nAddNamespaces(namespaces);
+            AppI18nAddNamespaces(hostedProjects);
           }
+          // Same aggregation for the apps' contributed custom actions ('<project>-custom-action'
+          // extension points): the shell's own project contributes none, so without this the
+          // generate / create-from buttons exist in each app's standalone shell but not here.
+          const customActions = Alpine.store('customActions');
+          if (customActions && customActions.addProjects) customActions.addProjects(hostedProjects);
           // Fire-and-forget: scan which languages each embedded app provides translations for
           // (drives the missing-translations warnings in Settings).
           this.loadLanguageCoverage(all);

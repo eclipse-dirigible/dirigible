@@ -60,6 +60,19 @@ public class EntityIntent {
      */
     private Boolean audit;
     /**
+     * Whether the generator keeps a full change history for this entity in a shadow table (a sibling
+     * {@code
+     *
+    <TABLE>
+     * _HISTORY}, like the multilingual {@code _LANG} table). Where {@link #audit} records only the LAST
+     * writer and time in four columns of the row itself, the history records every write as field-level
+     * deltas - property, old value, new value, who, when, and whether the write came from a user or
+     * from the system (a roll-up, a workflow write-back). The generated repository appends the rows on
+     * every write it performs and the record's form shows them in a read-only History panel; nothing
+     * offers a write path to the shadow table. Absent (the default) → no history.
+     */
+    private Boolean history;
+    /**
      * Optional navigation-group id. When set, the generated perspective for this entity carries this as
      * its {@code groupId}, so the shared application shell nests it under the matching navigation group
      * (defined once, e.g. in a dedicated navigation-groups project). Absent → the perspective is
@@ -150,6 +163,15 @@ public class EntityIntent {
      */
     private Boolean immutable;
     /**
+     * Whether this composition child freezes together with its master ({@code locksWithMaster}, default
+     * true). A master's {@code immutableWhen} locks the document's own CONTENT; it says nothing about a
+     * child collection that is a different entity with its own controller and its own rules. Declaring
+     * {@code locksWithMaster: false} keeps this collection's user-write affordances alive while the
+     * master is locked - the settlement case: an issued invoice's lines are frozen, but the payment
+     * allocations against it go on being recorded for months.
+     */
+    private Boolean locksWithMaster;
+    /**
      * Optional hierarchy declaration: names this entity's to-one SELF-relation that forms the tree edge
      * (e.g. {@code hierarchy: Parent} on a chart-of-accounts Account). The generated list renders as a
      * tree, relations targeting this entity get a hierarchy-aware picker, and {@code leafOnly}
@@ -180,6 +202,23 @@ public class EntityIntent {
      * two gated on an EntityStatus seed id so drafting stays unconstrained. See {@link CheckIntent}.
      */
     private List<CheckIntent> checks;
+
+    /**
+     * Optional read-only registers of the records that REFERENCE this entity - the reverse of an
+     * incoming to-one association. Each entry lists a referencing entity's records, filtered to the
+     * open record, on this entity's own page (a project-month showing its per-employee timesheet lines,
+     * a customer showing its invoices). Declared here, on the referenced side, because the referencing
+     * model may be generated later and in general is unknown to this one. See {@link RelatedIntent}.
+     */
+    private List<RelatedIntent> related = new ArrayList<>();
+
+    /**
+     * Optional declarative state machine over the entity's {@code function: EntityStatus} relation: the
+     * whole set of legal status edges, enforced on EVERY status write (user form, workflow setter,
+     * transition button, custom action) instead of only on the flips that happen to go through a
+     * {@code transitions:} button. See {@link LifecycleIntent}.
+     */
+    private LifecycleIntent lifecycle;
 
     /**
      * On a {@code function: Snapshot} child only: the fixed print-template language its generated
@@ -387,6 +426,19 @@ public class EntityIntent {
         this.audit = audit;
     }
 
+    /** Whether this entity keeps a full field-level change history in a shadow table. */
+    public boolean isHistorized() {
+        return Boolean.TRUE.equals(history);
+    }
+
+    public Boolean getHistory() {
+        return history;
+    }
+
+    public void setHistory(Boolean history) {
+        this.history = history;
+    }
+
     public String getGroup() {
         return group;
     }
@@ -451,6 +503,22 @@ public class EntityIntent {
         this.checks = checks;
     }
 
+    public List<RelatedIntent> getRelated() {
+        return related;
+    }
+
+    public void setRelated(List<RelatedIntent> related) {
+        this.related = related == null ? new ArrayList<>() : related;
+    }
+
+    public LifecycleIntent getLifecycle() {
+        return lifecycle;
+    }
+
+    public void setLifecycle(LifecycleIntent lifecycle) {
+        this.lifecycle = lifecycle;
+    }
+
     public List<RelationIntent> getRelations() {
         return relations;
     }
@@ -482,6 +550,22 @@ public class EntityIntent {
 
     public Boolean getDuplicable() {
         return duplicable;
+    }
+
+    /**
+     * Whether this child collection freezes when its master becomes immutable. Defaults to TRUE, so an
+     * entity that says nothing keeps the behaviour it has always had.
+     */
+    public boolean locksWithMaster() {
+        return !Boolean.FALSE.equals(locksWithMaster);
+    }
+
+    public Boolean getLocksWithMaster() {
+        return locksWithMaster;
+    }
+
+    public void setLocksWithMaster(Boolean locksWithMaster) {
+        this.locksWithMaster = locksWithMaster;
     }
 
     public void setDuplicable(Boolean duplicable) {

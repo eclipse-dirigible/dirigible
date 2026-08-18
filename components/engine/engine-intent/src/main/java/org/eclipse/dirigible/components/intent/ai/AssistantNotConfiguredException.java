@@ -1,0 +1,38 @@
+/*
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
+ */
+package org.eclipse.dirigible.components.intent.ai;
+
+/**
+ * Raised when an AI assistant is invoked but no API key is configured. Clients surface this as a
+ * hint to set {@code DIRIGIBLE_INTENT_AI_API_KEY} rather than as an error.
+ */
+public class AssistantNotConfiguredException extends RuntimeException {
+
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * Instantiates the exception.
+     *
+     * @param message the message
+     */
+    public AssistantNotConfiguredException(String message) {
+        super(message);
+    }
+
+    /**
+     * Instantiates the exception.
+     *
+     * @param message the message
+     * @param cause the cause
+     */
+    public AssistantNotConfiguredException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}

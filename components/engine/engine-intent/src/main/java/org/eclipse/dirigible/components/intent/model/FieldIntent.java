@@ -9,6 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.model;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Single attribute on an {@link EntityIntent}. {@link #type} carries a logical type string
  * ({@code string}, {@code integer}, {@code decimal}, {@code boolean}, {@code date},
@@ -77,6 +80,16 @@ public class FieldIntent {
      * unaffected. Not valid on the primary key, the identity field, or the personal FK.
      */
     private boolean sensitive;
+
+    /**
+     * Role allow-list scoping this field on EVERY generated surface: the value is stripped from the
+     * REST responses and ignored on writes unless the caller holds one of the listed roles, and the
+     * generated UI leaves out the column / input for everyone else. An allow-list on purpose - a role
+     * added to the application later sees nothing until it is listed here, and a misspelled role hides
+     * the value rather than exposing it. Every listed role must be declared in the intent's
+     * {@code permissions}. Empty (the default) = visible to every caller who may read the entity.
+     */
+    private List<String> visibleTo = new ArrayList<>();
     /**
      * Document role: marks this field as the document's <b>number/title</b> (widget {@code
      * DOCUMENT_NUMBER}). In the document (header-items) layout the value is shown in the form's title
@@ -131,8 +144,8 @@ public class FieldIntent {
      *
      * <p>
      * Restricted to string-typed fields on purpose - on a numeric property {@code widgetPattern} is the
-     * DISPLAY format ({@code parameterUtils.js} reads it as {@code formatPattern}), so a regex there
-     * would silently corrupt how the number renders.
+     * DISPLAY format ({@code ModelParameterProcessor} reads it as {@code formatPattern}), so a regex
+     * there would silently corrupt how the number renders.
      */
     private String pattern;
 
@@ -386,5 +399,13 @@ public class FieldIntent {
 
     public void setSensitive(boolean sensitive) {
         this.sensitive = sensitive;
+    }
+
+    public List<String> getVisibleTo() {
+        return visibleTo;
+    }
+
+    public void setVisibleTo(List<String> visibleTo) {
+        this.visibleTo = visibleTo == null ? new ArrayList<>() : visibleTo;
     }
 }

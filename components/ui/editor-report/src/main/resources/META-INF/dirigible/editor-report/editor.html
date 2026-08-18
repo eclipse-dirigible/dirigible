@@ -70,7 +70,7 @@
                     </bk-panel>
                     <!-- End General Section-->
                     <!-- Begin Base Table Section-->
-                    <bk-panel expanded="true">
+                    <bk-panel ng-if="queryMode === 'structured'" expanded="true">
                         <bk-panel-header>
                             <bk-panel-expand hint="expand base table section"></bk-panel-expand>
                             <h4 bk-panel-title>Base Table</h4>
@@ -100,7 +100,7 @@
                     </bk-panel>
                     <!-- End Base Table Section-->
                     <!-- Begin Columns -->
-                    <bk-panel expanded="true">
+                    <bk-panel ng-if="queryMode === 'structured'" expanded="true">
                         <bk-panel-header>
                             <bk-panel-expand hint="expand columns section"></bk-panel-expand>
                             <h4 bk-panel-title>Columns</h4>
@@ -149,7 +149,7 @@
                     </bk-panel>
                     <!-- End Columns -->
                     <!-- Begin Joins -->
-                    <bk-panel expanded="true">
+                    <bk-panel ng-if="queryMode === 'structured'" expanded="true">
                         <bk-panel-header>
                             <bk-panel-expand hint="expand joins section"></bk-panel-expand>
                             <h4 bk-panel-title>Joins</h4>
@@ -193,7 +193,7 @@
                     </bk-panel>
                     <!-- End Joins -->
                     <!-- Begin Conditions -->
-                    <bk-panel expanded="true">
+                    <bk-panel ng-if="queryMode === 'structured'" expanded="true">
                         <bk-panel-header>
                             <bk-panel-expand hint="expand conditions section"></bk-panel-expand>
                             <h4 bk-panel-title>Conditions</h4>
@@ -232,7 +232,7 @@
                     </bk-panel>
                     <!-- End Conditions -->
                     <!-- Begin Havings -->
-                    <bk-panel expanded="false">
+                    <bk-panel ng-if="queryMode === 'structured'" expanded="false">
                         <bk-panel-header>
                             <bk-panel-expand hint="expand havings section"></bk-panel-expand>
                             <h4 bk-panel-title>Havings</h4>
@@ -271,7 +271,7 @@
                     </bk-panel>
                     <!-- End Conditions -->
                     <!-- Begin Ordering -->
-                    <bk-panel expanded="false">
+                    <bk-panel ng-if="queryMode === 'structured'" expanded="false">
                         <bk-panel-header>
                             <bk-panel-expand hint="expand ordering section"></bk-panel-expand>
                             <h4 bk-panel-title>Ordering</h4>
@@ -347,16 +347,24 @@
                     </bk-panel>
                     <!-- End Parameters -->
                     <!-- Begin Query -->
-                    <bk-panel expanded="false">
+                    <bk-panel expanded="queryPanelExpanded">
                         <bk-panel-header>
                             <bk-panel-expand hint="expand query section"></bk-panel-expand>
                             <h4 bk-panel-title>Query</h4>
                         </bk-panel-header>
                         <bk-panel-content aria-label="Query Content">
+                            <bk-message-strip ng-if="queryMode === 'freestyle'" state="information" class="fd-margin-bottom--tiny">
+                                This query cannot be reproduced by the visual builder, so the SQL below is the source of truth and the builder sections are hidden. 'Convert to structured'
+                                rebuilds the query from the builder, discarding the custom SQL.
+                            </bk-message-strip>
                             <bk-form-item horizontal="false">
-                                <bk-form-label for="idQuery" colon="true">Generated Query</bk-form-label>
-                                <bk-textarea id="idQuery" name="query" ng-model="query" rows="10" ng-readonly="true"></bk-textarea>
+                                <bk-form-label for="idQuery" colon="true">{{ queryMode === 'structured' ? 'Generated Query' : 'Query' }}</bk-form-label>
+                                <bk-textarea id="idQuery" name="query" ng-model="report.query" rows="10" ng-readonly="queryMode === 'structured'"></bk-textarea>
                             </bk-form-item>
+                            <div class="bk-hbox bk-full-width bk-padding-bottom--tiny bk-flex-end bk-box--gap">
+                                <bk-button ng-if="queryMode === 'structured'" compact="true" label="Edit as free-style SQL" ng-click="switchToFreestyle()"></bk-button>
+                                <bk-button ng-if="queryMode === 'freestyle'" compact="true" label="Convert to structured" ng-click="convertToStructured()"></bk-button>
+                            </div>
                         </bk-panel-content>
                     </bk-panel>
                     <!-- End Query -->

@@ -26,7 +26,7 @@ the same for document headers plus a **metadata-driven** cascade in the line-ite
 dialog (`detail-register.js.template` emits `editColumns[].dependsOn`; filtered options
 live in a separate `draftOptions` store so the items table's label resolution keeps the
 full option set). The trigger's controller URL is precomputed as
-`widgetDependsOnControllerUrl` by `service-generate`'s `parameterUtils.js`.
+`widgetDependsOnControllerUrl` by `service-generate`'s `ModelParameterProcessor`.
 **Multi-language data** is wired through a single per-user flag: the Settings page's
 **Region & Language** picker (rendered from the generated `config.js` `languages`, hidden
 for a single language) writes the shared `locale` Alpine store
@@ -83,6 +83,8 @@ Velocity-processed (which would collide with `$`-sigils in the JS).
 - `template/ui/template.js` — aggregates the per-view source collectors.
 - `template/ui/shell.js` — the SPA shell + static assets (above).
 - `template/ui/list.js` — LIST/PRIMARY entities -> page component + view fragment.
+- `template/ui/related.js` — entities declaring `relatedEntities` -> one `<Entity>.related.js`
+  registration (the read-only register of the records REFERENCING them). See below.
 - `template/ui/navigation.js` — placeholder (nav currently folded into index.html).
 
 Velocity model vars (per-entity collections, same as the Angular module):
@@ -102,6 +104,29 @@ a missing file). The `.model` still carries `perspectiveIcon` for the AngularJS 
 So the intent `icon:` must be a valid Lucide name (bundled `org.webjars.npm:lucide` `dist/esm/icons/<name>.js`,
 currently 1.8.0); an unknown name renders blank.
 
+## Related registers (the reverse of an incoming association)
+
+A `.model` entity may declare `relatedEntities` — read-only registers of the records that
+**reference** it (a project-month's timesheet lines, a customer's invoices, an account's journal
+entries). Each entity that declares any emits one `<Entity>.related.js` calling
+`App.registerRelated(<entity>, def)`, and its form / document / master pages render one shared
+`relatedPanel` per entry off `App.relatedFor(<entity>)`.
+
+Three things about it are deliberate and easy to get wrong:
+
+- **The REFERENCED entity contributes the registration, not the referencing one.** That is the
+  opposite of a detail (`App.registerDetail`, contributed by the composition child) and it is
+  forced: the referencing entity may be owned by another model in another project, generated at
+  another time, with no knowledge of this one. Hence the def's `apiPath` and `appUrl` are
+  **absolute** and every call passes `{ baseUrl: '' }`.
+- **It filters through `POST <controller>/search`, not `?<fk>=<id>`.** The master-filter query
+  parameter only exists on a `*_DETAILS` layout's controller; the generic search endpoint every
+  generated controller exposes is what a register can rely on.
+- **It is a window, not an owner.** No add, no edit, no delete — a row opens the source's own record
+  page in the shared record dialog (`$store.related`), which is also what makes a cross-project
+  source work. `relatedPanel` therefore builds on `detailPanel` (same table, same foreign-key label
+  resolution, same formatting) and overrides only the load and the row action.
+
 ## Parity checklist (TODO)
 
 | View type | Angular collection | Status |
@@ -109,7 +134,7 @@ currently 1.8.0); an unknown name renders blank.
 | list | `uiListModels` | ✅ skeleton (read-only list page + view) |
 | manage | `uiManageModels` | ✅ CRUD list + shared create/edit form (/create, /:id/edit) on baseFormPage — relationship dropdowns, client validation, 422 field mapping, delete-confirm |
 | master-list + detail | `uiListMasterModels` / `uiListDetailsModels` | ✅ master page (x-h-split: list + detail panels) + registry-driven detail panels |
-| master-manage + detail | `uiManageMasterModels` / `uiManageDetailsModels` | ✅ same master page; masters reuse the manage form for create/edit, details get a routed form (FK preset) |
+| master-manage + detail | `uiManageMasterModels` / `uiManageDetailsModels` | ✅ same master page; masters reuse the manage form for create/edit, details get a routed form whose parent FK is **context-locked** — the panel names the FK in the URL on create AND on edit/preview, so the form shows the parent's label read-only instead of a dropdown that could re-point the record mid-flow (#6551); free selection survives only where nothing implies the parent (the entity's own top-level create) |
 | **calendar** | `uiCalendarModels` | ✅ a PRIMARY entity with intent `view: calendar` (+ a `calendar:` block: start/end/title/color/initialView) → the entity attribute `calendarView`; full-page `x-h-calendar` (month/week/day/year) whose events are the entity's records positioned by the date/datetime field. **An ADDITIONAL page, not a layout (#6547):** the entity keeps its own `layoutType` (MANAGE / MANAGE_MASTER / MANAGE_DOCUMENT) and every page it brings; the calendar owns the landing route `/<Entity>`, that layout's browse page moves to `/<Entity>/list`, and both carry a switch to the other. So **date-click → /create** and **event-click → /:id/edit** land on whatever editor the layout owns - a document master browsed on a calendar edits on its document page. Colour keyed categorically by `color`. Optional `calendar.scope: <relation>` scopes the calendar to a parent: when opened as `/<Entity>?<Scope>=<id>` it filters events (controller `/search` EQ) and presets that FK on create - so it shows/creates only one parent's records (e.g. day allocations of one timesheet). |
 | **range** | `uiCalendarModels` | ✅ `view: range` - a span entity (`calendar.start` + `calendar.end`) on the same calendar renderer; events render as all-day multi-day bars (`calendarRange`). For vacation/booking spans. |
 | **document items on a calendar** | (within document) | ✅ the document's **line-items child** declaring `view: calendar` makes the items PANE an `x-h-calendar` instead of the row grid (`documentItemsLayout: calendar`, #6482) - for a day-grained line (booked days, allocated hours). Same rows, same line dialog: event-click edits, empty-day click adds with the date preset, Delete moves into the dialog. Rendered on the power, personal and partner document surfaces; the calendar's configuration is read at runtime from the child's detail registration, never baked in. Mutually exclusive with `documentItemsLayout: chat`. |

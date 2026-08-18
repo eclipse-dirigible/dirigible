@@ -72,12 +72,16 @@ final class ModelParameterProcessor {
         for (Map<String, Object> entity : entities) {
             processEntity(entity, entities, parameters);
         }
+        // Before the scoped-surface passes below: they carry the flag onto the child panels they build.
+        collectRestrictedProperties(entities);
         if (truthy(parameters, "javaRuntime")) {
+            inheritMasterLock(entities, parameters);
             inheritPersonalScope(entities, parameters);
             inheritPartnerScope(entities, parameters);
             collectSensitiveProperties(entities);
             collectScopedChildren(entities);
             resolveLabelParts(entities);
+            resolveRelatedRegisters(entities, parameters);
         }
         resolveDependentWidgets(entities);
         collectPerspectives(entities, parameters);
@@ -481,6 +485,59 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Propagates a composition master's immutability to its direct children, so that the REST surface
+     * forbids what the generated UI already withholds.
+     *
+     * <p>
+     * A child declares no immutability of its own - the lock belongs to the document - yet its writes
+     * synchronously recompute the master's aggregate columns. Without this, creating, editing or
+     * deleting a line of a locked document succeeded over REST and silently rewrote the very totals the
+     * lock protects, after the number was stamped, the snapshot taken and the ledger posted.
+     *
+     * <p>
+     * Only the direct child is covered, which is the shape that writes through to the master. Engine
+     * writers stay exempt by construction: they go through the repository rather than the controller,
+     * exactly as the master's own guard already assumes. A child that declares
+     * {@code locksWithMaster: false} keeps its user writes - the deliberately post-lock collection,
+     * such as the payments settling an issued invoice.
+     *
+     * @param entities every entity in the model
+     * @param parameters the generation parameters
+     */
+    private static void inheritMasterLock(List<Map<String, Object>> entities, Map<String, Object> parameters) {
+        for (Map<String, Object> entity : entities) {
+            if ("false".equals(str(entity, "locksWithMaster"))) {
+                continue;
+            }
+            Map<String, Object> parentFk = findCompositionProperty(entity);
+            if (parentFk == null) {
+                continue;
+            }
+            Map<String, Object> parent = findEntity(entities, str(parentFk, "relationshipEntityName"));
+            if (parent == null) {
+                continue;
+            }
+            boolean always = truthy(parent, "immutableAlways");
+            String statusProperty = str(parent, "immutableStatusProperty");
+            if (!always && (statusProperty == null || statusProperty.isEmpty())) {
+                continue;
+            }
+            String parentPerspective = NamingHelper.sanitizeJavaIdentifier(str(parentFk, "relationshipEntityPerspectiveName"));
+            String parentPackage = "gen." + str(parameters, "javaGenFolderName") + ".data." + parentPerspective + ".";
+            Map<String, Object> masterLock = new LinkedHashMap<>();
+            masterLock.put("fkProperty", parentFk.get("name"));
+            masterLock.put("fkJavaClass", parentFk.get("dataTypeJavaClass"));
+            masterLock.put("entity", parent.get("name"));
+            masterLock.put("entityClass", parentPackage + str(parent, "name") + "Entity");
+            masterLock.put("repositoryClass", parentPackage + str(parent, "name") + "Repository");
+            masterLock.put("always", always);
+            masterLock.put("statusProperty", statusProperty);
+            masterLock.put("statusValues", str(parent, "immutableStatusValues"));
+            entity.put("masterLock", masterLock);
+        }
+    }
+
+    /**
      * Propagates the personal scope from a composition parent to its direct children - one hop only,
      * which is what the generated surfaces support. A deeper child simply has no personal surface.
      *
@@ -578,6 +635,25 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Flags the entities carrying a read-scoped property - the entity modeler's per-property read role,
+     * or the intent's {@code visibleTo:} allow-list, which is emitted as the same attribute. The
+     * generated pages ask the controller which of those fields the caller may not see only when there
+     * is such a field, so an application that uses none of this pays nothing for it.
+     *
+     * @param entities every entity in the model
+     */
+    private static void collectRestrictedProperties(List<Map<String, Object>> entities) {
+        for (Map<String, Object> entity : entities) {
+            for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+                if (truthy(property, "roleRead")) {
+                    entity.put("hasRestrictedFields", Boolean.TRUE);
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
      * Collects, for each scoped entity, the children that inherit its scope - rendered on its form as
      * an embedded calendar or table panel.
      *
@@ -625,6 +701,9 @@ final class ModelParameterProcessor {
             if (withCalendar) {
                 panel.put("calendar", isTrue(child, "detailCalendar") ? calendarPanel(child) : null);
             }
+            // Whether this child has role-scoped columns at all: only then does the panel ask the
+            // child's own scoped controller which of them the caller in front of it may not see.
+            panel.put("restrictedFields", truthy(child, "hasRestrictedFields"));
             panel.put("columns", panelColumns(child, fkProperty));
             children.add(panel);
         }
@@ -692,6 +771,148 @@ final class ModelParameterProcessor {
             columns.add(column);
         }
         return columns;
+    }
+
+    /**
+     * Turns each entity's declared related-records registers into what the generated page renders: the
+     * referencing entity's controller and application URLs, and one column descriptor per property it
+     * shows.
+     *
+     * <p>
+     * The declaration carries facts only - which entity, where it lives, its key, the foreign key back
+     * here, the property metadata of its columns - because a model may be authored by hand or emitted
+     * by a generator that must stay ignorant of the paths a template publishes. Every URL is therefore
+     * built here, from the same coordinates a dropdown's lookup URL is built from, and a register whose
+     * source lives in another project resolves against THAT project rather than this one.
+     *
+     * @param entities every entity in the model
+     * @param parameters the generation parameters
+     */
+    private static void resolveRelatedRegisters(List<Map<String, Object>> entities, Map<String, Object> parameters) {
+        for (Map<String, Object> entity : entities) {
+            List<Map<String, Object>> registers = asMaps(entity.get("relatedEntities"));
+            for (Map<String, Object> register : registers) {
+                resolveRelatedRegister(register, entities, parameters);
+            }
+        }
+    }
+
+    /**
+     * Resolves one register: its owner project, the URLs its panel calls and opens, and its columns.
+     *
+     * @param register the register
+     * @param entities every entity in the model, for resolving a column's projection owner
+     * @param parameters the generation parameters
+     */
+    private static void resolveRelatedRegister(Map<String, Object> register, List<Map<String, Object>> entities,
+            Map<String, Object> parameters) {
+        ProjectionOwner owner = ProjectionOwner.of(str(register, "referencedModel"));
+        String project = owner != null ? owner.project() : str(parameters, "projectName");
+        String genFolder = owner != null ? owner.genFolderName() : str(parameters, "genFolderName");
+        String entityName = str(register, "entity");
+        register.put("apiPath", javaControllerUrl(project, genFolder, str(register, "perspectiveName"), entityName));
+        // The source's own application, for opening a listed record in the shared record dialog. Web
+        // assets live under the RAW folder name while the controllers live under the sanitized one, so
+        // this is built from the raw folder rather than by rewriting the controller URL.
+        register.put("appUrl", "/services/web/" + project + "/gen/" + genFolder + "/index.html");
+        register.put("local", owner == null);
+        List<Object> columns = new ArrayList<>();
+        for (Map<String, Object> property : asMaps(register.get("properties"))) {
+            columns.add(relatedColumn(property, entities, project, genFolder));
+        }
+        register.put("columns", columns);
+        register.remove("properties");
+    }
+
+    /**
+     * Describes one register column: its heading, how the cell renders (number / float pattern / date)
+     * and, for a foreign key, where to fetch the referenced rows its label comes from.
+     *
+     * @param property the source property's metadata, as the model declares it
+     * @param entities every entity in the model, for resolving a projection owner
+     * @param sourceProject the project owning the register's source entity
+     * @param sourceGenFolder the generation folder owning the register's source entity
+     * @return the column descriptor
+     */
+    private static Map<String, Object> relatedColumn(Map<String, Object> property, List<Map<String, Object>> entities, String sourceProject,
+            String sourceGenFolder) {
+        String name = str(property, "name");
+        Map<String, Object> column = new LinkedHashMap<>();
+        column.put("name", name);
+        column.put("label", strOr(property, "widgetLabel", NamingHelper.humanizeIdentifier(name)));
+        if (property.get("dataName") != null) {
+            column.put("dataName", property.get("dataName"));
+        }
+        ModelDataTypes.DataType dataType = ModelDataTypes.parse(str(property, "dataType"));
+        String widgetType = str(property, "widgetType");
+        boolean relation =
+                ("DROPDOWN".equals(widgetType) || "DOCUMENT_STATUS".equals(widgetType)) && truthy(property, "relationshipEntityName");
+        if (relation) {
+            // The referenced rows resolve the foreign key to its label. The target may live in a third
+            // project (a projection of the source's model), so its owner wins over the source's.
+            ProjectionOwner target = ProjectionOwner.of(relatedColumnOwnerModel(property, entities));
+            String project = target != null ? target.project() : sourceProject;
+            String genFolder = target != null ? target.genFolderName() : sourceGenFolder;
+            Map<String, Object> lookup = new LinkedHashMap<>();
+            lookup.put("url", javaControllerUrl(project, genFolder, str(property, "relationshipEntityPerspectiveName"),
+                    str(property, "relationshipEntityName")));
+            lookup.put("key", strOr(property, "widgetDropDownKey", "Id"));
+            lookup.put("text", strOr(property, "widgetDropDownValue", "Name"));
+            column.put("lookup", lookup);
+        } else if ("Date".equals(dataType.typescript())) {
+            column.put("date", Boolean.TRUE);
+        } else if ("number".equals(dataType.typescript())) {
+            column.put("number", Boolean.TRUE);
+            String sqlType = strOr(property, "dataType", "").toUpperCase(Locale.ROOT);
+            if ("DECIMAL".equals(sqlType) || "DOUBLE".equals(sqlType) || "FLOAT".equals(sqlType) || "REAL".equals(sqlType)) {
+                column.put("float", Boolean.TRUE);
+                column.put("pattern", strOr(property, "widgetPattern", DEFAULT_FLOAT_PATTERN));
+            }
+        }
+        if (isTrue(property, "sensitiveProperty")) {
+            // Marked, not dropped: a register renders on the power surfaces, where the owning entity's
+            // own lists render the column too.
+            column.put("sensitive", Boolean.TRUE);
+        }
+        return column;
+    }
+
+    /**
+     * The model a register column's referenced entity is owned by: the one the declaration names (the
+     * source's own cross-model reference), else the projection this model carries for it, else null for
+     * a target owned by the register's own model.
+     *
+     * @param property the column's source property
+     * @param entities every entity in the model
+     * @return the owner's referenced-model path, or null
+     */
+    private static String relatedColumnOwnerModel(Map<String, Object> property, List<Map<String, Object>> entities) {
+        String declared = str(property, "referencedModel");
+        if (declared != null) {
+            return declared;
+        }
+        String target = str(property, "relationshipEntityName");
+        for (Map<String, Object> entity : entities) {
+            if ("PROJECTION".equals(str(entity, "type")) && target != null && target.equals(str(entity, "name"))) {
+                return str(entity, "projectionReferencedModel");
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The URL of a generated Java controller. The package segments are sanitized Java identifiers while
+     * the project stays as authored, exactly as the dropdown lookup URLs are built.
+     *
+     * @param project the owning project
+     * @param genFolderName the owning generation folder
+     * @param perspectiveName the entity's perspective
+     * @param entityName the entity
+     * @return the controller URL
+     */
+    private static String javaControllerUrl(String project, String genFolderName, String perspectiveName, String entityName) {
+        return "/services/java/" + project + "/gen/" + NamingHelper.sanitizeJavaIdentifier(genFolderName) + "/api/"
+                + NamingHelper.sanitizeJavaIdentifier(perspectiveName) + "/" + entityName + "Controller";
     }
 
     /**

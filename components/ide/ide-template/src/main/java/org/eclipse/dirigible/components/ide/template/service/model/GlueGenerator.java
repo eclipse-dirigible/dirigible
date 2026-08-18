@@ -43,9 +43,10 @@ import static org.eclipse.dirigible.components.ide.template.service.model.ModelV
 class GlueGenerator {
 
     /** The names of the collections this generator handles. */
-    private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "timerLoaders", "waits", "aborts",
-            "setters", "writers", "notifications", "schedules", "integrations", "inbound", "rollups", "expansions", "settlements",
-            "generates", "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering");
+    private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
+            "aborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles",
+            "stepEvents", "rollups", "expansions", "settlements", "generates", "generateEvents", "transitions", "sends", "posts",
+            "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -86,6 +87,7 @@ class GlueGenerator {
             case "triggers" -> each(collection, source, content, model, parameters, GlueGenerator::bindTrigger);
             case "resolvers" -> each(collection, source, content, model, parameters, GlueGenerator::bindResolver);
             case "fieldLoaders" -> each(collection, source, content, model, parameters, GlueGenerator::bindFieldLoader);
+            case "assignees" -> each(collection, source, content, model, parameters, GlueGenerator::bindAssignee);
             case "timerLoaders" -> each(collection, source, content, model, parameters, GlueGenerator::bindTimerLoader);
             case "waits" -> each(collection, source, content, model, parameters, GlueGenerator::bindWait);
             case "aborts" -> each(collection, source, content, model, parameters, GlueGenerator::bindAbort);
@@ -95,9 +97,15 @@ class GlueGenerator {
             case "schedules" -> each(collection, source, content, model, parameters, GlueGenerator::bindSchedule);
             case "integrations" -> each(collection, source, content, model, parameters, GlueGenerator::bindIntegration);
             case "inbound" -> each(collection, source, content, model, parameters, GlueGenerator::bindInbound);
+            case "inboundMessages" -> each(collection, source, content, model, parameters, GlueGenerator::bindInboundMessage);
+            case "inboundFiles" -> each(collection, source, content, model, parameters, GlueGenerator::bindInboundFile);
+            case "stepEvents" -> each(collection, source, content, model, parameters, GlueGenerator::bindStepEvent);
             case "expansions" -> each(collection, source, content, model, parameters, GlueGenerator::bindExpansion);
             case "settlements" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlement);
-            case "generates" -> each(collection, source, content, model, parameters, GlueGenerator::bindGenerate);
+            // Both collections carry the SAME create-from descriptors (generateEvents is the
+            // event-driven subset), so they share one binding - the listener and the create-from it
+            // calls cannot be rendered from divergent data.
+            case "generates", "generateEvents" -> each(collection, source, content, model, parameters, GlueGenerator::bindGenerate);
             case "transitions" -> each(collection, source, content, model, parameters, GlueGenerator::bindTransition);
             case "sends" -> each(collection, source, content, model, parameters, GlueGenerator::bindSend);
             case "posts" -> each(collection, source, content, model, parameters, GlueGenerator::bindPost);
@@ -105,6 +113,7 @@ class GlueGenerator {
             case "printFeeders" -> each(collection, source, content, model, parameters, GlueGenerator::bindPrintFeeder);
             case "snapshots" -> each(collection, source, content, model, parameters, GlueGenerator::bindSnapshot);
             case "numbering" -> each(collection, source, content, model, parameters, GlueGenerator::bindNumbering);
+            case "resolves" -> each(collection, source, content, model, parameters, GlueGenerator::bindResolve);
             case "rollups" -> rollups(source, content, model, parameters);
             case "aggregates" -> aggregates(source, content, model, parameters);
             default -> List.of();
@@ -224,6 +233,45 @@ class GlueGenerator {
     }
 
     /**
+     * Binds a user-task assignee resolver - the delegate that walks the trigger record's relations to
+     * the person a task belongs to and publishes their login.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindAssignee(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "process", "step", "handler", "variable", "path", "ownerEntity", "ownerPerspective", "ownerKeyProperty",
+                "ownerKeyAccessor", "firstFkProperty", "identityLocal", "identityProperty");
+        context.put("javaOwnerPerspective", sanitize(item, "ownerPerspective"));
+        context.put("hops", assigneeHops(item.get("hops"), parameters));
+    }
+
+    /**
+     * Resolves each hop of an assignee walk to the generated classes it loads. The intent layer carries
+     * only logical names; the package layout is known here, and a cross-model hop resolves against the
+     * owner model's generation folder rather than this project's.
+     *
+     * @param raw the declared hops
+     * @param parameters the generation parameters
+     * @return the resolved hops
+     */
+    private static List<Object> assigneeHops(Object raw, Map<String, Object> parameters) {
+        List<Object> hops = new ArrayList<>();
+        for (Map<String, Object> hop : asMaps(raw)) {
+            String genFolder = truthy(hop, "crossModel") ? sanitize(hop, "targetModel") : str(parameters, "javaGenFolderName");
+            String qualified = "gen." + genFolder + ".data." + sanitize(hop, "perspective") + "." + str(hop, "entity");
+            Map<String, Object> resolved = new LinkedHashMap<>();
+            resolved.put("local", hop.get("local"));
+            resolved.put("nextFkProperty", strOr(hop, "nextFkProperty", ""));
+            resolved.put("entityClass", qualified + "Entity");
+            resolved.put("repositoryClass", qualified + "Repository");
+            hops.add(resolved);
+        }
+        return hops;
+    }
+
+    /**
      * Binds an expiry loader - the delegate that publishes the date a task's boundary timer binds to.
      *
      * @param item the descriptor
@@ -301,6 +349,7 @@ class GlueGenerator {
                 "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachFileNameExpression");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
+        bindDeepLinks(item, context);
         bindAttachLanguage(item, context, parameters);
     }
 
@@ -324,6 +373,7 @@ class GlueGenerator {
                 truthy(item, "sourceCrossModel") ? sanitize(item, "sourceModel") : str(parameters, "javaGenFolderName"));
         context.put("action", strOr(item, "action", "notify"));
         context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
+        bindDeepLinks(item, context);
         bindAttachLanguage(item, context, parameters);
         context.put("genToGenFolder",
                 generates ? (truthy(item, "genCrossModel") ? sanitize(item, "genToModel") : str(parameters, "javaGenFolderName")) : "");
@@ -389,6 +439,45 @@ class GlueGenerator {
     }
 
     /**
+     * Binds an inbound message ingest - the listener that ingests every record arriving on a queue or a
+     * topic.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindInboundMessage(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "name", "className", "entity", "perspective", "destination", "listenerKind");
+        context.put("javaPerspective", sanitize(item, "perspective"));
+    }
+
+    /**
+     * Binds an inbound file ingest - the job that polls a drop folder and ingests every file that
+     * arrived.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindInboundFile(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "name", "className", "entity", "perspective", "folder", "cron");
+        context.put("javaPerspective", sanitize(item, "perspective"));
+    }
+
+    /**
+     * Binds a process-step event emitter - the delegate that publishes the process's record when the
+     * execution reaches or completes a step.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindStepEvent(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "name", "className", "process", "step", "entity", "perspective", "keyProperty", "keyAccessor", "topicSuffix");
+        context.put("javaPerspective", sanitize(item, "perspective"));
+    }
+
+    /**
      * Binds a period expansion - the handler that regenerates a master's child rows across a date span.
      * Only the period step is derived here; the type-dependent pieces arrive pre-rendered.
      *
@@ -441,8 +530,20 @@ class GlueGenerator {
     private static void bindGenerate(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "fromEntity", "toEntity", "toPk", "fieldAssignments", "hasItems", "hasItemLines",
                 "itemLines", "fromItemEntity", "toItemEntity", "srcFkProperty", "toFkProperty", "itemFieldAssignments", "fromPerspective",
-                "sourceStatusProperty", "sourceStatusValue");
+                "sourceStatusProperty", "sourceStatusValue",
+                // The event half (issue #6711): the trigger kind, the status guard and the back-reference
+                // the at-most-once check reads, plus whether a button is contributed at all.
+                "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "backRefProperty",
+                // The declared input form (issue #6685): the prompted target properties with their
+                // pre-rendered value conversions - the template renders one block per entry.
+                "hasPrompt", "promptFields");
         context.put("fromJavaPerspective", sanitize(item, "fromPerspective"));
+        // The SOURCE's gen folder / owning project: this project unless the source belongs to another
+        // model (intent `fromUses:`). That is what lets a create-from be authored on the module owning
+        // the TARGET and keeps the two modules' generated Java acyclic - only one side references the
+        // other.
+        context.put("fromGenFolder", truthy(item, "crossModelSource") ? sanitize(item, "fromModel") : str(parameters, "javaGenFolderName"));
+        context.put("fromProjectName", truthy(item, "crossModelSource") ? str(item, "fromProject") : str(parameters, "projectName"));
         context.put("toGenFolder", truthy(item, "crossModel") ? sanitize(item, "toModel") : str(parameters, "javaGenFolderName"));
         context.put("toJavaPerspective", sanitize(item, "toPerspective"));
         // A primary source item that is not a composition child lives outside the source document's
@@ -462,11 +563,12 @@ class GlueGenerator {
     private static void bindTransition(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "attachKeyProperty", "statusProperty", "setStatus", "allowedExpr",
                 "fromStatuses", "guardExpr", "guardText", "notify", "forEach", "forEachFkProperty", "forEachKeyProperty",
-                "notifyToExpression", "notifySubjectExpression", "notifyBodyExpression", "attach", "attachEntity",
+                "notifyToExpression", "notifySubjectExpression", "notifyBodyExpression", "notifyRecordScoped", "attach", "attachEntity",
                 "attachLanguageExpression", "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachFileNameExpression");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("notifyRelationLoads", relationLoads(item.get("notifyRelationLoads"), parameters));
         context.put("javaForEachPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "forEachPerspective", "")));
+        bindDeepLinks(item, context);
         bindAttachLanguage(item, context, parameters);
     }
 
@@ -480,11 +582,12 @@ class GlueGenerator {
     private static void bindSend(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "process", "step", "className", "entity", "perspective", "keyProperty", "keyAccessor", "forEach",
                 "forEachFkProperty", "forEachKeyProperty", "notifyToExpression", "notifySubjectExpression", "notifyBodyExpression",
-                "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty",
+                "notifyRecordScoped", "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty",
                 "attachLanguageTargetEntity", "attachFileNameExpression");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("notifyRelationLoads", relationLoads(item.get("notifyRelationLoads"), parameters));
         context.put("javaForEachPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "forEachPerspective", "")));
+        bindDeepLinks(item, context);
         bindAttachLanguage(item, context, parameters);
     }
 
@@ -607,6 +710,22 @@ class GlueGenerator {
     private static void bindNumbering(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "entity", "masterPk", "field", "series", "per");
         context.put("javaPerspective", sanitize(item, "perspective"));
+    }
+
+    /**
+     * Binds an effective-dated register lookup - the listener that fills a to-one from the register row
+     * valid on the record's date.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindResolve(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "name", "className", "entity", "perspective", "keyProperty", "topicSuffix", "guardExpression", "setProperty",
+                "registerEntity", "registerPerspective", "registerValueProperty", "matches", "matchSummary", "startProperty", "endProperty",
+                "valueProperty", "outcomeProperty", "statusProperty", "foundStatus", "notFoundStatus", "ambiguousStatus", "writesStatus");
+        context.put("javaPerspective", sanitize(item, "perspective"));
+        context.put("javaRegisterPerspective", sanitize(item, "registerPerspective"));
     }
 
     /**
@@ -733,6 +852,19 @@ class GlueGenerator {
                 NamingHelper.sanitizeJavaIdentifier(strOr(item, "attachLanguageTargetPerspective", "")));
         context.put("attachLanguageJavaGenFolder", truthy(item, "attachLanguageCrossModel") ? sanitize(item, "attachLanguageTargetModel")
                 : str(parameters, "javaGenFolderName"));
+    }
+
+    /**
+     * Binds the deep-link keys every notify call site carries: which of the two reserved link locals
+     * ({@code recordUrl} / {@code inboxUrl}) the message references, plus the entity and key property
+     * the record link is built from. The route itself is assembled in the template, which is the layer
+     * that knows the generated application's URL layout.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     */
+    private static void bindDeepLinks(Map<String, Object> item, Map<String, Object> context) {
+        copy(context, item, "usesRecordUrl", "usesInboxUrl", "recordUrlEntity", "recordUrlKeyProperty");
     }
 
     /**

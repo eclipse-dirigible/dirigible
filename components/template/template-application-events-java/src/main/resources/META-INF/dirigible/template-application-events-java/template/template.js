@@ -3,19 +3,6 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
-import * as generateUtils from "service-generate/template/generateUtils";
-import { sanitizeJavaIdentifier } from "service-generate/template/parameterUtils";
-
-export function generate(model, parameters) {
-    // The .glue file is { triggers: [...], resolvers: [...] } - no entity model. generateUtils
-    // filters model.entities up front, so give it an empty list; the gen package root comes from the
-    // glue file's base name (same as the full-stack gen folder).
-    const glue = JSON.parse(model);
-    glue.entities = glue.entities || [];
-    parameters.javaGenFolderName = sanitizeJavaIdentifier(parameters.genFolderName);
-    let templateSources = getTemplate(parameters).sources;
-    return generateUtils.generateFiles(glue, parameters, templateSources);
-};
 
 export function getTemplate(parameters) {
     return {
@@ -50,6 +37,13 @@ export function getTemplate(parameters) {
                 rename: "gen/events/{{javaGenFolderName}}/{{handler}}.java",
                 engine: "velocity",
                 collection: "fieldLoaders"
+            },
+            {
+                location: "/template-application-events-java/events/Assignee.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{handler}}.java",
+                engine: "velocity",
+                collection: "assignees"
             },
             {
                 location: "/template-application-events-java/events/TimerLoader.java.template",
@@ -108,6 +102,27 @@ export function getTemplate(parameters) {
                 collection: "inbound"
             },
             {
+                location: "/template-application-events-java/events/InboundMessage.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}Consumer.java",
+                engine: "velocity",
+                collection: "inboundMessages"
+            },
+            {
+                location: "/template-application-events-java/events/InboundFile.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}FileImport.java",
+                engine: "velocity",
+                collection: "inboundFiles"
+            },
+            {
+                location: "/template-application-events-java/events/StepEvent.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}.java",
+                engine: "velocity",
+                collection: "stepEvents"
+            },
+            {
                 location: "/template-application-events-java/events/Rollup.java.template",
                 action: "generate",
                 rename: "gen/events/{{javaGenFolderName}}/{{className}}.java",
@@ -164,6 +179,15 @@ export function getTemplate(parameters) {
                 collection: "generates"
             },
             {
+                // The event-driven subset of `generates` (issue #6711): the listener that calls the
+                // create-from above when the source reaches its state, so no one has to click.
+                location: "/template-application-events-java/events/GenerateOnEvent.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}GenerateOnEvent.java",
+                engine: "velocity",
+                collection: "generateEvents"
+            },
+            {
                 location: "/template-application-events-java/events/Transition.java.template",
                 action: "generate",
                 rename: "gen/events/{{javaGenFolderName}}/{{className}}Transition.java",
@@ -197,6 +221,13 @@ export function getTemplate(parameters) {
                 rename: "gen/events/{{javaGenFolderName}}/{{className}}.java",
                 engine: "velocity",
                 collection: "aggregates"
+            },
+            {
+                location: "/template-application-events-java/events/Resolve.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}Resolve.java",
+                engine: "velocity",
+                collection: "resolves"
             },
             {
                 location: "/template-application-events-java/project.json.mjs",

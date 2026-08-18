@@ -31,6 +31,7 @@
         <module>core/core-tracing</module>
         <module>core/core-java</module>
         <module>core/core-liquibase</module>
+        <module>core/core-dependencies</module>
 
         <!-- Security -->
         <module>security/security-basic</module>
@@ -167,6 +168,7 @@
         <module>ui/view-terminal</module>
         <module>ui/view-debugger</module>
         <module>ui/view-java-debug</module>
+        <module>ui/view-assistant</module>
         <module>ui/view-databases</module>
         <module>ui/view-sql</module>
         <module>ui/view-swagger</module>
@@ -664,6 +666,11 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-core-dependencies</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-core-registry</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -962,6 +969,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-view-java-debug</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-view-assistant</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

@@ -4,6 +4,11 @@
   (right), via x-h-split. Root x-data binds the generated ${name}MasterPage; detail panels are
   generic detailPanel components driven by the runtime registry (App.detailsFor).
 -->
+## Role-scoped field (intent `visibleTo:`): rendered only for a caller the server actually serves it
+## to - the page asked the controller which fields it withholds (canSee). Emits nothing for an
+## unrestricted property. The redaction applied to every response stays the authoritative one; this
+## only keeps a control that could never show or save a value off the page.
+#macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
 <div x-data="${name}MasterPage" class="vbox size-full">
 
   <div x-h-toolbar data-variant="transparent">
@@ -54,7 +59,7 @@
             <tr x-h-table-row>
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-              <th x-h-table-head scope="col"#if($property.isNumberType) class="text-right"#end>${property.name}</th>
+              <th x-h-table-head scope="col"#if($property.isNumberType) class="text-right"#end#visibleGate($property)>${property.name}</th>
 #end
 #end
               <th x-h-table-head scope="col"></th>
@@ -68,17 +73,17 @@
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
 #if($property.widgetType == "DOCUMENT_STATUS")
                 <!-- EntityStatus column: the resolved status name as a coloured badge pill. -->
-                <td x-h-table-cell><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}))" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>
+                <td x-h-table-cell#visibleGate($property)><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}))" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>
 #elseif($property.widgetType == "DROPDOWN")
-                <td x-h-table-cell x-text="lookupText('${property.name}', row.${property.name})"></td>
+                <td x-h-table-cell#visibleGate($property) x-text="lookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.isDateType)
-                <td x-h-table-cell x-text="displayValue(row.${property.name}, true)"></td>
+                <td x-h-table-cell#visibleGate($property) x-text="displayValue(row.${property.name}, true)"></td>
 #elseif($property.isFloatType)
-                <td x-h-table-cell class="text-right" x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></td>
+                <td x-h-table-cell class="text-right"#visibleGate($property) x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></td>
 #elseif($property.isNumberType)
-                <td x-h-table-cell class="text-right" x-text="displayValue(row.${property.name})"></td>
+                <td x-h-table-cell class="text-right"#visibleGate($property) x-text="displayValue(row.${property.name})"></td>
 #else
-                <td x-h-table-cell x-text="displayValue(row.${property.name})"></td>
+                <td x-h-table-cell#visibleGate($property) x-text="displayValue(row.${property.name})"></td>
 #end
 #end
 #end
@@ -141,7 +146,7 @@
         <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap">
           <template x-for="task in $store.processTasks.getTasks(selected)" :key="task.id">
             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
-              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('$projectName:${tprefix}.processes.' + (App.config.processTaskKeys || {})[task.name], task.name)"></span>
+              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="$store.processTasks.taskName(task)"></span>
             </button>
           </template>
         </div>
@@ -171,7 +176,7 @@
 #if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))
               <div class="vbox gap-0" x-show="selected?.${property.name} !== null && selected?.${property.name} !== undefined && selected?.${property.name} !== ''">
 #else
-              <div class="vbox gap-0">
+              <div class="vbox gap-0"#visibleGate($property)>
 #end
                 <span x-h-text.muted class="text-xs" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${plabel}')"></span>
 #if($property.widgetType == "DOCUMENT_STATUS")
@@ -271,7 +276,7 @@
                         <td x-h-table-cell data-row-actions>
                           <template x-for="task in $store.processTasks.getTasks(row)" :key="task.id">
                             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
-                              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('$projectName:${tprefix}.processes.' + (App.config.processTaskKeys || {})[task.name], task.name)"></span>
+                              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="$store.processTasks.taskName(task)"></span>
                             </button>
                           </template>
                           <button x-h-button data-variant="transparent" data-size="sm" aria-label="Preview" @click="previewRow(row)"><i role="img" x-h-lucide data-lucide="eye"></i></button>
@@ -282,6 +287,52 @@
                 </table>
               </div>
               </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- ===== Related registers: the records that REFERENCE this one, read-only. Those records are
+             owned by their own entities - own lifecycle, own pages, own processes - so this is a
+             window onto them and never an editor: a row opens the source's own record page in the
+             shared dialog (the source may live in another application entirely). ===== -->
+        <template x-for="r in relatedDefs" :key="r.entity + ':' + selectedId">
+          <div x-data="relatedPanel(r, selectedId)" x-h-card class="w-full">
+            <div x-h-card-header>
+              <h3 x-h-card-title x-text="title"></h3>
+            </div>
+            <div x-h-card-content>
+              <div x-show="state === 'loading'"><div x-h-spinner></div></div>
+              <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
+              <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
+              <div x-show="state === 'default'" x-h-table-container.scroll style="max-height: 320px">
+                <table x-h-table data-borders="rows">
+                  <thead x-h-table-header>
+                    <tr x-h-table-row>
+                      <template x-for="col in def.columns" :key="col.name">
+                        <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="columnHeader(col)"></th>
+                      </template>
+                      <th x-h-table-head scope="col"></th>
+                    </tr>
+                  </thead>
+                  <tbody x-h-table-body>
+                    <template x-for="row in rows" :key="row[def.primaryKey]">
+                      <tr x-h-table-row data-hoverable="true">
+                        <template x-for="col in def.columns" :key="col.name">
+                          <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+                            <template x-if="col.number"><span x-text="cellValue(col, row)"></span></template>
+                            <template x-if="!col.number">
+                              <div style="white-space: normal; overflow-wrap: break-word; max-width: 28rem;" x-text="cellValue(col, row)"></div>
+                            </template>
+                          </td>
+                        </template>
+                        <td x-h-table-cell data-row-actions>
+                          <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="openRow(row)" :aria-label="T('$projectName:${tprefix}.defaults.open', 'Open')"><i role="img" x-h-lucide data-lucide="external-link"></i></button>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </template>

@@ -10,7 +10,10 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.lessThan;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -19,7 +22,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.google.gson.Gson;
 
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -30,6 +32,7 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * Cross-model schedule SOURCE coverage: a schedule owned by the CONSUMER model iterates a source
@@ -51,6 +54,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * {@code .model} absent, and a mistyped {@code where} field - both drop the schedule with a warning
  * in the generate response (never a job that cannot compile).
  */
+// One Dirigible boot for the whole class: each method cleans up after itself (or is read-only), so
+// the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentCrossModelScheduleSourceIT extends IntegrationTest {
 
     private static final String WORKSPACE = "workspace";
@@ -253,18 +259,11 @@ class IntentCrossModelScheduleSourceIT extends IntegrationTest {
                                                           .extract()
                                                           .jsonPath()
                                                           .getList("codeGenerations")));
+        // The intent engine runs the model-to-code recipes itself, in the same call: assert each one
+        // succeeded instead of replaying them from here.
         for (Map<String, Object> codeGeneration : plan.get()) {
-            String template = String.valueOf(codeGeneration.get("templateId"));
-            String modelPath = String.valueOf(codeGeneration.get("path"));
-            String parameters = new Gson().toJson(codeGeneration.get("parameters"));
-            String payload = "{\"template\":\"" + template + "\",\"parameters\":" + parameters + "}";
-            restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                     .body(payload)
-                                                     .when()
-                                                     .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + project
-                                                             + "?path=" + modelPath)
-                                                     .then()
-                                                     .statusCode(201));
+            assertEquals(Boolean.TRUE, codeGeneration.get("generated"),
+                    "generating code from " + codeGeneration.get("path") + " failed: " + codeGeneration.get("error"));
         }
     }
 
@@ -315,10 +314,14 @@ class IntentCrossModelScheduleSourceIT extends IntegrationTest {
             restAssuredExecutor.execute(() -> given().when()
                                                      .delete("/services/ide/publisher/" + WORKSPACE + "/" + project)
                                                      .then()
-                                                     .statusCode(greaterThanOrEqualTo(200)));
+                                                     .statusCode(both(greaterThanOrEqualTo(200)).and(lessThan(300))));
             if (repository.hasCollection(projectPath(project))) {
                 repository.removeCollection(projectPath(project));
             }
         }
+        // The context (and its Quartz scheduler) now outlives the method: run the synchronizers so the
+        // JobSynchronizer's DELETE branch unschedules the published 5-second cron job - otherwise it
+        // keeps firing against unloaded gen classes for the rest of the class.
+        synchronizationProcessor.forceProcessSynchronizers();
     }
 }

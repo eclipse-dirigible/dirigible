@@ -13,6 +13,7 @@ import org.eclipse.dirigible.components.api.security.ActAsFacade;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceData;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessLabelKeys;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskActionData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskDTO;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
@@ -52,11 +53,21 @@ public class BpmInboxEndpoint extends BaseEndpoint {
     @GetMapping(value = "/instance/{id}/tasks")
     public ResponseEntity<List<TaskDTO>> getProcessInstanceTasks(@PathVariable("id") String id,
             @RequestParam(value = "type", required = false) String type) {
-        List<TaskDTO> taskDTOS = bpmService.findTasks(id, extractPrincipalType(type))
-                                           .stream()
-                                           .map(this::mapToDTO)
-                                           .collect(Collectors.toList());
-        return ResponseEntity.ok(taskDTOS);
+        return ResponseEntity.ok(mapToDTOs(bpmService.findTasks(id, extractPrincipalType(type))));
+    }
+
+    /**
+     * Maps a task list, resolving each process definition's task-label catalog once - a whole inbox is
+     * typically a handful of definitions, and every task of one shares its catalog.
+     *
+     * @param tasks the tasks
+     * @return the DTOs
+     */
+    private List<TaskDTO> mapToDTOs(List<Task> tasks) {
+        Map<String, Optional<ProcessLabelKeys>> labelKeys = new HashMap<>();
+        return tasks.stream()
+                    .map(task -> mapToDTO(task, labelKeys))
+                    .collect(Collectors.toList());
     }
 
     private static PrincipalType extractPrincipalType(String type) {
@@ -69,7 +80,7 @@ public class BpmInboxEndpoint extends BaseEndpoint {
         return principalType;
     }
 
-    private TaskDTO mapToDTO(Task task) {
+    private TaskDTO mapToDTO(Task task, Map<String, Optional<ProcessLabelKeys>> labelKeys) {
         List<IdentityLink> identityLinks = bpmService.getTaskIdentityLinks(task.getId());
 
         TaskDTO dto = new TaskDTO();
@@ -91,17 +102,22 @@ public class BpmInboxEndpoint extends BaseEndpoint {
         dto.setProcessInstanceBusinessKey(processInstance.getBusinessKey());
         dto.setProcessDefinitionId(processInstance.getProcessDefinitionId());
         dto.setProcessDefinitionName(processInstance.getProcessDefinitionName());
+        // The names in the language of whoever is looking at them: the process declares the i18n
+        // catalog its module's labels live in, and a BPMN id keys them within it. Cross-project shell
+        // surfaces (the Inbox, the notification bell, the task-form dialog) have no idea which module
+        // a task came from, so the keys have to travel with the task.
+        labelKeys.computeIfAbsent(task.getProcessDefinitionId(), bpmService::getProcessLabelKeys)
+                 .ifPresent(keys -> {
+                     dto.setNameKey(keys.taskNameKey(task.getTaskDefinitionKey()));
+                     dto.setProcessDefinitionNameKey(keys.processNameKey());
+                 });
 
         return dto;
     }
 
     @GetMapping(value = "/tasks")
     public ResponseEntity<List<TaskDTO>> getTasks(@RequestParam(value = "type", required = false) String type) {
-        List<TaskDTO> taskDTOS = bpmService.findTasks(extractPrincipalType(type))
-                                           .stream()
-                                           .map(this::mapToDTO)
-                                           .collect(Collectors.toList());
-        return ResponseEntity.ok(taskDTOS);
+        return ResponseEntity.ok(mapToDTOs(bpmService.findTasks(extractPrincipalType(type))));
     }
 
     @GetMapping(value = "/tasks/{taskId}/variables")
@@ -128,9 +144,7 @@ public class BpmInboxEndpoint extends BaseEndpoint {
 
         if (CLAIM.getActionName()
                  .equals(actionData.getAction())) {
-            // under act-as (delegated entry) a claim assigns the task to the ACTING identity, so
-            // the flow's record of who owns the step matches whose work it is
-            bpmService.claimTask(taskId, ActAsFacade.effectiveUser());
+            bpmService.claimTask(taskId, claimantFor(taskId));
         } else if (UNCLAIM.getActionName()
                           .equals(actionData.getAction())) {
             bpmService.unclaimTask(taskId);
@@ -143,6 +157,53 @@ public class BpmInboxEndpoint extends BaseEndpoint {
         }
         return ResponseEntity.ok()
                              .build();
+    }
+
+    /**
+     * Who a claim assigns the task to. Under act-as (delegated entry) that is the ACTING identity, but
+     * ONLY for a task addressed to that person - one where they are a candidate user, i.e. their own
+     * work the delegate is entering on their behalf. A task the caller reached through their OWN roles
+     * (a back-office group task: approve, issue, send) is claimed by the REAL user, whatever is armed:
+     * stamping the acted-as person there attributes a decision to someone who never made it, and
+     * strands the task on an identity whose group-candidate visibility the claim just removed it from.
+     *
+     * @param taskId the task about to be claimed
+     * @return the username to claim for
+     */
+    private String claimantFor(String taskId) {
+        String realUser = UserFacade.getName();
+        String acting = ActAsFacade.actingAs();
+        if (acting == null) {
+            return realUser;
+        }
+        boolean addressedToActingIdentity = bpmService.getTaskIdentityLinks(taskId)
+                                                      .stream()
+                                                      .map(IdentityLinkInfo::getUserId)
+                                                      .anyMatch(acting::equals);
+        if (addressedToActingIdentity) {
+            return acting;
+        }
+        logger.info("Act-as: task [{}] is not addressed to [{}] - claiming it for the real user [{}]", taskId, acting, realUser);
+        return realUser;
+    }
+
+    /**
+     * What act-as is currently doing to this Inbox: who is armed, and how many of the REAL user's own
+     * assigned tasks the armed state is hiding. An armed session's assignee query serves the acting
+     * identity's world, so the real user's tasks silently vanish from their own Inbox - this is what
+     * lets the Inbox say so instead of rendering an indistinguishable empty state.
+     *
+     * @return the acting identity (null when none) and the hidden-task count
+     */
+    @GetMapping(value = "/act-as")
+    public ResponseEntity<ActAsInboxState> getActAsState() {
+        String acting = ActAsFacade.actingAs();
+        long hidden = acting == null ? 0 : bpmService.countTasksByAssignee(UserFacade.getName());
+        return ResponseEntity.ok(new ActAsInboxState(acting, hidden));
+    }
+
+    /** The Inbox's act-as state: the armed acting identity and the real user's tasks it hides. */
+    public record ActAsInboxState(String actingAs, long hiddenTasks) {
     }
 
     private void verifyCurrentUserHasPermissionForTask(String id) {

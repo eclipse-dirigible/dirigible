@@ -19,7 +19,6 @@
   const HEALTHCHECK = '/services/core/healthcheck';
   const SHELLS = '/services/js/platform-core/extension-services/shells.js?extensionPoints=platform-shells';
   const PERSPECTIVES = '/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-perspectives';
-  const CODE_GEN = '/services/js/service-generate/generate.mjs/model';
 
   // The agent endpoint makes up to three upstream model calls at 120s each (the first draft plus two
   // server-side repair rounds), so the worst case is around six minutes. Anything less and a legitimately
@@ -44,6 +43,12 @@
 
   const ws = () => App.config.workspace;
   const seg = encodeURIComponent;
+
+  // A conversation is identified by the app and the surface it was held in - never by the workspace or
+  // the user, so a teammate opening the same app on another machine restores the same dialogue.
+  const CONVERSATION_SURFACE = 'builder';
+  const conversationQuery = (project) =>
+    `project=${seg(project)}&surface=${CONVERSATION_SURFACE}&path=${seg(App.config.intentFile)}`;
 
   /** Encode a file path segment by segment - the slashes are structural and must survive. */
   const encodePath = (path) => String(path).split('/').map(seg).join('/');
@@ -111,8 +116,10 @@
 
     /**
      * One conversation turn. `history` must be the clean alternating user/assistant transcript.
-     * Returns `{reply, proposedYaml}` - note the endpoint answers 200 even when the proposal is
-     * still invalid, so callers MUST re-validate the proposal through parse() before applying it.
+     * Returns `{reply, proposedYaml, boundaries}` - note the endpoint answers 200 even when the
+     * proposal is still invalid, so callers MUST re-validate the proposal through parse() before
+     * applying it. `boundaries` lists the requirements the proposal could NOT express; they are part
+     * of the answer, not a footnote, and must be shown as such.
      */
     async agent(yaml, message, history) {
       const result = await call('POST', `${INTENT_BASE}/agent`, {
@@ -124,22 +131,43 @@
     },
 
     /**
-     * Generate the derived model files. Reads the intent FROM DISK, so the buffer must be saved first.
-     * Returns `{written, scrubbed, codeGenerations, warnings}`; throws with `issues` on 422.
+     * Generate the derived model files AND the code from them - one call, since the intent engine runs
+     * the model-to-code recipes itself. Reads the intent FROM DISK, so the buffer must be saved first.
+     * Returns `{written, scrubbed, codeGenerations, warnings}`, where each `codeGenerations` entry
+     * carries its own outcome (`generated`, plus `error` when it failed); throws with `issues` on 422.
      */
     async generate(project, path) {
       const url = `${INTENT_BASE}/generate?workspace=${seg(ws())}&project=${seg(project)}&path=${seg(path)}`;
-      const result = await call('POST', url, { timeoutMs: 5 * 60 * 1000 });
+      // One call now covers the models AND every model-to-code recipe, so it is allowed the time the
+      // whole chain used to have across its several calls.
+      const result = await call('POST', url, { timeoutMs: 10 * 60 * 1000 });
       return result.data || {};
     },
 
-    /** Replay one model-to-code generation from a `codeGenerations` entry (the editor's Generate does the same). */
-    async generateCode(project, entry) {
-      const url = `${CODE_GEN}/${seg(ws())}/${seg(project)}?path=${seg(entry.path)}`;
-      await call('POST', url, {
-        body: JSON.stringify({ template: entry.templateId, parameters: entry.parameters || {} }),
+    // ----- Conversation history -----------------------------------------------
+
+    /**
+     * The stored conversation of one app: `{messages, turns}` - everything that was said
+     * (`[{sequence, role, content, createdBy, createdAt}]`) plus the alternating user/assistant
+     * transcript to send upstream on the next turn, which the SERVER derives (a failed turn's
+     * unanswered message is kept in the record but must never be replayed). Both are empty when
+     * nothing has been said about the app yet - the endpoint answers 200 with empty lists rather than
+     * 404, so "no history" is never an error path.
+     */
+    async conversation(project) {
+      const result = await call('GET', `${INTENT_BASE}/conversations?${conversationQuery(project)}`);
+      const data = result.data || {};
+      return { messages: data.messages || [], turns: data.turns || [] };
+    },
+
+    /**
+     * Append the messages of one completed turn, as `[{role, content}]`. Starts the conversation when
+     * this is its first message; the server stamps the author and the time.
+     */
+    async appendConversation(project, messages) {
+      await call('POST', `${INTENT_BASE}/conversations/messages?${conversationQuery(project)}`, {
+        body: JSON.stringify({ messages }),
         contentType: 'application/json',
-        timeoutMs: 5 * 60 * 1000,
       });
     },
 

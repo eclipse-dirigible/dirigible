@@ -29,7 +29,8 @@
       "startShort": "Започни",
       "bannerActing": "Действате като",
       "bannerNote": "записите се водят на името на този човек; журналът пази вашето",
-      "exit": "Изход"
+      "exit": "Изход",
+      "bannerUntil": "до {{time}}"
     },
     "notifications": {
       "title": "Известия",
@@ -57,7 +58,10 @@
       "mine": "Моя",
       "available": "Свободна",
       "assignedToMe": "Възложена на мен",
-      "ref": "Реф. {{key}}"
+      "ref": "Реф. {{key}}",
+      "actAsHidden": "Действате като {{person}} — {{count}} от вашите собствени задачи са скрити",
+      "actAsServing": "Действате като {{person}} — тази пощенска кутия показва неговите задачи, не вашите",
+      "noTasksActAsHint": "Действате като {{person}} и този списък е негов. Излезте, за да видите своите задачи."
     },
     "documents": {
       "newFolder": "Нова папка",
@@ -191,7 +195,12 @@
       "confirmTitle": "Изпълни действие",
       "confirmBody": "Да се изпълни ли {{name}} за избрания запис? Това създава или променя данни.",
       "confirmCancel": "Отказ",
-      "confirmRun": "Изпълни"
+      "confirmRun": "Изпълни",
+      "promptTitle": "Изпълни действие",
+      "promptMissing": "Задължителни: {{fields}}",
+      "promptCancel": "Отказ",
+      "promptRun": "Изпълни",
+      "promptSelect": "Изберете..."
     }
   }
 }

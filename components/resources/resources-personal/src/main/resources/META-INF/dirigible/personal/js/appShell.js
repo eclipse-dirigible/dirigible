@@ -195,7 +195,7 @@ document.addEventListener('alpine:init', () => {
     // surfaces and the Inbox serve THAT person's world - the manager-does-the-entry mode. The
     // state is server-side session; arming/exiting reloads so every page and hosted app
     // re-resolves under the new identity. Entitlement + audit live server-side.
-    actAs: { entitled: false, acting: null },
+    actAs: { entitled: false, acting: null, expiresAt: null },
     actAsDialog: false,
     actAsInput: '',
     async loadActAs() {
@@ -203,11 +203,17 @@ document.addEventListener('alpine:init', () => {
         const res = await fetch('/services/core/actas', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
         if (res.ok) {
           const s = await res.json();
-          this.actAs = { entitled: !!s.entitled, acting: s.actingAs || null };
+          this.actAs = { entitled: !!s.entitled, acting: s.actingAs || null, expiresAt: s.expiresAt || null };
         }
       } catch (e) {
         console.error('Failed to load the act-as state', e);
       }
+    },
+    // The arming expires on its own; show when, so the banner is a deadline and not just a state.
+    actAsUntil() {
+      if (!this.actAs.expiresAt) return '';
+      try { return new Date(this.actAs.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+      catch (_) { return ''; }
     },
     async armActAs() {
       const username = (this.actAsInput || '').trim();
@@ -231,6 +237,9 @@ document.addEventListener('alpine:init', () => {
 
     async init() {
       this.loadActAs(); // fire-and-forget: the banner/menu appear when the state arrives
+      // The arming expires server-side; re-read it when the tab comes back so the banner is not
+      // still claiming an identity the platform has already dropped.
+      window.addEventListener('focus', () => this.loadActAs());
       const projectionsLoaded = this.loadProjections();
       try {
         const res = await fetch(PERSPECTIVES_URL, { headers: { 'Accept': 'application/json' } });

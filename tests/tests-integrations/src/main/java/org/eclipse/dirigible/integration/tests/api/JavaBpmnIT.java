@@ -23,6 +23,7 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 import io.restassured.http.ContentType;
 
@@ -43,6 +44,9 @@ import io.restassured.http.ContentType;
  * Each delegate writes a process variable; the test asserts both variables made it into the
  * historic record, proving end-to-end execution.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself (or is read-only), so
+// the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class JavaBpmnIT extends IntegrationTest {
 
     private static final String PROJECT = "java-bpmn-it";

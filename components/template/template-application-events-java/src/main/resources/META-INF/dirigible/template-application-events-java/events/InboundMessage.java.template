@@ -1,0 +1,51 @@
+package gen.events.${javaGenFolderName};
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+
+/**
+ * Inbound ${name}: ingest a ${entity} from every JSON message arriving on ${destination}.
+ *
+ * Generated from the intent inbound block - do not edit; it is re-generated with the application.
+ * The record is saved through the entity's repository, exactly as the webhook shape saves a posted
+ * body, so validations, translations and the create event all fire as they do for any other write.
+ * Self-describing MessageHandler (strong-interface style): the destination and kind come from the
+ * interface, not an annotation.
+ */
+@Component("${javaGenFolderName}_${className}Consumer")
+public class ${className}Consumer implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Consumer");
+
+    @Override
+    public String destination() {
+        return "${destination}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.${listenerKind};
+    }
+
+    @Override
+    public void onMessage(String message) {
+        ${entity}Entity entity = Json.parse(message, ${entity}Entity.class);
+        if (entity == null) {
+            LOG.warn("Inbound ${name}: an empty or invalid payload arrived on [{}] - nothing ingested", destination());
+            return;
+        }
+        new ${entity}Repository().save(entity);
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Inbound ${name}: the listener on [{}] failed - [{}]", destination(), error);
+    }
+}

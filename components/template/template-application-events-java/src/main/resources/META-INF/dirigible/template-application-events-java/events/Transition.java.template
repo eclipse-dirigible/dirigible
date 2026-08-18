@@ -1,4 +1,11 @@
 package gen.events.${javaGenFolderName};
+#if($notifyRecordScoped == "true")
+#set($recordArgument = "source, ")
+#set($recordParameter = "gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity source, ")
+#else
+#set($recordArgument = "")
+#set($recordParameter = "")
+#end
 
 import org.eclipse.dirigible.sdk.http.Body;
 import org.eclipse.dirigible.sdk.log.Logger;
@@ -88,21 +95,58 @@ public class ${className}Transition {
         // A FAN-OUT: one message per ${forEach} of the transitioned record, each to its own recipient
         // and about its own row. Every row is attempted - one missing address or one failed send never
         // stops the rest, and none of it can fail the transition.
+        java.util.List<gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Entity> rows =
+                new gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Repository().findAll(
+                        org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                           .eq("${forEachFkProperty}", source.${keyProperty}));
+#if($attach == "recordPrint")
+        // The document belongs to the RECORD, not to the row, so it is rendered ONCE for the whole
+        // fan-out - and not at all when there is nobody to mail it to. A render failure means nobody
+        // can be given what the message promises, so nothing is mailed (a mail claiming an attachment
+        // it lacks is worse than none) and the transition itself still stands.
+        java.util.Map document = null;
+        if (!rows.isEmpty()) {
+            try {
+                document = renderDocument(source);
+            } catch (Exception ex) {
+                LOG.error("Transition ${name}: the ${attachEntity} document could not be rendered - no mail was sent", ex);
+                return;
+            }
+        }
+#end
         int sent = 0;
-        for (gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Entity entity : new gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Repository().findAll(
-                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
-                                                                                   .eq("${forEachFkProperty}", source.${keyProperty}))) {
-            if (sendOne(entity)) {
+        for (gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Entity entity : rows) {
+            if (sendOne(${recordArgument}entity#if($attach == "recordPrint"), document#end)) {
                 sent++;
             }
         }
         LOG.info("Transition ${name}: mailed [{}] ${forEach} recipient(s) for ${entity} [{}]", sent, source.${keyProperty});
     }
+#if($attach == "recordPrint")
+
+    /**
+     * The transitioned ${attachEntity}'s own document, rendered once for the whole fan-out.
+     */
+    private static java.util.Map renderDocument(gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity source) {
+#if($attachLanguageFkProperty != "")
+        gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Entity attachLanguageSource =
+                source.${attachLanguageFkProperty} == null ? null
+                        : new gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Repository().findById(source.${attachLanguageFkProperty});
+#end
+        java.util.Map document = new java.util.HashMap();
+        document.put("type", "attachment");
+        document.put("contentType", "application/pdf");
+        document.put("fileName", ${attachFileNameExpression});
+        document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
+                new ${attachEntity}PrintFeeder().feed(source.${attachKeyProperty})));
+        return document;
+    }
+#end
 
     /**
      * Send about one ${forEach} row. Returns whether a message actually went out.
      */
-    private static boolean sendOne(gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Entity entity) {
+    private static boolean sendOne(${recordParameter}gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Entity entity#if($attach == "recordPrint"), java.util.Map document#end) {
         try {
 #else
     private static void sendNotification(gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity entity) {
@@ -112,6 +156,20 @@ public class ${className}Transition {
             gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity ${load.local} =
                     entity.${load.fkProperty} == null ? null
                             : new gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository().findById(entity.${load.fkProperty});
+#end
+#if($usesRecordUrl == "true")
+            // {recordUrl} - the deep link to the record this message is about (the ROW in a fan-out).
+            // The ROUTE is composed HERE, in the layer that knows the generated application's URL
+            // layout; the intent layer contributes only the entity and its key, which is what keeps it
+            // path-agnostic.
+            String recordUrl = org.eclipse.dirigible.sdk.core.Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
+                    + "/services/web/${projectName}/gen/${genFolderName}/index.html#/${recordUrlEntity}/" + entity.${recordUrlKeyProperty}
+                    + "/edit";
+#end
+#if($usesInboxUrl == "true")
+            // {inboxUrl} - the deep link to the recipient's process Inbox.
+            String inboxUrl = org.eclipse.dirigible.sdk.core.Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
+                    + "/services/web/${projectName}/gen/${genFolderName}/index.html#/inbox";
 #end
             String to = ${notifyToExpression};
             if (to == null || to.isBlank()) {
@@ -141,6 +199,10 @@ public class ${className}Transition {
             document.put("fileName", ${attachFileNameExpression});
             document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
                     new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
+            parts.add(document);
+#elseif($attach == "recordPrint")
+            // attach: recordPrint - the transitioned record's own document, rendered once above and
+            // attached to every row's message: one document, many recipients.
             parts.add(document);
 #end
             String from = org.eclipse.dirigible.sdk.core.Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");

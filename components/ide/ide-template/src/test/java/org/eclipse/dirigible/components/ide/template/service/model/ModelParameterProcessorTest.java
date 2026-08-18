@@ -144,6 +144,24 @@ class ModelParameterProcessorTest {
         assertEquals(List.of("Book"), perspective.get("views"));
     }
 
+    /**
+     * The flag the generated pages gate on: only an entity with a read-scoped property asks its
+     * controller which fields the caller may not see, so an application using none of this issues no
+     * such request at all.
+     */
+    @Test
+    void flagsOnlyTheEntitiesCarryingAReadScopedProperty() {
+        Map<String, Object> restricted = property("DailyRate", "DECIMAL");
+        restricted.put("roleRead", "Payroll,Administrator");
+        Map<String, Object> scoped = entity("Employee", "People", restricted);
+        Map<String, Object> plain = entity("Author", "Authors", property("Name", "VARCHAR"));
+
+        ModelParameterProcessor.process(model(scoped, plain), parameters());
+
+        assertEquals(Boolean.TRUE, scoped.get("hasRestrictedFields"));
+        assertFalse(plain.containsKey("hasRestrictedFields"), "an entity with no read-scoped property must not carry the flag");
+    }
+
     @Test
     void collectsTheDefaultRolesOnlyWhereTheModelAsksForThem() {
         Map<String, Object> asking = entity("Book", "Books", property("Name", "VARCHAR"));
@@ -296,6 +314,67 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * The line of a locked document must inherit the lock: its writes recompute the master's totals, so
+     * leaving the child unguarded leaves the master's own guard with an open back door.
+     */
+    @Test
+    void aCompositionChildInheritsItsMastersStatusLock() {
+        Map<String, Object> master = entity("Invoice", "Invoices", property("Id", "INTEGER"));
+        master.put("immutableStatusProperty", "Status");
+        master.put("immutableStatusValues", "2,3");
+        Map<String, Object> child = entity("InvoiceItem", "Invoices", compositionTo("Invoice", "Invoices"));
+
+        ModelParameterProcessor.process(model(master, child), javaParameters());
+
+        Map<String, Object> lock = masterLock(child);
+        assertEquals("Invoice", lock.get("fkProperty"));
+        assertEquals("Invoice", lock.get("entity"));
+        assertEquals("gen.sales_order.data.invoices.InvoiceEntity", lock.get("entityClass"));
+        assertEquals("gen.sales_order.data.invoices.InvoiceRepository", lock.get("repositoryClass"));
+        assertEquals("Status", lock.get("statusProperty"));
+        assertEquals("2,3", lock.get("statusValues"));
+        assertEquals(Boolean.FALSE, lock.get("always"));
+    }
+
+    @Test
+    void aCompositionChildInheritsAnAppendOnlyMaster() {
+        Map<String, Object> master = entity("Invoice", "Invoices", property("Id", "INTEGER"));
+        master.put("immutableAlways", "true");
+        Map<String, Object> child = entity("InvoiceItem", "Invoices", compositionTo("Invoice", "Invoices"));
+
+        ModelParameterProcessor.process(model(master, child), javaParameters());
+
+        assertEquals(Boolean.TRUE, masterLock(child).get("always"));
+    }
+
+    /**
+     * The deliberate post-lock collection (intent {@code locksWithMaster: false}) - money keeps
+     * arriving against an issued invoice long after its content is frozen.
+     */
+    @Test
+    void aChildOptedOutOfTheLockCarriesNoGuard() {
+        Map<String, Object> master = entity("Invoice", "Invoices", property("Id", "INTEGER"));
+        master.put("immutableStatusProperty", "Status");
+        master.put("immutableStatusValues", "2");
+        Map<String, Object> child = entity("InvoicePayment", "Invoices", compositionTo("Invoice", "Invoices"));
+        child.put("locksWithMaster", "false");
+
+        ModelParameterProcessor.process(model(master, child), javaParameters());
+
+        assertNull(child.get("masterLock"));
+    }
+
+    @Test
+    void aChildOfAnUnlockedMasterCarriesNoGuard() {
+        Map<String, Object> master = entity("Invoice", "Invoices", property("Id", "INTEGER"));
+        Map<String, Object> child = entity("InvoiceItem", "Invoices", compositionTo("Invoice", "Invoices"));
+
+        ModelParameterProcessor.process(model(master, child), javaParameters());
+
+        assertNull(child.get("masterLock"));
+    }
+
+    /**
      * Builds a model around the given entities.
      *
      * @param entities the entities
@@ -336,6 +415,46 @@ class ModelParameterProcessorTest {
         property.put("name", name);
         property.put("dataType", dataType);
         return property;
+    }
+
+    /**
+     * The inherited-lock metadata of a child entity.
+     *
+     * @param entity the child entity
+     * @return the metadata
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> masterLock(Map<String, Object> entity) {
+        return (Map<String, Object>) entity.get("masterLock");
+    }
+
+    /**
+     * Builds the composition FK a child carries to its master - the property the whole master-detail
+     * derivation keys on.
+     *
+     * @param master the master entity name
+     * @param masterPerspective the master's perspective
+     * @return the property
+     */
+    private static Map<String, Object> compositionTo(String master, String masterPerspective) {
+        Map<String, Object> property = property(master, "INTEGER");
+        property.put("relationshipType", "COMPOSITION");
+        property.put("relationshipCardinality", "1_n");
+        property.put("relationshipEntityName", master);
+        property.put("relationshipEntityPerspectiveName", masterPerspective);
+        return property;
+    }
+
+    /**
+     * The parameters of a generation targeting the Java runtime - the only one the cross-entity
+     * derivations run for.
+     *
+     * @return the parameters
+     */
+    private static Map<String, Object> javaParameters() {
+        Map<String, Object> parameters = parameters();
+        parameters.put("javaRuntime", Boolean.TRUE);
+        return parameters;
     }
 
     /**

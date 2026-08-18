@@ -423,6 +423,57 @@ class ReportIntentGeneratorTest {
                 "expected an ascending-thresholds issue, got: " + ex.getIssues());
     }
 
+    /**
+     * A report has no field-level scoping, so one that sums a {@code visibleTo:} field serves that
+     * restricted figure to everyone who may open the report. Legitimate to author, so it is reported as
+     * a generation warning naming the report, the field and the roles - never silently.
+     */
+    @Test
+    void aReportOverARestrictedFieldIsReported() {
+        String yaml = """
+                name: hr
+                permissions:
+                  - { role: Payroll }
+                entities:
+                  - name: Department
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, length: 100 }
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: dailyRate, type: decimal, visibleTo: [Payroll] }
+                      - { name: headcount, type: integer }
+                    relations:
+                      - { name: Department, kind: manyToOne, to: Department }
+                reports:
+                  - name: PayrollByDepartment
+                    source: Employee
+                    dimensions: ["Department.name"]
+                    measures: ["sum(dailyRate)"]
+                  - name: HeadcountByDepartment
+                    source: Employee
+                    dimensions: ["Department.name"]
+                    measures: ["sum(headcount)"]
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        org.eclipse.dirigible.components.intent.generator.IntentGenerationContext context = TestContexts.context(model);
+        ReportIntentGenerator.buildForTest(context, model.getReports()
+                                                         .get(0));
+        assertTrue(context.getIssues()
+                          .stream()
+                          .anyMatch(issue -> issue.contains("PayrollByDepartment") && issue.contains("Employee.dailyRate")
+                                  && issue.contains("[Payroll]")),
+                "the re-exposing report should be reported, got: " + context.getIssues());
+
+        org.eclipse.dirigible.components.intent.generator.IntentGenerationContext plain = TestContexts.context(model);
+        ReportIntentGenerator.buildForTest(plain, model.getReports()
+                                                       .get(1));
+        assertTrue(plain.getIssues()
+                        .isEmpty(),
+                "a report touching no restricted field has nothing to report, got: " + plain.getIssues());
+    }
+
     @Test
     void ageingRequiresATemporalField() {
         String yaml = AGEING_INTENT.replace("ageing(due, [30, 60, 90])", "ageing(balance, [30, 60, 90])");
@@ -432,5 +483,95 @@ class ReportIntentGeneratorTest {
                      .stream()
                      .anyMatch(issue -> issue.contains("must be a date/timestamp field")),
                 "expected a temporal-field issue, got: " + ex.getIssues());
+    }
+
+    /**
+     * A multilingual nomenclature reported on from both sides: as a related label and as the source.
+     */
+    private static final String MULTILINGUAL_INTENT = """
+            name: shop
+            entities:
+              - name: Unit
+                kind: setting
+                multilingual: true
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                  - { name: code, type: string }
+                  - { name: factor, type: decimal }
+              - name: Line
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string }
+                  - { name: quantity, type: decimal }
+                relations:
+                  - { name: Unit, kind: manyToOne, to: Unit }
+            reports:
+              - name: QuantityByUnit
+                source: Line
+                dimensions: [Unit, Unit.code, Unit.factor, note]
+                measures: ["sum(quantity)"]
+                filter: "Unit.code != 'X'"
+              - name: UnitFactors
+                source: Unit
+                dimensions: [name, factor]
+            """;
+
+    @Test
+    void translatableColumnsOfAMultilingualEntityAreOverlaidForTheRequestLanguage() {
+        IntentModel model = IntentParser.parse(MULTILINGUAL_INTENT);
+        String query = (String) ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                     .get(0))
+                                                     .get("query");
+
+        // One LEFT join to the language table, keyed on the base row and the request language - LEFT so
+        // an untranslated row (or a caller with no language) still shows, with its base value.
+        assertEquals(1, query.split("LEFT JOIN", -1).length - 1, query);
+        assertTrue(query.contains(
+                "LEFT JOIN \"SHOP_UNIT_LANG\" as Unit_LANG ON Unit_LANG.\"Id\" = Unit.\"UNIT_ID\" AND Unit_LANG.\"Language\" = :language"),
+                query);
+        // The related nomenclature's label - the column the issue was raised about.
+        assertTrue(query.contains("COALESCE(Unit_LANG.\"Name\", Unit.\"UNIT_NAME\") as \"Unit\""), query);
+        // ... and any other translatable property reached through the relation.
+        assertTrue(query.contains("COALESCE(Unit_LANG.\"Code\", Unit.\"UNIT_CODE\") as \"Unit Code\""), query);
+        // A non-translatable property has no language column, so it stays on the base table.
+        assertTrue(query.contains("Unit.\"UNIT_FACTOR\" as \"Unit Factor\""), query);
+        assertFalse(query.contains("Unit_LANG.\"Factor\""), query);
+        // The source entity is not multilingual, so its own columns are untouched.
+        assertTrue(query.contains("Line.\"LINE_NOTE\" as \"Note\""), query);
+        // An aggregated report groups by what it selects, or the translated column is not grouped at all.
+        assertTrue(query.contains(
+                "GROUP BY COALESCE(Unit_LANG.\"Name\", Unit.\"UNIT_NAME\"), COALESCE(Unit_LANG.\"Code\", Unit.\"UNIT_CODE\"), Unit.\"UNIT_FACTOR\", Line.\"LINE_NOTE\""),
+                query);
+        // The overlay belongs to the SELECT list only: the filter still compiles against the BASE
+        // table, which is why translating a nomenclature can never change what a report matches.
+        assertTrue(query.contains("WHERE Unit.\"UNIT_CODE\" != 'X'"), query);
+    }
+
+    @Test
+    void aPlainFieldOfAMultilingualSourceIsOverlaidToo() {
+        IntentModel model = IntentParser.parse(MULTILINGUAL_INTENT);
+        String query = (String) ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                     .get(1))
+                                                     .get("query");
+
+        assertTrue(query.contains(
+                "LEFT JOIN \"SHOP_UNIT_LANG\" as Unit_LANG ON Unit_LANG.\"Id\" = Unit.\"UNIT_ID\" AND Unit_LANG.\"Language\" = :language"),
+                query);
+        assertTrue(query.contains("COALESCE(Unit_LANG.\"Name\", Unit.\"UNIT_NAME\") as \"Name\""), query);
+        assertTrue(query.contains("Unit.\"UNIT_FACTOR\" as \"Factor\""), query);
+    }
+
+    @Test
+    void aReportOverAPlainEntityBindsNoLanguageParameter() {
+        IntentModel model = IntentParser.parse(MULTILINGUAL_INTENT.replace("    multilingual: true\n", ""));
+        String query = (String) ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                     .get(0))
+                                                     .get("query");
+
+        // Nothing to overlay, nothing to bind: the generated repository keys its language binding off
+        // the query itself, so an unchanged model must stay byte-identical to what it emitted before.
+        assertFalse(query.contains(":language"), query);
+        assertFalse(query.contains("LEFT JOIN"), query);
     }
 }

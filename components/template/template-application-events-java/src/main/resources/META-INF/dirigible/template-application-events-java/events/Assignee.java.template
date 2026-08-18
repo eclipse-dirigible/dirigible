@@ -1,0 +1,56 @@
+package gen.events.${javaGenFolderName};
+
+import org.flowable.engine.delegate.DelegateExecution;
+import org.flowable.engine.delegate.JavaDelegate;
+
+import gen.${javaGenFolderName}.data.${javaOwnerPerspective}.${ownerEntity}Entity;
+import gen.${javaGenFolderName}.data.${javaOwnerPerspective}.${ownerEntity}Repository;
+
+/**
+ * Resolves the assignee of the ${step} task in the ${process} process by walking '${path}' off the
+ * ${ownerEntity} record, and publishes the resolved login into the '${variable}' process variable.
+ * Generated from the intent .glue file - do not edit; it is re-generated with the application.
+ * <p>
+ * Runs as a BPMN service task (flowable:delegateExpression="\${JavaTask}") right before the task, so
+ * the walk sees a relation an earlier step of this very process set rather than a start-time value.
+ * The task binds flowable:assignee to the variable and keeps a candidate group, so an unresolved
+ * walk - a null hop, a missing record, a blank identity - leaves a task the group can still claim
+ * instead of one nobody can see.
+ */
+public class ${handler} implements JavaDelegate {
+
+    private final ${ownerEntity}Repository ownerRepository = new ${ownerEntity}Repository();
+
+    @Override
+    public void execute(DelegateExecution execution) {
+        // Publish the variable up front, on every path out of this method: the task's assignee
+        // expression reads it at task creation and an ABSENT variable is an expression error, while a
+        // null one simply leaves the task to its candidate group.
+        execution.setVariable("${variable}", null);
+        Object ownerKey = execution.getVariable("${ownerKeyProperty}");
+        if (!(ownerKey instanceof Number)) {
+            return;
+        }
+        ${ownerEntity}Entity owner = ownerRepository.findById(((Number) ownerKey).${ownerKeyAccessor}());
+        if (owner == null) {
+            return;
+        }
+        Object fk = owner.${firstFkProperty};
+#foreach($hop in $hops)
+        if (fk == null) {
+            return;
+        }
+        ${hop.entityClass} ${hop.local} = new ${hop.repositoryClass}().findById(fk);
+        if (${hop.local} == null) {
+            return;
+        }
+#if($hop.nextFkProperty != "")
+        fk = ${hop.local}.${hop.nextFkProperty};
+#end
+#end
+        Object identity = ${identityLocal}.${identityProperty};
+        if (identity != null && !String.valueOf(identity).isBlank()) {
+            execution.setVariable("${variable}", String.valueOf(identity));
+        }
+    }
+}

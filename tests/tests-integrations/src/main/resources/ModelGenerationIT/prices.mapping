@@ -1,0 +1,25 @@
+{
+    "mapping": {
+        "structures": [
+            {
+                "name": "SOURCE_PRICES",
+                "type": "SOURCE",
+                "columns": [
+                    { "name": "AMOUNT", "type": "DECIMAL" },
+                    { "name": "CODE", "type": "VARCHAR" },
+                    { "name": "NOTE", "type": "VARCHAR" }
+                ]
+            },
+            {
+                "name": "TARGET_PRICES",
+                "type": "TARGET",
+                "columns": [
+                    { "name": "TOTAL", "type": "DECIMAL", "formula": "AMOUNT * 2", "scale": 4 },
+                    { "name": "LABEL", "type": "VARCHAR", "constant": "imported" },
+                    { "name": "CODE", "type": "VARCHAR", "direct": "CODE", "criteria": "== null" },
+                    { "name": "AMOUNT", "type": "DECIMAL", "direct": "AMOUNT", "criteria": "> 1000" }
+                ]
+            }
+        ]
+    }
+}

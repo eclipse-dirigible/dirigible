@@ -52,8 +52,34 @@ import org.eclipse.dirigible.components.intent.model.StepIntent;
  */
 public final class NotifySupport {
 
-    /** The only {@code attach} value today: the record's own rendered print template. */
+    /** {@code attach: print} - the rendered print template of the record the block is about. */
     public static final String ATTACH_PRINT = "print";
+
+    /**
+     * {@code attach: recordPrint} - the rendered print template of a fan-out's <b>anchor record</b>
+     * rather than of the row. The mirror of {@link #ATTACH_PRINT} inside a fan-out: the related rows
+     * are only the recipient list (the invited suppliers of a request for quotation, the participants
+     * of a meeting) and the document belongs to the record they hang off, so it is rendered ONCE and
+     * the same PDF rides on every message.
+     */
+    public static final String ATTACH_RECORD_PRINT = "recordPrint";
+
+    /**
+     * The reserved placeholder scope a fan-out addresses its <b>anchor record</b> with -
+     * {@code {record.<field>}} in a subject or body, while every bare path keeps resolving against the
+     * ROW. The scope is explicit on purpose: when both records are addressable, an implicit rule is how
+     * a message ends up quoting the wrong one, and nothing about the rendered text would show it.
+     */
+    public static final String RECORD_SCOPE = "record";
+
+    /**
+     * The local the generated code holds the fan-out's anchor record in - the name both fan-out
+     * templates already give it, so a record-scoped expression pre-rendered here drops straight in.
+     */
+    public static final String RECORD_LOCAL = "source";
+
+    /** The local the generated code holds the record a message is about in (a fan-out's ROW). */
+    static final String ENTITY_LOCAL = "entity";
 
     /**
      * The run-time language fallback a render defaults to when the notify block declares neither
@@ -147,6 +173,32 @@ public final class NotifySupport {
     }
 
     /**
+     * The glue keys the reserved deep-link tokens contribute, always present so the templates can
+     * compare them. The two {@code uses*} flags say which link locals the events template must declare;
+     * the other two are the only facts the intent layer supplies towards the record link - the entity
+     * and its key property. The ROUTE itself is assembled by that template, which is the layer that
+     * knows the generated application's URL layout (the path-agnostic rule).
+     *
+     * <p>
+     * In a fan-out {@code about} is the ROW, so {@code recordUrl} links the row - the thing that
+     * message is about - exactly like every other bare path.
+     *
+     * @param plan the translated notify block, or {@code null} when nothing is sent
+     * @param about the entity the message is about (a fan-out's row)
+     * @return the {@code usesRecordUrl} / {@code usesInboxUrl} / {@code recordUrlEntity} /
+     *         {@code recordUrlKeyProperty} keys
+     */
+    public static Map<String, Object> deepLinkFields(NotificationSupport.Plan plan, EntityIntent about) {
+        boolean record = plan != null && plan.usesRecordUrl() && about != null;
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("usesRecordUrl", String.valueOf(record));
+        fields.put("usesInboxUrl", String.valueOf(plan != null && plan.usesInboxUrl()));
+        fields.put("recordUrlEntity", record ? about.getName() : "");
+        fields.put("recordUrlKeyProperty", record ? IntentEntities.keyFieldName(about) : "");
+        return fields;
+    }
+
+    /**
      * A resolved print attachment: everything the generated code needs to render and name the PDF.
      *
      * @param entity the document entity whose print template is rendered
@@ -157,8 +209,17 @@ public final class NotifySupport {
      *        loaded record (the document number when the entity has one, else the entity name + id)
      * @param languageLoad the {@code languageFrom} relation load backing the expression, or
      *        {@code null} when the language needs no related record
+     * @param anchorScoped whether the rendered record is a fan-out's anchor ({@code recordPrint})
+     *        instead of the record the block is about - the expressions then read the
+     *        {@link #RECORD_LOCAL} local and the render happens once, outside the per-row loop
      */
-    public record PrintAttachment(String entity, String languageExpression, String fileNameExpression, LanguageLoad languageLoad) {
+    public record PrintAttachment(String entity, String languageExpression, String fileNameExpression, LanguageLoad languageLoad,
+            boolean anchorScoped) {
+
+        /** @return the authored {@code attach} value this attachment came from. */
+        public String kind() {
+            return anchorScoped ? ATTACH_RECORD_PRINT : ATTACH_PRINT;
+        }
     }
 
     /**
@@ -249,11 +310,40 @@ public final class NotifySupport {
 
     /**
      * @param notify a notify block, may be {@code null}
-     * @return whether it asks for the record's print to be attached
+     * @return whether it asks for a rendered document to be attached, of either scope
      */
     public static boolean attachesPrint(NotificationIntent notify) {
-        return notify != null && notify.getAttach() != null && ATTACH_PRINT.equalsIgnoreCase(notify.getAttach()
-                                                                                                   .trim());
+        return attaches(notify, ATTACH_PRINT) || attaches(notify, ATTACH_RECORD_PRINT);
+    }
+
+    /**
+     * @param notify a notify block, may be {@code null}
+     * @return whether it attaches the fan-out's ANCHOR record ({@code attach: recordPrint}) rather than
+     *         the record the block is about
+     */
+    public static boolean attachesRecordPrint(NotificationIntent notify) {
+        return attaches(notify, ATTACH_RECORD_PRINT);
+    }
+
+    /**
+     * Whether the block's text addresses the fan-out's anchor record ({@code {record.<field>}}). The
+     * generated per-row send method then takes the record as a parameter - it is passed only when a
+     * message actually quotes it, so nothing carries an argument it never reads.
+     *
+     * @param notify a notify block, may be {@code null}
+     * @return whether a subject or body placeholder is record-scoped
+     */
+    public static boolean usesRecordScope(NotificationIntent notify) {
+        String marker = "{" + RECORD_SCOPE + ".";
+        return notify != null && (notify.getSubject() != null && notify.getSubject()
+                                                                       .contains(marker)
+                || notify.getBody() != null && notify.getBody()
+                                                     .contains(marker));
+    }
+
+    private static boolean attaches(NotificationIntent notify, String kind) {
+        return notify != null && notify.getAttach() != null && kind.equalsIgnoreCase(notify.getAttach()
+                                                                                           .trim());
     }
 
     /**
@@ -284,15 +374,21 @@ public final class NotifySupport {
         if (!printable) {
             return null;
         }
+        // `recordPrint` renders the fan-out's anchor, which the generated code holds in its own local -
+        // so every expression below is rendered against that local instead of the per-row one.
+        boolean anchorScoped = attachesRecordPrint(notify);
+        String local = anchorScoped ? RECORD_LOCAL : ENTITY_LOCAL;
         String literal = notify.getLanguage();
         if (literal != null && !literal.isBlank()) {
-            return new PrintAttachment(entity.getName(), "\"" + literal.trim() + "\"", fileNameExpression(entity), null);
+            return new PrintAttachment(entity.getName(), "\"" + literal.trim() + "\"", fileNameExpression(entity, local), null,
+                    anchorScoped);
         }
         String path = notify.getLanguageFrom();
         if (path == null || path.isBlank()) {
-            return new PrintAttachment(entity.getName(), DEFAULT_LANGUAGE_EXPRESSION, fileNameExpression(entity), null);
+            return new PrintAttachment(entity.getName(), DEFAULT_LANGUAGE_EXPRESSION, fileNameExpression(entity, local), null,
+                    anchorScoped);
         }
-        return languageFromAttachment(path.trim(), entity, byName, compositionParents, crossModel);
+        return languageFromAttachment(path.trim(), entity, byName, compositionParents, crossModel, anchorScoped, local);
     }
 
     /**
@@ -301,7 +397,7 @@ public final class NotifySupport {
      * application language set when the chain is null/blank.
      */
     private static PrintAttachment languageFromAttachment(String path, EntityIntent entity, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
+            Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel, boolean anchorScoped, String local) {
         int dot = path.indexOf('.');
         if (dot < 0) {
             throw new IllegalArgumentException(
@@ -347,7 +443,7 @@ public final class NotifySupport {
         }
         String expression = "attachLanguageSource == null || attachLanguageSource." + pascalField + " == null || attachLanguageSource."
                 + pascalField + ".isBlank() ? " + DEFAULT_LANGUAGE_EXPRESSION + " : attachLanguageSource." + pascalField + ".trim()";
-        return new PrintAttachment(entity.getName(), expression, fileNameExpression(entity), load);
+        return new PrintAttachment(entity.getName(), expression, fileNameExpression(entity, local), load, anchorScoped);
     }
 
     private static FieldIntent fieldOf(EntityIntent entity, String name) {
@@ -362,19 +458,19 @@ public final class NotifySupport {
     /**
      * The attachment file name: the document's own number when the entity declares a {@code number:}
      * field (so the customer receives {@code SI00000042.pdf}, not {@code SalesInvoice 42.pdf}), falling
-     * back to the entity name plus the record id. Rendered as a Java expression over the loaded
-     * {@code entity} local of the generated code.
+     * back to the entity name plus the record id. Rendered as a Java expression over the {@code local}
+     * the generated code loaded the rendered record into.
      */
-    private static String fileNameExpression(EntityIntent entity) {
+    private static String fileNameExpression(EntityIntent entity, String local) {
         String keyProperty = IntentEntities.keyFieldName(entity);
         for (FieldIntent field : entity.getFields()) {
             if (field.getNumber() != null && field.getName() != null) {
-                String number = "entity." + IntentNaming.pascalCase(field.getName());
-                return "(" + number + " == null || " + number + ".isBlank() ? \"" + entity.getName() + " \" + entity." + keyProperty + " : "
-                        + number + ") + \".pdf\"";
+                String number = local + "." + IntentNaming.pascalCase(field.getName());
+                return "(" + number + " == null || " + number + ".isBlank() ? \"" + entity.getName() + " \" + " + local + "." + keyProperty
+                        + " : " + number + ") + \".pdf\"";
             }
         }
-        return "\"" + entity.getName() + " \" + entity." + keyProperty + " + \".pdf\"";
+        return "\"" + entity.getName() + " \" + " + local + "." + keyProperty + " + \".pdf\"";
     }
 
     /**
@@ -389,7 +485,9 @@ public final class NotifySupport {
      */
     public static Map<String, Object> attachmentFields(PrintAttachment attachment) {
         Map<String, Object> fields = new LinkedHashMap<>();
-        fields.put("attach", attachment == null ? "" : ATTACH_PRINT);
+        // The authored kind, not a constant: the fan-out templates branch on it to render the anchor
+        // record's document once, outside the per-row loop.
+        fields.put("attach", attachment == null ? "" : attachment.kind());
         fields.put("attachEntity", attachment == null ? "" : attachment.entity());
         fields.put("attachLanguageExpression", attachment == null ? "" : attachment.languageExpression());
         fields.put("attachFileNameExpression", attachment == null ? "" : attachment.fileNameExpression());

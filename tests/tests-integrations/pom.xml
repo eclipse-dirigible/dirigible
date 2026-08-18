@@ -116,7 +116,9 @@
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <!-- JUnit 5 tag selection lives here (not in the root pom) so only this module -
                      which has the JUnit 5 engine and the tagged ITs - applies it. Empty by default
-                     (full run); the PR smoke job passes -Dit.groups="!ui | smoke". Putting it in the
+                     (full run); the PR smoke job passes -Dit.groups="!ui | smoke", and the master/
+                     nightly IT jobs shard the suite via -Dit.groups="!ui" / "ui & !sample & !camel" /
+                     "sample | camel" (see .github/workflows/build.yml). Putting it in the
                      root failsafe config breaks other modules (e.g. dirigible-cli) that run failsafe
                      without a JUnit 5 engine, since non-empty groups require one on the classpath. -->
                 <configuration>

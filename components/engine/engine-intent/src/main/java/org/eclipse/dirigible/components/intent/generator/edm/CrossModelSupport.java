@@ -78,10 +78,15 @@ public final class CrossModelSupport {
      *        the model was not resolved. A cross-model {@code generates} SOURCE needs it to render the
      *        {@code sourceStatus} completion hook, which reads the same fact off
      *        {@code RelationIntent.isEntityStatus()} in the local case
+     * @param translatedProperties the target's translatable property names (PascalCase) - the columns
+     *        its sibling <code>&lt;TABLE&gt;_LANG</code> table carries, empty when the target is not
+     *        {@code multilingual} or the model was not resolved. A consumer reading the target's
+     *        columns directly (a report SELECT) needs it to overlay the caller's language the way the
+     *        target's own repository does
      */
     public record TargetInfo(boolean resolved, String perspectiveName, String tableDataName, String keyField, String keyColumn,
             String labelField, String fkType, java.util.Set<String> propertyNames, String hierarchyProperty, String identityProperty,
-            java.util.Map<String, String> propertyWidgets, String statusProperty) {
+            java.util.Map<String, String> propertyWidgets, String statusProperty, java.util.Set<String> translatedProperties) {
     }
 
     @SuppressWarnings("unchecked")
@@ -169,6 +174,179 @@ public final class CrossModelSupport {
                 + "], project [" + project + "]) cannot be resolved for computed item lines: no model found in the workspace ["
                 + workspacePath + "] or the registry [" + registryPath + "]. Generate the [" + alias
                 + "] model first, or install/publish its prebuilt module so its .model is in the registry."));
+    }
+
+    /**
+     * Everything a read-only related-records register needs about a REFERENCING entity owned by another
+     * model: where its controller lives, which of its properties is the foreign key back to the
+     * referenced entity, and the property metadata its columns render from.
+     *
+     * @param entity the referencing entity's name
+     * @param perspectiveName the perspective it lives under in its owner model (drives its REST URL)
+     * @param dataName its physical table name
+     * @param primaryKey its primary-key property name (PascalCase)
+     * @param fkProperty the property holding the foreign key back to the referenced entity
+     * @param properties its property maps, verbatim from the owner's {@code .model}, each relation
+     *        property additionally carrying {@code referencedModel} when ITS target is a projection of
+     *        yet another model - so a column's label lookup resolves against the right project
+     */
+    public record RelatedSourceInfo(String entity, String perspectiveName, String dataName, String primaryKey, String fkProperty,
+            List<Map<String, Object>> properties) {
+    }
+
+    /**
+     * Resolve a cross-model related-records register's SOURCE - the entity that references the one
+     * declaring the register. Read from the same two order-independent sources as {@link #resolve} (the
+     * owner's workspace {@code .model}, else its published copy in the registry) and failing just as
+     * loudly when neither has it: a register whose columns silently came out empty would look like a
+     * feature that does not work rather than a dependency that was not generated.
+     *
+     * @param context the generation context; a context without a repository (a unit test) yields
+     *        {@code null} - there is nothing to resolve against
+     * @param uses the {@code uses:} entry naming the owner model
+     * @param sourceEntity the referencing entity
+     * @param referencedEntity the entity declaring the register (the relation's target)
+     * @param via the source's relation to filter by, or null to take its only one
+     * @return the resolved source, or null when there is no repository to read from
+     */
+    public static RelatedSourceInfo resolveRelatedSource(IntentGenerationContext context, UsesIntent uses, String sourceEntity,
+            String referencedEntity, String via) {
+        if (context == null || context.getRepository() == null || context.getProjectRoot() == null) {
+            return null;
+        }
+        String alias = uses.getModel();
+        String project = uses.resolveProject();
+        IRepository repository = context.getRepository();
+        String workspacePath = siblingModelPath(context.getProjectRoot(), project, alias);
+        RelatedSourceInfo fromWorkspace = readRelatedSource(repository, workspacePath, sourceEntity, referencedEntity, via);
+        if (fromWorkspace != null) {
+            return fromWorkspace;
+        }
+        String registryPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project + "/" + alias + ".model";
+        RelatedSourceInfo fromRegistry = readRelatedSource(repository, registryPath, sourceEntity, referencedEntity, via);
+        if (fromRegistry != null) {
+            return fromRegistry;
+        }
+        throw new IntentValidationException(List.of("Related register source [" + sourceEntity + "] (model alias [" + alias + "], project ["
+                + project + "]) cannot be resolved: no model found in the workspace [" + workspacePath + "] or the registry ["
+                + registryPath + "]. Generate the [" + alias
+                + "] model first, or install/publish its prebuilt module so its .model is in the registry."));
+    }
+
+    /**
+     * Read the register's source entity from a {@code .model} resource, or {@code null} when the
+     * resource is absent, unparseable or does not declare the entity (so the caller tries the next
+     * source). A resolved model that declares the entity but no matching foreign key is an authoring
+     * error, reported as such rather than by falling through to the next source.
+     */
+    @SuppressWarnings("unchecked")
+    private static RelatedSourceInfo readRelatedSource(IRepository repository, String modelPath, String sourceEntity,
+            String referencedEntity, String via) {
+        if (modelPath == null) {
+            return null;
+        }
+        IResource resource = repository.getResource(modelPath);
+        if (!resource.exists()) {
+            return null;
+        }
+        List<Map<String, Object>> entities;
+        try {
+            String content = new String(resource.getContent(), StandardCharsets.UTF_8);
+            Map<String, Object> root = GSON.fromJson(content, Map.class);
+            Map<String, Object> body = (Map<String, Object>) root.get("model");
+            entities = body == null ? null : (List<Map<String, Object>>) body.get("entities");
+        } catch (RuntimeException e) {
+            LOGGER.warn("Failed to read owner model [{}] for related register source [{}]", modelPath, sourceEntity, e);
+            return null;
+        }
+        if (entities == null) {
+            return null;
+        }
+        Map<String, Object> source = null;
+        for (Map<String, Object> entity : entities) {
+            if (sourceEntity.equals(entity.get("name"))) {
+                source = entity;
+                break;
+            }
+        }
+        if (source == null) {
+            return null;
+        }
+        List<Map<String, Object>> properties = (List<Map<String, Object>>) source.get("properties");
+        if (properties == null) {
+            properties = List.of();
+        }
+        String fkProperty = relatedForeignKey(properties, sourceEntity, referencedEntity, via);
+        String primaryKey = "Id";
+        for (Map<String, Object> property : properties) {
+            if ("true".equals(String.valueOf(property.get("dataPrimaryKey")))) {
+                primaryKey = str(property.get("name"), primaryKey);
+                break;
+            }
+        }
+        return new RelatedSourceInfo(sourceEntity, str(source.get("perspectiveName"), sourceEntity), str(source.get("dataName"), null),
+                primaryKey, fkProperty, withProjectionOwners(properties, entities));
+    }
+
+    /**
+     * The source property holding the foreign key back at the referenced entity: the one named by
+     * {@code via:}, or - when the source references it exactly once - that single property. Anything
+     * else fails loudly; the cross-model half of the check the parser runs on a same-model source.
+     */
+    private static String relatedForeignKey(List<Map<String, Object>> properties, String sourceEntity, String referencedEntity,
+            String via) {
+        List<String> candidates = new java.util.ArrayList<>();
+        for (Map<String, Object> property : properties) {
+            if (referencedEntity.equals(str(property.get("relationshipEntityName"), null))) {
+                candidates.add(str(property.get("name"), null));
+            }
+        }
+        if (via != null && !via.isBlank()) {
+            String wanted = IntentNaming.pascalCase(via);
+            if (candidates.contains(wanted)) {
+                return wanted;
+            }
+            throw new IntentValidationException(List.of("Related register source [" + sourceEntity + "] via [" + via
+                    + "] is not one of its relations targeting [" + referencedEntity + "] " + candidates));
+        }
+        if (candidates.isEmpty()) {
+            throw new IntentValidationException(List.of("Related register source [" + sourceEntity + "] declares no relation targeting ["
+                    + referencedEntity + "], so there is nothing to list"));
+        }
+        if (candidates.size() > 1) {
+            throw new IntentValidationException(List.of("Related register source [" + sourceEntity + "] references [" + referencedEntity
+                    + "] through " + candidates.size() + " relations " + candidates + " - name the one to list through with via:"));
+        }
+        return candidates.get(0);
+    }
+
+    /**
+     * Stamps {@code referencedModel} on every relation property whose own target is a PROJECTION of the
+     * owner model - i.e. an entity of a THIRD model. Without it a consumer would resolve that column's
+     * label lookup against the source's project and hit a controller that does not exist there.
+     */
+    private static List<Map<String, Object>> withProjectionOwners(List<Map<String, Object>> properties,
+            List<Map<String, Object>> entities) {
+        Map<String, String> projectionOwners = new java.util.LinkedHashMap<>();
+        for (Map<String, Object> entity : entities) {
+            String owner = str(entity.get("projectionReferencedModel"), null);
+            String name = str(entity.get("name"), null);
+            if (owner != null && name != null && "PROJECTION".equals(str(entity.get("type"), null))) {
+                projectionOwners.put(name, owner);
+            }
+        }
+        List<Map<String, Object>> stamped = new java.util.ArrayList<>(properties.size());
+        for (Map<String, Object> property : properties) {
+            String owner = projectionOwners.get(str(property.get("relationshipEntityName"), null));
+            if (owner == null) {
+                stamped.add(property);
+                continue;
+            }
+            Map<String, Object> copy = new java.util.LinkedHashMap<>(property);
+            copy.put("referencedModel", owner);
+            stamped.add(copy);
+        }
+        return stamped;
     }
 
     /**
@@ -316,12 +494,44 @@ public final class CrossModelSupport {
                 String hierarchyProperty = str(entity.get("hierarchyProperty"), null);
                 String identityProperty = str(entity.get("identityProperty"), null);
                 return new TargetInfo(true, perspective, tableDataName, keyField, keyColumn, labelField, fkType, propertyNames,
-                        hierarchyProperty, identityProperty, propertyWidgets, statusProperty);
+                        hierarchyProperty, identityProperty, propertyWidgets, statusProperty,
+                        translatedProperties("true".equals(String.valueOf(entity.get("multilingual"))), properties));
             }
         } catch (RuntimeException e) {
             LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", modelPath, targetEntity, e);
         }
         return null;
+    }
+
+    /**
+     * The properties a multilingual entity's sibling <code>&lt;TABLE&gt;_LANG</code> table carries a
+     * column for - mirroring exactly what the schema template emits there: the character-typed
+     * properties that are neither the primary key, nor a foreign key, nor calculated, nor an audit
+     * column. A consumer that reads the base table directly can only overlay a property that actually
+     * has a language column.
+     *
+     * @param multilingual whether the entity keeps per-language values at all
+     * @param properties the entity's model properties
+     * @return the translatable property names, empty when there is no language table
+     */
+    private static java.util.Set<String> translatedProperties(boolean multilingual, List<Map<String, Object>> properties) {
+        if (!multilingual || properties == null) {
+            return java.util.Set.of();
+        }
+        java.util.Set<String> translated = new java.util.LinkedHashSet<>();
+        for (Map<String, Object> property : properties) {
+            String name = str(property.get("name"), null);
+            String dataType = str(property.get("dataType"), "");
+            boolean character = "VARCHAR".equals(dataType) || "CHAR".equals(dataType) || "CLOB".equals(dataType);
+            boolean audit = !"NONE".equals(str(property.get("auditType"), "NONE"));
+            if (name == null || !character || audit || "true".equals(String.valueOf(property.get("dataPrimaryKey")))
+                    || "true".equals(String.valueOf(property.get("isCalculatedProperty")))
+                    || property.get("relationshipEntityName") != null) {
+                continue;
+            }
+            translated.add(name);
+        }
+        return translated;
     }
 
     /**
@@ -351,7 +561,8 @@ public final class CrossModelSupport {
     private static TargetInfo convention(String alias, String targetEntity) {
         String table = IntentNaming.upperSnake(alias) + "_" + IntentNaming.upperSnake(targetEntity);
         String keyColumn = IntentNaming.upperSnake(targetEntity) + "_ID";
-        return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null, null);
+        return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null, null,
+                java.util.Set.of());
     }
 
     /**

@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.openqa.selenium.By;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 import com.codeborne.selenide.Condition;
 import com.codeborne.selenide.Selenide;
@@ -53,6 +54,9 @@ import com.sun.net.httpserver.HttpServer;
  * client-side re-validation, the auto-apply, the hidden persistence, and every step of the publish
  * pipeline (generate models, generate code, publish, verify against the Problems feed).
  */
+// One Dirigible boot for the whole class: the methods are read-only or clean up after themselves,
+// so the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public class IntentBuilderShellIT extends UserInterfaceIntegrationTest {
 
     private static final String BUILDER_PATH = "/services/web/builder/index.html";
@@ -196,6 +200,15 @@ public class IntentBuilderShellIT extends UserInterfaceIntegrationTest {
         Assertions.assertTrue(repository.getResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/app.intent")
                                         .exists(),
                 "Publish did not copy the project into the registry");
+
+        // Continuity: the conversation is the record of WHY the app looks the way it does, so it has to
+        // outlive the browser session. Nothing in the shell reads the transcript from the browser any
+        // more, so a reload that shows the dialogue again can only have restored it from the server.
+        openBuilder();
+        Selenide.$(By.xpath("//div[contains(@class, 'builder-message') and contains(text(), 'I need an expense tracker.')]"))
+                .shouldBe(Condition.visible, Duration.ofSeconds(60));
+        Selenide.$(By.xpath("//div[contains(@class, 'builder-message') and contains(text(), 'Added an Expense entity')]"))
+                .shouldBe(Condition.visible);
     }
 
     private void openBuilder() {

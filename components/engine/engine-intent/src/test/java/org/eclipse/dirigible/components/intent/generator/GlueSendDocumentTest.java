@@ -403,6 +403,229 @@ class GlueSendDocumentTest {
                 "a send step's work IS the message - it must stand alone: " + failure.getMessage());
     }
 
+    /**
+     * The mirror of the payroll fixture: the related rows are only the RECIPIENT LIST (the suppliers
+     * invited to quote) and the document belongs to the record they hang off - one request for
+     * quotation, many suppliers.
+     */
+    private static final String RECORD_PRINT_YAML = """
+            name: sourcing
+            entities:
+              - name: RfqStatus
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Supplier
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                  - { name: email, type: string }
+              - name: RequestForQuotation
+                function: Document
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: number
+                    type: string
+                    documentTitle: true
+                    number: { series: Request for Quotation, stampOn: create }
+                  - { name: deadline, type: date }
+                relations:
+                  - { name: Status, kind: manyToOne, to: RfqStatus, function: EntityStatus, init: 1 }
+              - name: RequestForQuotationItem
+                function: DocumentItem
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: quantity, type: decimal }
+                relations:
+                  - { name: RequestForQuotation, kind: manyToOne, to: RequestForQuotation, composition: true, required: true }
+              - name: InvitedSupplier
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: RequestForQuotation, kind: manyToOne, to: RequestForQuotation, required: true }
+                  - { name: Supplier, kind: manyToOne, to: Supplier, required: true }
+
+            transitions:
+              - name: IssueRfq
+                forEntity: RequestForQuotation
+                from: [1]
+                setStatus: 2
+                label: Issue
+                icon: send
+                notify:
+                  forEach: InvitedSupplier
+                  to: Supplier.email
+                  subject: "RFQ {record.number}"
+                  body: "Dear {Supplier.name}, please quote by {record.deadline}."
+                  attach: recordPrint
+            """;
+
+    @Test
+    void aFanOutCanAttachTheAnchorRecordsOwnDocument() {
+        Map<String, Object> transition = GlueIntentGenerator.buildTransitionsForTest(IntentParser.parse(RECORD_PRINT_YAML))
+                                                            .get(0);
+
+        assertEquals("true", transition.get("notify"));
+        assertEquals("InvitedSupplier", transition.get("forEach"));
+        // The recipient is still the ROW's supplier - the rows ARE the recipient list.
+        assertEquals("(Supplier == null ? null : Supplier.Email)", transition.get("notifyToExpression"));
+        // ...but the attached document is the RECORD's, fed with the RECORD's key off the `source`
+        // local the template renders it once from, outside the per-row loop.
+        assertEquals("recordPrint", transition.get("attach"));
+        assertEquals("RequestForQuotation", transition.get("attachEntity"));
+        assertEquals("Id", transition.get("attachKeyProperty"));
+        assertTrue(String.valueOf(transition.get("attachFileNameExpression"))
+                         .contains("source.Number"),
+                "the file name must be read off the anchor record: " + transition.get("attachFileNameExpression"));
+    }
+
+    @Test
+    void aRecordScopedPlaceholderReadsTheAnchorAndABarePlaceholderStillReadsTheRow() {
+        Map<String, Object> transition = GlueIntentGenerator.buildTransitionsForTest(IntentParser.parse(RECORD_PRINT_YAML))
+                                                            .get(0);
+
+        assertEquals("\"RFQ \" + source.Number", transition.get("notifySubjectExpression"),
+                "{record.x} must resolve against the anchor record, not the row");
+        assertTrue(String.valueOf(transition.get("notifyBodyExpression"))
+                         .contains("(Supplier == null ? null : Supplier.Name)"),
+                "a bare path keeps resolving against the ROW: " + transition.get("notifyBodyExpression"));
+        assertTrue(String.valueOf(transition.get("notifyBodyExpression"))
+                         .contains("source.Deadline"),
+                "both scopes may appear in one text: " + transition.get("notifyBodyExpression"));
+        // The record is handed to the generated per-row send method only because a message quotes it.
+        assertEquals("true", transition.get("notifyRecordScoped"));
+    }
+
+    @Test
+    void aFanOutThatNeverQuotesTheRecordDoesNotCarryIt() {
+        Map<String, Object> transition = GlueIntentGenerator.buildTransitionsForTest(
+                IntentParser.parse(RECORD_PRINT_YAML.replace("subject: \"RFQ {record.number}\"", "subject: \"Request for quotation\"")
+                                                    .replace("body: \"Dear {Supplier.name}, please quote by {record.deadline}.\"",
+                                                            "body: \"Dear {Supplier.name}, please quote.\"")))
+                                                            .get(0);
+
+        // Still a recordPrint fan-out - the attachment needs no placeholder - but no send-method
+        // parameter for a record nothing reads.
+        assertEquals("recordPrint", transition.get("attach"));
+        assertEquals("false", transition.get("notifyRecordScoped"));
+    }
+
+    @Test
+    void theRowsMustStillBeRelatedToTheRecord() {
+        IntentValidationException failure = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(RECORD_PRINT_YAML.replace("forEach: InvitedSupplier", "forEach: Supplier")));
+
+        assertTrue(failure.getMessage()
+                          .contains("must have exactly ONE to-one relation back to [RequestForQuotation]"),
+                failure.getMessage());
+    }
+
+    @Test
+    void recordPrintWithoutAFanOutIsRejected() {
+        IntentValidationException failure = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(YAML.replace("attach: print", "attach: recordPrint")));
+
+        assertTrue(failure.getMessage()
+                          .contains("attach: recordPrint attaches the anchor record of a fan-out, so it needs a forEach"),
+                "outside a fan-out there is no second record to disambiguate from: " + failure.getMessage());
+    }
+
+    @Test
+    void recordPrintNeedsTheANCHORToBeADocument() {
+        // The rows are a document (they have items), the anchor is not - `print` would be legal here,
+        // `recordPrint` must not be: it is the anchor that would have to be rendered.
+        String yaml = """
+                name: sourcing
+                entities:
+                  - name: Campaign
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Mailing
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: email, type: string }
+                    relations:
+                      - { name: Campaign, kind: manyToOne, to: Campaign, required: true }
+                  - name: MailingItem
+                    function: DocumentItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Mailing, kind: manyToOne, to: Mailing, composition: true, required: true }
+                processes:
+                  - name: CampaignRun
+                    trigger: { onCreate: Campaign }
+                    steps:
+                      - name: mailThem
+                        kind: serviceTask
+                        args:
+                          notify:
+                            forEach: Mailing
+                            to: email
+                            subject: "Campaign"
+                            body: "Hello"
+                            attach: recordPrint
+                          next: end
+                      - { name: end, kind: end }
+                """;
+        IntentValidationException failure = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+
+        assertTrue(failure.getMessage()
+                          .contains("attach: recordPrint needs [Campaign] to be a document"),
+                "the ANCHOR is what a recordPrint renders: " + failure.getMessage());
+    }
+
+    @Test
+    void aRecordScopedRecipientIsRejected() {
+        IntentValidationException failure = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(RECORD_PRINT_YAML.replace("to: Supplier.email", "to: record.number")));
+
+        assertTrue(failure.getMessage()
+                          .contains("is record-scoped - a fan-out sends to its ROWS"),
+                "a record-scoped address would mail one recipient once per row: " + failure.getMessage());
+    }
+
+    @Test
+    void aRecordScopeOutsideAFanOutIsRejected() {
+        IntentValidationException failure = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(YAML.replace("subject: \"Invoice {number} was voided\"", "subject: \"Invoice {record.number}\"")));
+
+        assertTrue(failure.getMessage()
+                          .contains("uses the record. scope in [{record.number}] without a forEach"),
+                "without a fan-out the bare placeholder already IS the record's: " + failure.getMessage());
+    }
+
+    @Test
+    void aRecordScopedWalkAndAnUnknownRecordFieldAreRejected() {
+        IntentValidationException walk = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(RECORD_PRINT_YAML.replace("{record.number}", "{record.Status.name}")));
+        assertTrue(walk.getMessage()
+                       .contains("must name ONE field of the anchor record [RequestForQuotation]"),
+                walk.getMessage());
+
+        IntentValidationException unknown = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(RECORD_PRINT_YAML.replace("{record.number}", "{record.numbr}")));
+        assertTrue(unknown.getMessage()
+                          .contains("[numbr] is not a field of the anchor record [RequestForQuotation]"),
+                unknown.getMessage());
+    }
+
+    @Test
+    void aFanOutAtACallSiteThatCannotGenerateOneIsRejected() {
+        // Only a transition and a sending service task generate the per-row loop. A schedule already
+        // runs per matched row and a notifications[] entry is about the event record, so a forEach
+        // there used to parse and then be silently ignored - the mail went out once, about the record.
+        IntentValidationException failure = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(YAML.replace("body: \"Please settle the attached invoice.\"",
+                        "body: \"Please settle the attached invoice.\"\n      forEach: InvoiceItem")));
+
+        assertTrue(failure.getMessage()
+                          .contains("declares forEach, which is generated only on a transitions[].notify"),
+                "an unconsumed forEach must fail rather than quietly send a different message: " + failure.getMessage());
+    }
+
     /** The keys the templates render the attachment from. */
     private static void assertPrintAttachment(Map<String, Object> entry, String languageExpression) {
         assertEquals("print", entry.get("attach"));

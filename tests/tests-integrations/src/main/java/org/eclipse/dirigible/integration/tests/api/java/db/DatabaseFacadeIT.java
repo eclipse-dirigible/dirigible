@@ -37,11 +37,13 @@ import org.eclipse.dirigible.tests.framework.util.JsonAsserter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@Tag("slow")
 class DatabaseFacadeIT extends IntegrationTest {
 
     private static final String ID_COLUMN = "Id";

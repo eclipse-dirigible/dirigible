@@ -1,0 +1,88 @@
+{
+    "model": {
+        "entities": [
+            {
+                "properties": [
+                    {
+                        "calculatedPropertyExpressionCreate": "",
+                        "calculatedPropertyExpressionUpdate": "",
+                        "dataAutoIncrement": "false",
+                        "dataLength": "20",
+                        "dataName": "BOOK_ISBN",
+                        "dataNullable": "true",
+                        "dataPrimaryKey": "false",
+                        "dataType": "VARCHAR",
+                        "dataUnique": "false",
+                        "isCalculatedProperty": "false",
+                        "isRequiredProperty": "false",
+                        "name": "Isbn",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "20",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    },
+                    {
+                        "calculatedPropertyExpressionCreate": "",
+                        "calculatedPropertyExpressionUpdate": "",
+                        "dataAutoIncrement": "true",
+                        "dataLength": "0",
+                        "dataName": "BOOK_ID",
+                        "dataNullable": "true",
+                        "dataPrimaryKey": "true",
+                        "dataType": "INTEGER",
+                        "dataUnique": "false",
+                        "isCalculatedProperty": "false",
+                        "isRequiredProperty": "false",
+                        "name": "Id",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "20",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    },
+                    {
+                        "calculatedPropertyExpressionCreate": "",
+                        "calculatedPropertyExpressionUpdate": "",
+                        "dataAutoIncrement": "false",
+                        "dataLength": "40",
+                        "dataName": "BOOK_TITLE",
+                        "dataNullable": "true",
+                        "dataPrimaryKey": "false",
+                        "dataType": "VARCHAR",
+                        "dataUnique": "false",
+                        "isCalculatedProperty": "false",
+                        "isRequiredProperty": "false",
+                        "name": "Title",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "40",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    },
+                    {
+                        "auditType": "CREATED_AT",
+                        "dataAutoIncrement": "false",
+                        "dataLength": "0",
+                        "dataName": "BOOK_CREATEDAT",
+                        "dataNullable": "true",
+                        "dataPrimaryKey": "false",
+                        "dataType": "TIMESTAMP",
+                        "dataUnique": "false",
+                        "isCalculatedProperty": "false",
+                        "isRequiredProperty": "false",
+                        "name": "CreatedAt",
+                        "widgetIsMajor": "false",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    }
+                ],
+                "dataName": "BOOK_EXT",
+                "extensionReferencedEntity": "Book",
+                "extensionReferencedModel": "generation",
+                "name": "BookExtension",
+                "perspectiveName": "Books",
+                "type": "EXTENSION"
+            }
+        ],
+        "perspectives": [],
+        "navigations": []
+    }
+}

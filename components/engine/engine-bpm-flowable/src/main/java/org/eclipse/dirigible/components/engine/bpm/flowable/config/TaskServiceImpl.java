@@ -231,6 +231,14 @@ class TaskServiceImpl implements TaskService {
     }
 
     @Override
+    public long countTasksByAssignee(String assignee) {
+        return flowableTaskService.createTaskQuery()
+                                  .taskTenantId(getTenantId())
+                                  .taskAssignee(assignee)
+                                  .count();
+    }
+
+    @Override
     public List<IdentityLink> getTaskIdentityLinks(String taskId) {
         flowableArtefactsValidator.validateTask(taskId);
 

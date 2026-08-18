@@ -15,11 +15,14 @@ workbench.controller('WorkbenchController', ($scope, Layout) => {
     let rightClickTabId;
 
     $scope.layoutConfig = {
-        views: ['welcome', 'projects', 'import', 'search', 'properties', 'console', 'terminal', 'preview', 'problems', 'java', 'java-debug'],
+        views: ['welcome', 'projects', 'import', 'search', 'properties', 'console', 'terminal', 'preview', 'problems', 'java', 'java-debug', 'assistant'],
         viewSettings: {},
         layoutSettings: {
             hideCenterPane: false,
-            leftPaneMinSize: 355
+            leftPaneMinSize: 355,
+            // The assistant lives in the right pane; a chat with a code diff in it needs the room.
+            rightPaneSize: 25,
+            rightPaneMinSize: 340
         },
     };
 

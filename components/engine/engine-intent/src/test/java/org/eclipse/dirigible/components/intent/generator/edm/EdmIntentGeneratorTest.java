@@ -481,6 +481,61 @@ class EdmIntentGeneratorTest {
                 "major:false keeps a cross-model relation off the list table");
     }
 
+    /**
+     * A to-one relation may derive its FK server-side, the counterpart of the field-level calculated
+     * action: {@code init:} covers a FIXED default (a literal seed id) but never a DERIVED one - a
+     * document's currency read off its company's base currency. The property must carry the same three
+     * keys a calculated field emits, on BOTH the same-model and the cross-model relation builder,
+     * because the DAO template's shared property loop is what turns them into
+     * {@code entity.<Relation> = Beans.get(<class>.class).calculate(entity);}. A relation with no
+     * action must stay untouched - the marker is what makes the template emit the call at all.
+     */
+    @Test
+    void relationCalculatedActionEmitsTheServerSideCallOutOnBothRelationBuilders() {
+        String yaml =
+                """
+                        name: shop
+                        uses:
+                          - { model: currencies }
+                        entities:
+                          - name: Company
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: name, type: string }
+                          - name: Order
+                            imports: |
+                              import custom.shop.OrderCurrencyAction;
+                              import custom.shop.OrderCompanyAction;
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: name, type: string }
+                            relations:
+                              # cross-model: the FK is derived from another record on create
+                              - { name: Currency, kind: manyToOne, to: Currency, model: currencies, calculatedActionOnCreate: OrderCurrencyAction }
+                              # same-model, and the update slot as well
+                              - { name: Company, kind: manyToOne, to: Company, calculatedActionOnCreate: OrderCompanyAction, calculatedActionOnUpdate: OrderCompanyAction }
+                              - { name: Alternate, kind: manyToOne, to: Company }
+                        """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(parsed, "shop");
+        Map<String, Object> order = entityByName(entities(model), "Order");
+
+        Map<String, Object> currency = propertyByName(order, "Currency");
+        assertEquals("true", currency.get("isCalculatedProperty"), "the cross-model FK must be marked calculated");
+        assertEquals("OrderCurrencyAction", currency.get("calculatedActionOnCreate"));
+        assertNull(currency.get("calculatedActionOnUpdate"), "only the create slot was authored");
+        assertEquals("INTEGER", currency.get("dataType"), "it stays an ordinary FK property - that is what the template assigns");
+
+        Map<String, Object> company = propertyByName(order, "Company");
+        assertEquals("true", company.get("isCalculatedProperty"), "the same-model FK must be marked calculated too");
+        assertEquals("OrderCompanyAction", company.get("calculatedActionOnCreate"));
+        assertEquals("OrderCompanyAction", company.get("calculatedActionOnUpdate"));
+
+        Map<String, Object> alternate = propertyByName(order, "Alternate");
+        assertNull(alternate.get("isCalculatedProperty"), "a relation with no action must not be marked calculated");
+        assertNull(alternate.get("calculatedActionOnCreate"));
+    }
+
     @Test
     void documentMasterWithACalendarViewKeepsTheDocumentLayoutAndAddsTheCalendar() {
         // #6547: a calendar/range view is an ADDITIONAL page - it must NOT replace the layout. A document
@@ -617,6 +672,46 @@ class EdmIntentGeneratorTest {
         Map<String, Object> entry = entityByName(entities(model), "JournalEntry");
         assertEquals("Status", entry.get("immutableStatusProperty"));
         assertEquals("2,3", entry.get("immutableStatusValues"));
+    }
+
+    @Test
+    void lifecycleEmitsTheStateMachineTheRepositoryEnforces() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                    lifecycle:
+                      edges:
+                        - { from: DRAFT,  to: [POSTED, CANCELLED] }
+                        - { from: POSTED, to: [VOIDED] }
+                seeds:
+                  - name: entry-statuses
+                    entity: EntryStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: POSTED }
+                      - { id: 3, name: CANCELLED }
+                      - { id: 4, name: VOIDED }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
+        Map<String, Object> entry = entityByName(entities(model), "JournalEntry");
+        assertEquals("Status", entry.get("lifecycleStatusProperty"));
+        assertEquals("1>2,1>3,2>4", entry.get("lifecycleEdges"));
+        // The seeded names ride along so a rejection reads "cannot move from POSTED to DRAFT".
+        assertEquals("1=DRAFT,2=POSTED,3=CANCELLED,4=VOIDED", entry.get("lifecycleStatusNames"));
+        // With a declared start, a record cannot be CREATED mid-lifecycle either.
+        assertEquals("1", entry.get("lifecycleInitialStatus"));
+        // An entity without a lifecycle carries none of it.
+        assertNull(entityByName(entities(model), "EntryStatus").get("lifecycleEdges"));
     }
 
     @Test
@@ -938,6 +1033,30 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void historyEntityCarriesTheModelAttribute() {
+        String yaml = """
+                name: legal
+                entities:
+                  - name: Contract
+                    audit: true
+                    history: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                  - name: Note
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: text, type: string }
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        List<Map<String, Object>> entities = entities(EdmIntentGenerator.buildModelJsonForTest(parsed, "legal"));
+
+        assertEquals("true", entityByName(entities, "Contract").get("history"),
+                "a historized entity should carry the EDM history attribute - the schema, DAO and UI templates all key on it");
+        assertNull(entityByName(entities, "Note").get("history"), "an entity that did not ask for a history must not carry the attribute");
+    }
+
+    @Test
     void multilingualEntityAndLanguagesFlowIntoTheModel() {
         String yaml = """
                 name: uoms
@@ -1219,6 +1338,96 @@ class EdmIntentGeneratorTest {
         assertEquals("Internal", master.get("chatInternalProperty"));
     }
 
+    @Test
+    // `related:` emits a read-only register carrying the source's key, its back-reference and the
+    // metadata its columns render from - and no URL, which belongs to the generation parameters.
+    void relatedEmitsTheReverseOfTheIncomingAssociation() {
+        String yaml = """
+                name: timesheets
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: ProjectTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: string }
+                    related:
+                      - entity: EmployeeTimesheet
+                        label: Employee Timesheets
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: totalHours, type: decimal }
+                      - { name: comment, type: string, major: false }
+                    relations:
+                      - { name: projectTimesheet, kind: manyToOne, to: ProjectTimesheet, required: true }
+                      - { name: employee, kind: manyToOne, to: Employee }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "timesheets");
+        Map<String, Object> project = entityByName(entities(model), "ProjectTimesheet");
+        List<Map<String, Object>> registers = (List<Map<String, Object>>) project.get("relatedEntities");
+        assertEquals(1, registers.size());
+        Map<String, Object> register = registers.get(0);
+        assertEquals("EmployeeTimesheet", register.get("entity"));
+        assertEquals("Employee Timesheets", register.get("label"));
+        assertEquals("EmployeeTimesheet", register.get("perspectiveName"));
+        assertEquals("TIMESHEETS_EMPLOYEE_TIMESHEET", register.get("dataName"));
+        assertEquals("Id", register.get("primaryKey"));
+        // The single relation pointing back here needs no via:, and it is what the register filters by.
+        assertEquals("ProjectTimesheet", register.get("fkProperty"));
+        // A same-model source is resolved from this model, so nothing is read from another one.
+        assertNull(register.get("referencedModel"));
+
+        // The default columns are the source's own list columns: not its generated identifier, not the
+        // foreign key back to the record the register already belongs to, not a `major: false` field.
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) register.get("properties");
+        List<String> names = columns.stream()
+                                    .map(c -> String.valueOf(c.get("name")))
+                                    .toList();
+        assertEquals(List.of("Number", "TotalHours", "Employee"), names);
+        // A relation column carries the lookup facts its label resolves through - the URL itself is
+        // built by the generation parameters, never here.
+        Map<String, Object> employee = columns.get(2);
+        assertEquals("Employee", employee.get("relationshipEntityName"));
+        assertEquals("Employee", employee.get("relationshipEntityPerspectiveName"));
+        assertEquals("Id", employee.get("widgetDropDownKey"));
+        assertNull(employee.get("apiPath"), "a register entry carries facts, never a template-owned URL");
+    }
+
+    @Test
+    // `show:` picks the register's columns and their order; an unnamed register is titled by the
+    // pluralized entity name.
+    void relatedShowSelectsAndOrdersTheColumns() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    related:
+                      - entity: Invoice
+                        show: [total, number]
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        Map<String, Object> register =
+                ((List<Map<String, Object>>) entityByName(entities(model), "Customer").get("relatedEntities")).get(0);
+        assertEquals("Invoices", register.get("label"), "an unnamed register is titled by the pluralized entity");
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) register.get("properties");
+        assertEquals(List.of("Total", "Number"), columns.stream()
+                                                        .map(c -> String.valueOf(c.get("name")))
+                                                        .toList());
+    }
+
     private static List<Map<String, Object>> entities(Map<String, Object> modelJson) {
         return (List<Map<String, Object>>) ((Map<String, Object>) modelJson.get("model")).get("entities");
     }
@@ -1292,6 +1501,36 @@ class EdmIntentGeneratorTest {
         // The confidential field is flagged for the personal-surface scrub; a plain one is not.
         assertEquals("true", propertyByName(entityByName(entities, "VacationRequest"), "DailyRate").get("sensitiveProperty"));
         assertNull(propertyByName(entityByName(entities, "VacationRequest"), "Note").get("sensitiveProperty"));
+    }
+
+    /**
+     * {@code visibleTo:} is emitted as the model's own per-property read AND write roles - the pair the
+     * generated controllers already enforce - so the allow-list reaches the runtime through the same
+     * attributes a hand-modeled EDM would carry. Both sides get the same comma-separated list: a caller
+     * who may not see the value must not be able to set it either.
+     */
+    @Test
+    void visibleToBecomesThePropertyReadAndWriteRoles() {
+        String yaml = """
+                name: hr
+                permissions:
+                  - { role: Payroll }
+                  - { role: Administrator }
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                      - { name: dailyRate, type: decimal, visibleTo: [Payroll, Administrator] }
+                """;
+        Map<String, Object> employee =
+                entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "hr")), "Employee");
+
+        Map<String, Object> rate = propertyByName(employee, "DailyRate");
+        assertEquals("Payroll,Administrator", rate.get("roleRead"));
+        assertEquals("Payroll,Administrator", rate.get("roleWrite"));
+        assertNull(propertyByName(employee, "Name").get("roleRead"));
+        assertNull(propertyByName(employee, "Name").get("roleWrite"));
     }
 
     @Test
@@ -1570,5 +1809,52 @@ class EdmIntentGeneratorTest {
         // An untouched string field stays a plain textbox with no pattern.
         assertEquals("TEXTBOX", propertyByName(contact, "Note").get("widgetType"));
         assertNull(propertyByName(contact, "Note").get("widgetPattern"));
+    }
+
+    /**
+     * A child collection that does not freeze with its master carries the marker the detail
+     * registration reads; every other entity keeps byte-identical output (the attribute is emitted only
+     * when declared false).
+     */
+    @Test
+    void locksWithMasterFalseMarksTheChildThatOutlivesItsMastersLock() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Invoice
+                    function: Document
+                    immutableWhen: "Status == 3"
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, length: 50 }
+                  - name: InvoiceItem
+                    function: DocumentItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                  - name: InvoiceAllocation
+                    locksWithMaster: false
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(parsed, "sales");
+        List<Map<String, Object>> entities = entities(model);
+
+        assertEquals("false", entityByName(entities, "InvoiceAllocation").get("locksWithMaster"));
+        // The document's own line items keep freezing with it - that is what immutability is for.
+        assertNull(entityByName(entities, "InvoiceItem").get("locksWithMaster"));
+        assertNull(entityByName(entities, "Invoice").get("locksWithMaster"));
     }
 }

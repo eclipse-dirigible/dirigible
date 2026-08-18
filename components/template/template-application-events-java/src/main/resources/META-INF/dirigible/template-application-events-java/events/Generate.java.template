@@ -1,31 +1,55 @@
 package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+#if(!$eventOnly)
 import org.eclipse.dirigible.sdk.http.Body;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Post;
+#end
 import org.eclipse.dirigible.sdk.utils.Json;
 #if($hasItemLines)
 import org.eclipse.dirigible.sdk.utils.Calc;
 #end
+#if($hasPrompt)
+import org.eclipse.dirigible.sdk.http.Response;
+#end
 
 /**
- * Create-from ${name}: builds a new ${toEntity} from an existing ${fromEntity} (loaded by the id in
- * the posted body), maps the declared fields, and saves it through the target's generated repository -
- * so the target's create-time logic (document numbering, status init, calculated fields) fires. Any
- * composition items are cloned and re-pointed at the new master.
+ * Create-from ${name}: builds a new ${toEntity} from an existing ${fromEntity} (loaded by id), maps the
+ * declared fields, and saves it through the target's generated repository - so the target's create-time
+ * logic (document numbering, status init, calculated fields) fires. Any composition items are cloned and
+ * re-pointed at the new master.
  *
  * Generated from the intent generates block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories (validations / events / numbering).
+#if(!$eventOnly)
  * The endpoint is served under /services/java/<project>/gen/events/${javaGenFolderName}/${className}Generate/run.
+#else
+ * There is no endpoint: this create-from is event-driven only, so ${className}GenerateOnEvent is its
+ * single caller.
+#end
+#if($hasEvent)
+ *
+ * At-most-once: it is triggered by a ${fromEntity} event, so it first looks for a ${toEntity} that
+ * already back-references the source through ${backRefProperty} and returns that one instead of
+ * creating a second document. A create-from with no event trigger deliberately keeps NO such guard -
+ * minting several targets from one source is a legitimate manual act.
+#end
  */
+#if(!$eventOnly)
 @Controller
 @Component("${javaGenFolderName}_${className}Generate")
+#end
 public class ${className}Generate {
+#if(!$eventOnly)
 
     public static class Request {
         public Integer id;
+#if($hasPrompt)
+        // The declared `prompt:` inputs (issue #6685), keyed by the target's PascalCase property names.
+        public java.util.Map<String, Object> values;
+#end
     }
 
     @Post("/run")
@@ -33,15 +57,68 @@ public class ${className}Generate {
         if (req == null || req.id == null) {
             return "{\"error\": \"missing source id\"}";
         }
-        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
-                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(req.id);
-        if (source == null) {
+#foreach($p in $promptFields)
+#if($p.required)
+        // A required `prompt:` input is refused BEFORE anything is written - the dialog checks the same
+        // thing, and this is what makes the check hold for any other caller of the endpoint.
+        if (req.values == null || req.values.get("${p.prop}") == null
+                || String.valueOf(req.values.get("${p.prop}")).isBlank()) {
+            Response.setStatus(400);
+            return "{\"error\": \"missing required input [${p.prop}]\"}";
+        }
+#end
+#end
+        gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved = create(req.id#if($hasPrompt), req.values#end);
+        if (saved == null) {
             return "{\"error\": \"source ${fromEntity} not found\"}";
         }
+        return Json.stringify(saved);
+    }
+#end
+
+    /**
+     * Creates the ${toEntity} for the given ${fromEntity}, or returns null when the source is gone.
+#if($hasPrompt)
+     * The values map carries the declared `prompt:` inputs collected by the action dialog.
+#end
+     */
+    public gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity create(Integer sourceId#if($hasPrompt), java.util.Map<String, Object> values#end) {
+        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
+                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(sourceId);
+        if (source == null) {
+            return null;
+        }
+#if($hasEvent)
+        // Already generated for this source (an event redelivery, or a click after the event) - hand back
+        // the existing document rather than minting a duplicate. Best-effort against two concurrent
+        // deliveries until a UNIQUE key on the back-reference lands, exactly as postings' guard is.
+        java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> existing =
+                new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().findAll(
+                        Criteria.create()
+                                .eq("${backRefProperty}", sourceId));
+        if (!existing.isEmpty()) {
+            return existing.get(0);
+        }
+#end
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity target =
                 new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity();
 #foreach($a in $fieldAssignments)
         target.${a.targetProp} = ${a.expr};
+#end
+#if($hasPrompt)
+        // Declared input form (intent `prompt:` - issue #6685): the values the user supplied in the
+        // action dialog, set on the target AFTER map/defaults (the parser rejects overlaps, so every
+        // property has exactly one writer). The required ones were already checked in run(), which is
+        // this method's only caller - a prompted create-from cannot be event-driven, there being
+        // nobody to answer. An absent optional input leaves the target's own default in place.
+#foreach($p in $promptFields)
+        {
+            Object raw = values == null ? null : values.get("${p.prop}");
+            if (!(raw == null || String.valueOf(raw).isBlank())) {
+                target.${p.prop} = ${p.expr};
+            }
+        }
+#end
 #end
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved =
                 new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().save(target);
@@ -49,7 +126,7 @@ public class ${className}Generate {
         for (gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity srcItem :
                 new gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Repository()
                         .findAll(Criteria.create()
-                                         .eq("${srcFkProperty}", req.id))) {
+                                         .eq("${srcFkProperty}", sourceId))) {
             gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity item =
                     new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity();
 #foreach($a in $itemFieldAssignments)
@@ -85,19 +162,19 @@ public class ${className}Generate {
         // system write - no "-updated" re-fire (no onUpdate reactions), but the dedicated
         // "-transitioned" topic IS published so posting glue / integrations observe the transition.
         // Flip ONLY the status column through the targeted single-column primitive. A full-row
-        // updateWithoutEvent(source) would merge the snapshot loaded at the top of run() - taken BEFORE
-        // the target and its items were created - and silently revert any concurrent write to the source
-        // row in that window (recalculated totals, a workflow status). Same reason the process trigger
-        // writes ProcessId via updateProperty rather than update().
+        // updateWithoutEvent(source) would merge the snapshot loaded at the top of create() - taken
+        // BEFORE the target and its items were created - and silently revert any concurrent write to the
+        // source row in that window (recalculated totals, a workflow status). Same reason the process
+        // trigger writes ProcessId via updateProperty rather than update().
         gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
                 new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository();
-        sourceRepository.updateProperty(req.id, "${sourceStatusProperty}", ${sourceStatusValue});
+        sourceRepository.updateProperty(sourceId, "${sourceStatusProperty}", ${sourceStatusValue});
         // Reload so the "-transitioned" payload carries the committed row (the flipped status plus any
         // write the target creation performed on the source), not the stale pre-generation snapshot.
-        source = sourceRepository.findById(req.id);
+        source = sourceRepository.findById(sourceId);
         org.eclipse.dirigible.sdk.messaging.Producer.sendToTopic(
                 "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned", Json.stringify(source));
 #end
-        return Json.stringify(saved);
+        return saved;
     }
 }

@@ -11,7 +11,11 @@ package org.eclipse.dirigible.components.jobs.endpoint;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -22,10 +26,13 @@ import java.util.Set;
 
 import jakarta.persistence.EntityManager;
 
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.jobs.domain.Job;
+import org.eclipse.dirigible.components.jobs.domain.JobEmail;
 import org.eclipse.dirigible.components.jobs.domain.JobParameter;
 import org.eclipse.dirigible.components.jobs.repository.JobRepository;
+import org.eclipse.dirigible.components.jobs.service.JobEmailService;
 import org.eclipse.dirigible.components.jobs.service.JobService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +46,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.web.FilterChainProxy;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
@@ -65,6 +73,10 @@ public class JobEndpointTest {
     /** The job service. */
     @Autowired
     private JobService jobService;
+
+    /** The job email service. */
+    @Autowired
+    private JobEmailService jobEmailService;
 
     /** The job repository. */
     @Autowired
@@ -171,6 +183,49 @@ public class JobEndpointTest {
                .andDo(print());
         // .andExpect(status().is2xxSuccessful());
 
+    }
+
+    /**
+     * Removes a job notification email by id (regression for #6609: DELETE verb + matching {id} path
+     * variable).
+     *
+     * @throws Exception the exception
+     */
+    @Test
+    public void removeJobEmail() throws Exception {
+        jobEmailService.addEmail(testJob.getName(), "admin@example.com");
+        List<JobEmail> emails = jobEmailService.findAllByJobName(testJob.getName());
+        assertEquals(1, emails.size());
+        Long emailId = emails.get(0)
+                             .getId();
+
+        mockMvc.perform(delete("/services/jobs/emails/{id}", emailId).with(csrf()))
+               .andDo(print())
+               .andExpect(status().isOk());
+
+        assertEquals(0, jobEmailService.findAllByJobName(testJob.getName())
+                                       .size());
+    }
+
+    /**
+     * A trigger may set only the parameters the job artefact declares. Anything else is the caller's
+     * mistake, answered as a bad request, and it never reaches the platform configuration (dirigible
+     * #6729). The test job declares none, so any parameter is undeclared.
+     *
+     * @throws Exception the exception
+     */
+    @Test
+    public void triggerRejectsAnUndeclaredParameter() throws Exception {
+        String key = "DIRIGIBLE_TEST_UNDECLARED_JOB_PARAMETER";
+
+        mockMvc.perform(post("/services/jobs/trigger/{name}", testJob.getName()).with(csrf())
+                                                                                .contentType(MediaType.APPLICATION_JSON)
+                                                                                .content("[{\"name\":\"" + key
+                                                                                        + "\",\"value\":\"http://attacker.example.com\"}]"))
+               .andDo(print())
+               .andExpect(status().isBadRequest());
+
+        assertNull(Configuration.get(key));
     }
 
     /**

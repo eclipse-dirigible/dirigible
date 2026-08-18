@@ -30,13 +30,23 @@ document.addEventListener('alpine:init', () => {
     searchTerm: '',
     selected: null,
     detailDefs: [],
+    // Read-only registers of the records REFERENCING the selected master (empty unless declared).
+    relatedDefs: [],
 
     deleteOpen: false,
     deleteTarget: null,
     deleteBusy: false,
 
     async init() {
+#if($hasRestrictedFields)
+      // Role-scoped fields: ask the controller which columns it withholds from this caller, so the
+      // master table, the property pane and the export leave them out.
+      this.loadRestrictedFields().then(() => {
+        this.exportColumns = this.exportColumns.filter(c => this.canSee(c.name));
+      });
+#end
       this.detailDefs = App.detailsFor('${name}');
+      this.relatedDefs = App.relatedFor('${name}');
       await this.load();
       this.loadLookups();
       this.selectFromRoute();

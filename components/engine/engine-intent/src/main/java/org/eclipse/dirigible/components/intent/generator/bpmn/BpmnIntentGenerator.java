@@ -26,6 +26,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
+import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport.FieldLoad;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport;
@@ -39,6 +40,7 @@ import org.eclipse.dirigible.components.intent.generator.WriterSupport;
 import org.eclipse.dirigible.components.intent.generator.WriterSupport.Writer;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
+import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
@@ -144,6 +146,10 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // inserted before it that re-reads the trigger entity's date field at task entry and publishes
         // the process variable the boundary timer's timeDate binds to.
         List<TimerLoad> allTimerLoads = ProcessTimerSupport.timerLoads(model);
+        // Step events: a notification/integration bound to onStepReached/onStepCompleted gets a
+        // JavaDelegate inserted at that step's boundary which publishes the trigger record on the step
+        // topic those consumers bind to. Deduplicated per moment, so N consumers still publish once.
+        List<StepEventSupport.Emitter> allStepEvents = StepEventSupport.emitters(model);
         // Writers: a user task with editable fields gets a JavaDelegate (gen.events.<Process><Task>Write)
         // inserted after it to persist the reviewer's edits. Index by process+task so render() can place
         // it right after the matching user task.
@@ -209,6 +215,13 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     processFieldLoads.add(load);
                 }
             }
+            List<StepEventSupport.Emitter> processStepEvents = new ArrayList<>();
+            for (StepEventSupport.Emitter emitter : allStepEvents) {
+                if (process.getName()
+                           .equals(emitter.process())) {
+                    processStepEvents.add(emitter);
+                }
+            }
             List<TimerLoad> processTimerLoads = new ArrayList<>();
             for (TimerLoad load : allTimerLoads) {
                 if (process.getName()
@@ -221,8 +234,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             Map<String, String> setterByTask = stripProcessPrefix(setterByProcessTask, taskPrefix);
             context.writeModelFile(fileName,
                     render(process, rolesByLowerName, context.getProjectName(), IntentNaming.eventsPackage(context), processResolvers,
-                            processFieldLoads, processTimerLoads, ownFieldPascalCase(process, byName), candidateGroupsExtra, writerByTask,
-                            setterByTask));
+                            processFieldLoads, processTimerLoads, processStepEvents, ownFieldPascalCase(process, byName),
+                            candidateGroupsExtra, writerByTask, setterByTask,
+                            IntentNaming.processTaskCatalog(context.getProjectName(), context)));
         }
     }
 
@@ -289,8 +303,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, String eventsPackage,
-            List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, Map<String, String> ownFieldPascalCase,
-            String candidateGroupsExtra, Map<String, String> writerByTask, Map<String, String> setterByTask) {
+            List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, List<StepEventSupport.Emitter> stepEvents,
+            Map<String, String> ownFieldPascalCase, String candidateGroupsExtra, Map<String, String> writerByTask,
+            Map<String, String> setterByTask, String taskLabelCatalog) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
         // mutating the shared model (the glue generator runs after this one and must still see the
@@ -302,8 +317,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // task's `next` is transferred onto its trailing writer/setter delegate, which would break the
         // walk that follows the authored routing.
         ProcessParallelSupport.Regions regions = ProcessParallelSupport.regions(process.getSteps());
-        AugmentedSteps augmented = augmentWithResolvers(process.getSteps(), eventsPackage, resolvers, fieldLoads, timerLoads,
-                ownFieldPascalCase, writerByTask, setterByTask);
+        AugmentedSteps augmented = augmentWithResolvers(process.getName(), process.getSteps(), eventsPackage, resolvers, fieldLoads,
+                timerLoads, stepEvents, ownFieldPascalCase, writerByTask, setterByTask);
         List<StepIntent> steps = augmented.steps();
         // abortOn: a -transitioned into a listed status cancels the in-flight instance via an
         // interrupting message event subprocess (below). Its optional `then` cleanup is an abort-only
@@ -393,6 +408,15 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append("\" name=\"")
           .append(escapeXmlAttribute(IntentNaming.humanize(processId)))
           .append("\" isExecutable=\"true\">\n");
+        // Where this module's user-task labels are translated. The Inbox, the notification bell and
+        // the task-form dialog are shared across every deployed app, so a task has to carry the key of
+        // its own module's catalog - this declares it once for the whole process, and the task's BPMN
+        // id (the authored step name) keys the entry within it.
+        sb.append("    <extensionElements>\n");
+        sb.append("      <flowable:property name=\"taskLabelCatalog\" value=\"")
+          .append(escapeXmlAttribute(taskLabelCatalog))
+          .append("\"></flowable:property>\n");
+        sb.append("    </extensionElements>\n");
         sb.append("    <startEvent id=\"")
           .append(START_ID)
           .append("\"></startEvent>\n");
@@ -542,11 +566,13 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * resolver) is inserted; every decision is replaced by a copy whose condition is rewritten to test
      * the resolved variables. A resolver is inserted once - at its anchor step - and the variable it
      * sets persists, so a decision downstream of the inserting step still resolves correctly even
-     * though its own condition is what is rewritten. Original steps otherwise pass through untouched.
+     * though its own condition is what is rewritten. A user task whose {@code assignee} is a relation
+     * walk gets its own delegate inserted the same way, publishing the login the task binds to.
+     * Original steps otherwise pass through untouched.
      */
-    private static AugmentedSteps augmentWithResolvers(List<StepIntent> steps, String eventsPackage, List<Resolver> resolvers,
-            List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, Map<String, String> ownFieldPascalCase,
-            Map<String, String> writerByTask, Map<String, String> setterByTask) {
+    private static AugmentedSteps augmentWithResolvers(String processName, List<StepIntent> steps, String eventsPackage,
+            List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, List<StepEventSupport.Emitter> stepEvents,
+            Map<String, String> ownFieldPascalCase, Map<String, String> writerByTask, Map<String, String> setterByTask) {
         List<StepIntent> result = new ArrayList<>(steps.size());
         Map<String, List<String>> nodesByStep = new LinkedHashMap<>();
         for (StepIntent step : steps) {
@@ -577,16 +603,39 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     result.add(javaServiceTaskStep(IntentNaming.camelCase(load.handler()), eventsPackage + "." + load.handler()));
                 }
             }
+            if (step.getName() != null && ProcessAssigneeSupport.pathAssignee(step) != null) {
+                // Walk the trigger record's relations to the person this task belongs to and publish
+                // their login, at task ENTRY - so a relation an earlier step of this very process set is
+                // already visible, which a start-time seeding (assignee: personal) could never see.
+                String handler = ProcessAssigneeSupport.handler(processName, step.getName());
+                result.add(javaServiceTaskStep(IntentNaming.camelCase(handler), eventsPackage + "." + handler));
+            }
+            for (StepEventSupport.Emitter emitter : stepEvents) {
+                if (!emitter.completed() && emitter.step()
+                                                   .equals(step.getName())) {
+                    // onStepReached: publish the trigger record the instant the execution arrives here -
+                    // last of the before-group, so it sits as close to the step as the flow allows.
+                    result.add(javaServiceTaskStep(IntentNaming.camelCase(emitter.className()), eventsPackage + "." + emitter.className()));
+                }
+            }
             boolean userTask = "userTask".equals(step.getKind()) && step.getName() != null;
-            // Delegates that run right after a user task, in order: the writer (persist the reviewer's
-            // edits) then the setter (set a relation FK). Each falls through linearly into the next, and
-            // the original `next` is carried onto the LAST one so downstream routing can't be bypassed.
-            List<String> afterTask = new ArrayList<>(2);
+            // Delegates that run right after a step, in order: the writer (persist the reviewer's
+            // edits), the setter (set a relation FK) - both user-task only - then the step-completed
+            // event emitter, LAST so it publishes a record that already carries those writes. Each falls
+            // through linearly into the next, and the original `next` is carried onto the LAST one so
+            // downstream routing can't be bypassed.
+            List<String> afterTask = new ArrayList<>(3);
             if (userTask && writerByTask.get(step.getName()) != null) {
                 afterTask.add(writerByTask.get(step.getName()));
             }
             if (userTask && setterByTask.get(step.getName()) != null) {
                 afterTask.add(setterByTask.get(step.getName()));
+            }
+            for (StepEventSupport.Emitter emitter : stepEvents) {
+                if (emitter.completed() && emitter.step()
+                                                  .equals(step.getName())) {
+                    afterTask.add(emitter.className());
+                }
             }
             if (!afterTask.isEmpty()) {
                 String next = stringArg(step, "next");
@@ -652,8 +701,16 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             return nodes == null || nodes.isEmpty() ? List.of(step) : nodes;
         }
 
+        /**
+         * A flow into a step must land on the FIRST node the step expands to, never on the step itself: the
+         * delegates inserted before it (a relation.field resolver, an own-field loader, an expire re-read,
+         * an assignee walk) are what make the step evaluable, and an explicit jump - a decision's
+         * {@code then}/{@code else}, another step's {@code next} - would otherwise sail past them. Inside a
+         * branch region nothing is adjacent so this was always so; on the linear chain the adjacency flow
+         * covers the fall-through case, and this covers the jumps.
+         */
         String entry(String step) {
-            return regions.contains(step) ? nodesOf(step).get(0) : step;
+            return nodesOf(step).get(0);
         }
 
         String exit(String step) {
@@ -803,7 +860,24 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append("\" name=\"")
           .append(escapeXmlAttribute(IntentNaming.humanize(step.getName())))
           .append("\"");
-        if ("personal".equals(assignee)) {
+        ProcessAssigneeSupport.PathAssignee pathAssignee = ProcessAssigneeSupport.pathAssignee(step);
+        if (pathAssignee != null) {
+            // A relation walk off the trigger record: the delegate inserted before this task published
+            // the resolved login into the variable bound here. Both attributes are emitted - the
+            // candidate group is what keeps the task claimable when the walk resolved to nobody.
+            sb.append(" flowable:assignee=\"${")
+              .append(escapeXmlAttribute(ProcessAssigneeSupport.variable(step.getName())))
+              .append("}\"");
+            if (pathAssignee.fallback() != null) {
+                String candidateGroups = resolveCandidateGroup(pathAssignee.fallback(), rolesByLowerName);
+                if (candidateGroupsExtra != null && !candidateGroupsExtra.isBlank()) {
+                    candidateGroups = candidateGroups + "," + candidateGroupsExtra;
+                }
+                sb.append(" flowable:candidateGroups=\"")
+                  .append(escapeXmlAttribute(candidateGroups))
+                  .append("\"");
+            }
+        } else if ("personal".equals(assignee)) {
             // The record's owner, resolved at start time by the trigger listener (identity mapping)
             // into the __personalUser variable - a per-user assignment, not a claimable group.
             sb.append(" flowable:assignee=\"${__personalUser}\"");
@@ -1055,13 +1129,13 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 flowId = "flow_" + source + "_default";
                 String elseTarget = stringArg(decision, "else");
                 if (elseTarget != null && !elseTarget.isBlank()) {
-                    target = effectiveTarget(elseTarget, steps);
+                    target = targets.entry(effectiveTarget(elseTarget, steps));
                 }
             } else {
                 StepIntent sourceStep = stepByName(source, steps);
                 String next = sourceStep == null ? null : stringArg(sourceStep, "next");
                 if (next != null && !next.isBlank()) {
-                    target = effectiveTarget(next, steps);
+                    target = targets.entry(effectiveTarget(next, steps));
                 }
                 flowId = "flow_" + source + "_" + target;
             }

@@ -11,6 +11,68 @@
 {
     "schema": {
         "structures": [
+## A historized entity gets a sibling <TABLE>_HISTORY shadow table: one row per property whose value
+## changed on a write, so the full trail (what changed, from what to what, by whom, when, and whether
+## a user or the system wrote it) survives - audit: true keeps only the LAST writer, in the row itself.
+## The generated repository is the only writer; nothing offers a write path to this table. Emitted
+## before the base tables so each entry is always comma-terminated (at least the base table follows).
+#foreach ($model in $models)
+#if($model.history == "true" && $model.type != "REPORT" && $model.type != "FILTER" && $model.type != "PROJECTION")
+            {
+                "name": "${tablePrefix}${model.dataName}_HISTORY",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "type": "INTEGER",
+                        "primaryKey": true,
+                        "identity": true,
+                        "name": "GUID"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "name": "Id"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 6,
+                        "name": "Operation"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 128,
+                        "name": "Property"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 4000,
+                        "nullable": true,
+                        "name": "OldValue"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 4000,
+                        "nullable": true,
+                        "name": "NewValue"
+                    },
+                    {
+                        "type": "TIMESTAMP",
+                        "name": "ChangedAt"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 255,
+                        "nullable": true,
+                        "name": "ChangedBy"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 6,
+                        "name": "Source"
+                    }
+                ]
+            },
+#end
+#end
 ## A multilingual entity gets a sibling <TABLE>_LANG translation table (the codbex convention):
 ## GUID pk, Id -> the base row, one column per translatable (string-typed, non-PK, non-FK,
 ## non-calculated, non-audit) property NAMED AFTER THE PROPERTY (that is what the runtime

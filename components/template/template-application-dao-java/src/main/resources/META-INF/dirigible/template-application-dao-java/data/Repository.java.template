@@ -1,6 +1,10 @@
 package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
+#set($preservedOnUpdate = [])
 #foreach ($property in $properties)
+    #if($property.dataPrimaryKey)
+        #set($pkPropertyName = $property.name)
+    #end
     #if($property.isCalculatedProperty && ($property.calculatedPropertyExpressionCreate || $property.calculatedActionOnCreate))
         #set($haveCalculatedPropertyOnCreate = "true")
     #end
@@ -12,6 +16,20 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
     #end
     #if($property.isCalculatedProperty && ($property.calculatedActionOnCreate || $property.calculatedActionOnUpdate))
         #set($haveCalculatedPropertyAction = "true")
+    #end
+## The comments below start at column 0 on purpose: Velocity gobbles the indentation of a line that
+## holds only a directive, but NOT of a line that holds only a ## comment - it emits the leading
+## whitespace and swallows the rest. Indented inside this loop they contributed 28 characters per
+## property to the output, which landed in front of the first import (#6754).
+## System-owned columns a user update must never take from the payload (consumed by update()):
+## platform-managed read-only fields (an author's readOnly, roll-up targets, the document number
+## and uuid) and aggregate footer fields (an invoice's Net/Total/Paid). An aggregate that is
+## recomputed on update (an expressionUpdate such as Balance) is exempt here - update() reassigns
+## it AFTER recalculate(), from the resummed aggregates and the preserved values. A calculated
+## create-only field that stays user-editable (a defaulted Currency relation) carries neither
+## flag, so a user's edit of it is respected.
+    #if(!$property.dataPrimaryKey && ($property.isReadOnlyProperty || ($property.aggregate && !$property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)))
+        #set($ignore = $preservedOnUpdate.add($property))
     #end
 #end
 ## Decimal places of a calculated property: its own scale, else 2 for floating-point types, else 0.
@@ -117,7 +135,7 @@ import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.sdk.messaging.Producer;
 import org.eclipse.dirigible.sdk.utils.Json;
-#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0))
+#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges)
 import org.eclipse.dirigible.sdk.db.ValidationException;
 #end
 #if($multilingual == "true")
@@ -128,6 +146,9 @@ import org.eclipse.dirigible.sdk.db.Translator;
 import org.eclipse.dirigible.sdk.security.User;
 import java.util.List;
 import java.util.Map;
+#end
+#if($history == "true")
+import org.eclipse.dirigible.sdk.db.History;
 #end
 #if($haveCalculatedPropertyExpression)
 import org.eclipse.dirigible.sdk.utils.Calc;
@@ -173,12 +194,28 @@ ${importsCode}
 @Component("${javaGenFolderName}_${name}Repository")
 public class ${name}Repository extends JavaRepository<${name}Entity> {
 
+#if($history == "true")
+    /** The base table whose shadow ${tablePrefix}${dataName}_HISTORY table carries the change trail. */
+    private static final String HISTORY_TABLE = "${tablePrefix}${dataName}";
+
+    /**
+     * The properties whose changes are recorded. The primary key never changes and the audit columns
+     * say what the history row already says (who and when), so both are left out - everything else,
+     * calculated fields and foreign keys included, is part of what the row was at a point in time.
+     */
+#set($historyFirst = true)
+    private static final java.util.List<String> HISTORY_PROPERTIES = java.util.List.of(#foreach($property in $properties)#if(!$property.dataPrimaryKey && (!$property.auditType || $property.auditType == "NONE"))#if($historyFirst)#set($historyFirst = false)#else, #end"${property.name}"#end#end);
+
+#end
     public ${name}Repository() {
         super(${name}Entity.class);
     }
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
+#if($lifecycleInitialStatus)
+        enforceLifecycleStart(entity.${lifecycleStatusProperty});
+#end
 #rollupGuardCheck()
 #aggregateGuardCheck()
 #if($hasLabel)
@@ -226,6 +263,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         enforceChecks(entity);
 #end
         ${name}Entity saved = super.save(entity);
+#if($history == "true")
+        // Change history: the initial state as a null -> value delta per property, attributed to the
+        // user whose request created the row.
+        History.recordCreate(HISTORY_TABLE, saved.${pkPropertyName}, History.USER, saved, HISTORY_PROPERTIES);
+#end
         // Publish the create event so listeners (e.g. intent process triggers / reactions under gen/events) can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}", Json.stringify(saved));
 #if($documentItem)
@@ -237,8 +279,26 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public ${name}Entity update(${name}Entity entity) {
+#if($lifecycleEdges)
+        enforceLifecycle(entity);
+#end
 #rollupGuardCheck()
 #aggregateGuardCheck()
+#if($preservedOnUpdate.size() > 0)
+        // System-owned fields survive a partial payload: a caller's update carries only the fields
+        // its form edits, and a value it leaves null must not erase what the write path computed -
+        // the roll-up/aggregate targets (an invoice's Paid, a timesheet's total hours) and the
+        // platform-managed identifiers (document number, uuid). The #6226/#6306 lost-update family,
+        // user-update edition: read the stored row once and take the system-owned values from THERE,
+        // never from the payload. System writers stay on the targeted primitives (updateProperty /
+        // updateProperties / updateDerived), so this preservation cannot fight a workflow write.
+        ${name}Entity existingRow = entity.${pkPropertyName} == null ? null : findById(entity.${pkPropertyName});
+        if (existingRow != null) {
+#foreach($property in $preservedOnUpdate)
+            entity.${property.name} = existingRow.${property.name};
+#end
+        }
+#end
 #if($aggregateKeys && $aggregateKeys.size() > 0)
         // Aggregate rekey: this entity groups an aggregate, so a change to one of its grouping keys
         // MOVES the row between tuples. The tuple it moves into is recomputed off the "-updated" event
@@ -252,7 +312,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($hasLabel)
         computeName(entity);
 #end
+#if($documentMaster)
+        recalculate(entity);
+#end
 #if($haveCalculatedPropertyOnUpdate)
+## The update-time recomputes run AFTER recalculate() and the preservation block above, so an
+## expression like Balance = Total - Paid reads the freshly resummed Total and the preserved Paid -
+## computing it from the incoming payload read nulls as zeros and persisted Balance 0 on a header
+## edit (the 2026-08-12 prod invoice corruption).
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedActionOnUpdate)
 #actionAssign($property $property.calculatedActionOnUpdate)
@@ -261,13 +328,19 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #end
 #end
-#if($documentMaster)
-        recalculate(entity);
-#end
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
 #end
+#if($history == "true")
+        // Change history: the before-image is read through the BASE find (super), never this class's
+        // overridden one - on a multilingual entity the overridden read overlays the caller's language,
+        // and a translated value diffed against the stored one would report an edit nobody made.
+        ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+#end
         ${name}Entity updated = super.update(entity);
+#if($history == "true")
+        History.recordUpdate(HISTORY_TABLE, updated.${pkPropertyName}, History.USER, historyBefore, updated, HISTORY_PROPERTIES);
+#end
         // Publish the update event (suffixed topic) so intent reactions under gen/events can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-updated", Json.stringify(updated));
 #if($aggregateKeys && $aggregateKeys.size() > 0)
@@ -292,6 +365,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * re-fire onUpdate reactions (notifications, roll-ups, integrations) for a change the user never made.
      */
     public ${name}Entity updateWithoutEvent(${name}Entity entity) {
+#if($lifecycleEdges)
+        // A system write is still a status write: the state machine is the ONE place the legal moves
+        // are declared, so a workflow setter or glue action gets the same answer a user form gets.
+        enforceLifecycle(entity);
+#end
 #if($hasLabel)
         // Workflow writes change label inputs too (e.g. the stamped document number) - keep the
         // stored display name current on the system path as well.
@@ -302,13 +380,23 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // the gate check makes an unbalanced document fail the transition, not silently post.
         enforceChecks(entity);
 #end
+#if($history == "true")
+        ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+        ${name}Entity historyAfter = super.update(entity);
+        // A system write (no user event), recorded as such so the trail separates what the application
+        // did from what a person did.
+        History.recordUpdate(HISTORY_TABLE, historyAfter.${pkPropertyName}, History.SYSTEM, historyBefore, historyAfter, HISTORY_PROPERTIES);
+        return historyAfter;
+#else
         return super.update(entity);
+#end
     }
-#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel)
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || $history == "true")
 
     /**
-     * Targeted single-column write with the document semantics preserved: routed through
-     * {@link #updateProperties} so the gate checks (and the stored label Name) still run.
+     * Targeted single-column write with this entity's semantics preserved: routed through
+     * {@link #updateProperties}, which is where they are applied. The base implementation writes the
+     * column directly, so a plain pass-through would skip them.
      */
     @Override
     public int updateProperty(Object id, String property, Object value) {
@@ -318,7 +406,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     }
 
     /**
-     * Targeted multi-column write with the document semantics preserved: the incoming values are
+     * Targeted multi-column write with this entity's semantics preserved: the incoming values are
      * applied to a FRESH copy of the row first, so the declarative gate checks (and the stored label
      * Name) see the row as it will be after the write - then only the named columns (plus a changed
      * Name) are persisted in one statement. The workflow setters/writers come through here; a plain
@@ -329,8 +417,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         if (values == null || values.isEmpty()) {
             return 0;
         }
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges)
         ${name}Entity entity = findOne(id).orElse(null);
         if (entity != null) {
+#if($lifecycleEdges)
+            // The status as it stands BEFORE the targeted write - a transition button, a workflow
+            // setter and a glue action all arrive here, and all of them are moves in the state machine.
+            Object lifecyclePrevious = entity.${lifecycleStatusProperty};
+#end
             values = new java.util.LinkedHashMap<>(values);
             for (java.util.Map.Entry<String, Object> value : values.entrySet()) {
                 try {
@@ -349,13 +443,29 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                 values.put("Name", entity.Name);
             }
 #end
+#if($lifecycleEdges)
+            enforceLifecycleMove(lifecyclePrevious, entity.${lifecycleStatusProperty});
+#end
 #if($documentChecks && $documentChecks.size() > 0)
             // The workflow transition (the setter flipping the status to POSTED) comes through here -
             // the gate check makes an unbalanced document fail the transition, not silently post.
             enforceChecks(entity);
 #end
         }
+#end
+#if($history == "true")
+        // Change history for the targeted write: it is how the system writes (a roll-up total, a
+        // workflow write-back, a stamped number), so the trail attributes it to SYSTEM - a person
+        // reading the record must be able to tell those apart from an edit somebody made.
+        ${name}Entity historyBefore = super.findById(id);
+        int historyUpdated = super.updateProperties(id, values);
+        if (historyUpdated > 0) {
+            History.recordUpdate(HISTORY_TABLE, id, History.SYSTEM, historyBefore, super.findById(id), HISTORY_PROPERTIES);
+        }
+        return historyUpdated;
+#else
         return super.updateProperties(id, values);
+#end
     }
 #end
 
@@ -386,6 +496,91 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         return count;
     }
 
+#if($lifecycleEdges)
+    /**
+     * The declarative state machine (intent {@code lifecycle:}): the WHOLE set of legal status edges,
+     * as {@code 1&gt;2} source-to-target id pairs.
+     *
+     * <p>
+     * It is enforced HERE, in the repository, because this is the one place every status write passes
+     * through whoever performs it - a user form, a workflow setter, a transition button, a glue action,
+     * a custom controller. Guarding only the {@code transitions:} buttons would leave every other
+     * writer free to jump a record from any status to any other, which is precisely the hole the
+     * declaration closes.
+     */
+    private static final java.util.Set<String> LIFECYCLE_EDGES =
+            new java.util.HashSet<>(java.util.Arrays.asList("${lifecycleEdges}".split(",")));
+
+    /** Seeded status names, so a rejection names statuses instead of quoting positional ids. */
+    private static final java.util.Map<String, String> LIFECYCLE_STATUS_NAMES = lifecycleStatusNames();
+
+    private static java.util.Map<String, String> lifecycleStatusNames() {
+        java.util.Map<String, String> names = new java.util.HashMap<>();
+#if($lifecycleStatusNames)
+        for (String seeded : "${lifecycleStatusNames}".split(",")) {
+            int separator = seeded.indexOf('=');
+            if (separator > 0) {
+                names.put(seeded.substring(0, separator), seeded.substring(separator + 1));
+            }
+        }
+#end
+        return names;
+    }
+
+    /** A status as a person reads it: its seeded name when it has one, else the bare id. */
+    private static String lifecycleLabel(Object status) {
+        String id = String.valueOf(status);
+        String name = LIFECYCLE_STATUS_NAMES.get(id);
+        return name == null ? id : name;
+    }
+
+    /**
+     * Validate the status move this write would make against the state machine, reading the stored row
+     * for the status the record is standing in.
+     */
+    private void enforceLifecycle(${name}Entity entity) {
+        if (entity.${pkPropertyName} == null) {
+            return; // no stored row yet - a create, which enforceLifecycleStart covers
+        }
+        ${name}Entity stored = findById(entity.${pkPropertyName});
+        if (stored != null) {
+            enforceLifecycleMove(stored.${lifecycleStatusProperty}, entity.${lifecycleStatusProperty});
+        }
+    }
+
+    /**
+     * Reject a status move the lifecycle does not declare. A write that leaves the status where it was
+     * is not a move; clearing the status is, and there is no edge to nowhere.
+     */
+    private void enforceLifecycleMove(Object previous, Object next) {
+        if (previous == null || (next != null && String.valueOf(previous)
+                                                       .equals(String.valueOf(next)))) {
+            return;
+        }
+        if (next == null) {
+            throw new ValidationException("This ${name} is " + lifecycleLabel(previous) + " and cannot be left without a status");
+        }
+        if (!LIFECYCLE_EDGES.contains(String.valueOf(previous) + ">" + String.valueOf(next))) {
+            throw new ValidationException("This ${name} cannot move from " + lifecycleLabel(previous) + " to "
+                    + lifecycleLabel(next) + " - that is not a step its lifecycle allows");
+        }
+    }
+#if($lifecycleInitialStatus)
+
+    /**
+     * A lifecycle with a declared start ({@code init:}) also fixes where a record may ENTER it: created
+     * anywhere else, a record would skip the graph entirely rather than travel it. The system's own
+     * create-time filing (an aggregate guard's {@code outcome: reject}) runs after this check, so it
+     * still files the record where the model says it belongs.
+     */
+    private void enforceLifecycleStart(Object status) {
+        if (status != null && !"${lifecycleInitialStatus}".equals(String.valueOf(status))) {
+            throw new ValidationException("A new ${name} starts at " + lifecycleLabel("${lifecycleInitialStatus}") + ", not at "
+                    + lifecycleLabel(status));
+        }
+    }
+#end
+#end
 #if($documentChecks && $documentChecks.size() > 0)
     /**
      * Declarative document checks (intent {@code checks:}): each runs when the document is persisted
@@ -424,7 +619,15 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public void delete(${name}Entity entity) {
+#if($history == "true")
+        // The caller's argument may be a partial snapshot; the trail must carry what was actually
+        // stored, so read the row (untranslated) before it is gone.
+        ${name}Entity historyDeleted = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+#end
         super.delete(entity);
+#if($history == "true")
+        History.recordDelete(HISTORY_TABLE, entity.${pkPropertyName}, History.USER, historyDeleted, HISTORY_PROPERTIES);
+#end
         // Publish the delete event (suffixed topic) so intent reactions under gen/events can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-deleted", Json.stringify(entity));
 #if($documentItem)
@@ -436,7 +639,13 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     @Override
     public void deleteById(Object id) {
         ${name}Entity entity = findById(id);
+#if($history == "true")
+        ${name}Entity historyDeleted = super.findById(id);
+#end
         super.deleteById(id);
+#if($history == "true")
+        History.recordDelete(HISTORY_TABLE, id, History.USER, historyDeleted, HISTORY_PROPERTIES);
+#end
         if (entity != null) {
             Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-deleted", Json.stringify(entity));
 #if($documentItem)
@@ -551,7 +760,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         totals.put("${property.name}", entity.${property.name});
 #end
 #end
+#if($history == "true")
+        // Recalculation deliberately goes to the BASE targeted write (it has already computed the row,
+        // so it must not re-run the gate), which means the history has to be recorded here rather than
+        // in the override - a document whose totals move with every line must show that in its trail.
+        ${name}Entity historyBefore = super.findById(id);
+#end
         super.updateProperties(id, totals);
+#if($history == "true")
+        History.recordUpdate(HISTORY_TABLE, id, History.SYSTEM, historyBefore, super.findById(id), HISTORY_PROPERTIES);
+#end
         return entity;
     }
 #end

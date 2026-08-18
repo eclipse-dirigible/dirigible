@@ -22,7 +22,7 @@
  * (Pragmatic discovery via the core repository API. A cleaner long-term option is for the intent to
  * surface its reports in the model the shell is generated from.)
  */
-// Mirror of service-generate/template/parameterUtils.js sanitizeJavaIdentifier — the rule that maps
+// Mirror of NamingHelper.sanitizeJavaIdentifier (the generation pipeline) — the rule that maps
 // a raw gen-folder name to the Java package folder the generated report controller lives under.
 // Keep the two in sync: lowercase, every non-[a-z0-9_] char -> '_', digit-prefixed -> '_'-prefixed.
 function sanitizeJavaIdentifier(name) {

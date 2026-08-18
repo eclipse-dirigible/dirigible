@@ -174,7 +174,9 @@ document.addEventListener('alpine:init', () => {
       console.warn('[form] no handler for callback', callback);
     },
 
-    // Generic submit for forms declaring a metadata URL and no explicit handler.
+    // Generic submit for forms declaring a metadata URL and no explicit handler. The two outcome
+    // messages come from this form's own catalog (the `dialogs` section the translate action emits,
+    // where successMsg carries the form's authored success text), falling back to the literals.
     async submit() {
       const url = '${metadata.url}';
       if (!url) return;
@@ -182,10 +184,11 @@ document.addEventListener('alpine:init', () => {
       try {
         await harmoniaHttp.post(url, this.model);
         this.state = 'success';
-        this.message = 'Submitted.';
+        this.message = window.T ? T('$projectName:${tprefix}.dialogs.successMsg', 'Submitted.') : 'Submitted.';
       } catch (e) {
+        const failed = window.T ? T('$projectName:${tprefix}.dialogs.errorTitle', 'Submit failed.') : 'Submit failed.';
         this.state = 'error';
-        this.message = (e && e.message) || 'Submit failed.';
+        this.message = (e && e.message) || failed;
       }
     },
 
@@ -252,8 +255,11 @@ document.addEventListener('alpine:init', () => {
     },
 
     // An HTML datetime-local value ("YYYY-MM-DDTHH:mm", local, no zone) -> a full ISO instant (…Z).
+    // A space-separated "YYYY-MM-DD HH:mm" (user-typed) is normalized first — WebKit's new Date()
+    // rejects the space form, which would pass the raw string through to the backend.
     toInstant(value) {
-      const d = new Date(String(value));
+      const s = String(value);
+      const d = new Date(s.length > 10 && s[10] === ' ' ? s.slice(0, 10) + 'T' + s.slice(11) : s);
       return isNaN(d.getTime()) ? String(value) : d.toISOString();
     },
 

@@ -60,6 +60,17 @@ body {
   color: var(--color-negative, #a51d2d);
 }
 
+/* A requirement the intent could not express. Deliberately NOT styled like the assistant's prose:
+   it is the one part of the answer the developer has to act on - and forward, so the missing
+   capability can be evaluated - so it must not read as more explanation. */
+.builder-message.boundary {
+  align-self: stretch;
+  max-width: 100%;
+  background: var(--color-warning-muted, #fdf3e0);
+  color: var(--color-foreground, #1d2d3e);
+  border-left: 3px solid var(--color-warning, #e9a319);
+}
+
 .builder-thinking {
   color: var(--color-muted-foreground, #6a6d70);
 }

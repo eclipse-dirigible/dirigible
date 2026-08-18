@@ -1,3 +1,16 @@
+## An apostrophe in an authored label would close the JS string literal a T() call sits in and break
+## the whole Alpine expression, so every interpolated label goes through .replace($SQ, $ESCSQ) - the
+## translation KEY included, since it is derived from the label and only spaces and _ . : are stripped
+## out of it. Built from a single-quoted (non-interpolated) backslash so no literal escaping is
+## assumed of VTL.
+#set($SQ = "'")
+#set($BS = '\')
+#set($ESCSQ = "${BS}${SQ}")
+## Every author-facing label resolves through this form's own catalog (i18n/<locale>/<form>.form.json,
+## key <tprefix>.t.<id>), falling back to the English literal baked in here. The id was assigned to
+## the model by the catalog-emitting generation pass, so nothing is derived at runtime - and a label
+## the pass did not key (a hand-authored form control without a label) keeps the element's own text.
+#macro(tlabel $el)#if($el.translation) x-text="T('${projectName}:${tprefix}.t.${el.translation.replace($SQ, $ESCSQ)}', '$!el.label.replace($SQ, $ESCSQ)')"#end#end
 #macro(leaf $el)
 #if($metadata.taskForm && $el.readonly && $el.model)
         <!-- BPM task form: a read-only field renders as a detail cell - a muted label above its value,
@@ -8,7 +21,7 @@
              `customer.name` shows the customer's name here rather than the raw FK id. A number is
              formatted with its pattern (grouped, fixed decimals); other values render as-is. -->
         <div class="vbox gap-0">
-          <span x-h-text.muted class="text-xs">$!el.label</span>
+          <span x-h-text.muted class="text-xs"#tlabel($el)>$!el.label</span>
 #if($el.controlId == "input-number")
           <span x-h-text class="text-sm break-words" x-text="fmtNumber(model.$el.model, '$!el.pattern')"></span>
 #elseif($el.controlId == "input-date" || $el.controlId == "input-datetime-local" || $el.controlId == "input-time" || $el.controlId == "input-month")
@@ -18,34 +31,34 @@
 #end
         </div>
 #elseif($el.controlId == "header")
-        <h1 x-h-text.h3 class="mb-2 col-span-full text-2xl font-semibold tracking-tight">$!el.label</h1>
+        <h1 x-h-text.h3 class="mb-2 col-span-full text-2xl font-semibold tracking-tight"#tlabel($el)>$!el.label</h1>
 #elseif($el.controlId == "paragraph")
-        <p x-h-text class="col-span-full">$!el.label</p>
+        <p x-h-text class="col-span-full"#tlabel($el)>$!el.label</p>
 #elseif($el.controlId == "line")
         <hr x-h-separator class="col-span-full" />
 #elseif($el.controlId == "spacer")
         <div class="flex-1"></div>
 #elseif($el.controlId == "link")
-        <a x-h-button data-variant="link" href="$!el.url">$!el.label</a>
+        <a x-h-button data-variant="link" href="$!el.url"#tlabel($el)>$!el.label</a>
 #elseif($el.controlId == "input-textarea")
         <div x-h-field class="col-span-full">
-          <label x-h-label for="$el.id">$!el.label</label>
+          <label x-h-label for="$el.id"#tlabel($el)>$!el.label</label>
           <textarea x-h-textarea id="$el.id" rows="4" x-model="model.$el.model"#if($el.readonly) readonly#end></textarea>
         </div>
 #elseif($el.controlId == "input-number")
         <div x-h-field>
-          <label x-h-label for="$el.id">$!el.label</label>
+          <label x-h-label for="$el.id"#tlabel($el)>$!el.label</label>
           <!-- step="any": without it the browser default step=1 rejects fractional input on number fields. -->
           <div x-h-input-number><input type="number" step="any" id="$el.id" x-model.number="model.$el.model"#if($el.readonly) readonly#end /></div>
         </div>
 #elseif($el.controlId == "input-checkbox")
         <div x-h-field data-orientation="horizontal">
           <span x-h-checkbox><input type="checkbox" id="$el.id" x-model="model.$el.model"#if($el.readonly) disabled#end /></span>
-          <label x-h-label for="$el.id">$!el.label</label>
+          <label x-h-label for="$el.id"#tlabel($el)>$!el.label</label>
         </div>
 #elseif($el.controlId == "input-date")
         <div x-h-field>
-          <label x-h-label for="$el.id">$!el.label</label>
+          <label x-h-label for="$el.id"#tlabel($el)>$!el.label</label>
           <div x-h-date-picker>
             <input type="text" id="$el.id"#if($el.readonly) disabled#end />
             <button x-h-date-picker-trigger aria-label="Choose date"></button>
@@ -54,7 +67,7 @@
         </div>
 #elseif($el.controlId == "input-datetime-local")
         <div x-h-field>
-          <label x-h-label for="$el.id">$!el.label</label>
+          <label x-h-label for="$el.id"#tlabel($el)>$!el.label</label>
           <div x-h-datetime-picker>
             <input type="text" id="$el.id"#if($el.readonly) disabled#end />
             <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
@@ -63,7 +76,7 @@
         </div>
 #elseif($el.controlId == "input-time")
         <div x-h-field>
-          <label x-h-label for="$el.id">$!el.label</label>
+          <label x-h-label for="$el.id"#tlabel($el)>$!el.label</label>
           <div x-h-time-picker>
             <input type="text" x-h-time-picker-input id="$el.id" x-model="model.$el.model"#if($el.readonly) disabled#end />
             <div x-h-time-picker-popup></div>
@@ -71,7 +84,7 @@
         </div>
 #elseif($el.controlId == "input-month")
         <div x-h-field>
-          <label x-h-label for="$el.id">$!el.label</label>
+          <label x-h-label for="$el.id"#tlabel($el)>$!el.label</label>
           <div x-h-month-picker>
             <input type="text" id="$el.id"#if($el.readonly) disabled#end />
             <button x-h-month-picker-trigger aria-label="Choose month"></button>
@@ -80,7 +93,7 @@
         </div>
 #elseif($el.controlId == "input-week")
         <div x-h-field>
-          <label x-h-label for="$el.id">$!el.label</label>
+          <label x-h-label for="$el.id"#tlabel($el)>$!el.label</label>
           <div x-h-week-picker>
             <input type="text" id="$el.id"#if($el.readonly) disabled#end />
             <button x-h-week-picker-trigger aria-label="Choose week"></button>
@@ -89,15 +102,15 @@
         </div>
 #elseif($el.controlId == "input-color")
         <div x-h-field>
-          <label x-h-label for="$el.id">$!el.label</label>
+          <label x-h-label for="$el.id"#tlabel($el)>$!el.label</label>
           <input x-h-input type="color" id="$el.id" x-model="model.$el.model"#if($el.readonly) readonly#end />
         </div>
 #elseif($el.controlId == "button")
-        <button x-h-button#if($el.type == "emphasized") data-variant="primary"#elseif($el.type) data-variant="$el.type"#end type="button"#if($el.callback) @click="run('$el.callback')"#elseif($el.isSubmit) @click="submit()"#end>$!el.label</button>
+        <button x-h-button#if($el.type == "emphasized") data-variant="primary"#elseif($el.type) data-variant="$el.type"#end type="button"#if($el.callback) @click="run('$el.callback')"#elseif($el.isSubmit) @click="submit()"#end#tlabel($el)>$!el.label</button>
 #else
         <!-- TODO (forms v2): widget '$!el.controlId' not yet rendered in Harmonia -->
         <div x-h-field>
-          <label x-h-label for="$!el.id">$!el.label</label>
+          <label x-h-label for="$!el.id"#tlabel($el)>$!el.label</label>
           <input x-h-input type="text" id="$!el.id" x-model="model.$!el.model"#if($el.readonly) readonly#end />
         </div>
 #end
@@ -152,14 +165,16 @@
         <hr class="col-span-full mb-4" style="border: none; border-top: 1px solid var(--border);" />
         <!-- Document status flow, extracted from the intent (the bound entity's function: EntityStatus
              relation -> the status entity's non-terminal seeds, in order). Read-only (non-interactive);
-             active step = the current status name (model.$metadata.statusVar). -->
-        <nav x-h-step-indicator="([#foreach($s in $metadata.steps){ label: '$s.label' }#if($foreach.hasNext), #end#end]).findIndex(s => s.label === model.${metadata.statusVar}) + 1" data-orientation="horizontal" class="col-span-full mb-4">
-          <template x-for="(step, i) in [#foreach($s in $metadata.steps){ label: '$s.label', description: '$!s.description' }#if($foreach.hasNext), #end#end]" :key="step.label">
+             active step = the current status name (model.$metadata.statusVar).
+             `label` stays the untranslated seed name because it is what the record's status value is
+             MATCHED against; `title` is the same name resolved through the catalog and is what shows. -->
+        <nav x-h-step-indicator="([#foreach($s in $metadata.steps){ label: '$s.label.replace($SQ, $ESCSQ)' }#if($foreach.hasNext), #end#end]).findIndex(s => s.label === model.${metadata.statusVar}) + 1" data-orientation="horizontal" class="col-span-full mb-4">
+          <template x-for="(step, i) in [#foreach($s in $metadata.steps){ label: '$s.label.replace($SQ, $ESCSQ)', title: #if($s.translation)T('${projectName}:${tprefix}.t.${s.translation.replace($SQ, $ESCSQ)}', '$s.label.replace($SQ, $ESCSQ)')#{else}'$s.label.replace($SQ, $ESCSQ)'#end, description: #if($s.description)'$s.description.replace($SQ, $ESCSQ)'#{else}''#end }#if($foreach.hasNext), #end#end]" :key="step.label">
             <div x-h-step-indicator-item="i + 1">
               <button x-h-step-indicator-trigger data-non-interactive="true" type="button">
                 <span x-h-step-indicator-marker x-text="i + 1"></span>
                 <span x-h-step-indicator-content>
-                  <span x-h-step-indicator-title x-text="step.label"></span>
+                  <span x-h-step-indicator-title x-text="step.title"></span>
                   <span x-h-step-indicator-description x-show="step.description" x-text="step.description"></span>
                 </span>
               </button>
@@ -239,6 +254,12 @@
     <!-- The single shared value formatter (dates/numbers). Self-contained + dependency-free, so it loads
          by absolute URL even in the standalone task-form iframe where the shell assets are absent. -->
     <script src="/services/web/application-core/shell/js/services/format.js"></script>
+    <!-- i18n: the shared shell translator (window.T + the Alpine i18n store), which serves the labels,
+         the status steps and the submit messages from this form's own catalog. This page is standalone
+         (no SPA shell / app.js), so the catalog namespace is bootstrapped inline: i18n.js reads
+         App.config.projectName at load to fetch the project's catalogs next to 'application-core'. -->
+    <script>window.App = window.App || { config: {} }; App.config = App.config || {}; App.config.projectName = '$projectName';</script>
+    <script src="/services/web/application-core/shell/js/services/i18n.js"></script>
     <script src="./form.js"></script>
     <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
     <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>

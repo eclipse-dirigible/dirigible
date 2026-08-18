@@ -657,10 +657,14 @@ class ModelGenerator {
         collections.put("uiDocumentModels", select(entities, layout("MANAGE_DOCUMENT", "PRIMARY")));
         // A calendar / slot-picker view is an ADDITIONAL page (#6547): the entity keeps its own layout, so
         // these two key on their own flags rather than on a layout type - there is no MANAGE_CALENDAR or
-        // MANAGE_SLOTS layout any more. Keep in step with generateUtils.js while both paths are live.
+        // MANAGE_SLOTS layout any more.
         collections.put("uiCalendarModels",
                 select(entities, e -> "true".equals(str(e, "calendarView")) && "PRIMARY".equals(str(e, "type"))));
         collections.put("uiSlotsModels", select(entities, e -> "true".equals(str(e, "slotsView")) && "PRIMARY".equals(str(e, "type"))));
+        // An entity that lists the records REFERENCING it contributes one registration file its own
+        // pages read the registers from - so the register metadata is emitted once per entity rather
+        // than repeated in every page template that renders it.
+        collections.put("uiRelatedModels", select(entities, e -> !asMaps(e.get("relatedEntities")).isEmpty()));
 
         // The personal surface: entities the logged-in user owns, either through a direct personal
         // relation or through the scope inherited from their composition parent.

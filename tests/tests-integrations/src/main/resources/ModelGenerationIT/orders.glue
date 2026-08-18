@@ -1,0 +1,272 @@
+{
+    "triggers": [
+        {
+            "process": "OrderApproval",
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "keyProperty": "Id",
+            "topicSuffix": "",
+            "guardExpression": "",
+            "relationLinks": [
+                {
+                    "fkProperty": "Customer",
+                    "labelField": "Name",
+                    "targetEntity": "Customer",
+                    "targetPerspective": "Partners"
+                },
+                {
+                    "fkProperty": "Currency",
+                    "labelField": "Code",
+                    "crossModel": true,
+                    "targetProject": "codbex-currencies",
+                    "targetModel": "currencies",
+                    "targetEntity": "Currency",
+                    "targetPerspective": "Currencies"
+                }
+            ],
+            "businessKeyProperty": "Id"
+        }
+    ],
+    "notifications": [
+        {
+            "name": "orderApproved",
+            "className": "OrderApprovedNotification",
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "topicSuffix": "-transitioned",
+            "guardExpression": "\"APPROVED\".equals(status)",
+            "toExpression": "customer.Email",
+            "subjectExpression": "\"Order approved\"",
+            "bodyExpression": "\"Your order has been approved.\"",
+            "relationLoads": [
+                {
+                    "fkProperty": "Customer",
+                    "local": "customer",
+                    "targetEntity": "Customer",
+                    "targetPerspective": "Partners"
+                },
+                {
+                    "fkProperty": "Currency",
+                    "local": "currency",
+                    "crossModel": true,
+                    "targetModel": "currencies",
+                    "targetEntity": "Currency",
+                    "targetPerspective": "Currencies"
+                }
+            ],
+            "attach": "",
+            "attachEntity": "",
+            "attachLanguageExpression": "",
+            "attachFileNameExpression": "",
+            "attachLanguageFkProperty": "",
+            "attachLanguageTargetEntity": "",
+            "attachLanguageTargetPerspective": "",
+            "attachLanguageCrossModel": false,
+            "attachLanguageTargetModel": "",
+            "attachKeyProperty": ""
+        }
+    ],
+    "rollups": [
+        {
+            "className": "SalesOrderItemRollup",
+            "childEntity": "SalesOrderItem",
+            "childPerspective": "Sales Orders",
+            "parentEntity": "SalesOrder",
+            "parentPerspective": "Sales Orders",
+            "fkProperty": "SalesOrder",
+            "topicSuffix": "",
+            "op": "sum",
+            "sumField": "Amount",
+            "countField": "Total",
+            "capacityField": "",
+            "balanceField": "",
+            "statusField": "",
+            "statusWhenFull": "",
+            "statusWhenPartial": "",
+            "parentModel": "",
+            "parentCrossModel": false,
+            "criteriaExpression": "Criteria.create().eq(\"SalesOrder\", entity.SalesOrder)"
+        },
+        {
+            "className": "SalesOrderItemRollup",
+            "childEntity": "SalesOrderItem",
+            "childPerspective": "Sales Orders",
+            "parentEntity": "SalesOrder",
+            "parentPerspective": "Sales Orders",
+            "fkProperty": "SalesOrder",
+            "topicSuffix": "",
+            "op": "count",
+            "countField": "LineCount",
+            "parentModel": "",
+            "parentCrossModel": false,
+            "criteriaExpression": "Criteria.create().eq(\"SalesOrder\", entity.SalesOrder)"
+        },
+        {
+            "className": "SalesOrderItemRollup",
+            "childEntity": "SalesOrderItem",
+            "childPerspective": "Sales Orders",
+            "parentEntity": "SalesOrder",
+            "parentPerspective": "Sales Orders",
+            "fkProperty": "SalesOrder",
+            "topicSuffix": "-deleted",
+            "op": "sum",
+            "sumField": "Amount",
+            "countField": "Total",
+            "capacityField": "",
+            "balanceField": "",
+            "statusField": "",
+            "statusWhenFull": "",
+            "statusWhenPartial": "",
+            "parentModel": "",
+            "parentCrossModel": false,
+            "criteriaExpression": "Criteria.create().eq(\"SalesOrder\", entity.SalesOrder)"
+        },
+        {
+            "className": "SalesOrderItemRollup",
+            "childEntity": "SalesOrderItem",
+            "childPerspective": "Sales Orders",
+            "parentEntity": "SalesOrder",
+            "parentPerspective": "Sales Orders",
+            "parentModel": "",
+            "parentCrossModel": false,
+            "fkProperty": "SalesOrder",
+            "topicSuffix": "-capacity",
+            "op": "sum",
+            "sumField": "Amount",
+            "countField": "Reserved",
+            "capacityField": "Capacity",
+            "balanceField": "Available",
+            "statusField": "Status",
+            "statusWhenFull": "3",
+            "statusWhenPartial": "2",
+            "criteriaExpression": "Criteria.create().eq(\"SalesOrder\", entity.SalesOrder)"
+        }
+    ],
+    "aggregates": [
+        {
+            "className": "CustomerRevenue",
+            "op": "sum",
+            "sourceEntity": "SalesOrder",
+            "sourcePerspective": "Sales Orders",
+            "targetEntity": "CustomerRevenue",
+            "targetPerspective": "Analytics",
+            "targetField": "Revenue",
+            "targetPk": "Id",
+            "sumField": "Total",
+            "keys": [
+                {
+                    "key": "Customer"
+                },
+                {
+                    "key": "Year"
+                }
+            ]
+        }
+    ],
+    "setters": [
+        {
+            "process": "OrderApproval",
+            "className": "SetOrderApproved",
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "keyProperty": "Id",
+            "keyAccessor": "getId",
+            "field": "Status",
+            "value": "APPROVED"
+        }
+    ],
+    "generates": [
+        {
+            "name": "invoiceFromOrder",
+            "className": "InvoiceFromOrder",
+            "crossModel": false,
+            "fromEntity": "SalesOrder",
+            "fromPerspective": "Sales Orders",
+            "crossModelSource": false,
+            "fromModel": "",
+            "fromProject": "",
+            "toEntity": "SalesInvoice",
+            "toModel": "",
+            "toPerspective": "Sales Invoices",
+            "toPk": "Id",
+            "fieldAssignments": "        target.Customer = source.Customer;\n",
+            "sourceStatusProperty": "",
+            "sourceStatusValue": "",
+            "hasItems": false,
+            "hasItemLines": false
+        },
+        {
+            "name": "orderFromQuote",
+            "className": "OrderFromQuote",
+            "crossModel": false,
+            "fromEntity": "Quote",
+            "fromPerspective": "Quotes",
+            "crossModelSource": true,
+            "fromModel": "sales-quotes",
+            "fromProject": "codbex-quotes",
+            "toEntity": "SalesOrder",
+            "toModel": "",
+            "toPerspective": "Sales Orders",
+            "toPk": "Id",
+            "fieldAssignments": "        target.Customer = source.Customer;\n",
+            "sourceStatusProperty": "Status",
+            "sourceStatusValue": "4",
+            "hasItems": false,
+            "hasItemLines": false
+        },
+        {
+            "name": "deliveryFromOrder",
+            "className": "DeliveryFromOrder",
+            "crossModel": false,
+            "fromEntity": "SalesOrder",
+            "fromPerspective": "Sales Orders",
+            "fromPk": "Id",
+            "crossModelSource": false,
+            "fromModel": "",
+            "fromProject": "",
+            "toEntity": "Delivery",
+            "toModel": "",
+            "toPerspective": "Deliveries",
+            "toPk": "Id",
+            "fieldAssignments": "        target.SalesOrder = source.Id;\n",
+            "sourceStatusProperty": "",
+            "sourceStatusValue": "",
+            "hasItems": false,
+            "hasItemLines": false,
+            "eventOnly": true,
+            "hasEvent": true,
+            "isCreate": false,
+            "guardProperty": "Status",
+            "guardValue": "3",
+            "backRefProperty": "SalesOrder"
+        }
+    ],
+    "generateEvents": [
+        {
+            "name": "deliveryFromOrder",
+            "className": "DeliveryFromOrder",
+            "crossModel": false,
+            "fromEntity": "SalesOrder",
+            "fromPerspective": "Sales Orders",
+            "fromPk": "Id",
+            "crossModelSource": false,
+            "fromModel": "",
+            "fromProject": "",
+            "toEntity": "Delivery",
+            "toModel": "",
+            "toPerspective": "Deliveries",
+            "toPk": "Id",
+            "fieldAssignments": "        target.SalesOrder = source.Id;\n",
+            "sourceStatusProperty": "",
+            "sourceStatusValue": "",
+            "hasItems": false,
+            "hasItemLines": false,
+            "eventOnly": true,
+            "hasEvent": true,
+            "isCreate": false,
+            "guardProperty": "Status",
+            "guardValue": "3",
+            "backRefProperty": "SalesOrder"
+        }
+    ]
+}

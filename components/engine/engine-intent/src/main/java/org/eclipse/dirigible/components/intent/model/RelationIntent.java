@@ -33,6 +33,14 @@ public class RelationIntent {
      */
     private String model;
     /**
+     * Optional name for the intermediate (link) entity a {@code manyToMany} materialises into -
+     * {@code <Declaring><Target>} when absent. Use it to give the link a domain name
+     * ({@code Enrollment} rather than {@code StudentCourse}) or to keep two n:m relations between the
+     * same pair of entities apart. Valid on {@code manyToMany} only.
+     */
+    private String through;
+
+    /**
      * Pre-rename boolean form of the status role - REJECTED by the parser with a clear migration
      * message; kept as a field only so the validator can detect it. Author {@code function:
      * EntityStatus} instead.
@@ -135,6 +143,31 @@ public class RelationIntent {
      */
     private boolean partner;
 
+    /**
+     * Optional fully-qualified Java class that computes this to-one relation's FK on create - the
+     * relation counterpart of {@link FieldIntent#getCalculatedActionOnCreate()}, for a default that
+     * must be DERIVED rather than fixed. {@code init:} already covers the fixed case (a literal target
+     * seed id); this covers "read it off another record" - a document's currency defaulting from its
+     * company's base currency - which no other hook expresses: {@code init:} is a literal, {@code
+     * dependsOn} is a UI-only cascade, and the {@code setRelationField} process step also takes a
+     * literal id.
+     *
+     * <p>
+     * The class is a {@code @Component} implementing
+     * {@code org.eclipse.dirigible.sdk.db.CalculatedField} returning the FK's Java type (an
+     * {@code Integer} for the usual integer-keyed target); the generated repository invokes it as
+     * {@code Beans.get(<class>.class).calculate(entity)} and assigns the result to the FK property.
+     * Reference the class from the owning entity's {@link EntityIntent#getImports()}. Valid on
+     * {@code manyToOne}/{@code oneToOne} only.
+     */
+    private String calculatedActionOnCreate;
+
+    /**
+     * Optional fully-qualified Java class that computes this to-one relation's FK on update (see
+     * {@link #calculatedActionOnCreate}).
+     */
+    private String calculatedActionOnUpdate;
+
     public String getName() {
         return name;
     }
@@ -194,6 +227,14 @@ public class RelationIntent {
     /** Whether this relation targets an entity owned by another intent model. */
     public boolean isCrossModel() {
         return model != null && !model.isBlank();
+    }
+
+    public String getThrough() {
+        return through;
+    }
+
+    public void setThrough(String through) {
+        this.through = through;
     }
 
     public String getFunction() {
@@ -300,5 +341,27 @@ public class RelationIntent {
 
     public void setPartner(boolean partner) {
         this.partner = partner;
+    }
+
+    public String getCalculatedActionOnCreate() {
+        return calculatedActionOnCreate;
+    }
+
+    public void setCalculatedActionOnCreate(String calculatedActionOnCreate) {
+        this.calculatedActionOnCreate = calculatedActionOnCreate;
+    }
+
+    public String getCalculatedActionOnUpdate() {
+        return calculatedActionOnUpdate;
+    }
+
+    public void setCalculatedActionOnUpdate(String calculatedActionOnUpdate) {
+        this.calculatedActionOnUpdate = calculatedActionOnUpdate;
+    }
+
+    /** Whether this relation's FK is computed (has a create or update action). */
+    public boolean isCalculated() {
+        return (calculatedActionOnCreate != null && !calculatedActionOnCreate.isBlank())
+                || (calculatedActionOnUpdate != null && !calculatedActionOnUpdate.isBlank());
     }
 }

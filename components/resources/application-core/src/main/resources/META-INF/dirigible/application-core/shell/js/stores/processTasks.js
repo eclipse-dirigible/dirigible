@@ -30,6 +30,7 @@ document.addEventListener('alpine:init', () => {
     formOpen: false,
     formUrl: '',
     formTitle: '',
+    formTitleKey: '',   // the open task's translation key; '' for a process that declares no catalog
     serverUnavailable: false,   // set once the backend is unreachable; stops the poll until a reload
     _poll: null,
 
@@ -72,6 +73,7 @@ document.addEventListener('alpine:init', () => {
         this.byProcessId = map;
         this.tasks = flat;
         this.loaded = true;
+        this.loadTaskLabelCatalogs(flat);
         // Surface the user's actionable tasks in the shell's notification bell.
         const notifications = Alpine.store('notifications');
         if (notifications && notifications.syncTasks) notifications.syncTasks(flat);
@@ -96,6 +98,46 @@ document.addEventListener('alpine:init', () => {
 
     refresh() { return this.load(); },
 
+    // A task names its own translation key ('<project>:<model>-model.processes.<task>', minted into
+    // the process definition at generation time), and the module that raised it is not necessarily
+    // the one hosting this shell — the Inbox and the bell aggregate every deployed app. So the
+    // namespaces the tasks actually reference are added to the translator on arrival; already
+    // rendered T() bindings re-evaluate when they land.
+    loadTaskLabelCatalogs(tasks) {
+      if (!window.AppI18nAddNamespaces) return;
+      const namespaces = [];
+      tasks.forEach((t) => {
+        const separator = t.nameKey ? t.nameKey.indexOf(':') : -1;
+        if (separator > 0) {
+          const namespace = t.nameKey.substring(0, separator);
+          if (namespaces.indexOf(namespace) < 0) namespaces.push(namespace);
+        }
+      });
+      if (namespaces.length) AppI18nAddNamespaces(namespaces);
+    },
+
+    // The display names, in the user's language. A generated process carries the i18n key of every
+    // name it shows (see loadTaskLabelCatalogs); anything else — a hand-authored BPMN, an older
+    // deployment — carries none and keeps rendering the raw BPMN name it always did. One rule here so
+    // the Inbox, the bell, the task dialog and the in-record buttons cannot drift apart.
+    taskName(task) {
+      const name = (task && task.name) || 'Task';
+      return window.T ? T(task && task.nameKey, name) : name;
+    },
+
+    processName(task) {
+      const name = task && task.processDefinitionName;
+      if (!name) return '';
+      return window.T ? T(task.processDefinitionNameKey, name) : name;
+    },
+
+    // How a task reads where it is listed on its own, away from the record it belongs to.
+    taskLabel(task) {
+      const process = this.processName(task);
+      const name = this.taskName(task);
+      return process ? process + ' — ' + name : name;
+    },
+
     getTasks(entity) {
       return (entity && entity.ProcessId && this.byProcessId[entity.ProcessId]) || [];
     },
@@ -119,7 +161,10 @@ document.addEventListener('alpine:init', () => {
       const sep = task.formKey.indexOf('?') >= 0 ? '&' : '?';
       this.formUrl = task.formKey + sep + 'taskId=' + encodeURIComponent(task.id)
                    + '&processInstanceId=' + encodeURIComponent(task.processInstanceId);
+      // The dialog title is bound as T(formTitleKey, formTitle), so it keeps following the language
+      // (and the catalogs, which may still be loading) rather than being resolved once here.
       this.formTitle = task.name || 'Task';
+      this.formTitleKey = task.nameKey || '';
       this.formOpen = true;
     },
 
@@ -128,6 +173,7 @@ document.addEventListener('alpine:init', () => {
     closeForm() {
       this.formOpen = false;
       this.formUrl = '';
+      this.formTitleKey = '';
       this.refresh();
     },
   });

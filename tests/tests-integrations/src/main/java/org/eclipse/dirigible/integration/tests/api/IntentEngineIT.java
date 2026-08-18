@@ -28,8 +28,10 @@ import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * End-to-end test for the intent editor services: {@code POST /services/ide/intent/parse} (the
@@ -42,6 +44,10 @@ import org.springframework.beans.factory.annotation.Autowired;
  * workspace, exactly as the editor's Generate button does it. HTTP-only - no Selenide, no Chrome,
  * no synchronization cycles.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself, so the per-method
+// context reset inherited from IntegrationTest would only add ~10s of boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@Tag("slow")
 class IntentEngineIT extends IntegrationTest {
 
     private static final String PROJECT = "intent-test";
@@ -51,6 +57,7 @@ class IntentEngineIT extends IntegrationTest {
     private static final String GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
     private static final String AGENT_URL = "/services/ide/intent/agent";
+    private static final String ASSIST_URL = "/services/ide/intent/assist";
 
     private static final String INTENT_YAML = """
             name: orders
@@ -90,8 +97,12 @@ class IntentEngineIT extends IntegrationTest {
                   - { name: total,     type: decimal }
                   # Depends-On auto-populate: copied from the chosen customer's creditLimit.
                   - { name: creditSnapshot, type: decimal, dependsOn: { relation: customer, valueFrom: creditLimit } }
+                  # The observable trace of the effective-dated salesRep lookup (found/notFound/ambiguous).
+                  - { name: repResolution, type: string, length: 20, readOnly: true }
                 relations:
                   - { name: customer, kind: manyToOne, to: Customer }
+                  # Filled by the `resolves` lookup below, never typed in.
+                  - { name: salesRep, kind: manyToOne, to: SalesRep }
                   # Depends-On cascade: narrowed to the chosen customer's country (filterBy defaults to the PK).
                   - { name: country,  kind: manyToOne, to: Country, dependsOn: { relation: customer, valueFrom: country } }
                   - { name: items,    kind: oneToMany, to: OrderItem }
@@ -114,6 +125,26 @@ class IntentEngineIT extends IntegrationTest {
                 relations:
                   - { name: order, kind: manyToOne, to: Order, composition: true }
 
+              # identity: the login a rep record maps to - what makes it addressable as a task assignee.
+              - name: SalesRep
+                identity: email
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: name,  type: string,  required: true, length: 200 }
+                  - { name: email, type: string,  unique: true, length: 200 }
+                relations:
+                  - { name: manager, kind: manyToOne, to: SalesRep }
+
+              # The effective-dated register: who covered this customer between which dates.
+              - name: CustomerAssignment
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: validFrom, type: date }
+                  - { name: validTo,   type: date }
+                relations:
+                  - { name: customer, kind: manyToOne, to: Customer }
+                  - { name: salesRep, kind: manyToOne, to: SalesRep }
+
             processes:
               - name: OrderApproval
                 trigger: { onCreate: Order }
@@ -124,9 +155,12 @@ class IntentEngineIT extends IntegrationTest {
                   - name: bigOrder
                     kind: decision
                     args: { if: "customer.creditLimit > 10000", then: cfoReview, else: notifyCustomer }
+                  # Resolver-path assignment: the order's own sales rep decides WHO reviews it - the
+                  # rep's manager - resolved at task entry off the record, with `cfo` as the candidate
+                  # group that keeps the task claimable when the walk resolves to nobody.
                   - name: cfoReview
                     kind: userTask
-                    args: { assignee: cfo, form: ApproveOrder }
+                    args: { assignee: { path: salesRep.manager, fallback: cfo }, form: ApproveOrder }
                   - name: cfoDecision
                     kind: decision
                     args: { if: "action == 'approve'", then: notifyCustomer, else: done }
@@ -216,7 +250,9 @@ class IntentEngineIT extends IntegrationTest {
                 event: { onUpdate: Order }
                 to: ops@example.com
                 subject: "Order {id} for {customer.name}, total {total}"
-                body: "The order changed."
+                # {recordUrl} - the deep link to the record. The intent never spells a route: the
+                # events template composes it from the entity + key the glue carries.
+                body: "The order changed. Open it here: {recordUrl}"
 
             schedules:
               - name: staleOrders
@@ -227,7 +263,7 @@ class IntentEngineIT extends IntegrationTest {
                 notify:
                   to: ops@example.com
                   subject: "Stale order {id} for {customer.name}"
-                  body: "This order is stale."
+                  body: "This order is stale. Open it: {recordUrl} - your tasks: {inboxUrl}"
 
             integrations:
               - name: pushOrderToWarehouse
@@ -245,6 +281,17 @@ class IntentEngineIT extends IntegrationTest {
                 entity: Order
                 via: customer
                 field: orderCount
+
+            # Effective-dated register lookup: the rep who covered this customer on the order date.
+            # Zero and more-than-one covering rows are distinct outcomes - neither fills the relation.
+            resolves:
+              - name: assignSalesRep
+                event: { onCreate: Order }
+                set: salesRep
+                from: CustomerAssignment
+                match: { customer: customer }
+                between: { start: validFrom, end: validTo, value: orderDate }
+                outcome: repResolution
             """;
 
     @Autowired
@@ -262,7 +309,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("name", equalTo("orders"))
-                                                 .body("entities", hasSize(5))
+                                                 .body("entities", hasSize(7))
                                                  .body("entities.name", hasItems("Country", "Customer", "Order", "OrderItem"))
                                                  .body("processes", hasSize(1))
                                                  .body("processes[0].steps", hasSize(6))
@@ -297,6 +344,40 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void assist_refuses_a_path_it_does_not_own() {
+        // The Workbench assistant helps with the project's HAND-WRITTEN Java. A file under gen/ is the
+        // template engine's output and is wiped on the next generation, so a proposal there could only
+        // be lost - and a non-Java file is not its business at all. Both are refused before anything
+        // else happens, so neither costs a workspace lookup or an upstream call.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(assistBody("gen/orders/data/OrderEntity.java"))
+                                                 .when()
+                                                 .post(ASSIST_URL)
+                                                 .then()
+                                                 .statusCode(400));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(assistBody("app.intent"))
+                                                 .when()
+                                                 .post(ASSIST_URL)
+                                                 .then()
+                                                 .statusCode(400));
+    }
+
+    @Test
+    void assist_reports_when_not_configured() {
+        // Same contract as the intent agent's 412: no DIRIGIBLE_INTENT_AI_API_KEY is set in the test
+        // environment, so a well-formed request for a custom/ class must say the assistant is
+        // unavailable rather than attempting an upstream call. Network-free.
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(assistBody("custom/OrderNumber.java"))
+                                                 .when()
+                                                 .post(ASSIST_URL)
+                                                 .then()
+                                                 .statusCode(412));
+    }
+
+    @Test
     void parse_reports_every_validation_issue_at_once() {
         String broken = """
                 name: broken
@@ -323,6 +404,80 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("issues", hasItems(
                                                          "entity [Customer] relation [country] points to unknown entity [Nowhere]",
                                                          "process [Flow] decision [decide] `then` references unknown step [missingStep]")));
+    }
+
+    /**
+     * A key the intent does not declare is dropped by the typed mapping without a sound, so the whole
+     * pipeline used to report success over an authored promise that was simply absent (#6541). Both
+     * shapes are refused: an invented key on a typed node, and a seed row key matching no field or
+     * to-one relation - each naming the nearest declared name.
+     */
+    @Test
+    void parse_rejects_an_unknown_key_and_an_unknown_seed_row_key() {
+        String yaml = """
+                name: contributions
+                entities:
+                  - name: Scheme
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Rate
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: percent, type: decimal }
+                    relations:
+                      - { name: Scheme, kind: manyToOne, to: Scheme, requird: true }
+                seeds:
+                  - name: rates
+                    entity: Rate
+                    rows:
+                      - { id: 1, percent: 13.78, scheme: 1 }
+                """;
+        restAssuredExecutor.execute(() -> given().contentType("text/plain")
+                                                 .body(yaml)
+                                                 .when()
+                                                 .post(PARSE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("issues", hasItems(
+                                                         "unknown key [requird] at [entities[Rate].relations[Scheme]] - did you mean [required]?",
+                                                         "seed [rates] row references [scheme] which is not a field or a to-one relation of [Rate] - did you mean [Scheme]? (names are case-sensitive)")));
+    }
+
+    /**
+     * The map-shaped half of the same rule (#6749): a step's {@code args:}, a process {@code trigger:}
+     * and a glue {@code event:} binding have no typed class to reflect a key set off, so an invented
+     * key, a mis-cased one, or one belonging to another step kind used to be accepted and read by
+     * nothing - the BPMN emitted, the task created, only the behaviour missing.
+     */
+    @Test
+    void parse_rejects_an_unknown_step_arg_and_an_unknown_trigger_key() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                forms:
+                  - { name: ApproveInvoice, forEntity: Invoice, fields: [id], actions: [approve] }
+                processes:
+                  - name: InvoiceApproval
+                    trigger: { onCreate: Invoice, businesskey: id }
+                    steps:
+                      - { name: approve, kind: userTask, args: { assigne: manager, form: ApproveInvoice, if: "1 == 1" } }
+                      - { name: done, kind: end }
+                """;
+        restAssuredExecutor.execute(() -> given().contentType("text/plain")
+                                                 .body(yaml)
+                                                 .when()
+                                                 .post(PARSE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("issues", hasItems(
+                                                         "process [InvoiceApproval] step [approve] declares unknown arg [assigne] - did you mean [assignee]?",
+                                                         "process [InvoiceApproval] step [approve] declares arg [if] but is a userTask - if is a decision argument",
+                                                         "unknown key [businesskey] at [processes[InvoiceApproval].trigger] - did you mean [businessKey]? (names are case-sensitive)")));
     }
 
     @Test
@@ -482,6 +637,23 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(formResolver.contains("execution.setVariable(\"customer_name\"") && formResolver.contains("entity.Name"),
                 "the form resolver should publish the related field as the customer_name variable the form control binds to");
 
+        // The resolver-path assignee (cfoReview -> salesRep.manager): a JavaDelegate that walks the
+        // order's relations to the reviewing person and publishes their login for the task to bind to.
+        String assignee = contentOf("gen/events/orders/ResolveOrderApprovalCfoReviewAssignee.java");
+        assertTrue(assignee.contains("class ResolveOrderApprovalCfoReviewAssignee implements JavaDelegate"),
+                "the assignee resolver should be a Flowable JavaDelegate");
+        // Published FIRST, on every path out: the task's assignee expression reads it at task creation
+        // and an absent variable is an expression error, while a null one just leaves the candidate group.
+        assertTrue(assignee.contains("execution.setVariable(\"__assignee_cfoReview\", null)"),
+                "the assignee resolver should publish a null variable before walking, so the expression always resolves");
+        assertTrue(assignee.contains("owner.SalesRep"), "the walk should start at the FK of the trigger record's first relation");
+        assertTrue(assignee.contains("hop0.Manager"), "the walk should follow the intermediate hop's FK to the next one");
+        assertTrue(assignee.contains("hop1.Email"), "the login should be read off the identity property of the LAST hop");
+        assertTrue(
+                assignee.contains("import gen.orders.data.order.OrderRepository")
+                        && assignee.contains("gen.orders.data.salesrep.SalesRepRepository"),
+                "the resolver should load the owner and each hop from their real (lowercased) Java packages");
+
         // The notification (onUpdate: Order) is a self-describing @Component MessageHandler that sends mail
         // when an Order is updated -
         // exercises the generateUtils.js "notifications" collection case end to end.
@@ -507,6 +679,18 @@ class IntentEngineIT extends IntegrationTest {
                 "the listener should load the one-hop related entity by FK id");
         assertTrue(notification.contains("\"Order \" + entity.Id + \" for \" + (customer == null ? null : customer.Name)"),
                 "the subject should interpolate the relation.field against the loaded related entity");
+        // {recordUrl}: the ROUTE is the template's knowledge, the entity + key the intent's. What the
+        // intent emits is the bare identifier; the local composed here is what makes the link work, and
+        // is the whole point of the token over hand-typing a path after {appUrl}.
+        assertTrue(
+                notification.contains("String recordUrl = Configurations.get(\"DIRIGIBLE_APP_BASE_URL\", \"\")")
+                        && notification.contains("\"/services/web/intent-test/gen/orders/index.html#/Order/\" + entity.Id"),
+                "the notification should declare the recordUrl local composed from the project, gen folder, entity and key");
+        assertTrue(notification.contains("+ recordUrl"), "the body should read the declared link local, not an entity field");
+        assertFalse(notification.contains("entity.RecordUrl"),
+                "recordUrl is reserved - it must never fall through to a (non-existent) entity property");
+        assertFalse(notification.contains("String inboxUrl"),
+                "a link the message never references must not be declared - no dead local in generated code");
 
         // The schedule is a self-describing @Component JobHandler (cron()) that queries via a typed
         // Criteria and notifies per row.
@@ -523,6 +707,13 @@ class IntentEngineIT extends IntegrationTest {
                         "CustomerEntity customer = entity.Customer == null ? null : new CustomerRepository().findById(entity.Customer)"),
                 "the per-row notify should load the one-hop related entity");
         assertTrue(job.contains("Mail.send("), "the job should notify per row via the SDK Mail API");
+        // Both links at the second call site: the per-row record link and the Inbox link, each declared
+        // only because the body names it.
+        assertTrue(job.contains("\"/services/web/intent-test/gen/orders/index.html#/Order/\" + entity.Id"),
+                "the job should compose the per-row record link from the queried entity and its key");
+        assertTrue(job.contains("\"/services/web/intent-test/gen/orders/index.html#/inbox\""),
+                "the job should compose the Inbox link from the same base");
+        assertTrue(job.contains("+ recordUrl") && job.contains("+ inboxUrl"), "the body should read both declared link locals");
 
         // The integration is a self-describing @Component MessageHandler that forwards the entity JSON to
         // an external endpoint.
@@ -583,6 +774,31 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(feeder.contains("new gen.orders.data.order.OrderItemRepository().findAll(Criteria.create().eq(\"Order\", id))"),
                 "the feeder should load the line items by the composition FK");
         assertTrue(feeder.contains("return Json.stringify(payload)"), "the feeder should return the { document, items } payload as JSON");
+
+        // The effective-dated register lookup: a self-describing @Component MessageHandler that queries
+        // the register by the match keys, keeps only the rows whose period covers the order date, and
+        // treats found / notFound / ambiguous as three distinct outcomes.
+        String lookup = contentOf("gen/events/orders/AssignSalesRepResolve.java");
+        assertTrue(
+                lookup.contains("@Component") && lookup.contains("class AssignSalesRepResolve implements MessageHandler")
+                        && lookup.contains("return \"intent-test-Order-Order\""),
+                "the lookup should be a @Component MessageHandler bound to the record's create topic");
+        assertTrue(lookup.contains("new CustomerAssignmentRepository().findAll(Criteria.create().eq(\"Customer\", entity.Customer))"),
+                "the lookup should query the register with a typed Criteria built from the match keys");
+        assertTrue(
+                lookup.contains("Long at = millis(entity.OrderDate)") && lookup.contains("Long from = millis(row.ValidFrom)")
+                        && lookup.contains("Long to = endExclusive(row.ValidTo)"),
+                "the lookup should compare the record's date against both period bounds");
+        assertTrue(lookup.contains("if (entity.SalesRep != null)"),
+                "an already-resolved record should be skipped, so a manual correction is never overwritten");
+        assertTrue(
+                lookup.contains("stamp(entity.Id, \"found\", resolved)") && lookup.contains("\"notFound\"")
+                        && lookup.contains("\"ambiguous\""),
+                "all three outcomes should be generated - an ambiguous register is never resolved by picking one");
+        assertTrue(
+                lookup.contains("values.put(\"SalesRep\", resolved)") && lookup.contains("values.put(\"RepResolution\", outcome)")
+                        && lookup.contains("new OrderRepository().updateProperties(id, values)"),
+                "the resolved relation and the outcome trace should be written in ONE targeted update");
     }
 
     @Test
@@ -1400,6 +1616,55 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void calculated_action_stub_is_scaffolded_under_custom_and_preserved() {
+        // A calculatedAction names a class the generated repository will call. Until it exists the
+        // whole client-Java batch fails to compile - one declared boundary taking every module's beans
+        // down - so Generate hands the developer the file, exactly as a bare service task does.
+        writeIntent("""
+                name: orders
+                entities:
+                  - name: Order
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, calculatedActionOnCreate: OrderNumberAction }
+                      - { name: score,  type: integer, calculatedActionOnUpdate: shared.rating.ScoreAction }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        assertTrue(resource("custom/OrderNumberAction.java").exists(), "a named calculated action should scaffold a custom/ Java stub");
+        String stub = contentOf("custom/OrderNumberAction.java");
+        assertTrue(stub.contains("package custom;") && stub.contains("class OrderNumberAction implements CalculatedField<Object, String>"),
+                "the stub should implement the SDK contract, returning the field's type");
+        assertTrue(stub.contains("Order.number"), "the stub should say which field it computes");
+        assertFalse(stub.contains("System.out") || stub.contains("System.err"), "the scaffolded stub must never print to stdout/stderr");
+
+        // An action in somebody else's package is somebody else's compilation unit - scaffolding it
+        // here would collide on the binary name and fail the whole registry-wide batch.
+        assertFalse(resource("custom/ScoreAction.java").exists(), "an action outside custom/ must not be scaffolded");
+        assertFalse(resource("custom/shared/rating/ScoreAction.java").exists(), "an action outside custom/ must not be scaffolded");
+
+        // The developer implements it; regeneration must NOT overwrite it.
+        writeProjectFile("custom/OrderNumberAction.java", """
+                package custom;
+                import org.eclipse.dirigible.sdk.component.Component;
+                import org.eclipse.dirigible.sdk.db.CalculatedField;
+                @Component
+                public class OrderNumberAction implements CalculatedField<Object, String> {
+                    public String calculate(Object entity) { return "MY IMPLEMENTATION"; }
+                }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        assertTrue(contentOf("custom/OrderNumberAction.java").contains("MY IMPLEMENTATION"),
+                "the developer's calculated action must be preserved across regeneration");
+    }
+
+    @Test
     void service_task_handler_stub_is_scaffolded_under_custom_and_preserved() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()
@@ -1545,11 +1810,16 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(documentView.contains("openHref(row)"),
                 "the files panel rows must offer the inline Open action for stored snapshot versions");
 
-        // A detail's form never offers its COMPOSITION-parent FK as an input: the detail is created
-        // from its master's panel, which presets the FK via the create query param - offering the
-        // parent as a dropdown invites re-parenting by accident and is redundant in the dialog.
+        // A detail's parent FK is context-locked, never a free dropdown: the detail is created and
+        // edited from its master's panel, which names the FK in the URL, so the form shows the
+        // parent's label read-only. A free dropdown there would let the record be re-pointed
+        // mid-flow; free selection survives only where nothing implies the parent.
         String itemForm = contentOf("gen/orders/views/Order/OrderItem-form.html");
-        assertFalse(itemForm.contains("f_Order\""), "the composition-parent FK must not render as a form input, got a f_Order control");
+        assertTrue(itemForm.contains("isContextLocked('Order')"), "the composition-parent FK must render context-aware, got: " + itemForm);
+        assertTrue(itemForm.contains("contextLabel(form.Order, optionsOrder)"),
+                "a context-locked parent must render the referenced record's label read-only");
+        assertTrue(itemForm.contains("<template x-if=\"!isContextLocked('Order')\">"),
+                "the parent combobox must be confined to the un-implied branch");
         assertTrue(itemForm.contains("f_Quantity\""), "the detail's own fields still render as inputs");
 
         // The generic item-dialog machinery is model-independent but must be present for line items.
@@ -1613,17 +1883,15 @@ class IntentEngineIT extends IntegrationTest {
         String modelCatalog = contentOf("i18n/en-US/orders.model.json");
         assertTrue(modelCatalog.contains("\"widgetSystemHealth\": \"System Health\""),
                 "the custom widget's label should land in the model catalog");
-        // BPM user-task labels land in the catalog's processes section, keyed by the authored step
-        // name, and config.js carries the baked reverse (runtime task name -> key) map: the views
-        // translate the in-record task buttons as
-        // T('<project>:<model>-model.processes.' + processTaskKeys[task.name], task.name), so an
-        // Approve / Issue / Send button follows the locale instead of always showing the English
-        // BPMN name. Everything is known at generation time - no runtime key derivation.
+        // BPM process and user-task labels land in the catalog's processes section, keyed by BPMN id
+        // (the authored process / step name). The task itself carries the key of its entry - the
+        // .bpmn declares the catalog, the inbox serves it per task - so an Approve / Issue / Send
+        // button follows the locale instead of always showing the English BPMN name, in a shell that
+        // has no idea which module raised the task. Everything is known at generation time.
         assertTrue(modelCatalog.contains("\"processes\"") && modelCatalog.contains("\"managerReview\": \"Manager Review\""),
                 "the BPM user-task labels should land in the en catalog's processes section, got: " + modelCatalog);
-        String appConfig = contentOf("gen/orders/js/config.js");
-        assertTrue(appConfig.contains("\"Manager Review\":\"managerReview\""),
-                "config.js should carry the baked task-name -> catalog-key map, got: " + appConfig);
+        assertTrue(modelCatalog.contains("\"OrderApproval\": \"Order Approval\""),
+                "the process' own name should land there too - the Inbox renders '<process> - <task>', got: " + modelCatalog);
 
         // The report-file template also emits the report's label catalog (report + columns + the
         // widget's tile label) under the '<Name>-report' translation prefix.
@@ -1632,7 +1900,7 @@ class IntentEngineIT extends IntegrationTest {
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body(reportPayload)
                                                  .when()
-                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
+                                                 .post("/services/ide/generate/model/" + WORKSPACE + "/" + PROJECT
                                                          + "?path=OrdersByMonth.report")
                                                  .then()
                                                  .statusCode(201));
@@ -1953,10 +2221,12 @@ class IntentEngineIT extends IntegrationTest {
         generateFromModel("template-application-events-java/template/template.js", "proforma.glue");
         String generate = contentOf("gen/events/proforma/InvoiceFromProformaGenerate.java");
         // The completion hook flips the source status via the targeted single-column primitive...
-        assertTrue(generate.contains("updateProperty(req.id, \"Status\", 3)"),
+        // (the create-from's body is a create(Integer sourceId) method both the button endpoint and an
+        // event trigger call - hence sourceId rather than the posted request's id, since #6711.)
+        assertTrue(generate.contains("updateProperty(sourceId, \"Status\", 3)"),
                 "the source status must be flipped with the targeted updateProperty write");
         // ...and reloads before publishing so the -transitioned payload is the committed row...
-        assertTrue(generate.contains("findById(req.id)"), "it should reload the source for the -transitioned payload");
+        assertTrue(generate.contains("findById(sourceId)"), "it should reload the source for the -transitioned payload");
         assertTrue(generate.contains("-transitioned"), "it should publish the source's -transitioned channel");
         // ...NOT the full-row merge that would revert a concurrent write to the source row (the actual
         // call pattern; an explanatory code comment naming it is expected and must not trip this).
@@ -2021,7 +2291,7 @@ class IntentEngineIT extends IntegrationTest {
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body(payload)
                                                  .when()
-                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
+                                                 .post("/services/ide/generate/model/" + WORKSPACE + "/" + PROJECT
                                                          + "?path=OrdersByCustomer.report")
                                                  .then()
                                                  .statusCode(201));
@@ -2299,6 +2569,12 @@ class IntentEngineIT extends IntegrationTest {
         assertFalse(contentOf("Revenue.report").contains("WHERE"), "with nothing to resolve, the query stays exactly as authored");
     }
 
+    /** A well-formed Workbench-assistant request for one file of the test project. */
+    private static String assistBody(String path) {
+        return "{\"workspace\":\"" + WORKSPACE + "\",\"project\":\"" + PROJECT + "\",\"path\":\"" + path
+                + "\",\"source\":\"package custom;\\n\",\"message\":\"implement it\",\"history\":[]}";
+    }
+
     private void writeIntent(String yaml) {
         String path = PROJECT_PATH + "/app.intent";
         IResource existing = repository.getResource(path);
@@ -2333,8 +2609,7 @@ class IntentEngineIT extends IntegrationTest {
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body(payload)
                                                  .when()
-                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
-                                                         + "?path=" + modelFile)
+                                                 .post("/services/ide/generate/model/" + WORKSPACE + "/" + PROJECT + "?path=" + modelFile)
                                                  .then()
                                                  .statusCode(201));
     }
@@ -2446,6 +2721,11 @@ class IntentEngineIT extends IntegrationTest {
                 "glue should carry the customer.creditLimit resolver (used by both the form and the decision)");
         assertTrue(glue.contains("\"handler\": \"ResolveCustomerName\"") && glue.contains("\"variable\": \"customer_name\""),
                 "glue should carry the form-only customer.name resolver");
+        // Assignees: one per user task whose assignee is a relation walk.
+        assertTrue(
+                glue.contains("\"assignees\"") && glue.contains("\"handler\": \"ResolveOrderApprovalCfoReviewAssignee\"")
+                        && glue.contains("\"path\": \"salesRep.manager\"") && glue.contains("\"identityProperty\": \"Email\""),
+                "glue should carry the cfoReview assignee walk down to the identity property it ends at");
         assertTrue(
                 glue.contains("\"fkProperty\": \"Customer\"") && glue.contains("\"targetEntity\": \"Customer\"")
                         && glue.contains("\"targetField\": \"CreditLimit\"") && glue.contains("\"variable\": \"customer_creditLimit\""),
@@ -2514,6 +2794,89 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void task_form_renders_its_labels_through_the_module_catalog() {
+        // A BPM task form is a standalone page (no SPA shell), which is why its content used to render
+        // in English while the shell pages around it were translated: it never loaded the translator and
+        // baked every label in as a literal. The catalog it needs is the one this same generation emits.
+        String yaml = """
+                name: invoices
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 50 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, required: true, length: 20 }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                processes:
+                  - name: InvoiceApproval
+                    trigger: { onCreate: Invoice }
+                    steps:
+                      - { name: approve, kind: userTask, args: { assignee: manager, form: ApproveInvoice } }
+                      - { name: decide, kind: decision, args: { if: "action == 'approve'", then: activate, else: cancel } }
+                      - { name: activate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: done } }
+                      - { name: cancel, kind: serviceTask, args: { setRelationField: Status, value: 3, next: end } }
+                      - { name: done, kind: end }
+                forms:
+                  - name: ApproveInvoice
+                    forEntity: Invoice
+                    fields: [number, total]
+                    actions: [approve, reject]
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: APPROVED }
+                      - { id: 3, name: CANCELLED }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-form-builder-harmonia/template/template.js", "ApproveInvoice.form");
+
+        // The catalog the translate action emits, keyed by the form's own prefix: every label is in it.
+        String catalog = contentOf("i18n/en-US/ApproveInvoice.form.json");
+        assertTrue(catalog.contains("\"ApproveInvoice-form\""), "the catalog should be keyed by the form translation prefix");
+        assertTrue(catalog.contains("\"Number\": \"Number\"") && catalog.contains("\"Total\": \"Total\""),
+                "the field labels should land in the catalog, got: " + catalog);
+        assertTrue(catalog.contains("\"Approve\": \"Approve\"") && catalog.contains("\"Reject\": \"Reject\""),
+                "the action button captions should land in the catalog, got: " + catalog);
+        assertTrue(catalog.contains("\"DRAFT\": \"DRAFT\"") && catalog.contains("\"APPROVED\": \"APPROVED\""),
+                "the status step labels should land in the catalog, got: " + catalog);
+
+        // ... and the generated page consumes it: the translator is loaded with this project's namespace
+        // bootstrapped (the page has no window.App to read it from), and every label binds through T()
+        // with the English literal as the fallback.
+        String index = contentOf("gen/ApproveInvoice/forms/ApproveInvoice/index.html");
+        assertTrue(index.contains("/services/web/application-core/shell/js/services/i18n.js"),
+                "the standalone form must load the shared translator");
+        assertTrue(index.contains("App.config.projectName = '" + PROJECT + "'"),
+                "the form must bootstrap its catalog namespace - i18n.js reads it at load");
+        String prefix = "T('" + PROJECT + ":ApproveInvoice-form.t.";
+        assertTrue(index.contains("tracking-tight\" x-text=\"" + prefix), "the form title should resolve through the catalog");
+        assertTrue(index.contains("x-text=\"" + prefix + "Number', 'Number')\""), "a field label should resolve through the catalog");
+        assertTrue(index.contains("x-text=\"" + prefix + "Approve', 'Approve')\""),
+                "an action button caption should resolve through the catalog");
+        // The step's `label` stays the untranslated seed name - it is what the record's status value is
+        // matched against - and the displayed `title` is the translated one.
+        assertTrue(index.contains("title: " + prefix + "DRAFT', 'DRAFT')"), "a status step should carry its translated title");
+        assertTrue(index.contains("{ label: 'DRAFT'"), "the step label must stay untranslated for the active-status match");
+        assertTrue(index.contains("x-text=\"step.title\""), "the step indicator should render the translated title");
+
+        String formJs = contentOf("gen/ApproveInvoice/forms/ApproveInvoice/form.js");
+        assertTrue(formJs.contains("T('" + PROJECT + ":ApproveInvoice-form.dialogs.successMsg'"),
+                "the submit outcome messages should resolve through the catalog");
+    }
+
+    @Test
     void settings_overrides_skip_generation_and_are_preserved() {
         writeIntent(INTENT_YAML);
         // First Generate scaffolds orders.settings (everything generate:true) and emits the form.
@@ -2561,6 +2924,12 @@ class IntentEngineIT extends IntegrationTest {
                 "the process should keep its id but carry a humanized name");
         assertTrue(body.contains("<userTask id=\"managerReview\" name=\"Manager Review\""),
                 "BPMN should map managerReview to a userTask with a humanized name");
+        // The process declares where its display names are translated. The Inbox, the notification
+        // bell and the task-form dialog are shared by every deployed app, so this is the only way a
+        // task can be named in the user's language there: the inbox serves each task the key of its
+        // entry (this catalog + the task's BPMN id, which is the authored step name).
+        assertTrue(body.contains("<flowable:property name=\"taskLabelCatalog\" value=\"intent-test:orders-model.processes\">"),
+                "the process should declare its module's label catalog, got: " + body);
         // The assignee "manager" resolves to the declared role "Manager" (case-insensitive); the
         // settings' candidateGroupsExtra (ADMINISTRATOR by default) is appended so an admin can claim.
         assertTrue(body.contains("flowable:candidateGroups=\"Manager,ADMINISTRATOR\""),
@@ -2577,8 +2946,19 @@ class IntentEngineIT extends IntegrationTest {
                 body.contains("<serviceTask id=\"notifyCustomer\" name=\"Notify Customer\"")
                         && body.contains("<![CDATA[custom.NotifyCustomer]]>"),
                 "a no-call service task should bind to ${JavaTask} -> custom.<Step>");
-        assertTrue(body.contains("id=\"flow_bigOrder_then\" sourceRef=\"bigOrder\" targetRef=\"cfoReview\""),
-                "the conditioned flow should target the `then` step");
+        // A flow into a step lands on the FIRST node it expands to - here the assignee-walk delegate
+        // that publishes the login cfoReview's flowable:assignee reads. Jumping straight at the task
+        // would sail past it and the expression would fail task creation outright.
+        assertTrue(body.contains("id=\"flow_bigOrder_then\" sourceRef=\"bigOrder\" targetRef=\"resolveOrderApprovalCfoReviewAssignee\""),
+                "the conditioned flow should target the `then` step, entering at its resolver");
+        assertTrue(body.contains("sourceRef=\"resolveOrderApprovalCfoReviewAssignee\" targetRef=\"cfoReview\""),
+                "the assignee resolver should run right before the task it routes");
+        assertTrue(body.contains("gen.events.orders.ResolveOrderApprovalCfoReviewAssignee"),
+                "the assignee resolver task should point at its generated handler FQN");
+        assertTrue(body.contains("flowable:assignee=\"${__assignee_cfoReview}\""),
+                "the task should bind its assignee to the variable the resolver publishes");
+        assertTrue(body.contains("flowable:candidateGroups=\"Cfo,ADMINISTRATOR\""),
+                "an assignee walk keeps its fallback candidate group, so an unresolved walk still leaves a claimable task");
         assertTrue(body.contains("id=\"flow_bigOrder_default\" sourceRef=\"bigOrder\" targetRef=\"notifyCustomer\""),
                 "the gateway default flow should target the `else` step so small orders skip CFO review");
         // customer.creditLimit is referenced by BOTH the managerReview user-task form and the bigOrder
@@ -2689,6 +3069,21 @@ class IntentEngineIT extends IntegrationTest {
                 "a bare relation dimension (customer) should INNER JOIN the related entity with quoted identifiers");
         assertTrue(body.contains("SELECT Customer.\\\"CUSTOMER_NAME\\\" as") && body.contains("GROUP BY Customer.\\\"CUSTOMER_NAME\\\""),
                 "the bare relation dimension should select + group by the related entity's name, not its FK id");
+        // The query is not the only place the structure lives: the report editor's visual builder
+        // rebuilds the query from the model on open, so a join present only in the query string was
+        // deleted the moment the file was saved (dirigible #6675). Same for a computed dimension,
+        // which degraded to its raw column, and for an empty conditions array, which emitted a bare
+        // WHERE. The builder-owned model has to say exactly what the query says.
+        assertTrue(body.contains("\"joins\": ["), "the resolved joins should be part of the model the report editor edits");
+        assertTrue(
+                body.contains("\"name\": \"ORDERS_CUSTOMER\"") && body.contains("\"type\": \"INNER\"")
+                        && body.contains("\"condition\": \"Order.\\\"ORDER_CUSTOMER\\\" = Customer.\\\"CUSTOMER_ID\\\"\""),
+                "a join row should carry the physical table, the join type and the ON condition");
+        assertTrue(monthly.contains(
+                "\"expression\": \"(EXTRACT(YEAR FROM Order.\\\"ORDER_ORDER_DATE\\\") * 100 + EXTRACT(MONTH FROM Order.\\\"ORDER_ORDER_DATE\\\"))\""),
+                "a computed dimension should carry its expression on the column, else it degrades to the raw column on save");
+        assertFalse(body.contains("\"conditions\""),
+                "an unfiltered report should emit no conditions at all - an empty array makes the editor emit a bare WHERE");
 
         // A relation.field dimension joins the related table; the filter becomes a qualified WHERE.
         String joined = contentOf("BigOrderItems.report");
@@ -2697,6 +3092,10 @@ class IntentEngineIT extends IntegrationTest {
                 "a relation.field dimension (order.orderDate) should INNER JOIN the related entity on its FK");
         assertTrue(joined.contains("WHERE OrderItem.\\\"ORDER_ITEM_QUANTITY\\\" > 1"),
                 "the intent filter should become a WHERE with the field rewritten to its quoted, qualified column");
+        assertTrue(
+                joined.contains("\"left\": \"OrderItem.\\\"ORDER_ITEM_QUANTITY\\\"\"") && joined.contains("\"operation\": \">\"")
+                        && joined.contains("\"right\": \"1\""),
+                "the filter should also be the builder-owned condition, with the same quoted column the query uses");
 
         // kind: balance - the six windowed totals around the runtime :fromDate/:toDate parameters,
         // declared on the .report in the editor's {name, type, initial} shape with all-time defaults.

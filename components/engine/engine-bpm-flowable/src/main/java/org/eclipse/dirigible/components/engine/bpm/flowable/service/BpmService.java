@@ -21,6 +21,7 @@ import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFl
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActivityStatusData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessDefinitionData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceData;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessLabelKeys;
 import org.eclipse.dirigible.components.ide.workspace.domain.File;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -236,6 +237,16 @@ public class BpmService {
     }
 
     /**
+     * Where a process declares its display names are translated, empty when it declares nothing.
+     *
+     * @param processDefinitionId the process definition id
+     * @return the declared keys
+     */
+    public Optional<ProcessLabelKeys> getProcessLabelKeys(String processDefinitionId) {
+        return bpmProviderFlowable.getProcessLabelKeys(processDefinitionId);
+    }
+
+    /**
      * Gets the process definition by id.
      *
      * @param id the id
@@ -426,6 +437,11 @@ public class BpmService {
     public List<Task> findTasks(PrincipalType type) {
         return bpmProviderFlowable.getTaskService()
                                   .findTasks(type);
+    }
+
+    public long countTasksByAssignee(String assignee) {
+        return bpmProviderFlowable.getTaskService()
+                                  .countTasksByAssignee(assignee);
     }
 
     public long processDefinitionsCount() {

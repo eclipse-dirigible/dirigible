@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.intent.generator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -18,6 +19,7 @@ import java.util.Map;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -76,6 +78,49 @@ class GlueGeneratesTest {
                   to: OrderItem
                   map:
                     Amount: amount
+            """;
+
+    /**
+     * The motivating shape of issue #6711: a fine arrives by webhook, the responsible person is
+     * identified (a status transition), and the declaration document is minted from it with nobody
+     * clicking. The status is named, not numbered - the resolver turns it into the seed id before the
+     * typed mapping.
+     */
+    private static final String EVENT_YAML = """
+            name: fines
+            entities:
+              - name: FineStatus
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Fine
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string }
+                relations:
+                  - { name: Status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+              - name: Declaration
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string }
+                relations:
+                  - { name: Fine, kind: manyToOne, to: Fine }
+            generates:
+              - name: declaration-from-fine
+                from: Fine
+                to: Declaration
+                forEntity: Fine
+                event: { onTransition: Fine, when: "Status == POSTED" }
+                map:
+                  Fine: id
+                  Note: note
+            seeds:
+              - name: fine-statuses
+                entity: FineStatus
+                rows:
+                  - { id: 1, name: DRAFT }
+                  - { id: 2, name: POSTED }
             """;
 
     @SuppressWarnings("unchecked")
@@ -499,6 +544,100 @@ class GlueGeneratesTest {
      * caption is not mistaken for a field), and a {@code double} target narrows the {@code Calc}
      * result.
      */
+    /**
+     * The event trigger (issue #6711): an {@code onTransition} create-from binds the source's
+     * {@code -transitioned} topic through the {@code isCreate: false} marker, guards on the status the
+     * seeded NAME resolved to, and derives its at-most-once back-reference from the {@code map} entry
+     * that copies the source key. With no {@code button:} declared it is event-only, so no endpoint and
+     * no button are emitted - and it lands in the event-driven subset the listener template renders.
+     */
+    @Test
+    void eventDrivenGenerateCarriesTheTriggerGuardAndBackReference() {
+        IntentModel model = IntentParser.parse(EVENT_YAML);
+        List<Map<String, Object>> generates = GlueIntentGenerator.buildGeneratesForTest(model);
+        Map<String, Object> g = generates.get(0);
+
+        assertEquals(true, g.get("hasEvent"));
+        assertEquals(false, g.get("isCreate"));
+        assertEquals(true, g.get("eventOnly"));
+        // The guard is the SOURCE's status FK against the id its seeded name resolved to.
+        assertEquals("Status", g.get("guardProperty"));
+        assertEquals("2", g.get("guardValue"));
+        // Derived from `map: { Fine: id }` - never declared twice.
+        assertEquals("Fine", g.get("backRefProperty"));
+        assertEquals("Id", g.get("fromPk"));
+    }
+
+    /**
+     * {@code onCreate} binds the source's bare create topic (the platform publishes creates unsuffixed)
+     * and needs no status guard; an explicit {@code button: true} keeps the click as well, and the
+     * button then shares the event's at-most-once guard.
+     */
+    @Test
+    void onCreateEventNeedsNoGuardAndAnExplicitButtonIsKept() {
+        IntentModel model = IntentParser.parse(EVENT_YAML.replace("event: { onTransition: Fine, when: \"Status == POSTED\" }",
+                "event: { onCreate: Fine }\n    button: true"));
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+
+        assertEquals(true, g.get("hasEvent"));
+        assertEquals(true, g.get("isCreate"));
+        assertEquals(false, g.get("eventOnly"));
+        assertEquals("", g.get("guardProperty"));
+        assertEquals("", g.get("guardValue"));
+        assertEquals("Fine", g.get("backRefProperty"));
+    }
+
+    /**
+     * A create-from with no event keeps every event marker empty - the template then renders exactly
+     * what it rendered before the trigger existed, including no at-most-once guard (minting several
+     * targets from one source by clicking twice is a legitimate manual act).
+     */
+    @Test
+    void aCreateFromWithoutAnEventCarriesNoTriggerAndNoGuard() {
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(YAML))
+                                                   .get(0);
+        assertEquals(false, g.get("hasEvent"));
+        assertEquals(false, g.get("eventOnly"));
+        assertEquals("", g.get("backRefProperty"));
+        assertEquals("", g.get("guardProperty"));
+    }
+
+    /**
+     * A CROSS-MODEL source's key field is only known once the owner model resolves, so the missing
+     * back-reference is caught here rather than by the parser - loudly, because without it the
+     * create-from cannot recognize its own output and every event redelivery would mint another
+     * document.
+     */
+    @Test
+    void anEventDrivenGenerateWithoutABackReferenceFailsLoudly() {
+        IntentModel model = IntentParser.parse("""
+                name: declarations
+                uses:
+                  - { model: fines }
+                entities:
+                  - name: Declaration
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Fine, kind: manyToOne, to: Fine, model: fines }
+                generates:
+                  - name: declaration-from-fine
+                    from: Fine
+                    fromUses: fines
+                    to: Declaration
+                    forEntity: Fine
+                    event: { onTransition: Fine, when: "Status == 2" }
+                    map:
+                      Note: note
+                """);
+        IntentValidationException failure =
+                assertThrows(IntentValidationException.class, () -> GlueIntentGenerator.buildGeneratesForTest(model));
+        assertTrue(failure.getMessage()
+                          .contains("back-reference"),
+                "the failure must name the missing back-reference: " + failure.getMessage());
+    }
+
     @SuppressWarnings("unchecked")
     @Test
     void computedItemLineStringLiteralAndDoubleNarrowing() {
@@ -533,5 +672,70 @@ class GlueGeneratesTest {
                                                                                                                         .get("assigns");
         assertTrue(assigns.contains(Map.of("targetProp", "Name", "expr", "\"Consulting services\"")));
         assertTrue(assigns.contains(Map.of("targetProp", "Factor", "expr", "Calc.eval(\"Hours * 2\", source, 2).doubleValue()")));
+    }
+
+    /**
+     * The {@code prompt:} inputs (issue #6685) render per prompted TARGET property: its PascalCase
+     * name, the required flag, and a typed conversion expression over the posted {@code Object raw} - a
+     * to-one relation converts to its integer FK, a decimal field to BigDecimal.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void promptFieldsRenderTypedConversions() {
+        IntentModel model = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: CustomerPayment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: SalesInvoiceCustomerPayment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal, required: true }
+                      - { name: note, type: string }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                      - { name: CustomerPayment, kind: manyToOne, to: CustomerPayment, required: true }
+                generates:
+                  - name: allocate-payment
+                    from: SalesInvoice
+                    to: SalesInvoiceCustomerPayment
+                    map:
+                      SalesInvoice: id
+                    prompt:
+                      - { field: CustomerPayment, required: true }
+                      - { field: amount, required: true }
+                      - { field: note }
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+        assertEquals(true, g.get("hasPrompt"));
+        List<Map<String, Object>> prompt = (List<Map<String, Object>>) g.get("promptFields");
+        assertEquals(3, prompt.size());
+        assertTrue(prompt.contains(Map.of("prop", "CustomerPayment", "required", true, "expr",
+                "Integer.valueOf(new java.math.BigDecimal(String.valueOf(raw)).intValue())")));
+        assertTrue(prompt.contains(Map.of("prop", "Amount", "required", true, "expr", "new java.math.BigDecimal(String.valueOf(raw))")));
+        assertTrue(prompt.contains(Map.of("prop", "Note", "required", false, "expr", "String.valueOf(raw)")));
+    }
+
+    /** An action without a prompt keeps the flag off so the template renders nothing new. */
+    @Test
+    void noPromptLeavesTheFlagOff() {
+        IntentModel model = IntentParser.parse(YAML);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+        assertEquals(false, g.get("hasPrompt"));
+        assertTrue(((List<?>) g.get("promptFields")).isEmpty());
     }
 }

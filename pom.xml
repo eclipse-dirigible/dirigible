@@ -181,8 +181,13 @@
         <!-- ActiveMQ -->
         <activemq.version>6.1.0</activemq.version>
 
+        <!-- Maven Artifact Resolver (embedded for dynamic dependency resolution);
+             maven-resolver-maven.version is the Maven line the resolver release pairs with -->
+        <maven-resolver.version>1.9.27</maven-resolver.version>
+        <maven-resolver-maven.version>3.9.12</maven-resolver-maven.version>
+
         <!-- Camel -->
-        <camel.version>4.21.0</camel.version>
+        <camel.version>4.22.0</camel.version>
 
 
         <!-- Velocity -->
@@ -215,7 +220,7 @@
         <c3p0.version>0.14.1</c3p0.version>
         <guava.version>33.6.0-jre</guava.version>
         <icu4j.version>78.3</icu4j.version>
-        <classgraph.version>4.8.186</classgraph.version>
+        <classgraph.version>4.8.189</classgraph.version>
         <logcaptor.version>2.12.6</logcaptor.version>
 
         <!-- UI -->

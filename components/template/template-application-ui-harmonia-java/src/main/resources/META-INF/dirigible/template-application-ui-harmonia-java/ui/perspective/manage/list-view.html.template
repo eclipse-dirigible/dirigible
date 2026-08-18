@@ -3,6 +3,11 @@
   Manage (CRUD) list fragment for ${name}. Rendered into #app on /${name}.
   Root x-data binds the generated ${name}ManageListPage.
 -->
+## Role-scoped field (intent `visibleTo:`): rendered only for a caller the server actually serves it
+## to - the page asked the controller which fields it withholds (canSee). Emits nothing for an
+## unrestricted property. The redaction applied to every response stays the authoritative one; this
+## only keeps a permanently empty column off the page.
+#macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
 <div x-data="${name}ManageListPage" class="vbox size-full">
 
   <div x-h-toolbar data-variant="transparent">
@@ -176,7 +181,7 @@
               <tr x-h-table-row>
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-                <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS") class="text-right"#end @click="cycleSort('${property.name}')">
+                <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS") class="text-right"#end#visibleGate($property) @click="cycleSort('${property.name}')">
                   <div class="hbox items-center justify-between">
                     <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${property.name}')"></span>
                     <svg x-h-lucide role="img" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></svg>
@@ -225,17 +230,17 @@
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
 #if($property.widgetType == "DOCUMENT_STATUS")
                   <!-- EntityStatus column: the resolved status name as a coloured badge pill. -->
-                  <td x-h-table-cell><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}))" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>
+                  <td x-h-table-cell#visibleGate($property)><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}))" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>
 #elseif($property.widgetType == "DROPDOWN")
-                  <td x-h-table-cell x-text="lookupText('${property.name}', row.${property.name})"></td>
+                  <td x-h-table-cell#visibleGate($property) x-text="lookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.isDateType)
-                  <td x-h-table-cell x-text="displayValue(row.${property.name}, true)"></td>
+                  <td x-h-table-cell#visibleGate($property) x-text="displayValue(row.${property.name}, true)"></td>
 #elseif($property.isFloatType)
-                  <td x-h-table-cell class="text-right" x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></td>
+                  <td x-h-table-cell class="text-right"#visibleGate($property) x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></td>
 #elseif($property.isNumberType)
-                  <td x-h-table-cell class="text-right" x-text="displayValue(row.${property.name})"></td>
+                  <td x-h-table-cell class="text-right"#visibleGate($property) x-text="displayValue(row.${property.name})"></td>
 #else
-                  <td x-h-table-cell x-text="displayValue(row.${property.name})"></td>
+                  <td x-h-table-cell#visibleGate($property) x-text="displayValue(row.${property.name})"></td>
 #end
 #end
 #end
@@ -303,7 +308,7 @@
         <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
           <template x-for="task in $store.processTasks.getTasks(selected)" :key="task.id">
             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
-              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('$projectName:${tprefix}.processes.' + (App.config.processTaskKeys || {})[task.name], task.name)"></span>
+              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="$store.processTasks.taskName(task)"></span>
             </button>
           </template>
         </div>
@@ -329,7 +334,7 @@
 #if(!$property.dataAutoIncrement)
 #if($property.widgetLabel)#set($plabel = $property.widgetLabel)#else#set($plabel = $property.name)#end
 #if($property.isDateType)#set($isDate = "true")#else#set($isDate = "false")#end
-          <div class="vbox gap-0">
+          <div class="vbox gap-0"#visibleGate($property)>
             <span x-h-text.muted class="text-xs" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${plabel}')"></span>
 #if($property.widgetType == "DOCUMENT_STATUS")
             <span><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', selected?.${property.name}))" x-show="lookupText('${property.name}', selected?.${property.name})" x-text="lookupText('${property.name}', selected?.${property.name})"></span></span>

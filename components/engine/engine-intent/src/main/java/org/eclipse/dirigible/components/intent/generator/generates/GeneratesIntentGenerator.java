@@ -9,7 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.generator.generates;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
@@ -18,6 +20,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.PromptFieldIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -67,6 +70,13 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
             String name = g.getName();
             if (name == null || name.isBlank()) {
                 LOGGER.warn("Skipping generates action with no name");
+                continue;
+            }
+            if (!g.hasButton()) {
+                // Event-driven only (issue #6711): the create-from runs by itself, so there is no button
+                // to contribute - and contributing one anyway would offer the user a click that only
+                // re-reads the document the event already created.
+                LOGGER.debug("Generates action [{}] is event-driven with no button - contributing no client action", name);
                 continue;
             }
             String fileBase = name + "-generate-action";
@@ -120,6 +130,26 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
         }
         if (g.getOrder() != null) {
             view.put("order", g.getOrder());
+        }
+        if (g.hasPrompt()) {
+            // Declared input form (issue #6685): the customActions store opens a dialog instead of the
+            // plain confirm, rendering one control per entry. The descriptor carries only the authored
+            // names (PascalCased to the generated property names) - control types, lookups and
+            // dependsOn metadata are resolved AT RUNTIME from the target's own detail registration
+            // (App.detailsFor(view)), so the intent layer never references template-owned routes.
+            List<Map<String, Object>> prompt = new ArrayList<>();
+            for (PromptFieldIntent p : g.getPrompt()) {
+                if (p.getField() == null || p.getField()
+                                             .isBlank()) {
+                    continue;
+                }
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("name", IntentNaming.pascalCase(p.getField()));
+                entry.put("required", p.isRequired());
+                prompt.add(entry);
+            }
+            view.put("prompt", prompt);
+            view.put("promptEntity", g.getTo());
         }
         // A CommonJS module exporting getView() - the shape the extension-services endpoint loads.
         return "const viewData = " + JsonHelper.toJson(view) + ";\n" + "if (typeof exports !== 'undefined') {\n"

@@ -24,12 +24,16 @@ import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * End-to-end test for the tenant-aware configuration feature. Exercises the full chain in the
  * running application (per-tenant DIRIGIBLE_CONFIGURATION table -> store -> cache -> key policy ->
  * thread-scoped {@link Configuration} precedence) against the default tenant.
  */
+// One Dirigible boot for the whole class: each method cleans up after itself (or is read-only), so
+// the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class TenantConfigurationIT extends IntegrationTest {
 
     /** A white-listed key (branding is the only injectable namespace for now). */

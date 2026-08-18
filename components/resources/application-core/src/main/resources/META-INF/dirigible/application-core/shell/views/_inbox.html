@@ -28,6 +28,22 @@
     <button x-h-button data-variant="outline" data-size="sm" @click="refresh()"><i role="img" x-h-lucide data-lucide="refresh-cw"></i><span x-text="T('application-core:shell.inbox.refresh', 'Refresh')"></span></button>
   </div>
 
+  <!-- Act-as (delegated entry): while armed this Inbox serves the ACTING identity's tasks, so the
+       real user's own assigned tasks are absent. Say it, and say how many — an empty list under a
+       forgotten arming reads as a broken process (#6694). -->
+  <div x-show="actAs.acting" x-cloak class="hbox items-center gap-2 px-3 py-1.5 text-sm"
+       style="background: var(--color-warning, #b45309); color: #fff;">
+    <i role="img" x-h-lucide data-lucide="user-round-cog"></i>
+    <span x-text="actAs.hiddenTasks
+        ? T('application-core:shell.inbox.actAsHidden', 'Acting as {{person}} — {{count}} of your own tasks are hidden', { person: actAs.acting, count: actAs.hiddenTasks })
+        : T('application-core:shell.inbox.actAsServing', 'Acting as {{person}} — this Inbox serves their tasks, not yours', { person: actAs.acting })"></span>
+    <div class="flex-1"></div>
+    <button x-h-button data-size="sm" data-variant="outline" @click="exitActAs()"
+            style="border-color:#fff; color:#fff; background:transparent;">
+      <span x-text="T('application-core:shell.actAs.exit', 'Exit')"></span>
+    </button>
+  </div>
+
   <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
 
     <!-- Master: the task list -->
@@ -44,7 +60,9 @@
           <div x-h-info-page-header>
             <div x-h-info-page-media.icon><i x-h-lucide data-lucide="inbox" role="img" aria-label="inbox"></i></div>
             <div x-h-info-page-title x-text="T('application-core:shell.inbox.noTasks', 'No tasks')"></div>
-            <div x-h-info-page-description x-text="T('application-core:shell.inbox.noTasksHint', 'You have no pending tasks.')"></div>
+            <div x-h-info-page-description x-text="actAs.acting
+                ? T('application-core:shell.inbox.noTasksActAsHint', 'You are acting as {{person}} and this list is theirs. Exit to see your own tasks.', { person: actAs.acting })
+                : T('application-core:shell.inbox.noTasksHint', 'You have no pending tasks.')"></div>
           </div>
         </div>
 
@@ -55,7 +73,7 @@
                 <tr x-h-table-row data-hoverable="true" :data-state="isSelected(task) ? 'selected' : ''" @click="select(task)" style="cursor:pointer;">
                   <td x-h-table-cell>
                     <div class="vbox gap-1">
-                      <span class="font-medium" x-text="task.processDefinitionName ? task.processDefinitionName + ' — ' + task.name : task.name"></span>
+                      <span class="font-medium" x-text="$store.processTasks.taskLabel(task)"></span>
                       <span x-h-text.muted class="text-xs">
                         <span x-h-badge :data-variant="task.mine ? 'positive' : 'outline'" data-size="sm" x-text="task.mine ? T('application-core:shell.inbox.mine', 'Mine') : T('application-core:shell.inbox.available', 'Available')"></span>
                         <span x-show="task.processInstanceBusinessKey" x-text="' · ' + T('application-core:shell.inbox.ref', 'Ref {{key}}', { key: task.processInstanceBusinessKey })"></span>
@@ -83,7 +101,7 @@
 
       <div x-show="selected" class="vbox size-full">
         <div x-h-toolbar data-variant="transparent">
-          <span x-h-toolbar-title x-text="selected ? (selected.processDefinitionName ? selected.processDefinitionName + ' — ' + selected.name : selected.name) : ''"></span>
+          <span x-h-toolbar-title x-text="selected ? $store.processTasks.taskLabel(selected) : ''"></span>
           <div x-h-toolbar-spacer></div>
           <span x-show="selected && selected.processInstanceBusinessKey" x-h-badge data-variant="information" x-text="selected ? T('application-core:shell.inbox.ref', 'Ref {{key}}', { key: selected.processInstanceBusinessKey }) : ''"></span>
           <span x-h-badge :data-variant="selected && selected.mine ? 'positive' : 'outline'" x-text="selected && selected.mine ? T('application-core:shell.inbox.assignedToMe', 'Assigned to me') : T('application-core:shell.inbox.available', 'Available')"></span>

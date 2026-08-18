@@ -15,6 +15,7 @@ import org.eclipse.dirigible.components.ide.lsp.java.process.JdtLsManager;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
@@ -49,6 +50,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * No JDWP target process is required — the test only verifies the DAP server starts, not that it
  * can connect to a debuggee JVM.
  */
+@Tag("slow")
 class JavaDebugIT extends IntegrationTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(JavaDebugIT.class);

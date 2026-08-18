@@ -11,7 +11,7 @@
  */
 angular.module('RepositoryService', []).provider('RepositoryService', function RepositoryServiceProvider() {
     this.repositoryServiceUrl = '/services/core/repository';
-    this.$get = ['$http', function repositoryApiFactory($http) {
+    this.$get = ['$http', '$window', function repositoryApiFactory($http, $window) {
         const getMetadata = function (resourceUrl) {
             return $http.get(resourceUrl, { headers: { 'describe': 'application/json' } });
         };
@@ -44,6 +44,17 @@ angular.module('RepositoryService', []).provider('RepositoryService', function R
             return $http.post(url);
         }.bind(this);
 
+        /**
+         * Downloads a repository path. A collection is downloaded as a zip archive of its content,
+         * including all its subfolders; a resource is downloaded as the file itself.
+         * @param {string} resourcePath - Full resource path.
+         */
+        const exportPath = function (resourcePath) {
+            if (!resourcePath) throw Error('exportPath: resourcePath must be a path');
+            const url = UriBuilder().path(this.repositoryServiceUrl.split('/')).path(resourcePath.split('/')).build() + '?export=true';
+            $window.open(url, '_blank');
+        }.bind(this);
+
         const remove = function (resourcePath) {
             if (resourcePath !== undefined && !(typeof resourcePath === 'string'))
                 throw Error("remove: resourcePath must be a path");
@@ -57,6 +68,7 @@ angular.module('RepositoryService', []).provider('RepositoryService', function R
             load: loadRepository,
             createCollection: createCollection,
             createResource: createResource,
+            exportPath: exportPath,
             remove: remove,
         };
     }];

@@ -32,6 +32,13 @@ document.addEventListener('alpine:init', () => {
     caView: '${name}',
 
     async init() {
+#if($hasRestrictedFields)
+      // Role-scoped fields: ask the controller which columns it withholds from this caller, so the
+      // table and the export leave them out instead of carrying permanently empty cells.
+      this.loadRestrictedFields().then(() => {
+        this.exportColumns = this.exportColumns.filter(c => this.canSee(c.name));
+      });
+#end
       await this.load();
       this.loadLookups();
     },

@@ -238,9 +238,14 @@
               <div x-h-menu-separator></div>
               <!-- Act as (delegated entry) - the Applications-shell entry point: arm the acting
                    identity here, then land in the My shell as that person (where the banner rules). -->
-              <template x-if="actAs.entitled">
+              <template x-if="actAs.entitled && !actAs.acting">
                 <li x-h-menu-item @click="actAsDialog = true">
                   <i role="img" x-h-lucide data-lucide="user-round-cog"></i> <span x-text="T('application-core:shell.actAs.enter', 'Enter data as...')"></span>
+                </li>
+              </template>
+              <template x-if="actAs.acting">
+                <li x-h-menu-item @click="disarmActAs()">
+                  <i role="img" x-h-lucide data-lucide="user-round-x"></i> <span x-text="T('application-core:shell.actAs.stop', 'Stop acting as') + ' ' + actAs.acting"></span>
                 </li>
               </template>
               <!-- Switch shells without the detour through Home: the same `platform-shells` list the
@@ -266,6 +271,25 @@
             </ul>
           </div>
 
+          <!-- Act-as (delegated entry) banner: the armed identity follows the session into the
+               back office, so it is shown here too - loud, persistent, with the deadline it expires
+               at and a one-click exit. Its absence here is what let an arming be forgotten (#6694). -->
+          <div x-show="actAs.acting" x-cloak class="hbox items-center gap-2 px-3 py-1.5 text-sm"
+               style="background: var(--color-warning, #b45309); color: #fff;">
+            <i role="img" x-h-lucide data-lucide="user-round-cog"></i>
+            <span>
+              <span x-text="T('application-core:shell.actAs.bannerActing', 'Acting as')"></span>
+              <b x-text="actAs.acting"></b>
+              <span x-text="' - ' + T('application-core:shell.actAs.bannerNote', 'entries are recorded in this person\'s name; the log keeps yours')"></span>
+              <span x-show="actAsUntil()" x-text="' - ' + T('application-core:shell.actAs.bannerUntil', 'until {{time}}', { time: actAsUntil() })"></span>
+            </span>
+            <div class="flex-1"></div>
+            <button x-h-button data-size="sm" data-variant="outline" @click="disarmActAs()"
+                    style="border-color:#fff; color:#fff; background:transparent;">
+              <span x-text="T('application-core:shell.actAs.exit', 'Exit')"></span>
+            </button>
+          </div>
+
           <!-- Built-in pages (incl. the Settings master-detail) render here via Pinecone; a hosted
                domain app shows in the iframe instead. -->
           <div id="app" x-show="!hostedUrl" class="size-full overflow-auto flex-1">
@@ -285,7 +309,7 @@
     <div x-h-dialog-overlay :data-open="$store.processTasks.formOpen">
       <div x-h-dialog style="width: 92vw; max-width: 1100px;">
         <div x-h-dialog-header>
-          <h2 x-h-dialog-title x-text="$store.processTasks.formTitle"></h2>
+          <h2 x-h-dialog-title x-text="T($store.processTasks.formTitleKey, $store.processTasks.formTitle)"></h2>
           <button x-h-dialog-close @click="$store.processTasks.closeForm()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
         </div>
         <div x-h-dialog-content>
@@ -328,6 +352,68 @@
             <span x-show="$store.customActions.confirmBusy" x-h-spinner></span>
             <span x-text="T('application-core:shell.customActions.confirmRun', 'Run')"></span>
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input dialog for a prompted `endpoint` custom action (issue #6685): the declared inputs are
+         rendered from the target entity's own detail registration (App.detailsFor), so its dropdown
+         lookups and dependsOn cascades apply unchanged. Submitting the dialog IS the run
+         confirmation. The customActionPrompt wrapper keeps the markup free of `$store` references
+         (the per-project shell is a Velocity template) and hosts the cascade watcher. -->
+    <div x-data="customActionPrompt">
+      <div x-h-dialog-overlay :data-open="s.promptOpen">
+        <div x-h-dialog data-prompt-dialog>
+          <div x-h-dialog-header>
+            <h2 x-h-dialog-title x-text="(s.promptAction && s.promptAction.label) || T('application-core:shell.customActions.promptTitle', 'Run action')"></h2>
+            <button x-h-dialog-close @click="s.cancelPrompt()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+          </div>
+          <div x-h-dialog-content>
+            <div x-show="s.promptError" x-h-alert data-variant="negative" role="alert">
+              <div x-h-alert-description x-text="T('application-core:shell.customActions.promptMissing', 'Required: {{fields}}', { fields: s.promptError })"></div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <template x-for="col in s.promptCols" :key="col.name">
+                <div x-h-field :style="['NUMBER','CHECKBOX','DATE'].includes(col.widget) ? '' : 'grid-column: 1 / -1'">
+                  <label x-h-label x-text="col.tkey ? T(col.tkey, col.label) : col.label"></label>
+                  <template x-if="col.widget === 'DROPDOWN'">
+                    <div x-h-select data-filter="contains">
+                      <input x-h-select-input x-model="s.promptValues[col.name]" :placeholder="T('application-core:shell.customActions.promptSelect', 'Select...')" />
+                      <div x-h-select-content>
+                        <div x-h-select-search></div>
+                        <template x-for="opt in s.promptOptionsFor(col.name)" :key="opt.value">
+                          <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                  <template x-if="col.widget === 'NUMBER'">
+                    <div x-h-input-number><input type="number" step="any" x-model.number="s.promptValues[col.name]" :data-prompt-field="col.name" /></div>
+                  </template>
+                  <template x-if="col.widget === 'CHECKBOX'">
+                    <span x-h-checkbox><input type="checkbox" x-model="s.promptValues[col.name]" /></span>
+                  </template>
+                  <template x-if="col.widget === 'DATE'">
+                    <div x-h-date-picker.table>
+                      <input type="text" />
+                      <button x-h-date-picker-trigger aria-label="Choose date"></button>
+                      <div x-h-date-picker-popup x-model="s.promptValues[col.name]"></div>
+                    </div>
+                  </template>
+                  <template x-if="!['DROPDOWN','NUMBER','CHECKBOX','DATE'].includes(col.widget)">
+                    <input x-h-input type="text" x-model="s.promptValues[col.name]" :pattern="col.pattern" :data-prompt-field="col.name" />
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+          <div x-h-dialog-footer>
+            <button x-h-button data-variant="transparent" @click="s.cancelPrompt()" :disabled="s.promptBusy" x-text="T('application-core:shell.customActions.promptCancel', 'Cancel')"></button>
+            <button x-h-button data-variant="primary" @click="s.promptRun()" :disabled="s.promptBusy">
+              <span x-show="s.promptBusy" x-h-spinner></span>
+              <span x-text="T('application-core:shell.customActions.promptRun', 'Run')"></span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

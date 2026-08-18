@@ -51,6 +51,11 @@ document.addEventListener('alpine:init', () => {
 #end
 
     async init() {
+#if($hasRestrictedFields)
+      // Role-scoped fields (intent `visibleTo:`): this surface's own controller strips them from the
+      // record and ignores them on writes, so the form must not offer the inputs either.
+      this.loadRestrictedFields();
+#end
       const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};
       this.id = params.id || null;
       this.mode = this.id ? 'edit' : 'create';
@@ -200,13 +205,25 @@ document.addEventListener('alpine:init', () => {
         apiPath: '${child.apiPath}', rows: [], state: 'loading',
         calendar: #if($child.calendar){ start: '${child.calendar.start}', end: #if($child.calendar.end)'${child.calendar.end}'#{else}null#end, title: #if($child.calendar.title)'${child.calendar.title}'#{else}null#end, titleLookup: #if($child.calendar.titleLookup){ url: '${child.calendar.titleLookup.url}', key: '${child.calendar.titleLookup.key}', value: '${child.calendar.titleLookup.value}' }#{else}null#end, view: '${child.calendar.view}' }#{else}null#end,
         calCfg: { view: '#if($child.calendar)${child.calendar.view}#{else}month#end', events: [] },
-        columns: [#foreach($col in $child.columns){ name: '${col.name}', label: '${col.label}'#if($col.number), number: true#end#if($col.date), date: true#end }#if($foreach.hasNext), #end#end] },
+        columns: [#foreach($col in $child.columns){ name: '${col.name}', label: '${col.label}'#if($col.number), number: true#end#if($col.date), date: true#end }#if($foreach.hasNext), #end#end],
+        // Role-scoped columns (intent `visibleTo:`): asked from the child's own scoped controller
+        // on first load, so the panel drops what this caller is not served.
+        restrictedFields: #if($child.restrictedFields)true#{else}false#end },
 #end
     ],
 
     async loadChildren() {
       for (const child of this.children) {
         try {
+          if (child.restrictedFields && !child.restrictedLoaded) {
+            child.restrictedLoaded = true;
+            const answer = await App.services.api.get(child.apiPath + '/restricted').catch((e) => {
+              console.error('[restricted] could not read the field visibility of ' + child.apiPath, e);
+              return null;
+            });
+            const hidden = (answer && answer.restricted) || [];
+            child.columns = child.columns.filter(c => !hidden.includes(c.name));
+          }
           child.rows = await App.services.api.get(child.apiPath + '?' + encodeURIComponent(child.fkProperty) + '=' + encodeURIComponent(this.id)) || [];
           if (child.calendar) {
             // a title naming a RELATION resolves to its referenced label (fail-soft: raw value stays)

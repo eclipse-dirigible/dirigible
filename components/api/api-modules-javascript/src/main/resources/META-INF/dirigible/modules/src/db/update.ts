@@ -71,7 +71,7 @@ export class Update {
 	 * @param datasourceName The name of the database connection to use (optional).
 	 * @returns The number of rows affected by the statement.
 	 */
-	public static execute(sql: string, parameters?: (string | number | boolean | Date | TypedUpdateParameter | NamedUpdateParameter)[], datasourceName?: string): number {
+	public static execute(sql: string, parameters?: (string | number | boolean | Date | null | TypedUpdateParameter | NamedUpdateParameter)[], datasourceName?: string): number {
 		let arr: any[] = [];
 
 	    if (parameters == null) {
@@ -111,10 +111,12 @@ export class Update {
 	      return result;
 	    }
 
-	    // Primitive array
+	    // Primitive array; null/undefined are valid values - they bind as SQL NULL
 	    if (
 	      arr.every(
 	        (v) =>
+	          v === null ||
+	          v === undefined ||
 	          typeof v === "string" ||
 	          typeof v === "number" ||
 	          typeof v === "boolean" ||

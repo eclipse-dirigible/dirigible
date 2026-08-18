@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.annotation.DirtiesContext;
 
 /**
  * The shell switcher in every Harmonia shell's user menu: the other registered shells plus Home, so
@@ -21,6 +22,9 @@ import org.junit.jupiter.api.Test;
  * aggregation Home renders, so this exercises two different host shells to prove the block works
  * wherever it is embedded - and that each one leaves ITSELF out of its own list.
  */
+// One Dirigible boot for the whole class: the methods are read-only or clean up after themselves,
+// so the per-method context reset inherited from IntegrationTest would only add boot time per test.
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public class ShellSwitcherIT extends UserInterfaceIntegrationTest {
 
     @Test

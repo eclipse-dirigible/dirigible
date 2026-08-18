@@ -325,16 +325,46 @@ window.IntentDiagrams = (() => {
         fitIntoView(graph, container);
     };
 
-    // The single lifecycle event a glue binding reacts to: { kind: 'onCreate'|'onUpdate'|'onDelete',
-    // entity: <Entity> }. Returns null when none is declared.
+    // The single event a glue binding reacts to, on either axis: an entity lifecycle event
+    // ({ kind: 'onCreate'|'onUpdate'|'onDelete', entity: <Entity> }) or a process step event
+    // ({ kind: 'onStepReached'|'onStepCompleted', process, step }). Returns null when none is declared.
     const eventOf = (ev) => {
         if (!ev) return null;
         for (const kind of ['onCreate', 'onUpdate', 'onDelete']) {
             if (ev[kind]) return { kind, entity: ev[kind] };
         }
+        for (const kind of ['onStepReached', 'onStepCompleted']) {
+            const at = ev[kind];
+            if (at && at.process && at.step) return { kind, process: at.process, step: at.step };
+        }
         return null;
     };
-    const eventVerb = (kind) => ({ onCreate: 'on create', onUpdate: 'on update', onDelete: 'on delete' }[kind] || '');
+    const eventVerb = (ev) => {
+        const event = eventOf(ev);
+        if (!event) return '';
+        if (event.process) return 'on ' + event.step + (event.kind === 'onStepCompleted' ? ' completed' : ' reached');
+        return { onCreate: 'on create', onUpdate: 'on update', onDelete: 'on delete' }[event.kind] || '';
+    };
+
+    // The entity a glue binding is about: the one a lifecycle event names, or the trigger entity of the
+    // process a step event names - the record that process runs on, which is what the action addresses.
+    const eventEntity = (model, ev) => {
+        const event = eventOf(ev);
+        if (!event) return null;
+        if (event.entity) return event.entity;
+        const process = (model.processes || []).find(p => p && p.name === event.process);
+        const trigger = (process && process.trigger) || {};
+        return trigger.onCreate || trigger.onUpdate || trigger.onDelete || null;
+    };
+
+    // Where an inbound ingest arrives from: its HTTP path, or its message/file source.
+    const inboundDetail = (ingest) => {
+        const source = ingest.source || {};
+        if (source.queue) return 'queue ' + source.queue;
+        if (source.topic) return 'topic ' + source.topic;
+        if (source.folder) return 'folder ' + source.folder;
+        return 'POST ' + (ingest.path || '');
+    };
 
     // The roll-up's parent entity is the target of its `via` to-one relation on the counted child entity.
     const rollupParent = (model, rollup) => {
@@ -356,10 +386,10 @@ window.IntentDiagrams = (() => {
         const categories = [
             { list: model.forms, icon: ICON.form, color: COLOR.output, entity: f => f.forEntity, detail: () => 'form' },
             { list: model.reports, icon: ICON.report, color: COLOR.output, entity: r => r.source, detail: r => r.widget ? 'report • KPI ' + (r.widget.kind || (r.widget.value ? 'value' : 'count')) : 'report' },
-            { list: model.notifications, icon: ICON.notification, color: COLOR.glue, entity: n => (eventOf(n.event) || {}).entity, detail: n => eventVerb((eventOf(n.event) || {}).kind) + ' → email' },
+            { list: model.notifications, icon: ICON.notification, color: COLOR.glue, entity: n => eventEntity(model, n.event), detail: n => eventVerb(n.event) + ' → email' },
             { list: model.schedules, icon: ICON.schedule, color: COLOR.glue, entity: s => s.model ? null : s.entity, detail: s => (s.model ? s.model + '.' + s.entity + ' • ' : '') + (s.cron || 'scheduled') },
-            { list: model.integrations, icon: ICON.integration, color: COLOR.glue, entity: i => (eventOf(i.event) || {}).entity, detail: i => (i.method || 'POST') + ' ' + eventVerb((eventOf(i.event) || {}).kind) },
-            { list: model.inbound, icon: ICON.inbound, color: COLOR.glue, entity: w => w.create, detail: w => 'POST ' + (w.path || '') },
+            { list: model.integrations, icon: ICON.integration, color: COLOR.glue, entity: i => eventEntity(model, i.event), detail: i => (i.method || 'POST') + ' ' + eventVerb(i.event) },
+            { list: model.inbound, icon: ICON.inbound, color: COLOR.glue, entity: w => w.create, detail: inboundDetail },
             { list: model.rollups, icon: ICON.rollup, color: COLOR.glue, entity: r => r.entity, detail: r => '→ ' + (rollupParent(model, r) || '?') + '.' + (r.field || '') }
         ];
 

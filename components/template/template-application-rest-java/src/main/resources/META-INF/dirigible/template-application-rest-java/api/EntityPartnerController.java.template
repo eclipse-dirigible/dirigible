@@ -22,6 +22,24 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+## Role-scoped properties (the modeler's per-property read/write role, or the intent's `visibleTo:`
+## allow-list): stripped from this surface's responses and ignored on its writes for a caller outside
+## the roles - being the partner the record belongs to is not the same as being allowed every column.
+#foreach($property in $properties)
+#if($property.roleRead)
+#set($hasRestrictedReads = "true")
+#end
+#if($property.roleRead || $property.roleWrite)
+#set($hasRoleScopedProperties = "true")
+#end
+#end
+#if($masterLock)
+#if($partnerParent)
+#set($masterRepositoryRef = "parentRepository")
+#else
+#set($masterRepositoryRef = "masterRepository")
+#end
+#end
 /**
  * The PARTNER surface of ${name}: every read is scoped to the logged-in EXTERNAL partner's identity
  * record (Customer / Supplier, matched by email) and every write is forced onto it - a partner can
@@ -42,13 +60,20 @@ public class ${name}PartnerController {
 #if($partnerParent)
     private final ${partnerParent.repositoryClass} parentRepository;
 #end
+#if($masterLock && !$partnerParent)
+    private final ${masterLock.repositoryClass} masterRepository;
+#end
 
     public ${name}PartnerController(${name}Repository repository, ${partnerIdentityRepositoryClass} identityRepository#if($partnerParent),
-            ${partnerParent.repositoryClass} parentRepository#end) {
+            ${partnerParent.repositoryClass} parentRepository#end#if($masterLock && !$partnerParent),
+            ${masterLock.repositoryClass} masterRepository#end) {
         this.repository = repository;
         this.identityRepository = identityRepository;
 #if($partnerParent)
         this.parentRepository = parentRepository;
+#end
+#if($masterLock && !$partnerParent)
+        this.masterRepository = masterRepository;
 #end
     }
 
@@ -117,8 +142,19 @@ public class ${name}PartnerController {
         // The owner is the server's decision - whatever the client sent is overwritten.
         entity.${partnerProperty} = me;
 #end
+#if($masterLock)
+        requireMasterMutable(entity.${masterLock.fkProperty});
+#end
 #foreach($sensitive in $sensitiveProperties)
         entity.${sensitive} = null;
+#end
+#foreach($property in $properties)
+#if($property.roleWrite)
+        // Role-scoped field: not writable by a caller outside its roles, here as on the power surface.
+        if (!isInAnyRole("${property.roleWrite}")) {
+            entity.${property.name} = null;
+        }
+#end
 #end
         return scrub(repository.save(entity));
     }
@@ -129,6 +165,9 @@ public class ${name}PartnerController {
         ${name}Entity existing = requireMine(id);
 #if($immutableAlways || $immutableStatusProperty)
         requireMutable(existing);
+#end
+#if($masterLock)
+        requireMasterMutable(existing.${masterLock.fkProperty});
 #end
         entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = id;
 #if($partnerParent)
@@ -141,6 +180,14 @@ public class ${name}PartnerController {
         // Sensitive fields are not writable here - the stored value is kept.
         entity.${sensitive} = existing.${sensitive};
 #end
+#foreach($property in $properties)
+#if($property.roleWrite)
+        // Role-scoped field: a caller outside its roles keeps the stored value.
+        if (!isInAnyRole("${property.roleWrite}")) {
+            entity.${property.name} = existing.${property.name};
+        }
+#end
+#end
         return scrub(repository.update(entity));
     }
 
@@ -150,6 +197,9 @@ public class ${name}PartnerController {
         ${name}Entity existing = requireMine(id);
 #if($immutableAlways || $immutableStatusProperty)
         requireMutable(existing);
+#end
+#if($masterLock)
+        requireMasterMutable(existing.${masterLock.fkProperty});
 #end
         try {
             repository.deleteById(id);
@@ -230,6 +280,45 @@ public class ${name}PartnerController {
         }
     }
 #end
+#if($masterLock)
+
+    // Inherited immutability: this ${name} is a line of a ${masterLock.entity}, and its writes
+    // recompute that document's totals - so while the document is locked its lines are locked with
+    // it. Declare `locksWithMaster: false` on the child to keep a collection writable past the
+    // master's lock. Workflow / system writes through the repository stay unaffected.
+    private void requireMasterMutable(${masterLock.fkJavaClass} masterId) {
+        if (masterId == null) {
+            return;
+        }
+        ${masterLock.entityClass} master = ${masterRepositoryRef}.findOne(masterId).orElse(null);
+        if (master == null || isMasterMutable(master)) {
+            return;
+        }
+#if($masterLock.always)
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "This ${name} belongs to an append-only ${masterLock.entity} and can no longer be changed");
+#else
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "The ${masterLock.entity} of this ${name} is immutable in its current status - corrections go through the workflow");
+#end
+    }
+
+    private static boolean isMasterMutable(${masterLock.entityClass} master) {
+#if($masterLock.always)
+        return false;
+#else
+        if (master.${masterLock.statusProperty} == null) {
+            return true;
+        }
+        for (String immutable : "${masterLock.statusValues}".split(",")) {
+            if (immutable.equals(String.valueOf(master.${masterLock.statusProperty}))) {
+                return false;
+            }
+        }
+        return true;
+#end
+    }
+#end
 #if($immutableAlways)
 
     private void requireMutable(${name}Entity existing) {
@@ -266,13 +355,57 @@ public class ${name}PartnerController {
     }
 #end
 
-    /** Strip sensitive fields from a response - they exist only on the power surface. */
+    /**
+     * Strip from a response what this caller may not see: the sensitive fields (absent from the partner
+     * surface for everyone) and the role-scoped ones (absent unless the caller holds one of their
+     * roles - being the partner the record belongs to does not grant them).
+     */
     private ${name}Entity scrub(${name}Entity entity) {
 #foreach($sensitive in $sensitiveProperties)
         entity.${sensitive} = null;
 #end
+#foreach($property in $properties)
+#if($property.roleRead)
+        if (!isInAnyRole("${property.roleRead}")) {
+            entity.${property.name} = null;
+        }
+#end
+#end
         return entity;
     }
+#if($hasRestrictedReads)
+
+    @Get("/restricted")
+    @Documentation("The ${name} properties withheld from the CURRENT caller (role-scoped fields) - what the generated pages leave out instead of rendering a permanently empty column; the redaction applied to every response stays authoritative")
+    public Map<String, List<String>> restricted() {
+        List<String> restricted = new java.util.ArrayList<>();
+#foreach($property in $properties)
+#if($property.roleRead)
+        if (!isInAnyRole("${property.roleRead}")) {
+            restricted.add("${property.name}");
+        }
+#end
+#end
+        return Map.of("restricted", restricted);
+    }
+#end
+#if($hasRoleScopedProperties)
+
+    /**
+     * Whether the caller holds ANY of a comma-separated role list. One role name is what the entity
+     * modeler's per-property read/write role carries; the intent's `visibleTo: [A, B]` allow-list
+     * arrives here as "A,B" and holding either of them is enough.
+     */
+    private static boolean isInAnyRole(String roles) {
+        for (String role : roles.split(",")) {
+            String name = role.trim();
+            if (!name.isEmpty() && User.isInRole(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+#end
 
     /** Whether a persistence failure is (caused by) a database constraint violation. */
     private static boolean isConstraintViolation(Throwable e) {

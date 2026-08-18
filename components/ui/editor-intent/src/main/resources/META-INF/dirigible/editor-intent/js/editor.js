@@ -18,6 +18,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     const PARSE_URL = '/services/ide/intent/parse';
     const GENERATE_URL = '/services/ide/intent/generate';
     const AGENT_URL = '/services/ide/intent/agent';
+    const CONVERSATIONS_URL = '/services/ide/intent/conversations';
 
     $scope.state = { isBusy: true, error: false };
     $scope.errorMessage = '';
@@ -55,6 +56,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                 $scope.state.isBusy = false;
                 refreshPreview();
                 mountEditor();
+                restoreConversation();
             });
         }, (response) => {
             console.error(response);
@@ -258,52 +260,35 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         $scope.$evalAsync(() => { $scope.state.isBusy = false; });
     };
 
-    // Run the model-to-code plan from the response (the templates + parameters registered in the
-    // <intent>.settings), one generate-from-template call per generated model, sequentially.
-    const runCodeGenerations = (location, plan, written, scrubbed) => {
-        let index = 0;
-        const next = () => {
-            if (index >= plan.length) {
-                finishGenerate(location, written, scrubbed, plan.length);
-                return;
-            }
-            const entry = plan[index++];
-            dialogHub.showBusyDialog(`Generating code (${index}/${plan.length}): ${entry.path}`);
-            const url = `/services/js/service-generate/generate.mjs/model/${encodeURIComponent(location.workspace)}/${encodeURIComponent(location.project)}?path=${encodeURIComponent(entry.path)}`;
-            $http.post(url, { template: entry.templateId, parameters: entry.parameters || {} })
-                 .then(next, (response) => {
-                     console.error(response);
-                     dialogHub.closeBusyDialog();
-                     $scope.$evalAsync(() => { $scope.state.isBusy = false; });
-                     dialogHub.postMessage({ topic: 'projects.tree.refresh', data: { partial: true, project: location.project, workspace: location.workspace } });
-                     dialogHub.showAlert({
-                         title: 'Failed to generate code',
-                         message: `Models were generated, but generating code from '${entry.path}' failed. See the console for details.`,
-                         type: AlertTypes.Error,
-                         preformatted: false,
-                     });
-                 });
-        };
-        next();
+    // Report the model-to-code generations the server ran (the templates + parameters registered in
+    // the <intent>.settings). Generate is one call now - the models and the code are produced in the
+    // same request - so this only reads the outcome each entry carries.
+    const reportCodeGenerations = (location, plan, written, scrubbed) => {
+        const failed = plan.filter((entry) => entry.generated === false);
+        finishGenerate(location, written, scrubbed, plan.length - failed.length);
+        if (failed.length) {
+            const details = failed.map((entry) => `${entry.path}: ${entry.error || 'unknown error'}`).join('\n');
+            dialogHub.showAlert({
+                title: 'Failed to generate code',
+                message: `Models were generated, but generating code failed for:\n\n${details}`,
+                type: AlertTypes.Error,
+                preformatted: true,
+            });
+        }
     };
 
     $scope.generate = () => {
         const location = fileLocation();
         $scope.state.isBusy = true;
-        dialogHub.showBusyDialog('Generating model files');
+        dialogHub.showBusyDialog('Generating model files and code');
         $http.post(`${GENERATE_URL}?workspace=${encodeURIComponent(location.workspace)}&project=${encodeURIComponent(location.project)}&path=${encodeURIComponent(location.path)}`)
              .then((response) => {
                  $scope.issues = []; // a successful generate clears any pinned cross-model issue from a prior attempt
                  $scope.warnings = response.data.warnings || [];
                  const written = (response.data.written || []).length;
                  const scrubbed = (response.data.scrubbed || []).length;
-                 const plan = response.data.codeGenerations || [];
-                 if (plan.length) {
-                     // Models are written; now chain the model-to-code generation per the .settings recipe.
-                     runCodeGenerations(location, plan, written, scrubbed);
-                 } else {
-                     finishGenerate(location, written, scrubbed, 0);
-                 }
+                 // The server generated the code as part of this call; each entry reports its outcome.
+                 reportCodeGenerations(location, response.data.codeGenerations || [], written, scrubbed);
              }, (response) => {
                  console.error(response);
                  dialogHub.closeBusyDialog();
@@ -345,6 +330,8 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     $scope.chat = { open: false, busy: false, input: '', messages: [], turns: [], proposalPending: false };
     let proposedYaml = null;
     let diffEditor = null;
+    // How many of chat.messages the server has accepted; everything past it is still unsaved.
+    let persistedMessages = 0;
 
     $scope.toggleChat = () => { $scope.chat.open = !$scope.chat.open; };
 
@@ -353,6 +340,58 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
             const list = document.getElementById('intent-chat-messages');
             if (list) list.scrollTop = list.scrollHeight;
         }, 0);
+    };
+
+    // ----- Conversation history --------------------------------------------------
+    // The conversation is the record of WHY the intent looks the way it does, so it is persisted
+    // server-side (tenant-aware, append-only) instead of living in this controller until the tab
+    // closes. It is keyed by project + surface + intent file - never by workspace or user, so the same
+    // app opened on another machine, or by a teammate, restores the same dialogue.
+
+    const conversationQuery = () => {
+        const location = fileLocation();
+        return `?project=${encodeURIComponent(location.project)}&surface=intent-editor&path=${encodeURIComponent(location.path)}`;
+    };
+
+    /** Load the stored conversation of this intent file into the chat pane. */
+    const restoreConversation = () => {
+        $http.get(CONVERSATIONS_URL + conversationQuery())
+             .then((response) => {
+                 const stored = response.data || {};
+                 $scope.chat.messages = (stored.messages || []).map((m) => ({ role: m.role, text: m.content }));
+                 // The transcript is DERIVED from the stored roles rather than stored a second time, so
+                 // the two lists cannot drift - and it is derived SERVER-side, because "which messages
+                 // may be replayed" is a property of the roles: a failed turn keeps the message that was
+                 // sent (support needs it) but replaying that unanswered turn would break the model
+                 // API's alternation.
+                 $scope.chat.turns = (stored.turns || []).map((t) => ({ role: t.role, content: t.content }));
+                 persistedMessages = $scope.chat.messages.length;
+                 scrollChatToBottom();
+             }, (response) => {
+                 // No history is a degraded pane, never a broken editor.
+                 console.error(response);
+             });
+    };
+
+    /**
+     * Append whatever this file's conversation has said but not yet saved. Called once per turn, after
+     * it has fully resolved - a failed turn's error bubble is part of the record too.
+     *
+     * On failure the count is deliberately left where it is, so the next turn re-sends this tail and a
+     * transient outage costs nothing.
+     */
+    const flushConversation = () => {
+        const pending = $scope.chat.messages.slice(persistedMessages);
+        if (!pending.length) return;
+        const messages = pending.map((m) => ({ role: m.role, content: m.text }));
+        $http.post(CONVERSATIONS_URL + '/messages' + conversationQuery(), { messages: messages })
+             .then(() => {
+                 // Advance by what was actually sent - a message typed while the call was in flight has
+                 // not been saved yet.
+                 persistedMessages += messages.length;
+             }, (response) => {
+                 console.error(response);
+             });
     };
 
     const disposeDiff = () => {
@@ -387,6 +426,50 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         });
     };
 
+    /**
+     * Render each requirement the proposal could NOT express as its own bubble - what it was, why the
+     * intent does not carry it, and which extension point does. Kept out of the assistant's prose on
+     * purpose: as another paragraph it reads like the rest of the answer and gets skimmed past, which
+     * is how "the system identifies the driver" once became "an officer identifies the driver" with
+     * nobody noticing. When the extension point is a Java class the bubble also carries a way into it.
+     */
+    const reportBoundaries = (boundaries) => {
+        for (const boundary of boundaries || []) {
+            if (!boundary || !boundary.requirement) continue;
+            const lines = ['Not expressible in the intent: ' + boundary.requirement];
+            if (boundary.explanation) lines.push(boundary.explanation);
+            if (boundary.extensionKind && boundary.extensionKind !== 'none') {
+                lines.push('Carried by: ' + boundary.extensionKind
+                    + (boundary.suggestedClass ? ' (' + boundary.suggestedClass + ', to be written by hand)' : ''));
+            }
+            $scope.chat.messages.push({ role: 'boundary', text: lines.join('\n'), file: customFileFor(boundary.suggestedClass) });
+        }
+    };
+
+    /** Where a suggested class lives in this project - the same custom/ mapping the stub generator uses. */
+    const customFileFor = (suggestedClass) => {
+        if (!suggestedClass) return null;
+        const relative = suggestedClass.replace(/\./g, '/')
+                                       .replace(/^custom\//, '');
+        return 'custom/' + relative + '.java';
+    };
+
+    /**
+     * Open the hand-written class of a boundary. The stub is scaffolded by Generate (custom/ is
+     * generate-once and never overwritten), so before that there is nothing to open and saying so beats
+     * opening an editor on a file that does not exist.
+     */
+    $scope.openBoundaryFile = (file) => {
+        const location = fileLocation();
+        const path = `/${location.workspace}/${location.project}/${file}`;
+        WorkspaceService.resourceExists(path).then(() => layoutHub.openEditor({ path: path }), () => dialogHub.showAlert({
+            title: 'Not generated yet',
+            message: `${file} does not exist yet. Click Generate - the stub is scaffolded then, and never overwritten afterwards.`,
+            type: AlertTypes.Information,
+            preformatted: false,
+        }));
+    };
+
     $scope.sendChat = () => {
         const message = ($scope.chat.input || '').trim();
         if (!message || $scope.chat.busy) return;
@@ -406,12 +489,14 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                      $scope.chat.messages.push({ role: 'assistant', text: reply });
                      $scope.chat.turns.push({ role: 'assistant', content: reply });
                  }
+                 reportBoundaries(response.data && response.data.boundaries);
                  if (response.data && response.data.proposedYaml) {
                      proposedYaml = response.data.proposedYaml;
                      $scope.chat.proposalPending = true;
                      setTimeout(showDiff, 0); // defer until ng-if renders the diff container
                  }
                  scrollChatToBottom();
+                 flushConversation();
              }, (response) => {
                  $scope.chat.busy = false;
                  // The turn never completed - drop its unanswered user turn so the transcript stays alternating.
@@ -422,6 +507,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                  } else console.error(response);
                  $scope.chat.messages.push({ role: 'error', text: text });
                  scrollChatToBottom();
+                 flushConversation();
              });
     };
 
@@ -437,9 +523,12 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         if (!$scope.chat.proposalPending || proposedYaml === null) return;
         if (monacoEditor) monacoEditor.setValue(proposedYaml); // fires onDidChangeModelContent -> $scope.text, dirty, re-parse
         else { $scope.text = proposedYaml; handleTextChanged(); }
-        $scope.chat.messages.push({ role: 'assistant', text: 'Applied to the editor. Review, then Save and Generate.' });
+        // A UI note, NOT an assistant turn: it is displayed and recorded, but the model never sees it -
+        // which is exactly what the `note` role means to the restored transcript.
+        $scope.chat.messages.push({ role: 'note', text: 'Applied to the editor. Review, then Save and Generate.' });
         $scope.rejectProposal();
         scrollChatToBottom();
+        flushConversation();
     };
 
     $scope.rejectProposal = () => {

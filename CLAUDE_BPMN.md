@@ -62,21 +62,9 @@ d0968c65dd  Fix property-panel popup lock-up: $hide/$show + prefixEvent + displa
 - **Templates**
   - `…/editor-bpm/editor-app/configuration/properties/duedate-popup.html` — `bs-select` → `<select>`
   - `…/editor-bpm/views/popover/formfield-edit-popover.html` — `bs-tooltip` → native `title`
-- **Tests** *(all new on this branch)*
-  - `tests/.../BpmnEditorLoadsIT.java` — smoke (canvas + palette + Start Events + theme variable + `$modal`/`$popover` injector contract)
-  - `tests/.../BpmnEditorIT.java` — full edit / rename / save / "Published"
-  - `tests/.../BpmnEditorPropertyPopupIT.java` — open Execution Listeners modal, assert `$hide` + ✕-size + close-via-Cancel + canvas still interactive
+- **Tests** *(all new on this branch; later merged into one journey)*
+  - `tests/.../BpmnEditorIT.java` — ONE editor session asserting all three stations, in order: editor boot (canvas + palette + Start Events + theme variable + `$modal`/`$popover` injector contract), property-popup lifecycle (open Execution Listeners modal, assert `$hide` + ✕-size + close-via-Cancel + canvas still interactive), then full edit / rename / save / "Published". The original three classes (`BpmnEditorLoadsIT`, `BpmnEditorPropertyPopupIT`, `BpmnEditorIT`) each paid a full Dirigible boot + browser + ~30 s editor bring-up for the same freshly created `.bpmn` file, so they were consolidated.
   - `tests/.../BpmnModelApiIT.java` — API-level
-
-### Tests on this branch
-
-```
-BpmnEditorLoadsIT          25 s
-BpmnEditorIT               59 s
-BpmnEditorPropertyPopupIT  46 s
-```
-
-All three pass on `origin/fix-bpmn-editor`.
 
 ### Don't repeat these dead-ends
 

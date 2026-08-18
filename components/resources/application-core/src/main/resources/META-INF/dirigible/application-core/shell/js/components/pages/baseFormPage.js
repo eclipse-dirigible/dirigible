@@ -120,6 +120,27 @@ function baseFormPage() {
       }
     },
 
+    // A relationship control is CONTEXT-LOCKED when the URL that opened this form already names it:
+    // the record is being created or edited from inside that parent (a master's detail panel, a
+    // create-from flow), so the parent is implied by where the user is standing rather than chosen
+    // here. The generated form then renders the referenced record's label read-only instead of a
+    // dropdown that would let the record be re-pointed mid-flow. A form opened with no such param
+    // (the entity's own top-level create) keeps free selection. UI only - the payload is unchanged
+    // and the controller stays authoritative.
+    isContextLocked(name) {
+      const v = this.queryParam(name);
+      return v !== null && v !== '';
+    },
+
+    // The label of a context-locked relation: the referenced record's display value out of the
+    // option list the form already loaded, falling back to the raw id while the options are in
+    // flight (or when the referenced row is outside the loaded set).
+    contextLabel(value, options) {
+      if (value === null || value === undefined || value === '') return '';
+      const opt = (options || []).find(o => String(o.value) === String(value));
+      return opt ? opt.text : String(value);
+    },
+
     // Read a validated `returnTo` from the current URL (must be an in-app path).
     returnToParam() {
       const ret = this.queryParam('returnTo');

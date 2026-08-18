@@ -24,6 +24,7 @@ filters) are covered at the generation layer by `IntentEngineIT` and the parser 
 | [`function`](#function--presentation-role) | explicit presentation role (Document, Setting, ...) |
 | [`checks`](#checks--declarative-validations) | cross-field / cross-line validations |
 | [`immutableWhen` / `immutable`](#immutablewhen--immutable---user-write-immutability) | 409 on user writes in a status / append-only snapshots |
+| [`lifecycle`](#lifecycle---the-legal-status-graph) | the whole legal status graph, enforced on every status write |
 | [`hierarchy` / `leafOnly`](#hierarchy--leafonly--tree-entities) | tree entities, leaf-only references |
 | [`multilingual` / `languages`](#multilingual--translated-master-data) | `_LANG` tables + read-time translation overlay |
 | [calculated fields](#calculated-fields--actions) | server+UI-evaluated expressions, date functions, Java call-outs |
@@ -139,6 +140,29 @@ message).
 seed ids (terms joined with `||`). `immutable: true` is the unconditional append-only variant, mutually
 exclusive with `immutableWhen`. Workflow/system writes through the repository stay possible -
 corrections are flow-generated reversals, never edits.
+
+## lifecycle - the legal status graph
+
+```yaml
+- name: SalesInvoice
+  lifecycle:
+    edges:
+      - { from: DRAFT,  to: [ISSUED, CANCELLED] }
+      - { from: ISSUED, to: [PAID, VOIDED] }
+  relations:
+    - { name: status, kind: manyToOne, to: SalesInvoiceStatus, function: EntityStatus, init: DRAFT }
+```
+
+The whole set of legal status moves, declared once. One entry per SOURCE status; either side accepts
+a seeded status name or its id. The graph is always over the entity's `function: EntityStatus`
+relation (so it names no column), and the nomenclature must be seeded in this model.
+
+Enforced in the generated **repository** - the one choke point every status write passes through - so
+an unmodeled move is rejected with 400 wherever it came from: the REST update, the transition
+controller's targeted write, a workflow `setRelationField`, a hand-written action. With `init:`
+declared, a record must also be created in that status. At authoring time the graph is what
+`transitions:`, a status-setting workflow step and a check's rejection are validated against, so the
+buttons and the graph cannot disagree.
 
 ## hierarchy / leafOnly - tree entities
 
@@ -290,8 +314,40 @@ entities:
       - { name: Country, kind: manyToOne, to: Country, model: countries }
 ```
 
-Many-to-many is an explicit intermediate entity (composition to one side + `manyToOne` to the
-other, plus bridge fields); `manyToMany` is parsed but never materialized.
+## manyToMany - the intermediate entity, materialized
+
+An n:m is always an intermediate (link) entity - one row per link. `kind: manyToMany` writes that
+entity for you:
+
+```yaml
+entities:
+  - name: Order
+    relations:
+      - { name: products, kind: manyToMany, to: Product }        # through: OrderLine to name it
+```
+
+materializes, before validation and generation:
+
+```yaml
+  - name: OrderProduct                       # <Declaring><Target>, or the authored `through:`
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+    relations:
+      - { name: Order,   kind: manyToOne, to: Order, composition: true, required: true }
+      - { name: Product, kind: manyToOne, to: Product, required: true }
+```
+
+so the link gets a real table, a detail grid under the declaring entity's page (dropdown for the
+target), and can be seeded, reported on and referenced like any other entity. The target may be
+cross-model (`model:`); the target-picker attributes (`where` / `show` / `major` / `size` /
+`leafOnly`) travel onto the link's target relation.
+
+**Author the intermediate entity yourself** (composition to one side + `manyToOne` to the other,
+exactly as above) when the link carries **bridge fields** - a quantity, a partial `amount`, a
+valid-from date - or a lifecycle of its own; then drop the `manyToMany`. Declare an n:m on **one**
+side only, and note that a relation attribute describing a hand-authored to-one (`composition`,
+`function`, `init`, `dependsOn`, a calculated action, `personal`, `partner`) is rejected on a
+`manyToMany` rather than silently dropped.
 
 ## processes - workflows
 
@@ -368,6 +424,28 @@ Adds a button on the source view; the clone saves through the target's repositor
 status init and calculated fields fire. `sourceStatus:` flips the SOURCE to the given EntityStatus
 seed id once the target exists (proforma -> INVOICED) - a system write: no `-updated` re-fire, but
 the source's `-transitioned` topic is published.
+
+`prompt:` (#6685) declares a small input form shown before the target is created - the values the
+source cannot derive (which payment, how much). Entries name fields / to-one relations of the
+TARGET, so the dialog's controls are typed from the target's own definitions and its `dependsOn:`
+cascades apply unchanged; required inputs are enforced in the dialog and again by the generated
+controller (400). This is what makes a post-issue child (a manual payment allocation) reachable on
+an **immutable** document - the panel is read-only by design, the action button is not:
+
+```yaml
+generates:
+  - name: allocate-payment
+    from: SalesInvoice
+    to: SalesInvoiceCustomerPayment   # must be a composition child of forEntity (local, scope entity)
+    map: { SalesInvoice: id, Customer: Customer }
+    prompt:
+      - { field: CustomerPayment, required: true }
+      - { field: amount, required: true }
+```
+
+A prompted property may not also be mapped/defaulted (one writer); prompted values are set on the
+target after `map`/`defaults`, and the create still goes through the target's repository, so the
+ordinary `-created` event and rollups fire unchanged.
 
 ## postings - source-document to ledger
 
@@ -557,8 +635,8 @@ UI-test manifest, and its perspective in the generated Harmonia SPA + the shared
 - **Reserved `function:` roles** - `Board`, `Gantt`, `Timeline`; rejected with a clear "not yet
   available" message. (`function: Calendar` is now first-class - the role alias for
   `view: calendar`.)
-- **`manyToMany`** - parsed but never materialized; the supported shape is the explicit
-  intermediate entity.
+- **Bridge fields on a generated `manyToMany` link** - the materialized link entity carries only its
+  key and the two FKs; a link with its own data is authored as an explicit intermediate entity.
 - **Declarative glue actions beyond the current set** (see CLAUDE.md "Planned: declarative glue"):
   `publish`/consume message, `generateDocument` (PDF), `assign`, process-step events, inbound
   message/file events. Today's implemented glue: triggers, decision/form resolvers,

@@ -81,6 +81,8 @@ final class StatusSymbolResolver {
         resolver.rewriteTransitions(root);
         resolver.rewriteProcesses(root);
         resolver.rewritePostings(root);
+        resolver.rewriteGenerates(root);
+        resolver.rewriteResolves(root);
         resolver.rewriteReports(root);
         if (!resolver.issues.isEmpty()) {
             throw new IntentValidationException(resolver.issues);
@@ -152,6 +154,16 @@ final class StatusSymbolResolver {
             }
             Target status = statusOf(entityName);
             String statusRelation = statusRelationName(entityName);
+            // The declarative state machine: every node of the graph names a status.
+            for (Object edgeNode : asList(asMap(entity.get("lifecycle")) == null ? null : asMap(entity.get("lifecycle")).get("edges"))) {
+                Map<?, ?> edge = asMap(edgeNode);
+                if (edge == null) {
+                    continue;
+                }
+                String subject = "entity [" + entityName + "] lifecycle edge [" + text(edge, "from") + "]";
+                putResolved(edge, "from", status, subject + " from");
+                putResolvedList(edge, "to", status, subject + " to");
+            }
             if (entity.get("immutableWhen") != null) {
                 String rewritten = rewriteExpression(text(entity, "immutableWhen"), statusRelation, status,
                         "entity [" + entityName + "] immutableWhen");
@@ -226,6 +238,50 @@ final class StatusSymbolResolver {
             // than reporting the entity as unknown.
             Target status = text(event, "model") != null ? new Target(source, text(event, "model")) : statusOf(source);
             put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(source), status, subject));
+        }
+    }
+
+    /**
+     * An event-driven create-from (issue #6711) guards on the SOURCE's status exactly as a posting
+     * does; the source is {@code from:}, owned by {@code fromUses:} when it is not local.
+     */
+    private void rewriteGenerates(Map<?, ?> root) {
+        for (Object node : asList(root.get("generates"))) {
+            Map<?, ?> generate = asMap(node);
+            Map<?, ?> event = asMap(generate == null ? null : generate.get("event"));
+            if (event == null || event.get("when") == null) {
+                continue;
+            }
+            String source = text(generate, "from");
+            String subject = "generates [" + text(generate, "name") + "] event when";
+            Target status = text(generate, "fromUses") != null ? new Target(source, text(generate, "fromUses")) : statusOf(source);
+            put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(source), status, subject));
+        }
+    }
+
+    /**
+     * An effective-dated register lookup routes the record it enriches by status: each of its three
+     * outcomes may name one, on the record's own nomenclature.
+     */
+    private void rewriteResolves(Map<?, ?> root) {
+        for (Object node : asList(root.get("resolves"))) {
+            Map<?, ?> resolve = asMap(node);
+            Map<?, ?> event = asMap(resolve == null ? null : resolve.get("event"));
+            if (event == null) {
+                continue;
+            }
+            String record = event.get("onCreate") != null ? text(event, "onCreate") : text(event, "onUpdate");
+            Target status = statusOf(record);
+            String subject = "resolve [" + text(resolve, "name") + "]";
+            if (event.get("when") != null) {
+                put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(record), status, subject + " event when"));
+            }
+            for (String outcome : List.of("found", "notFound", "ambiguous")) {
+                Map<?, ?> block = asMap(resolve.get(outcome));
+                if (block != null) {
+                    putResolved(block, "setStatus", status, subject + " " + outcome + " setStatus");
+                }
+            }
         }
     }
 

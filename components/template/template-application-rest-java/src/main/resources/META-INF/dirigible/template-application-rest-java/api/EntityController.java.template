@@ -4,6 +4,12 @@ package gen.${javaGenFolderName}.api.${javaPerspectiveName};
 #if($property.roleRead || $property.roleWrite)
 #set($isEntityPropertySecurityEnabled = "true")
 #end
+## A read-scoped property (the modeler's roleRead, or the intent's `visibleTo:` allow-list) is stripped
+## from every response for a caller outside its roles - and the generated pages ask which ones those are
+## so they can leave the column/input out instead of rendering a permanently empty one.
+#if($property.roleRead)
+#set($hasRestrictedReads = "true")
+#end
 #end
 #set($needsRoles = false)
 #if($perspectiveRole || $roleRead || $roleWrite || $isEntityPropertySecurityEnabled)
@@ -41,9 +47,15 @@ public class ${name}Controller {
     private static final Set<String> FILTER_FIELDS = Set.of(#foreach($property in $properties)"${property.name}"#if($foreach.hasNext), #end#end);
 
     private final ${name}Repository repository;
+#if($masterLock)
+    private final ${masterLock.repositoryClass} masterRepository;
+#end
 
-    public ${name}Controller(${name}Repository repository) {
+    public ${name}Controller(${name}Repository repository#if($masterLock), ${masterLock.repositoryClass} masterRepository#end) {
         this.repository = repository;
+#if($masterLock)
+        this.masterRepository = masterRepository;
+#end
     }
 
     @Get
@@ -131,12 +143,64 @@ public class ${name}Controller {
         return Map.of("mutable", isMutable(entity));
     }
 #end
+#if($hasRestrictedReads)
+
+    @Get("/restricted")
+    @Documentation("The ${name} properties withheld from the CURRENT caller (role-scoped fields) - what the generated pages leave out instead of rendering a permanently empty column; the redaction applied to every response stays authoritative")
+    public Map<String, List<String>> restricted() {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        return Map.of("restricted", restrictedProperties());
+    }
+
+    /** The role-scoped properties this caller may not see - the ones every response nulls for them. */
+    private List<String> restrictedProperties() {
+        List<String> restricted = new java.util.ArrayList<>();
+#foreach ($property in $properties)
+#if($property.roleRead)
+        if (!isInAnyRole("${property.roleRead}")) {
+            restricted.add("${property.name}");
+        }
+#end
+#end
+        return restricted;
+    }
+#end
+#if($history == "true")
+
+    @Get("/{id}/history")
+    @Documentation("The change history of ${name} {id} - one entry per property whose value changed, newest first")
+    public List<Map<String, Object>> history(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        // 404 on an unknown row rather than an empty trail, so the caller cannot read "nothing ever
+        // happened" out of "no such record".
+        repository.findOne(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
+        // Read-only by design: the shadow table has no create/update/delete verb anywhere, which is
+        // what makes the trail append-only.
+        List<Map<String, Object>> entries = org.eclipse.dirigible.sdk.db.History.read("${tablePrefix}${dataName}", id);
+#if($hasRestrictedReads)
+        // The trail records the before/after of every tracked property, so a role-scoped field would
+        // hand out here exactly what the record's own response withholds. Drop those entries for a
+        // caller outside the roles - the rest of the record's history stays readable.
+        List<String> hidden = restrictedProperties();
+        entries.removeIf(entry -> hidden.contains(String.valueOf(entry.get("Property"))));
+#end
+        return entries;
+    }
+#end
 
     @Post
     @Documentation("Create ${name}")
     public ${name}Entity create(@Body ${name}Entity entity) {
 #if($needsRoles)
         checkPermissions("write");
+#end
+#if($masterLock)
+        requireMasterMutable(entity.${masterLock.fkProperty});
 #end
 #if($isEntityPropertySecurityEnabled)
         applyOnCreate(entity);
@@ -160,6 +224,9 @@ public class ${name}Controller {
         if (!org.eclipse.dirigible.sdk.http.Upload.isMultipartContent()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The request must be multipart/form-data");
         }
+#if($masterLock)
+        requireMasterMutable(${masterEntityId});
+#end
         List<${name}Entity> uploaded = new java.util.ArrayList<>();
         // The SDK parses the multipart request and stores each file in the tenant CMS at
         // /Attachments/${name}/<yyyy>/<MM>/<uuid>/<file> (the multipart/FileItem handling stays inside
@@ -209,6 +276,11 @@ public class ${name}Controller {
 #if($immutableStatusProperty || $immutableAlways)
         requireMutable(id);
 #end
+#if($masterLock)
+        // Neither an edit inside a locked ${masterLock.entity} nor a move into one.
+        repository.findOne(id).ifPresent(stored -> requireMasterMutable(stored.${masterLock.fkProperty}));
+        requireMasterMutable(entity.${masterLock.fkProperty});
+#end
 #if($isEntityPropertySecurityEnabled)
         ${name}Entity existing = repository.findOne(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
@@ -239,6 +311,9 @@ public class ${name}Controller {
         }
 #if($immutableStatusProperty || $immutableAlways)
         requireMutable(id);
+#end
+#if($masterLock)
+        repository.findOne(id).ifPresent(stored -> requireMasterMutable(stored.${masterLock.fkProperty}));
 #end
 #if($attachmentEntity)
         String storagePath = repository.findOne(id)
@@ -388,7 +463,7 @@ public class ${name}Controller {
     private void redactRead(${name}Entity entity) {
 #foreach ($property in $properties)
 #if($property.roleRead)
-        if (!UserFacade.isInRole("${property.roleRead}")) {
+        if (!isInAnyRole("${property.roleRead}")) {
             entity.${property.name} = null;
         }
 #end
@@ -399,7 +474,7 @@ public class ${name}Controller {
 #foreach ($property in $properties)
 #if(!$property.dataPrimaryKey)
 #if($property.roleWrite)
-        if (UserFacade.isInRole("${property.roleWrite}")) {
+        if (isInAnyRole("${property.roleWrite}")) {
             target.${property.name} = input.${property.name};
         }
 #else
@@ -412,11 +487,26 @@ public class ${name}Controller {
     private void applyOnCreate(${name}Entity entity) {
 #foreach ($property in $properties)
 #if($property.roleWrite)
-        if (!UserFacade.isInRole("${property.roleWrite}")) {
+        if (!isInAnyRole("${property.roleWrite}")) {
             entity.${property.name} = null;
         }
 #end
 #end
+    }
+
+    /**
+     * Whether the caller holds ANY of a comma-separated role list. One role name is what the entity
+     * modeler's per-property read/write role carries; the intent's `visibleTo: [A, B]` allow-list
+     * arrives here as "A,B" and holding either of them is enough.
+     */
+    private static boolean isInAnyRole(String roles) {
+        for (String role : roles.split(",")) {
+            String name = role.trim();
+            if (!name.isEmpty() && UserFacade.isInRole(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 #end
 
@@ -467,6 +557,47 @@ public class ${name}Controller {
     }
 
 #end
+#if($masterLock)
+    // Inherited immutability: this ${name} is a line of a ${masterLock.entity}, and its writes
+    // recompute that document's totals - so while the document is locked its lines are locked with it,
+    // which is what the generated UI already shows (no Add, no row actions). Declare
+    // `locksWithMaster: false` on the child to keep a collection writable past the master's lock.
+    // Workflow / system writes through the repository stay unaffected, as for the master's own guard.
+    private void requireMasterMutable(${masterLock.fkJavaClass} masterId) {
+        // No master to consult: an unset FK is the required-field check's business, not the lock's.
+        if (masterId == null) {
+            return;
+        }
+        ${masterLock.entityClass} master = masterRepository.findOne(masterId).orElse(null);
+        if (master == null || isMasterMutable(master)) {
+            return;
+        }
+#if($masterLock.always)
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "This ${name} belongs to an append-only ${masterLock.entity} and can no longer be changed");
+#else
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "The ${masterLock.entity} of this ${name} is immutable in its current status - corrections go through the workflow");
+#end
+    }
+
+    private static boolean isMasterMutable(${masterLock.entityClass} master) {
+#if($masterLock.always)
+        return false;
+#else
+        if (master.${masterLock.statusProperty} == null) {
+            return true;
+        }
+        for (String immutable : "${masterLock.statusValues}".split(",")) {
+            if (immutable.equals(String.valueOf(master.${masterLock.statusProperty}))) {
+                return false;
+            }
+        }
+        return true;
+#end
+    }
+
+#end
     private static void validate(${name}Entity entity) {
 #if($rowChecks && $rowChecks.size() > 0)
 #foreach($check in $rowChecks)
@@ -496,7 +627,12 @@ public class ${name}Controller {
         }
 #end
 #if($property.widgetPattern && $property.widgetPattern != "")
-        if (entity.${property.name} != null && !entity.${property.name}.toString().matches("${property.widgetPatternJava}")) {
+## A format constraint describes what a value must look like WHEN THERE IS ONE. On an OPTIONAL property
+## a blank string is "no value", so the pattern must not fire on it - otherwise the field is required by
+## the back door (a blank optional Email was rejected, and the only way to save was to invent an
+## address). The Harmonia form already posts '' as null, but a direct REST caller may send ''.
+## A REQUIRED property keeps the strict check: blank is not a legal value there.
+        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.toString().isBlank()#end && !entity.${property.name}.toString().matches("${property.widgetPatternJava}")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The value of '${property.name}' does not match the required pattern '${property.widgetPatternJava}'");
         }
 #end

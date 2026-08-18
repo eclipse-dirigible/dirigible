@@ -259,6 +259,12 @@ repositoryView.controller('RepositoryViewController', ($scope, $document, client
                     });
                 }
                 items.push({
+                    id: 'export',
+                    label: 'Export',
+                    leftIconClass: 'sap-icon--download-from-cloud',
+                    separator: true,
+                });
+                items.push({
                     id: 'delete',
                     label: 'Delete',
                     shortcut: inMacOS ? '⌘⌫' : 'Del',
@@ -343,6 +349,8 @@ repositoryView.controller('RepositoryViewController', ($scope, $document, client
                             preformatted: false,
                         });
                     });
+                } else if (id === 'export') {
+                    RepositoryService.exportPath(selectedNode.data.path);
                 } else if (id === 'delete') {
                     openDeleteDialog(selectedNode);
                 }
