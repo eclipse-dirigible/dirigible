@@ -20,7 +20,8 @@ import org.springframework.stereotype.Component;
  * Sends a message to a queue or a topic, resolving the physical destination from the tenant that is
  * current at send time and stamping that tenant onto the message. See
  * {@link DestinationNameManager} for the destination-naming contract this shares with
- * {@link MessageConsumer} and with the subscribing sides.
+ * {@link MessageConsumer} and with the subscribing sides - including the global destination, which
+ * is scoped to no tenant and therefore carries the default tenant's stamp instead.
  */
 @Component
 public class MessageProducer {
@@ -62,7 +63,7 @@ public class MessageProducer {
     public void sendMessageToTopic(String topic, String message) throws JMSException {
         String destinationName = destinationNameManager.toTenantName(topic);
         Destination destination = session.createTopic(destinationName);
-        sendMessage(message, destination);
+        sendMessage(message, destination, DestinationNameManager.isGlobal(topic));
     }
 
     /**
@@ -70,14 +71,19 @@ public class MessageProducer {
      *
      * @param message the message
      * @param destination the destination
+     * @param globalDestination whether the destination is shared beyond this deployment
      * @throws JMSException the JMS exception
      */
-    private void sendMessage(String message, Destination destination) throws JMSException {
+    private void sendMessage(String message, Destination destination, boolean globalDestination) throws JMSException {
         try (jakarta.jms.MessageProducer producer = session.createProducer(destination)) {
             producer.setDeliveryMode(DeliveryMode.PERSISTENT);
 
             TextMessage textMessage = session.createTextMessage(message);
-            tenantPropertyManager.setCurrentTenant(textMessage);
+            if (globalDestination) {
+                tenantPropertyManager.setDefaultTenant(textMessage);
+            } else {
+                tenantPropertyManager.setCurrentTenant(textMessage);
+            }
 
             producer.send(textMessage);
             LOGGER.trace("Message sent in [{}]", destination);
@@ -94,7 +100,7 @@ public class MessageProducer {
     public void sendMessageToQueue(String queue, String message) throws JMSException {
         String destinationName = destinationNameManager.toTenantName(queue);
         Destination destination = session.createQueue(destinationName);
-        sendMessage(message, destination);
+        sendMessage(message, destination, DestinationNameManager.isGlobal(queue));
     }
 
 }
