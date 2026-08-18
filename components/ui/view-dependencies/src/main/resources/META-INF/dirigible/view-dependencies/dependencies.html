@@ -24,22 +24,18 @@
     </head>
 
     <body class="bk-vbox">
-        <bk-toolbar has-title="false">
-            <bk-toolbar-spacer fixed-width="8px"></bk-toolbar-spacer>
+        <bk-toolbar compact="true" has-title="true">
             <span bk-object-status status="{{ state.frozen ? 'critical' : 'informative' }}" text="{{ state.frozen ? 'FROZEN' : 'DYNAMIC' }}" inverted="true"></span>
             <bk-toolbar-spacer fixed-width="12px"></bk-toolbar-spacer>
             <bk-toolbar-title>Generation {{ state.classLoaderGeneration }}{{ state.resolvedAt ? ' · resolved ' + (state.resolvedAt | date:'medium') : ' · not resolved yet' }}</bk-toolbar-title>
             <bk-toolbar-spacer></bk-toolbar-spacer>
-            <bk-input type="search" placeholder="Search" style="max-width: 240px" ng-keyup="search($event)" ng-model="searchField.text"></bk-input>
-            <bk-toolbar-spacer fixed-width="8px"></bk-toolbar-spacer>
-            <bk-button label="Refresh" ng-click="load()"></bk-button>
-            <bk-toolbar-spacer fixed-width="8px"></bk-toolbar-spacer>
-            <bk-button label="{{ resolving ? 'Resolving…' : 'Resolve' }}" ng-disabled="resolving" ng-click="resolve()"></bk-button>
-            <bk-toolbar-spacer fixed-width="8px"></bk-toolbar-spacer>
-            <bk-button label="Add Dependency…" state="emphasized" ng-click="openAddDialog()"></bk-button>
-            <bk-toolbar-spacer fixed-width="8px"></bk-toolbar-spacer>
+            <bk-input compact="true" type="search" placeholder="Search" style="max-width: 240px" ng-keyup="search($event)" ng-model="searchField.text"></bk-input>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button compact="true" label="Refresh" ng-click="load()"></bk-button>
+            <bk-button compact="true" label="{{ resolving ? 'Resolving…' : 'Resolve' }}" ng-disabled="resolving" ng-click="resolve()"></bk-button>
+            <bk-button compact="true" label="Add Dependency…" state="emphasized" ng-click="openAddDialog()"></bk-button>
         </bk-toolbar>
-        <bk-message-strip ng-if="message.text" state="{{ message.state }}" dismissible="true" ng-click="message.text = ''">{{ message.text }}</bk-message-strip>
+        <bk-message-strip type="{{ message.type }}" ng-if="message.text">{{ message.text }}</bk-message-strip>
         <div bk-scrollbar class="bk-full-height">
             <table bk-table display-mode="compact" outer-borders="none">
                 <thead bk-table-header sticky="true" interactive="false">
@@ -73,40 +69,41 @@
             </div>
         </div>
 
-        <bk-dialog visible="addDialog.visible" window-title="Add Dependency" state="{{ addDialog.error ? 'error' : '' }}">
-            <bk-dialog-body>
+        <bk-dialog visible="addDialog.visible" window-min-width="480px">
+            <bk-dialog-header title="Add Dependency"></bk-dialog-header>
+            <bk-dialog-body class="bk-padding">
+                <bk-message-strip type="error" ng-if="addDialog.error">{{ addDialog.error }}</bk-message-strip>
                 <bk-fieldset>
+                    <bk-form-group horizontal="false">
+                        <bk-form-label for="ad-workspace" required colon="true">Workspace</bk-form-label>
+                        <bk-select id="ad-workspace" class="bk-full-width" placeholder="Select a workspace" dropdown-fixed="true" ng-model="addDialog.workspace">
+                            <bk-option ng-repeat="w in addDialog.workspaces" text="{{ w }}" value="w"></bk-option>
+                        </bk-select>
+                    </bk-form-group>
+                    <bk-form-group horizontal="false">
+                        <bk-form-label for="ad-project" required colon="true">Project</bk-form-label>
+                        <bk-select id="ad-project" class="bk-full-width" placeholder="Select a project" dropdown-fixed="true" ng-model="addDialog.project">
+                            <bk-option ng-repeat="p in addDialog.projects" text="{{ p }}" value="p"></bk-option>
+                        </bk-select>
+                    </bk-form-group>
                     <bk-form-group>
                         <bk-form-item>
-                            <bk-form-label for="ad-workspace" required="true">Workspace</bk-form-label>
-                            <bk-select id="ad-workspace" placeholder="Select a workspace" dropdown-fixed="true" ng-model="addDialog.workspace" ng-required="true">
-                                <bk-option ng-repeat="w in addDialog.workspaces" text="{{ w }}" value="w"></bk-option>
-                            </bk-select>
-                        </bk-form-item>
-                        <bk-form-item>
-                            <bk-form-label for="ad-project" required="true">Project</bk-form-label>
-                            <bk-select id="ad-project" placeholder="Select a project" dropdown-fixed="true" ng-model="addDialog.project" ng-required="true">
-                                <bk-option ng-repeat="p in addDialog.projects" text="{{ p }}" value="p"></bk-option>
-                            </bk-select>
-                        </bk-form-item>
-                        <bk-form-item>
-                            <bk-form-label for="ad-id" required="true">Coordinate (groupId:artifactId:version)</bk-form-label>
-                            <bk-input id="ad-id" type="text" placeholder="org.jsoup:jsoup:1.17.2" ng-model="addDialog.id" ng-change="validate()"></bk-input>
-                        </bk-form-item>
-                        <bk-form-item>
-                            <bk-form-label for="ad-scope">Scope</bk-form-label>
-                            <bk-select id="ad-scope" dropdown-fixed="true" ng-model="addDialog.scope">
-                                <bk-option text="module (default) - swappable, restartless add/upgrade/remove" value="'module'"></bk-option>
-                                <bk-option text="platform - system classloader; JDBC drivers and native libraries" value="'platform'"></bk-option>
-                            </bk-select>
+                            <bk-form-label for="ad-id" required colon="true">Coordinate (groupId:artifactId:version)</bk-form-label>
+                            <bk-input id="ad-id" type="text" placeholder="org.jsoup:jsoup:1.17.2" ng-model="addDialog.id" ng-change="validate()" state="{{ addDialog.id && !addDialog.valid ? 'error' : '' }}"></bk-input>
                         </bk-form-item>
                     </bk-form-group>
+                    <bk-form-group horizontal="false">
+                        <bk-form-label for="ad-scope" colon="true">Scope</bk-form-label>
+                        <bk-select id="ad-scope" class="bk-full-width" dropdown-fixed="true" ng-model="addDialog.scope">
+                            <bk-option text="module (default) - swappable, restartless add/upgrade/remove" value="'module'"></bk-option>
+                            <bk-option text="platform - system classloader; JDBC drivers and native libraries" value="'platform'"></bk-option>
+                        </bk-select>
+                    </bk-form-group>
                 </bk-fieldset>
-                <p ng-if="addDialog.error" class="bk-margin-top--sm">{{ addDialog.error }}</p>
             </bk-dialog-body>
-            <bk-dialog-footer>
+            <bk-dialog-footer compact="true">
                 <bk-bar-element>
-                    <bk-button label="Add" state="emphasized" ng-disabled="!addDialog.valid || addDialog.saving" ng-click="addDependency()"></bk-button>
+                    <bk-button label="Add" state="emphasized" ng-disabled="!addDialog.valid || !addDialog.workspace || !addDialog.project || addDialog.saving" ng-click="addDependency()"></bk-button>
                 </bk-bar-element>
                 <bk-bar-element>
                     <bk-button label="Cancel" state="transparent" ng-click="addDialog.visible = false"></bk-button>
@@ -122,7 +119,7 @@
                 const GAV_PATTERN = /^[^\s:]+:[^\s:]+:[^\s:,\[\]\(\)]+$/;
                 $scope.state = { report: [] };
                 $scope.searchField = { text: '' };
-                $scope.message = { text: '', state: 'information' };
+                $scope.message = { text: '', type: 'information' };
                 $scope.resolving = false;
                 $scope.addDialog = { visible: false, workspaces: [], projects: [], scope: 'module', valid: false };
 
@@ -144,7 +141,7 @@
                         $scope.applySearch();
                     }, (error) => {
                         console.error(error);
-                        $scope.message = { text: 'The dependencies state could not be loaded.', state: 'negative' };
+                        $scope.message = { text: 'The dependencies state could not be loaded.', type: 'error' };
                     });
                 };
 
@@ -155,11 +152,11 @@
                         $scope.applySearch();
                         const failures = Object.keys($scope.state.failures || {}).length;
                         $scope.message = failures
-                            ? { text: failures + ' failure(s) - see the report below.', state: 'negative' }
-                            : { text: 'Resolution completed cleanly.', state: 'positive' };
+                            ? { text: failures + ' failure(s) - see the report below.', type: 'error' }
+                            : { text: 'Resolution completed cleanly.', type: 'success' };
                     }, (error) => {
                         console.error(error);
-                        $scope.message = { text: (error.data && error.data.message) || 'The resolution failed.', state: 'negative' };
+                        $scope.message = { text: (error.data && error.data.message) || 'The resolution failed.', type: 'error' };
                     }).finally(() => {
                         $scope.resolving = false;
                     });
@@ -236,7 +233,7 @@
                             dialog.visible = false;
                             $scope.message = {
                                 text: `[${id}] added to ${dialog.project}/project.json - publish the project to activate it.`,
-                                state: 'positive'
+                                type: 'success'
                             };
                         }, (error) => {
                             console.error(error);

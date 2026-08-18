@@ -78,7 +78,9 @@ class LauncherAgentDeliveryIT {
     @Test
     void the_executable_jar_carries_the_provided_bom() throws IOException {
         try (JarFile jar = new JarFile(executableJar().toFile())) {
-            ZipEntry bom = jar.getEntry("BOOT-INF/classes/META-INF/dirigible-provided-bom.xml");
+            // the ZIP-layout repackage keeps the original jar's META-INF at the ROOT, where the
+            // system classloader sees it on -jar launches
+            ZipEntry bom = jar.getEntry("META-INF/dirigible-provided-bom.xml");
             assertNotNull(bom, "the provided-BOM must ship inside the artifact - the resolver's shadowing detection reads it");
             String content = new String(jar.getInputStream(bom)
                                            .readAllBytes(),

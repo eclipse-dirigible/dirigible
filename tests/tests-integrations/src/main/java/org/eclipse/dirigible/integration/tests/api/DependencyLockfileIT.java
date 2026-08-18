@@ -130,7 +130,7 @@ class DependencyLockfileIT extends IntegrationTest {
                         }
                         """)));
         // a fake gson the platform-provided one must shadow - the marker resource distinguishes it
-        MavenFixtures.deploy(fixtureRepo, "com.google.gson", "gson", "1.0.0-fixture",
+        MavenFixtures.deploy(fixtureRepo, "com.google.code.gson", "gson", "1.0.0-fixture",
                 MavenFixtures.buildPlainJar(work, "gson-1.0.0-fixture.jar", Map.of("com.google.gson.FixtureMarker", """
                         package com.google.gson;
                         public class FixtureMarker {
@@ -245,17 +245,17 @@ class DependencyLockfileIT extends IntegrationTest {
         writeProjectJson("""
                 { "type": "maven", "id": "com.example:alpha:1.0.0" },
                 { "type": "maven", "id": "com.example:survivor-module:1.0.0" },
-                { "type": "maven", "id": "com.google.gson:gson:1.0.0-fixture" }""");
+                { "type": "maven", "id": "com.google.code.gson:gson:1.0.0-fixture" }""");
 
         // shadowing is a report, not a failure - the resolution itself stays clean
         resolveExpecting(response -> response.body("failures", anEmptyMap())
-                                             .body("report.findAll { it.coordinate == 'com.google.gson:gson:1.0.0-fixture' }.status",
+                                             .body("report.findAll { it.coordinate == 'com.google.code.gson:gson:1.0.0-fixture' }.status",
                                                      hasItem("shadowed"))
-                                             .body("report.findAll { it.coordinate == 'com.google.gson:gson:1.0.0-fixture' }.message[0]",
+                                             .body("report.findAll { it.coordinate == 'com.google.code.gson:gson:1.0.0-fixture' }.message[0]",
                                                      containsString("requested: 1.0.0-fixture")));
 
         // never downloaded - parent-first delegation would never serve it anyway
-        assertThat(localRepository.resolve("com/google/gson/gson/1.0.0-fixture/gson-1.0.0-fixture.jar")).doesNotExist();
+        assertThat(localRepository.resolve("com/google/code/gson/gson/1.0.0-fixture/gson-1.0.0-fixture.jar")).doesNotExist();
 
         // the class actually loaded is the platform's: the fixture's marker resource is absent and
         // the platform's Gson answers
