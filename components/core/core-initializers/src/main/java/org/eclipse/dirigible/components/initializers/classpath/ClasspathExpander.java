@@ -162,50 +162,36 @@ public class ClasspathExpander {
         if (maybeSkip != null) {
             return;
         }
+        Path registryRoot = Path.of(IRepositoryStructure.PATH_REGISTRY_PUBLIC);
         while (entries.hasMoreElements()) {
             JarEntry entry = entries.nextElement();
             if (entry.getName()
                      .startsWith(jarRoot)) {
                 if (!entry.isDirectory()) {
-                    String registryPath = entry.getName()
-                                               .substring(jarRoot.length());
-                    if (!isSafeRegistryPath(registryPath)) {
+                    // Zip Slip guard: resolve the entry against the registry root, normalize, and
+                    // require the result to stay strictly below the root - a crafted '..' entry is
+                    // skipped and lands nowhere
+                    String relative = entry.getName()
+                                           .substring(jarRoot.length());
+                    while (relative.startsWith("/")) {
+                        relative = relative.substring(1);
+                    }
+                    Path target = relative.isEmpty() || relative.indexOf('\\') >= 0 ? null
+                            : registryRoot.resolve(relative)
+                                          .normalize();
+                    if (target == null || !target.startsWith(registryRoot) || target.equals(registryRoot)) {
                         LOGGER.warn("Skipping the jar entry [{}] - its path would escape the registry root", entry.getName()
-                                                                                                                  .replaceAll("[\\r\\n]",
-                                                                                                                          "_"));
+                                                                                                                  .replace('\r', '_')
+                                                                                                                  .replace('\n', '_'));
                         continue;
                     }
                     byte[] content = IOUtils.toByteArray(jar.getInputStream(entry));
-                    repository.createResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + IRepository.SEPARATOR + registryPath, content);
+                    repository.createResource(target.toString()
+                                                    .replace(File.separatorChar, IRepository.SEPARATOR.charAt(0)),
+                            content);
                 }
             }
         }
-    }
-
-    /**
-     * Guards against Zip Slip: an archive entry may only map to a path strictly below the registry root
-     * - no '.' or '..' segments, no blank segments, no backslashes.
-     *
-     * @param registryPath the entry's registry-relative path
-     * @return true when the path is safe to create
-     */
-    private static boolean isSafeRegistryPath(String registryPath) {
-        if (registryPath.indexOf('\\') >= 0) {
-            return false;
-        }
-        String[] segments = registryPath.split("/");
-        boolean hasContent = false;
-        for (int i = 0; i < segments.length; i++) {
-            String segment = segments[i];
-            if (i == 0 && segment.isEmpty()) {
-                continue; // the leading separator
-            }
-            if (segment.isEmpty() || ".".equals(segment) || "..".equals(segment)) {
-                return false;
-            }
-            hasContent = true;
-        }
-        return hasContent;
     }
 
     /**

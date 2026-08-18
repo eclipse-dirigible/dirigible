@@ -75,9 +75,10 @@ class ResolvedModulesLinker {
         // the directory is operator configuration - strip line breaks so a crafted value cannot
         // forge log entries
         LOGGER.info("Resolved-modules directory [{}] holds [{}] jar(s) - the seed of the next launch's classpath", directory.toString()
-                                                                                                                            .replaceAll(
-                                                                                                                                    "[\\r\\n]",
-                                                                                                                                    "_"),
+                                                                                                                            .replace('\r',
+                                                                                                                                    '_')
+                                                                                                                            .replace('\n',
+                                                                                                                                    '_'),
                 desired.size());
     }
 
