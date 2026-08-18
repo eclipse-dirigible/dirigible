@@ -11,9 +11,11 @@ package org.eclipse.dirigible.components.dependencies;
 
 import nl.altindag.log.LogCaptor;
 import org.eclipse.dirigible.components.dependencies.PlatformScopeInstaller.PlatformArtifactState;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 
 import java.io.IOException;
 import java.lang.instrument.Instrumentation;
@@ -27,6 +29,7 @@ import java.util.jar.JarOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -50,6 +53,18 @@ class PlatformScopeInstallerTest {
         localRepository = Files.createDirectories(tempDir.resolve("repo"));
         instrumentation = mock(Instrumentation.class);
         installer = new PlatformScopeInstaller(() -> instrumentation);
+    }
+
+    @AfterEach
+    void closeAppendedJarFiles() throws IOException {
+        // production keeps every appended JarFile open for the process lifetime (the system
+        // classloader reads from it); the test must close what the mock captured, or the open
+        // handles block the @TempDir cleanup on Windows
+        ArgumentCaptor<JarFile> appended = ArgumentCaptor.forClass(JarFile.class);
+        verify(instrumentation, atLeast(0)).appendToSystemClassLoaderSearch(appended.capture());
+        for (JarFile jarFile : appended.getAllValues()) {
+            jarFile.close();
+        }
     }
 
     @Test
