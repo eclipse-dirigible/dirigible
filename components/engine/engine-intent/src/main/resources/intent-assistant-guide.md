@@ -2224,10 +2224,12 @@ failed publish is logged and the write stands. There is no outbox, no exactly-on
 ordering guarantee. If a contract needs any of those, say so - it is beyond what this construct
 promises.
 
-**A destination name belongs to the application, so it is tenant-scoped.** Two deployments sharing a
-broker cannot exchange a message on a plain name; that needs the platform's external-contract
-destination marker, which is a separate piece of work. Within one deployment (including its inbound
-arrivals) a departure works as declared for every tenant.
+**A destination name belongs to the application, so it is tenant-scoped** - which is right for a
+channel this deployment both publishes and consumes, and wrong for one that IS a contract with someone
+else. Mark that one `global:` (`to: { topic: "global:codbex.orders" }`) and the other side binds to the
+plain name it was given. What the marker costs: the destination no longer carries the tenant, so a
+business tenant that matters downstream must travel in the payload - a `tenantId: "{tenant}"` key in
+the declared envelope is exactly that.
 
 ### rollups - maintain a count on a parent
 

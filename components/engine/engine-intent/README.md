@@ -638,9 +638,10 @@ outbound:
 
 The message is published after the write that raised the event is persisted and is **not**
 transactional with it - a failed publish is logged and the write stands. No outbox, no exactly-once,
-no ordering. A destination name is application-owned, so it is tenant-scoped: two separate
-deployments sharing one broker need the platform's external-contract destination marker
-([#6766](https://github.com/eclipse-dirigible/dirigible/issues/6766)).
+no ordering. A destination name is application-owned and therefore tenant-scoped; mark it `global:`
+when the queue or topic is a contract with a system outside this deployment (the platform marker from
+[#6766](https://github.com/eclipse-dirigible/dirigible/issues/6766) - the name is passed through
+verbatim, so nothing in the intent layer resolves it).
 
 ## permissions - roles
 

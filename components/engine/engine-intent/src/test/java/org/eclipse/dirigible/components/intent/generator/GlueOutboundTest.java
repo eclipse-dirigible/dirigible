@@ -137,6 +137,24 @@ class GlueOutboundTest {
     }
 
     @Test
+    void anExternalContractDestinationReachesThePublisherVerbatim() {
+        IntentModel model = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                outbound:
+                  - { name: publishOrder, event: { onCreate: Order }, to: { topic: "global:codbex.orders" } }
+                """);
+
+        Map<String, Object> departure = GlueIntentGenerator.buildOutboundForTest(model)
+                                                           .get(0);
+        assertEquals("global:codbex.orders", departure.get("destination"),
+                "the platform resolves a destination name - this layer must never rewrite one, marker included");
+    }
+
+    @Test
     void aDepartureNamingNoSingleChannelContributesNothing() {
         // The parser rejects this shape; the generator is asked directly to prove it never emits a
         // publisher that picked a channel of its own.
