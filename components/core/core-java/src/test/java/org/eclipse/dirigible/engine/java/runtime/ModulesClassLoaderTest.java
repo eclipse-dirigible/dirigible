@@ -97,11 +97,16 @@ class ModulesClassLoaderTest {
 
         Path jar = jarWithClass("swap-lib", "com.example.Swapped", "v1");
         ModulesClassLoader swapped = holder.swap(List.of(jar));
-
-        assertThat(holder.generation()).isEqualTo(1);
-        assertThat(holder.current()).isSameAs(swapped);
-        assertThat(value(holder.current()
-                               .loadClass("com.example.Swapped"))).isEqualTo("v1");
+        try {
+            assertThat(holder.generation()).isEqualTo(1);
+            assertThat(holder.current()).isSameAs(swapped);
+            assertThat(value(holder.current()
+                                   .loadClass("com.example.Swapped"))).isEqualTo("v1");
+        } finally {
+            // the holder deliberately never closes loaders; the test must, or the open jar handle
+            // blocks the @TempDir cleanup on Windows
+            swapped.close();
+        }
     }
 
     private static String value(Class<?> type) throws Exception {

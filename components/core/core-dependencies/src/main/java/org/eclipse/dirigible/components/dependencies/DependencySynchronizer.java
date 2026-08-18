@@ -164,7 +164,7 @@ class DependencySynchronizer {
         warnOnPlatformShadowing(inspections);
         reconcileRegistryPayload(added, removed, inspections);
 
-        ModulesClassLoader next = loaderHolder.swap(target);
+        loaderHolder.swap(target);
         int generation = loaderHolder.generation();
 
         Set<String> addedCoordinates = coordinates(localRepository, added);

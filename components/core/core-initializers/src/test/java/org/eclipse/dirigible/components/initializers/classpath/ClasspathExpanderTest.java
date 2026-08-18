@@ -64,6 +64,22 @@ class ClasspathExpanderTest {
     }
 
     @Test
+    void rejects_entries_that_would_escape_the_registry_root() throws IOException {
+        Path jar = jarWithEntries("zip-slip.jar", Map.of("META-INF/dirigible/../../../evil.txt", "escape",
+                "META-INF/dirigible/mod/../../evil2.txt", "escape", "META-INF/dirigible/mod/safe.txt", "kept"));
+
+        expander.expand(jar);
+
+        // the safe sibling entry is laid down; the traversal entries are skipped and land nowhere
+        assertThat(resourceContent("/mod/safe.txt")).isEqualTo("kept");
+        try (var files = Files.walk(tempDir)) {
+            assertThat(files.filter(file -> file.getFileName()
+                                                .toString()
+                                                .startsWith("evil"))).isEmpty();
+        }
+    }
+
+    @Test
     void honors_the_skip_marker() throws IOException {
         Path jar = jarWithEntries("skipped.jar",
                 Map.of("META-INF/dirigible/.skip", "", "META-INF/dirigible/skipped-module/hello.txt", "payload"));

@@ -72,7 +72,12 @@ class ResolvedModulesLinker {
             removeStaleEntries(directory, desired.keySet());
         }
         desired.forEach((name, target) -> place(directory.resolve(name), target));
-        LOGGER.info("Resolved-modules directory [{}] holds [{}] jar(s) - the seed of the next launch's classpath", directory,
+        // the directory is operator configuration - strip line breaks so a crafted value cannot
+        // forge log entries
+        LOGGER.info("Resolved-modules directory [{}] holds [{}] jar(s) - the seed of the next launch's classpath", directory.toString()
+                                                                                                                            .replaceAll(
+                                                                                                                                    "[\\r\\n]",
+                                                                                                                                    "_"),
                 desired.size());
     }
 

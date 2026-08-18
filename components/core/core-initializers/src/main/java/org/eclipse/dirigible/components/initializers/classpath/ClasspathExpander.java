@@ -167,13 +167,45 @@ public class ClasspathExpander {
             if (entry.getName()
                      .startsWith(jarRoot)) {
                 if (!entry.isDirectory()) {
-                    byte[] content = IOUtils.toByteArray(jar.getInputStream(entry));
                     String registryPath = entry.getName()
                                                .substring(jarRoot.length());
+                    if (!isSafeRegistryPath(registryPath)) {
+                        LOGGER.warn("Skipping the jar entry [{}] - its path would escape the registry root", entry.getName()
+                                                                                                                  .replaceAll("[\\r\\n]",
+                                                                                                                          "_"));
+                        continue;
+                    }
+                    byte[] content = IOUtils.toByteArray(jar.getInputStream(entry));
                     repository.createResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + IRepository.SEPARATOR + registryPath, content);
                 }
             }
         }
+    }
+
+    /**
+     * Guards against Zip Slip: an archive entry may only map to a path strictly below the registry root
+     * - no '.' or '..' segments, no blank segments, no backslashes.
+     *
+     * @param registryPath the entry's registry-relative path
+     * @return true when the path is safe to create
+     */
+    private static boolean isSafeRegistryPath(String registryPath) {
+        if (registryPath.indexOf('\\') >= 0) {
+            return false;
+        }
+        String[] segments = registryPath.split("/");
+        boolean hasContent = false;
+        for (int i = 0; i < segments.length; i++) {
+            String segment = segments[i];
+            if (i == 0 && segment.isEmpty()) {
+                continue; // the leading separator
+            }
+            if (segment.isEmpty() || ".".equals(segment) || "..".equals(segment)) {
+                return false;
+            }
+            hasContent = true;
+        }
+        return hasContent;
     }
 
     /**
