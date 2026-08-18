@@ -57,7 +57,7 @@ class CognitoNativeLoginProviderTest {
 
     @BeforeEach
     void setUp() {
-        provider = new CognitoNativeLoginProvider(idpClient, "default-tenant");
+        provider = new CognitoNativeLoginProvider(idpClient);
         registration = ClientRegistration.withRegistrationId("default-tenant")
                                          .clientId("client-id")
                                          .clientSecret("client-secret")
@@ -68,6 +68,11 @@ class CognitoNativeLoginProviderTest {
                                          .issuerUri("https://cognito-idp.eu-central-1.amazonaws.com/eu-central-1_TestPool1")
                                          .userNameAttributeName("email")
                                          .build();
+    }
+
+    @Test
+    void theDefaultRegistrationIsTheOneTheDefaultTenantClientIsRegisteredUnder() {
+        assertEquals("cognito", provider.getDefaultRegistrationId());
     }
 
     @Test

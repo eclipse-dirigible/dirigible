@@ -20,7 +20,6 @@ import org.eclipse.dirigible.components.security.oauth2.login.NativeLoginExcepti
 import org.eclipse.dirigible.components.security.oauth2.login.NativeLoginProvider;
 import org.eclipse.dirigible.components.security.oauth2.login.NativeLoginResult;
 import org.eclipse.dirigible.components.security.oauth2.login.NativeLoginTokens;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.stereotype.Component;
@@ -46,13 +45,16 @@ class CognitoNativeLoginProvider implements NativeLoginProvider {
     private static final String PASSWORD_VERIFIER = "PASSWORD_VERIFIER";
     private static final String USERNAME = "USERNAME";
 
-    private final CognitoIdpClient idpClient;
-    private final String defaultRegistrationId;
+    /**
+     * The registration id {@code DynamicClientRegistrationRepository} registers the default-tenant
+     * Cognito client under (the registration's name, not its {@code client-name} label).
+     */
+    private static final String DEFAULT_REGISTRATION_ID = "cognito";
 
-    CognitoNativeLoginProvider(CognitoIdpClient idpClient,
-            @Value("${spring.security.oauth2.client.registration.cognito.client-name:cognito}") String defaultRegistrationId) {
+    private final CognitoIdpClient idpClient;
+
+    CognitoNativeLoginProvider(CognitoIdpClient idpClient) {
         this.idpClient = idpClient;
-        this.defaultRegistrationId = defaultRegistrationId;
     }
 
     /**
@@ -62,7 +64,7 @@ class CognitoNativeLoginProvider implements NativeLoginProvider {
      */
     @Override
     public String getDefaultRegistrationId() {
-        return defaultRegistrationId;
+        return DEFAULT_REGISTRATION_ID;
     }
 
     /**

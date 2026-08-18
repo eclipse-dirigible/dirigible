@@ -81,6 +81,10 @@ public class KeycloakSecurityConfiguration {
             KeycloakLogoutSuccessHandler keycloakLogoutSuccessHandler, OAuth2AuthorizedClientService authorizedClientService,
             ClientRegistrationRepository clientRegistrationRepository) throws Exception {
         String loginPage = DirigibleConfig.SECURITY_LOGIN_PAGE.getStringValue();
+        // both oauth2Client and oauth2Login register an authorization-request redirect filter, and
+        // the client one runs first - the resolver must be set on both for the hints to pass through
+        IdpHintAuthorizationRequestResolver authorizationRequestResolver =
+                new IdpHintAuthorizationRequestResolver(clientRegistrationRepository);
         http.authorizeHttpRequests(authz -> authz.requestMatchers("/oauth2/**", "/login/**")
                                                  .permitAll())
             .csrf(csrf -> csrf.disable())
@@ -88,12 +92,13 @@ public class KeycloakSecurityConfiguration {
             .addFilterBefore(new OAuth2SessionRevalidationFilter(authorizedClientService, userAuthoritiesMapper()),
                     AuthorizationFilter.class)
             .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.sameOrigin()))
-            .oauth2Client(Customizer.withDefaults())
+            .oauth2Client(oauth2Client -> oauth2Client.authorizationCodeGrant(
+                    grant -> grant.authorizationRequestResolver(authorizationRequestResolver)))
             .oauth2Login(Customizer.withDefaults())
             .oauth2Login(oauth2 -> {
                 oauth2.userInfoEndpoint(userInfoEndpointConfig -> userInfoEndpointConfig.userAuthoritiesMapper(userAuthoritiesMapper()));
-                oauth2.authorizationEndpoint(authorizationEndpoint -> authorizationEndpoint.authorizationRequestResolver(
-                        new IdpHintAuthorizationRequestResolver(clientRegistrationRepository)));
+                oauth2.authorizationEndpoint(
+                        authorizationEndpoint -> authorizationEndpoint.authorizationRequestResolver(authorizationRequestResolver));
                 if (StringUtils.hasText(loginPage)) {
                     oauth2.loginPage(loginPage);
                 }
