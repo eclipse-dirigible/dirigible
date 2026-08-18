@@ -176,6 +176,7 @@
         <module>ui/view-transfer</module>
         <module>ui/view-translation</module>
         <module>ui/view-artefacts</module>
+        <module>ui/view-dependencies</module>
         <module>ui/view-jvm-monitoring</module>
         <module>ui/view-jvm-threads</module>
         <module>ui/view-monitoring-metrics</module>
@@ -1010,6 +1011,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-view-artefacts</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-view-dependencies</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

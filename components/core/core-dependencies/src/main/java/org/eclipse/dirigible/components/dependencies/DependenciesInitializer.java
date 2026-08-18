@@ -21,7 +21,9 @@ import org.springframework.stereotype.Component;
  * Resolves the maven dependencies declared across the registry projects at startup - ordered after
  * the synchronization initializer, so the project.json files are present in the registry. The
  * resolved jars are activated through the modules classloader immediately; the run also arms the
- * declaration watcher by recording the first fingerprint.
+ * declaration watcher by recording the first fingerprint. A frozen instance
+ * ({@code DIRIGIBLE_DEPENDENCIES_FROZEN=true}) boots through here too - its activation verifies
+ * every locked artifact's checksum before anything serves.
  */
 @Order(ApplicationReadyEventListeners.DEPENDENCIES_INITIALIZER)
 @Component
@@ -48,7 +50,7 @@ class DependenciesInitializer implements ApplicationListener<ApplicationReadyEve
      */
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
-        if (!dependenciesService.isDynamicEnabled()) {
+        if (!dependenciesService.isDynamicEnabled() && !dependenciesService.isFrozen()) {
             LOGGER.debug("Dynamic dependency resolution is disabled");
             return;
         }

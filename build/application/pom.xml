@@ -293,6 +293,22 @@
                 <artifactId>maven-dependency-plugin</artifactId>
                 <executions>
                     <execution>
+                        <!-- the input of the provided-BOM: this module's own resolved runtime
+                             dependencies, which are exactly what spring-boot:repackage packs into
+                             BOOT-INF/lib (never derived by unzipping the assembled artifact - a
+                             reactor-built module's jar does not live at a local-repository path) -->
+                        <id>list-provided-dependencies</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>list</goal>
+                        </goals>
+                        <configuration>
+                            <includeScope>runtime</includeScope>
+                            <sort>true</sort>
+                            <outputFile>${project.build.directory}/provided-dependencies.txt</outputFile>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>unpack-launcher-agent</id>
                         <phase>prepare-package</phase>
                         <goals>
@@ -326,6 +342,27 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>
                 <executions>
+                    <execution>
+                        <!-- Turns the resolved dependency list into the provided-BOM (a standard
+                             dependencyManagement POM) inside the classes, so it ships embedded in
+                             the artifact as META-INF/dirigible-provided-bom.xml - the resolver reads
+                             it to treat platform-shipped coordinates as provided and to report
+                             shadowing. Runs in prepare-package, before the jar is assembled. -->
+                        <id>generate-provided-bom</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <java classname="org.eclipse.dirigible.components.dependencies.ProvidedBomGenerator" classpathref="maven.runtime.classpath" fork="true" failonerror="true">
+                                    <arg value="${project.build.directory}/provided-dependencies.txt"/>
+                                    <arg value="${project.build.outputDirectory}/META-INF/dirigible-provided-bom.xml"/>
+                                    <arg value="${project.version}"/>
+                                </java>
+                            </target>
+                        </configuration>
+                    </execution>
                     <execution>
                         <!-- The launcher agent's classes must sit at the executable jar's ROOT: the
                              JVM loads the Launcher-Agent-Class through the system classloader before

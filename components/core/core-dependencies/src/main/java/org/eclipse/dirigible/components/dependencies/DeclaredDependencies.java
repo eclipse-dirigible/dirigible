@@ -20,12 +20,14 @@ import java.util.stream.Collectors;
  * @param dependencies the declared dependencies in registry order
  * @param errors the declaration errors that never reached resolution (bad coordinate, version
  *        range, unknown scope, ...), keyed by the declared id or the declaring project
+ * @param declaredBy the declaring projects per declared coordinate - the lockfile's
+ *        {@code requestedBy} attribution
  */
-record DeclaredDependencies(Set<MavenDependency> dependencies, Map<String, String> errors) {
+record DeclaredDependencies(Set<MavenDependency> dependencies, Map<String, String> errors, Map<String, Set<String>> declaredBy) {
 
     /**
      * A change-detection fingerprint of the declarations - stable across collection order, different
-     * for any semantic change (coordinate, scope, exclusions, or a declaration error).
+     * for any semantic change (coordinate, scope, exclusions, attribution, or a declaration error).
      *
      * @return the fingerprint
      */
@@ -40,6 +42,11 @@ record DeclaredDependencies(Set<MavenDependency> dependencies, Map<String, Strin
                               .map(entry -> entry.getKey() + "=" + entry.getValue())
                               .sorted()
                               .collect(Collectors.joining(";"));
-        return declared + "||" + failed;
+        String attribution = declaredBy.entrySet()
+                                       .stream()
+                                       .map(entry -> entry.getKey() + "=" + new TreeSet<>(entry.getValue()))
+                                       .sorted()
+                                       .collect(Collectors.joining(";"));
+        return declared + "||" + failed + "||" + attribution;
     }
 }

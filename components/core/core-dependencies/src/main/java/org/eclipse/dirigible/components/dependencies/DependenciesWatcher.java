@@ -49,7 +49,7 @@ class DependenciesWatcher {
      */
     @Scheduled(initialDelay = 10_000, fixedDelay = 5_000)
     void watch() {
-        if (!dependenciesService.isDynamicEnabled()) {
+        if (!dependenciesService.isDynamicEnabled() && !dependenciesService.isFrozen()) {
             return;
         }
         String last = dependenciesService.lastDeclaredFingerprint();
