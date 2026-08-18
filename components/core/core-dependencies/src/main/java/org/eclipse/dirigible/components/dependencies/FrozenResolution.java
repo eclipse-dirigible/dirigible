@@ -49,8 +49,11 @@ final class FrozenResolution {
      *        the lock), keyed by coordinate
      * @param mismatched the declared coordinates the lock does not carry - reported as
      *        {@code frozen-mismatch}
+     * @param provided the declared coordinates the platform provides at the declared version
+     * @param shadowed the declared coordinates the platform provides at a different version
      */
-    record FrozenPlan(List<LockedActivation> activations, Map<String, String> failures, Set<String> mismatched) {
+    record FrozenPlan(List<LockedActivation> activations, Map<String, String> failures, Set<String> mismatched, List<String> provided,
+            List<ResolutionResult.Shadowed> shadowed) {
 
         /**
          * The activations of one scope.
@@ -78,21 +81,40 @@ final class FrozenResolution {
 
     /**
      * Plans the frozen activation - verifies every locked artifact against the local repository and
-     * rejects every declaration the lock does not carry.
+     * rejects every declaration the lock does not carry. A declaration the platform provides is never a
+     * mismatch: it was never lockable in the first place, and the embedded provided-BOM answers without
+     * any network - a provided one is satisfied, a different-version one stays a loud {@code shadowed}
+     * report exactly as in dynamic mode.
      *
      * @param lockfile the lockfile
      * @param declared the declared dependencies
      * @param localRepository the local repository the locked artifacts must already live in
+     * @param bom the provided-BOM
      * @return the plan
      */
-    static FrozenPlan plan(Lockfile lockfile, DeclaredDependencies declared, Path localRepository) {
+    static FrozenPlan plan(Lockfile lockfile, DeclaredDependencies declared, Path localRepository, ProvidedBom bom) {
         Map<String, String> failures = new LinkedHashMap<>();
         Set<String> mismatched = new LinkedHashSet<>();
+        List<String> provided = new ArrayList<>();
+        List<ResolutionResult.Shadowed> shadowed = new ArrayList<>();
 
         Set<String> lockedIds = new LinkedHashSet<>();
         lockfile.artifacts()
                 .forEach(artifact -> lockedIds.add(artifact.id()));
         for (MavenDependency dependency : declared.dependencies()) {
+            String[] parts = dependency.coordinate()
+                                       .split(":", -1);
+            String providedVersion = bom.providedVersion(parts[0] + ":" + parts[1]);
+            if (providedVersion != null) {
+                if (providedVersion.equals(parts[2])) {
+                    provided.add(dependency.coordinate());
+                } else {
+                    shadowed.add(new ResolutionResult.Shadowed(parts[0] + ":" + parts[1], parts[2], providedVersion));
+                    LOGGER.warn("Declared [{}:{}] is SHADOWED: requested [{}], the platform provides [{}] - parent-first delegation"
+                            + " serves the platform's version", parts[0], parts[1], parts[2], providedVersion);
+                }
+                continue;
+            }
             if (!lockedIds.contains(dependency.coordinate())) {
                 String message = "Declared as [" + dependency.coordinate() + "] but not part of [project-lock.json] - frozen mode"
                         + " (DIRIGIBLE_DEPENDENCIES_FROZEN=true) activates the locked set only. Unfreeze the instance or rebuild the"
@@ -131,7 +153,7 @@ final class FrozenResolution {
             }
             activations.add(new LockedActivation(artifact, jar));
         }
-        return new FrozenPlan(activations, failures, mismatched);
+        return new FrozenPlan(activations, failures, mismatched, provided, shadowed);
     }
 
     /**

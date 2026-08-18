@@ -88,7 +88,7 @@ class LockfileRoundTripTest {
         tampered[0] ^= 0x01; // one flipped byte
         Files.write(jar, tampered);
 
-        FrozenResolution.FrozenPlan plan = FrozenResolution.plan(lockfile, declared(), tempDir.resolve("repo"));
+        FrozenResolution.FrozenPlan plan = FrozenResolution.plan(lockfile, declared(), tempDir.resolve("repo"), new ProvidedBom(Map.of()));
 
         assertThat(plan.activations()).isEmpty();
         assertThat(plan.failures()).hasSize(1);
@@ -105,7 +105,7 @@ class LockfileRoundTripTest {
                 new Lockfile.LockedArtifact("com.example:lib:1.0.0", LockfileStore.sha256(jar), List.of("my-project"), null, "module")),
                 List.of());
 
-        FrozenResolution.FrozenPlan plan = FrozenResolution.plan(lockfile, declared(), tempDir.resolve("repo"));
+        FrozenResolution.FrozenPlan plan = FrozenResolution.plan(lockfile, declared(), tempDir.resolve("repo"), new ProvidedBom(Map.of()));
 
         assertThat(plan.failures()).isEmpty();
         assertThat(plan.activations()).hasSize(1);

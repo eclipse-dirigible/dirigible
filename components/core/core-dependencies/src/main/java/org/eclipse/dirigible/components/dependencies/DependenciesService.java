@@ -271,7 +271,7 @@ class DependenciesService {
             return state(true, declared, List.of(), Map.of(), Map.of(LOCKFILE_FAILURE_KEY, message), List.of(), report, localRepository);
         }
 
-        FrozenPlan plan = FrozenResolution.plan(lockfile.get(), declared, localRepository);
+        FrozenPlan plan = FrozenResolution.plan(lockfile.get(), declared, localRepository, ProvidedBom.fromClasspath());
         List<Path> platformArtifacts = plan.artifacts(ArtifactStatus.SCOPE_PLATFORM);
         List<PlatformScopeInstaller.PlatformArtifactState> platformStates =
                 platformArtifacts.isEmpty() ? List.of() : platformScopeInstaller.install(localRepository, platformArtifacts);
@@ -302,6 +302,11 @@ class DependenciesService {
 
         List<ArtifactStatus> report = new ArrayList<>();
         reportDeclarationErrors(declared, report);
+        plan.shadowed()
+            .forEach(shadowed -> report.add(shadowedStatus(shadowed, null)));
+        plan.provided()
+            .forEach(coordinate -> report.add(new ArtifactStatus(coordinate, null, ArtifactStatus.STATUS_ACTIVE,
+                    "Provided by the platform - satisfied without a download")));
         plan.mismatched()
             .forEach(coordinate -> report.add(new ArtifactStatus(coordinate, null, ArtifactStatus.STATUS_FROZEN_MISMATCH, plan.failures()
                                                                                                                               .get(coordinate))));
@@ -447,6 +452,19 @@ class DependenciesService {
     }
 
     /**
+     * The status of one shadowed declaration.
+     *
+     * @param shadowed the shadowed declaration
+     * @param scope the scope name, null when unknown
+     * @return the status
+     */
+    private static ArtifactStatus shadowedStatus(ResolutionResult.Shadowed shadowed, String scope) {
+        return new ArtifactStatus(shadowed.groupArtifact() + ":" + shadowed.requested(), scope, ArtifactStatus.STATUS_SHADOWED,
+                "requested: " + shadowed.requested() + ", provided: " + shadowed.providedVersion()
+                        + " - parent-first delegation serves the platform's version; the declared version is inert");
+    }
+
+    /**
      * Reports the declaration errors.
      *
      * @param declared the declared dependencies
@@ -472,9 +490,7 @@ class DependenciesService {
     private void reportResolution(ResolutionResult result, List<ResolvedArtifact> verified, Map<String, String> integrityFailures,
             boolean swapped, String scope, List<ArtifactStatus> report) {
         result.shadowed()
-              .forEach(shadowed -> report.add(new ArtifactStatus(shadowed.groupArtifact() + ":" + shadowed.requested(), scope,
-                      ArtifactStatus.STATUS_SHADOWED, "requested: " + shadowed.requested() + ", provided: " + shadowed.providedVersion()
-                              + " - parent-first delegation serves the platform's version; the declared version is inert")));
+              .forEach(shadowed -> report.add(shadowedStatus(shadowed, scope)));
         result.provided()
               .forEach(coordinate -> report.add(new ArtifactStatus(coordinate, scope, ArtifactStatus.STATUS_ACTIVE,
                       "Provided by the platform - satisfied without a download")));

@@ -43,7 +43,8 @@ class FrozenModeTest {
                 List.of(locked("com.example:mid:1.0.0", moduleJar, "module"), locked("com.example:driver:2.0.0", platformJar, "platform")),
                 List.of());
 
-        FrozenPlan plan = FrozenResolution.plan(lockfile, declared(module("com.example:mid:1.0.0")), localRepository());
+        FrozenPlan plan =
+                FrozenResolution.plan(lockfile, declared(module("com.example:mid:1.0.0")), localRepository(), new ProvidedBom(Map.of()));
 
         assertThat(plan.failures()).isEmpty();
         assertThat(plan.mismatched()).isEmpty();
@@ -58,7 +59,7 @@ class FrozenModeTest {
                 new Lockfile("2026-08-18T09:00:00Z", "15.0.0", List.of(locked("com.example:mid:1.0.0", moduleJar, "module")), List.of());
 
         FrozenPlan plan = FrozenResolution.plan(lockfile, declared(module("com.example:mid:1.0.0"), module("com.example:brand-new:1.0.0")),
-                localRepository());
+                localRepository(), new ProvidedBom(Map.of()));
 
         assertThat(plan.mismatched()).containsExactly("com.example:brand-new:1.0.0");
         assertThat(plan.failures()
@@ -70,11 +71,32 @@ class FrozenModeTest {
     }
 
     @Test
+    void a_platform_provided_declaration_is_never_a_frozen_mismatch() throws IOException {
+        Path moduleJar = deploy("com.example", "mid", "1.0.0");
+        Lockfile lockfile =
+                new Lockfile("2026-08-18T09:00:00Z", "15.0.0", List.of(locked("com.example:mid:1.0.0", moduleJar, "module")), List.of());
+        ProvidedBom bom = new ProvidedBom(Map.of("com.example:provided-lib", "2.0.0"));
+
+        // provided and shadowed declarations were never lockable - the embedded BOM answers for
+        // them without any network, so a registry that resolves cleanly stays clean when frozen
+        FrozenPlan plan = FrozenResolution.plan(lockfile, declared(module("com.example:mid:1.0.0"),
+                module("com.example:provided-lib:2.0.0"), module("com.example:provided-lib:1.0.0")), localRepository(), bom);
+
+        assertThat(plan.mismatched()).isEmpty();
+        assertThat(plan.failures()).isEmpty();
+        assertThat(plan.provided()).containsExactly("com.example:provided-lib:2.0.0");
+        assertThat(plan.shadowed()).hasSize(1);
+        assertThat(plan.shadowed()
+                       .get(0)
+                       .requested()).isEqualTo("1.0.0");
+    }
+
+    @Test
     void a_missing_locked_artifact_fails_with_the_coordinate_in_the_error() {
         Lockfile lockfile = new Lockfile("2026-08-18T09:00:00Z", "15.0.0",
                 List.of(new Lockfile.LockedArtifact("com.example:gone:1.0.0", "aa11", List.of("my-project"), null, "module")), List.of());
 
-        FrozenPlan plan = FrozenResolution.plan(lockfile, declared(), localRepository());
+        FrozenPlan plan = FrozenResolution.plan(lockfile, declared(), localRepository(), new ProvidedBom(Map.of()));
 
         assertThat(plan.activations()).isEmpty();
         assertThat(plan.failures()
