@@ -65,7 +65,10 @@ import org.springframework.stereotype.Component;
  * Either way the entries of {@code loader.path} / {@code LOADER_PATH} are appended — the runtime
  * image's drop-in directory for AOT compiled module jars (see
  * {@code build/application/Dockerfile}). Those jars are on the application classpath, so client
- * sources must be able to compile against them.
+ * sources must be able to compile against them. The jars of the current
+ * {@link ModulesClassLoaderHolder modules classloader} generation are appended as well, and a
+ * dependency swap {@link #invalidate() invalidates} the cache, so client sources compile against
+ * the project-declared maven dependencies without a restart.
  */
 @Component
 public class ClassPathIndex {
@@ -79,6 +82,12 @@ public class ClassPathIndex {
     private static final String STAMP_FILENAME = "extracted.stamp";
 
     private final AtomicReference<List<Path>> entriesRef = new AtomicReference<>();
+
+    private final ModulesClassLoaderHolder modulesLoaderHolder;
+
+    public ClassPathIndex(ModulesClassLoaderHolder modulesLoaderHolder) {
+        this.modulesLoaderHolder = modulesLoaderHolder;
+    }
 
     /** Disk paths that should be passed to {@code javac} via {@code --class-path}. */
     public List<Path> classPathEntries() {
@@ -100,9 +109,25 @@ public class ClassPathIndex {
         }
     }
 
-    private static List<Path> build() {
+    /**
+     * Drops the cached classpath so the next {@link #classPathEntries()} rebuilds it - called by the
+     * dependency swap pipeline after the modules classloader generation changed. The expensive platform
+     * half (the one-time fat-jar extraction) is disk-cached and stamp-checked, so a rebuild after an
+     * invalidation is cheap.
+     */
+    public void invalidate() {
+        entriesRef.set(null);
+    }
+
+    private List<Path> build() {
         List<Path> entries = new ArrayList<>(buildPlatformEntries());
         entries.addAll(loaderPathEntries(rawLoaderPath()));
+        for (Path jar : modulesLoaderHolder.current()
+                                           .jars()) {
+            if (!entries.contains(jar)) {
+                entries.add(jar);
+            }
+        }
         return Collections.unmodifiableList(entries);
     }
 

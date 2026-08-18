@@ -19,6 +19,7 @@ import java.util.regex.Pattern;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.StaticObjects;
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
+import org.eclipse.dirigible.engine.java.runtime.ClientClassLoaderHolder;
 import org.eclipse.dirigible.graalium.core.globals.DirigibleContextGlobalObject;
 import org.eclipse.dirigible.graalium.core.globals.DirigibleEngineTypeGlobalObject;
 import org.eclipse.dirigible.graalium.core.javascript.GraalJSCodeRunner;
@@ -124,6 +125,13 @@ public class DirigibleJavascriptCodeRunner implements CodeRunner<Source, Value> 
         if (externalModuleResolver.isPresent()) {
             builder.addModuleResolver(externalModuleResolver.get());
         }
+
+        // Java.type(...) host lookups resolve through the client classloader, whose parent chain
+        // includes the swappable modules classloader - so JS sees client classes AND the maven
+        // dependency jars projects declare, at their current generation, without a restart.
+        Optional<ClientClassLoaderHolder> clientClassLoaderHolder = BeanProvider.getOptionalBean(ClientClassLoaderHolder.class);
+        builder.addOnBeforeContextCreatedListener(contextBuilder -> clientClassLoaderHolder.map(ClientClassLoaderHolder::current)
+                                                                                           .ifPresent(contextBuilder::hostClassLoader));
 
         return builder.addModuleResolver(new JavaModuleResolver(javaModulesESMProxiesCachePath))
                       .addModuleResolver(new DirigibleModuleResolver(coreModulesESMProxiesCachePath, sourceProvider))

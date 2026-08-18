@@ -1338,6 +1338,96 @@ class EdmIntentGeneratorTest {
         assertEquals("Internal", master.get("chatInternalProperty"));
     }
 
+    @Test
+    // `related:` emits a read-only register carrying the source's key, its back-reference and the
+    // metadata its columns render from - and no URL, which belongs to the generation parameters.
+    void relatedEmitsTheReverseOfTheIncomingAssociation() {
+        String yaml = """
+                name: timesheets
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: ProjectTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: string }
+                    related:
+                      - entity: EmployeeTimesheet
+                        label: Employee Timesheets
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: totalHours, type: decimal }
+                      - { name: comment, type: string, major: false }
+                    relations:
+                      - { name: projectTimesheet, kind: manyToOne, to: ProjectTimesheet, required: true }
+                      - { name: employee, kind: manyToOne, to: Employee }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "timesheets");
+        Map<String, Object> project = entityByName(entities(model), "ProjectTimesheet");
+        List<Map<String, Object>> registers = (List<Map<String, Object>>) project.get("relatedEntities");
+        assertEquals(1, registers.size());
+        Map<String, Object> register = registers.get(0);
+        assertEquals("EmployeeTimesheet", register.get("entity"));
+        assertEquals("Employee Timesheets", register.get("label"));
+        assertEquals("EmployeeTimesheet", register.get("perspectiveName"));
+        assertEquals("TIMESHEETS_EMPLOYEE_TIMESHEET", register.get("dataName"));
+        assertEquals("Id", register.get("primaryKey"));
+        // The single relation pointing back here needs no via:, and it is what the register filters by.
+        assertEquals("ProjectTimesheet", register.get("fkProperty"));
+        // A same-model source is resolved from this model, so nothing is read from another one.
+        assertNull(register.get("referencedModel"));
+
+        // The default columns are the source's own list columns: not its generated identifier, not the
+        // foreign key back to the record the register already belongs to, not a `major: false` field.
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) register.get("properties");
+        List<String> names = columns.stream()
+                                    .map(c -> String.valueOf(c.get("name")))
+                                    .toList();
+        assertEquals(List.of("Number", "TotalHours", "Employee"), names);
+        // A relation column carries the lookup facts its label resolves through - the URL itself is
+        // built by the generation parameters, never here.
+        Map<String, Object> employee = columns.get(2);
+        assertEquals("Employee", employee.get("relationshipEntityName"));
+        assertEquals("Employee", employee.get("relationshipEntityPerspectiveName"));
+        assertEquals("Id", employee.get("widgetDropDownKey"));
+        assertNull(employee.get("apiPath"), "a register entry carries facts, never a template-owned URL");
+    }
+
+    @Test
+    // `show:` picks the register's columns and their order; an unnamed register is titled by the
+    // pluralized entity name.
+    void relatedShowSelectsAndOrdersTheColumns() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    related:
+                      - entity: Invoice
+                        show: [total, number]
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        Map<String, Object> register =
+                ((List<Map<String, Object>>) entityByName(entities(model), "Customer").get("relatedEntities")).get(0);
+        assertEquals("Invoices", register.get("label"), "an unnamed register is titled by the pluralized entity");
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) register.get("properties");
+        assertEquals(List.of("Total", "Number"), columns.stream()
+                                                        .map(c -> String.valueOf(c.get("name")))
+                                                        .toList());
+    }
+
     private static List<Map<String, Object>> entities(Map<String, Object> modelJson) {
         return (List<Map<String, Object>>) ((Map<String, Object>) modelJson.get("model")).get("entities");
     }

@@ -19,7 +19,10 @@ import org.springframework.stereotype.Component;
 import java.lang.IllegalStateException;
 
 /**
- * The Class MessageConsumer.
+ * Draws a single message synchronously from a queue or a topic. The physical destination is
+ * resolved from the tenant that is current on the calling thread, so a caller can only ever receive
+ * its own tenant's messages — see {@link DestinationNameManager} for the naming contract this
+ * shares with {@link MessageProducer} and with the subscribing sides.
  */
 @Component
 public class MessageConsumer {

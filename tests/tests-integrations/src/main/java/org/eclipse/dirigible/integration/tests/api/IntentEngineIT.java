@@ -259,7 +259,11 @@ class IntentEngineIT extends IntegrationTest {
                 cron: "0 0 9 * * ?"
                 entity: Order
                 where:
-                  - { field: orderDate, op: lt, value: CURRENT_DATE }
+                  # A moment RELATIVE to now (#6764) - "older than a week", which is what makes a
+                  # staleness sweep a sweep. The offset resolves against the clock of the run that
+                  # fires, and its shape must match the queried field's (a date takes a date-only
+                  # amount).
+                  - { field: orderDate, op: lt, value: "CURRENT_DATE-P7D" }
                 notify:
                   to: ops@example.com
                   subject: "Stale order {id} for {customer.name}"
@@ -270,6 +274,24 @@ class IntentEngineIT extends IntegrationTest {
                 event: { onCreate: Order }
                 method: POST
                 url: "@config:WAREHOUSE_URL"
+
+              # A declared payload: the envelope this application sends, instead of the record as
+              # stored. Literals, a minted key, the two context tokens, a configuration value, a field
+              # and a one-hop relation walk - the whole vocabulary in one contract.
+              - name: announceOrder
+                event: { onCreate: Order }
+                method: POST
+                url: "@config:ANNOUNCE_URL"
+                payload:
+                  type: "order.placed"
+                  version: 1
+                  messageId: "{uuid}"
+                  tenantId: "{tenant}"
+                  placedBy: "{user}"
+                  placedAt: "{now}"
+                  source: "@config:APP_ID"
+                  orderId: id
+                  customer: customer.name
 
             inbound:
               - name: ingestOrder
@@ -699,8 +721,11 @@ class IntentEngineIT extends IntegrationTest {
                 job.contains("@Component") && job.contains("class StaleOrdersJob implements JobHandler")
                         && job.contains("return \"0 0 9 * * ?\""),
                 "the schedule should generate a self-describing @Component JobHandler whose cron() returns the expression");
-        assertTrue(job.contains("new OrderRepository().findAll(Criteria.create().lt(\"OrderDate\", java.time.LocalDate.now()))"),
-                "the job should query the entity with a typed Criteria built from the where clause");
+        assertTrue(
+                job.contains("new OrderRepository().findAll(Criteria.create()"
+                        + ".lt(\"OrderDate\", java.time.LocalDate.now().minus(java.time.Period.parse(\"P7D\"))))"),
+                "the job should query the entity with a typed Criteria built from the where clause, the relative moment resolved"
+                        + " against the run's clock rather than baked in at generation");
         assertTrue(job.contains("for (OrderEntity entity : rows)"), "the job should iterate the matching rows");
         assertTrue(
                 job.contains(
@@ -725,9 +750,40 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(integration.contains("String url = Configurations.get(\"WAREHOUSE_URL\")"),
                 "an @config: URL should resolve through the configuration at run time");
         assertTrue(
-                integration.contains("HttpClient.post(url, Json.stringify(options))")
-                        && integration.contains("options.put(\"text\", message)"),
-                "a POST integration should forward the entity JSON as the request body");
+                integration.contains("HttpClient.post(url, Json.stringify(options))") && integration.contains("String body = message;")
+                        && integration.contains("options.put(\"text\", body)"),
+                "a POST integration without a declared payload should forward the entity JSON as the request body");
+
+        // A declared payload replaces that raw record with the envelope the intent spells out - every
+        // value form in one generated method, so a contract is expressible without a hand-written
+        // publisher (and adding an entity column no longer changes what the outside world receives).
+        String announce = contentOf("gen/events/orders/AnnounceOrderIntegration.java");
+        assertTrue(announce.contains("OrderEntity entity = Json.parse(message, OrderEntity.class)"),
+                "a payload-bearing integration should read the record the values resolve against");
+        assertTrue(
+                announce.contains(
+                        "CustomerEntity customer = entity.Customer == null ? null : new CustomerRepository().findById(entity.Customer)"),
+                "a one-hop value should load the related record once, exactly as a notification does");
+        assertTrue(announce.contains("payload.put(\"type\", \"order.placed\")") && announce.contains("payload.put(\"version\", 1)"),
+                "literals should land verbatim: " + announce);
+        assertTrue(
+                announce.contains("payload.put(\"messageId\", java.util.UUID.randomUUID().toString())")
+                        && announce.contains("payload.put(\"placedAt\", java.time.Instant.now().toString())")
+                        && announce.contains("payload.put(\"tenantId\", org.eclipse.dirigible.sdk.core.Tenant.getId())")
+                        && announce.contains("payload.put(\"placedBy\", org.eclipse.dirigible.sdk.security.User.getName())"),
+                "the four context tokens should each resolve to their run-time source");
+        assertTrue(announce.contains("payload.put(\"source\", Configurations.get(\"APP_ID\"))"),
+                "an @config: value should resolve through the configuration, as the URL does");
+        assertTrue(
+                announce.contains("payload.put(\"orderId\", entity.Id)")
+                        && announce.contains("payload.put(\"customer\", (customer == null ? null : customer.Name))"),
+                "a field and a one-hop relation.field should read the record and the loaded relation");
+        assertTrue(announce.contains("String body = Json.stringify(payload)") && announce.contains("options.put(\"text\", body)"),
+                "the declared payload, not the record, should be the request body");
+        assertTrue(
+                announce.indexOf("payload.put(\"type\"") < announce.indexOf("payload.put(\"version\"")
+                        && announce.indexOf("payload.put(\"version\"") < announce.indexOf("payload.put(\"messageId\""),
+                "the envelope should keep the order it was authored in");
 
         // The inbound webhook is a @Controller that ingests a posted JSON payload as the entity.
         String webhook = contentOf("gen/events/orders/IngestOrderWebhook.java");
@@ -1054,6 +1110,131 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(loader.contains("plusDays(1).atStartOfDay"),
                 "a `date` expire field names the LAST valid day - the timer arms at the start of the day after it");
         assertTrue(loader.contains("9999-12-31"), "a null date must arm a far-future due so the timer never fires");
+    }
+
+    @Test
+    void step_resilience_emits_retry_cycle_error_boundary_clear_listener_and_error_glue() {
+        // Declarative step resilience (#6762): a delegate serviceTask's `retry: { count, every }`
+        // becomes a Flowable failed-job retry cycle (R<count+1> - the R number counts TOTAL attempts),
+        // `onError:` an error boundary event catching the INTENT_STEP_FAILED error the
+        // engine-bpm-flowable conversion raises for the final failed attempt, a `setField` value of
+        // {error} a read of the published failure-message variable, and a var's `clearAfter` an
+        // end-listener removing the value (a generated credential must not survive in the history).
+        String yaml =
+                """
+                        name: provisioning
+                        entities:
+                          - name: ProvisioningStatus
+                            function: Setting
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: name, type: string }
+                          - name: TenantApplication
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: failureMessage, type: string }
+                            relations:
+                              - { name: Status, kind: manyToOne, to: ProvisioningStatus, function: EntityStatus, init: 1 }
+                        processes:
+                          - name: TenantProvisioning
+                            trigger: { onCreate: TenantApplication }
+                            vars:
+                              - { name: dbPassword, clearAfter: provisionApp }
+                            steps:
+                              - { name: createSchema, kind: serviceTask, args: { delegate: custom.SchemaProvisioner, produces: [dbPassword], retry: { count: 3, every: PT30S }, onError: recordFailure } }
+                              - { name: provisionApp, kind: serviceTask, args: { delegate: custom.AppProvisioner, uses: [dbPassword], retry: { count: 5, every: PT1M }, onError: recordFailure, next: done } }
+                              - { name: recordFailure, kind: serviceTask, args: { setField: failureMessage, value: "{error}", next: markFailed } }
+                              - { name: markFailed, kind: serviceTask, args: { setRelationField: Status, value: 3, next: end } }
+                              - { name: done, kind: end }
+                        """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // BPMN: the retry cycle rides the delegate task's extensionElements; count is FURTHER
+        // attempts, so count: 3 = R4 (four total) and count: 5 = R6.
+        String bpmn = contentOf("TenantProvisioning.bpmn");
+        assertTrue(bpmn.contains("<flowable:failedJobRetryTimeCycle>R4/PT30S</flowable:failedJobRetryTimeCycle>"),
+                "retry count: 3 should emit an R4 failed-job retry cycle");
+        assertTrue(bpmn.contains("<flowable:failedJobRetryTimeCycle>R6/PT1M</flowable:failedJobRetryTimeCycle>"),
+                "retry count: 5 should emit an R6 failed-job retry cycle");
+
+        // onError: one <error> definition plus a cancelling boundary event per declaring step, each
+        // flowing to the declared error route like a decision branch.
+        assertTrue(bpmn.contains("<error id=\"intentStepError\" name=\"Intent Step Error\" errorCode=\"INTENT_STEP_FAILED\"></error>"),
+                "onError should declare the intent error once at the definitions level");
+        assertTrue(
+                bpmn.contains("<boundaryEvent id=\"createSchemaError\" attachedToRef=\"createSchema\" cancelActivity=\"true\">")
+                        && bpmn.contains("<errorEventDefinition errorRef=\"intentStepError\"></errorEventDefinition>"),
+                "each onError step should carry a cancelling error boundary event");
+        assertTrue(
+                bpmn.contains("sourceRef=\"createSchemaError\" targetRef=\"recordFailure\"")
+                        && bpmn.contains("sourceRef=\"provisionAppError\" targetRef=\"recordFailure\""),
+                "each error boundary should flow to the onError step");
+        assertFalse(bpmn.contains("sourceRef=\"provisionApp\" targetRef=\"recordFailure\""),
+                "the main flow must route around the error steps");
+        assertTrue(bpmn.contains("BPMNShape_createSchemaError") && bpmn.contains("BPMNEdge_flow_createSchemaError_then"),
+                "the error boundary needs its DI shape and edge or the modeler opens it detached");
+
+        // clearAfter: an end-listener on the completing step removes the credential from the
+        // instance data (and thereby from the history).
+        assertTrue(bpmn.contains(
+                "<flowable:executionListener event=\"end\" expression=\"${execution.removeVariable('dbPassword')}\"></flowable:executionListener>"),
+                "clearAfter should emit an end-listener clearing the declared var");
+
+        // Glue: the {error} setter is flagged so the template reads the failure-message variable.
+        String glue = contentOf("provisioning.glue");
+        assertTrue(glue.contains("\"errorMessage\": \"true\""), "the {error} setter should carry the errorMessage flag");
+
+        // Generated handler: the recordFailure setter reads the variable the runtime conversion
+        // published just before it raised the caught BPMN error; the literal setter path is untouched.
+        generateFromModel("template-application-events-java/template/template.js", "provisioning.glue");
+        String setter = contentOf("gen/events/provisioning/TenantProvisioningRecordFailure.java");
+        assertTrue(setter.contains("execution.getVariable(\"__errorMessage\")"),
+                "the {error} setter should read the published failure message");
+        assertFalse(setter.contains("\"{error}\""), "the {error} token must never be written as a literal");
+        String relationSetter = contentOf("gen/events/provisioning/TenantProvisioningMarkFailed.java");
+        assertTrue(relationSetter.contains("updateProperty") && relationSetter.contains(", \"Status\", 3)"),
+                "the relation setter keeps assigning the unquoted seed id");
+    }
+
+    @Test
+    void parse_rejects_malformed_step_resilience_and_undeclared_vars() {
+        // The resilience vocabulary is validated like every other step arg: a typo inside retry, a
+        // dangling onError, an undeclared produces/uses name, a clearAfter to nowhere and an {error}
+        // no route ever reaches are all parse errors - reported together, with exact positions.
+        String yaml =
+                """
+                        name: provisioning
+                        entities:
+                          - name: TenantApplication
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: failureMessage, type: string }
+                        processes:
+                          - name: TenantProvisioning
+                            trigger: { onCreate: TenantApplication }
+                            vars:
+                              - { name: dbPassword, clearAfter: nowhere }
+                            steps:
+                              - { name: createSchema, kind: serviceTask, args: { delegate: custom.SchemaProvisioner, produces: [dbPasword], retry: { cout: 3, every: 30seconds }, onError: recordFailur } }
+                              - { name: recordFailure, kind: serviceTask, args: { setField: failureMessage, value: "{error}", next: end } }
+                        """;
+        restAssuredExecutor.execute(() -> given().contentType("text/plain")
+                                                 .body(yaml)
+                                                 .when()
+                                                 .post(PARSE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("issues", hasItems(
+                                                         "process [TenantProvisioning] step [createSchema] retry declares unknown key [cout] - did you mean [count]?",
+                                                         "process [TenantProvisioning] step [createSchema] retry `every` [30seconds] is not an ISO-8601 duration (e.g. PT30S, PT1M)",
+                                                         "process [TenantProvisioning] step [createSchema] `onError` references unknown step [recordFailur]",
+                                                         "process [TenantProvisioning] step [createSchema] produces names undeclared var [dbPasword] - declare it under the process `vars:`",
+                                                         "process [TenantProvisioning] var [dbPassword] clearAfter references unknown step [nowhere]",
+                                                         "process [TenantProvisioning] step [recordFailure] setField value {error} is only resolvable on a step reachable from an onError route")));
     }
 
     @Test
@@ -2741,13 +2922,19 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(
                 glue.contains("\"schedules\"") && glue.contains("\"name\": \"staleOrders\"") && glue.contains("\"cron\": \"0 0 9 * * ?\""),
                 "glue should carry the staleOrders schedule with its cron");
-        assertTrue(glue.contains("Criteria.create().lt(\\\"OrderDate\\\", java.time.LocalDate.now())"),
-                "glue should carry the schedule's typed Criteria expression");
+        assertTrue(
+                glue.contains("Criteria.create().lt(\\\"OrderDate\\\", java.time.LocalDate.now()"
+                        + ".minus(java.time.Period.parse(\\\"P7D\\\")))"),
+                "glue should carry the schedule's typed Criteria expression, the relative moment included");
         // Integrations: one per outbound integration, carrying the HTTP method + URL expression.
         assertTrue(glue.contains("\"integrations\"") && glue.contains("\"name\": \"pushOrderToWarehouse\"")
                 && glue.contains("\"clientMethod\": \"post\""), "glue should carry the pushOrderToWarehouse integration as a POST");
         assertTrue(glue.contains("Configurations.get(\\\"WAREHOUSE_URL\\\")"),
                 "glue should carry the integration URL as a config lookup expression");
+        assertTrue(
+                glue.contains("\"name\": \"announceOrder\"") && glue.contains("\"hasPayload\": true")
+                        && glue.contains("\"key\": \"messageId\""),
+                "glue should carry the declared payload of the announceOrder integration");
         // Inbound: one per webhook, carrying the path + the entity to create.
         assertTrue(glue.contains("\"inbound\"") && glue.contains("\"name\": \"ingestOrder\"") && glue.contains("\"path\": \"/ingest\""),
                 "glue should carry the ingestOrder inbound webhook with its path");

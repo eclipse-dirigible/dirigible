@@ -155,6 +155,20 @@
 #else
                     }
                 ]
+#if($model.uniqueConstraints && !$model.uniqueConstraints.isEmpty())
+## A composite business key - one row per (tenant, application). The single-column case stays on the
+## column itself ("unique": true above); this is the only expression of a key spanning several.
+                ,"constraints": {
+                    "uniqueIndexes": [
+#foreach ($uniqueConstraint in $model.uniqueConstraints)
+                        {
+                            "name": "${uniqueConstraint.name}",
+                            "columns": [#foreach ($uniqueColumn in $uniqueConstraint.columns)"${uniqueColumn.name}"#if($foreach.hasNext), #end#end]
+                        }#if($foreach.hasNext),#end
+#end
+                    ]
+                }
+#end
 #end
 #end
 #if($foreach.hasNext)

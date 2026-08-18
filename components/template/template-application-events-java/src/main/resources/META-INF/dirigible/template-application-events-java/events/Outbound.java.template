@@ -1,0 +1,90 @@
+package gen.events.${javaGenFolderName};
+
+#if($hasPayload)
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+#end
+import org.eclipse.dirigible.sdk.component.Component;
+#if($hasPayload)
+import org.eclipse.dirigible.sdk.core.Configurations;
+#end
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.messaging.Producer;
+#if($hasPayload || $hasGuard)
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+#foreach($load in $relationLoads)
+import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity;
+import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository;
+#end
+#end
+
+/**
+ * Outbound ${name}: emits a ${entity} event on the ${channel} ${destination}.
+ *
+ * Generated from the intent outbound block - do not edit; it is re-generated with the application.
+ * Subscribes to the topic the ${entity} repository already publishes its events on and re-publishes
+#if($hasPayload)
+ * the payload declared in the intent - the contract this application sends, built from literals,
+ * record fields, one-hop relation values and the context tokens.
+#else
+ * the record's own JSON, unchanged.
+#end
+ *
+ * The write that raised the event is already persisted by the time the message arrives here, so the
+ * departure is NOT transactional with it: a failed publish is logged and the write stands. There is
+ * no outbox, no exactly-once delivery and no ordering guarantee.
+ */
+@Component("${javaGenFolderName}_${className}Publisher")
+public class ${className}Publisher implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Publisher");
+
+    @Override
+    public String destination() {
+        return "${projectName}-${perspective}-${entity}${topicSuffix}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+#if($hasPayload || $hasGuard)
+        ${entity}Entity entity = Json.parse(message, ${entity}Entity.class);
+        if (entity == null) {
+            LOG.warn("Outbound ${name}: an empty or invalid ${entity} event arrived - nothing published");
+            return;
+        }
+#end
+#if($hasGuard)
+        if (!(${guardExpression})) {
+            return;
+        }
+#end
+#if($hasPayload)
+#foreach($load in $relationLoads)
+        ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
+#end
+        Map<String, Object> payload = new LinkedHashMap<>();
+#foreach($field in $payloadFields)
+        payload.put(${field.keyLiteral}, ${field.expression});
+#end
+        String body = Json.stringify(payload);
+#else
+        String body = message;
+#end
+        try {
+            Producer.${producerMethod}("${destination}", body);
+        } catch (Exception ex) {
+            LOG.error("Outbound ${name}: publishing to [${destination}] failed - the ${entity} write stands", ex);
+        }
+    }
+}

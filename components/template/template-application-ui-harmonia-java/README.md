@@ -83,6 +83,8 @@ Velocity-processed (which would collide with `$`-sigils in the JS).
 - `template/ui/template.js` — aggregates the per-view source collectors.
 - `template/ui/shell.js` — the SPA shell + static assets (above).
 - `template/ui/list.js` — LIST/PRIMARY entities -> page component + view fragment.
+- `template/ui/related.js` — entities declaring `relatedEntities` -> one `<Entity>.related.js`
+  registration (the read-only register of the records REFERENCING them). See below.
 - `template/ui/navigation.js` — placeholder (nav currently folded into index.html).
 
 Velocity model vars (per-entity collections, same as the Angular module):
@@ -101,6 +103,29 @@ shells (whose `isSvgIcon`/`isImageIcon` would send a `.svg` path down the `<svg 
 a missing file). The `.model` still carries `perspectiveIcon` for the AngularJS stack — untouched.
 So the intent `icon:` must be a valid Lucide name (bundled `org.webjars.npm:lucide` `dist/esm/icons/<name>.js`,
 currently 1.8.0); an unknown name renders blank.
+
+## Related registers (the reverse of an incoming association)
+
+A `.model` entity may declare `relatedEntities` — read-only registers of the records that
+**reference** it (a project-month's timesheet lines, a customer's invoices, an account's journal
+entries). Each entity that declares any emits one `<Entity>.related.js` calling
+`App.registerRelated(<entity>, def)`, and its form / document / master pages render one shared
+`relatedPanel` per entry off `App.relatedFor(<entity>)`.
+
+Three things about it are deliberate and easy to get wrong:
+
+- **The REFERENCED entity contributes the registration, not the referencing one.** That is the
+  opposite of a detail (`App.registerDetail`, contributed by the composition child) and it is
+  forced: the referencing entity may be owned by another model in another project, generated at
+  another time, with no knowledge of this one. Hence the def's `apiPath` and `appUrl` are
+  **absolute** and every call passes `{ baseUrl: '' }`.
+- **It filters through `POST <controller>/search`, not `?<fk>=<id>`.** The master-filter query
+  parameter only exists on a `*_DETAILS` layout's controller; the generic search endpoint every
+  generated controller exposes is what a register can rely on.
+- **It is a window, not an owner.** No add, no edit, no delete — a row opens the source's own record
+  page in the shared record dialog (`$store.related`), which is also what makes a cross-project
+  source work. `relatedPanel` therefore builds on `detailPanel` (same table, same foreign-key label
+  resolution, same formatting) and overrides only the load and the row action.
 
 ## Parity checklist (TODO)
 

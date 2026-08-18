@@ -46,8 +46,8 @@ The three categories, and the extension point that carries each:
 
 1. **Protocol adaptation** - talking to another system with a conversation shape: certificates,
    acknowledgements, retries, batch or file transports (an SFTP drop, a signed archive, polling).
-   `integrations:` and `inbound:` are deliberately one-line call-outs. Anything richer is a **Camel
-   route** in the same project, feeding the entity's ordinary write path.
+   `integrations:`, `inbound:` and `outbound:` are deliberately one-line call-outs. Anything richer is
+   a **Camel route** in the same project, feeding the entity's ordinary write path.
 2. **Algorithms** - checksums (national identifiers, account numbers), fuzzy matching, scoring,
    policy-driven tie-breaking. The DSL says this of `pattern` itself: a format check, not a semantic
    one. The modeled hooks are **`calculatedActionOnCreate` / `calculatedActionOnUpdate`** on a field
@@ -675,6 +675,45 @@ entities:
 owned across models). Generate leaf models (the owners) before their consumers so the dropdown
 resolves. Each project is its own `.intent`; all must be published to the same runtime.
 
+### related - list the records that REFERENCE this entity (read-only register)
+
+**Use when:** an entity is the *target* of an association and its own page should show the records
+pointing at it - a project-month and its per-employee timesheet lines, a customer and its invoices,
+an account and its journal entries, a supplier and its purchase orders. Without it those records
+are only reachable from their own perspective, by filtering.
+
+Declare it on the **referenced** entity (the one the relation points at), never on the referencing
+one:
+
+```yaml
+  - name: ProjectTimesheet
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+    related:
+      - entity: EmployeeTimesheet          # the referencing entity
+        model: employee-timesheets         # omit when it is declared in THIS model
+        via: projectTimesheet              # omit when it has exactly one relation pointing here
+        label: Employee Timesheets         # omit for the pluralized entity name
+        show: [number, employee, totalHours, status]   # omit for the source's own list columns
+```
+
+The register renders as a read-only grid on the referenced record's form / document / master page,
+filtered to that record, and each row opens the source's own record page - **there is no add, edit
+or delete**: the listed records have their own lifecycle, pages and processes. That is the whole
+difference from a composition child, which IS edited in place as a detail / document-items
+collection - so a composition child is refused here rather than listed twice.
+
+**Why the referenced side declares it:** generation is per model and leaf-first, so the model being
+referenced is generated before - and generally knows nothing about - the models that reference it.
+Only the referenced side can say "show these here". A cross-model source is resolved against the
+owner model's generated model file (workspace, else the published registry copy) exactly like a
+cross-model relation, and fails loudly when that model is not there.
+
+**Rules:** `entity` is required; a cross-model `model:` must be listed in `uses:`; `via:` is
+required only when the source references this entity through more than one relation (an invoice
+naming the same company as both issuer and recipient) - anything else is refused rather than
+guessed; every `show:` name must be a field or relation of the source.
+
 ### Many-to-many (n:m) - the intermediate entity
 
 An n:m is always an **intermediate (link) entity** - one row per link, holding a `composition` to
@@ -1061,6 +1100,43 @@ an entity must live in that entity's project** and manage it through the generat
 entity-agnostic helpers (e.g. a number generator over its own repository) belong in a shared project
 and are called from the delegate (client Java compiles across all published projects). `delegate`
 cannot be combined with `setField` / `setRelationField` / `call`; `fields` values must be scalars.
+
+**Step resilience on a delegate: `retry:`, `onError:`, `{error}` and declared step data.** A
+delegate that talks to something remote - provision a schema, register a client in an identity
+provider, call a partner API - fails sometimes, and what happens then should be modeled, not left to
+the runtime's defaults. Both attributes apply to `delegate:` service tasks only:
+
+```yaml
+processes:
+  - name: TenantProvisioning
+    trigger: { onCreate: TenantApplication }
+    vars:
+      - { name: dbPassword, clearAfter: provisionApp }   # step data; cleared once provisionApp completes
+    steps:
+      - name: createSchema
+        kind: serviceTask
+        args: { delegate: custom.SchemaProvisioner, produces: [dbPassword], retry: { count: 3, every: PT30S }, onError: recordFailure }
+      - name: provisionApp
+        kind: serviceTask
+        args: { delegate: custom.AppProvisioner, uses: [dbPassword], retry: { count: 5, every: PT1M }, onError: recordFailure, next: done }
+      - { name: recordFailure, kind: serviceTask, args: { setField: failureMessage, value: "{error}", next: markFailed } }
+      - { name: markFailed,    kind: serviceTask, args: { setRelationField: Status, value: Failed, next: end } }
+      - { name: done, kind: end }
+```
+
+- `retry: { count: <n>, every: <ISO-8601 duration> }` - re-attempt the failed step `count` further
+  times, spaced by `every` (same vocabulary as `timeout.after`). `count` must be an integer >= 1.
+  Absent -> today's behaviour (existing files generate byte-identically).
+- `onError: <step | end>` - where the exhausted (or, with no `retry`, the first) failure routes,
+  validated like `next`/`then`. Route the main flow around the error steps with `next`, as with
+  decision branches. Absent -> the runtime's own incident, as today.
+- `{error}` - the failure message; a `setField` value of exactly `{error}` (the whole value) writes
+  it onto the record. Only resolvable on a step reachable from an `onError` route - nothing else
+  ever populates it.
+- `vars:` + `produces:`/`uses:` - declared step data: the delegate sets/reads the process variable
+  itself, the declaration is the contract, and an undeclared name in `produces`/`uses` is a parse
+  error. `clearAfter: <step>` removes the value once that serviceTask/userTask completes normally,
+  so a generated credential does not survive in the process history.
 
 **Waiting for a data event: `wait`.** A `wait` step **parks the process** until an entity lifecycle
 event resumes it - a support case waiting for the requester's reply, a dunning flow waiting for a
@@ -1897,6 +1973,32 @@ schedules:
       # add `attach: print` to carry the row's own rendered document (dunning with the invoice)
 ```
 
+**A `where` value may be a moment relative to now** - which is what makes the archetypal schedule, a
+**staleness sweep**, expressible at all ("stuck provisioning for 30 minutes", "unanswered for a week",
+"abandoned for an hour"). Write the moment token with one signed ISO-8601 offset; it resolves against
+the clock of the run that fires, not of the generation:
+
+```yaml
+schedules:
+  - name: stuckProvisioning
+    cron: "0 */5 * * * ?"
+    entity: TenantApplication
+    where:
+      - { field: provisioningStatus, op: eq, value: Provisioning }
+      - { field: changedAt,          op: lt, value: "CURRENT_TIMESTAMP-PT30M" }
+    notify: { to: ops@example.com, subject: "Application {id} has been provisioning for over 30 minutes" }
+```
+
+**Rules.** The forward form (`+`) is admitted symmetrically, for "falls due within the next week". The
+comparison happens in the **queried field's own shape**: a `date` field takes `CURRENT_DATE` and a
+date-only amount (`P7D` / `P1M` / `P1Y`), a `timestamp` field takes `CURRENT_TIMESTAMP` (or `NOW`) and
+any amount (`PT30M`, `PT12H`, `P7D`, `P1M`). It is a moment vocabulary, not an expression language -
+**exactly one offset on one token**, no arithmetic between fields, no nesting. Each of these is an
+authoring **error**, never a comparison that silently never matches: a token of the other shape than
+the field, a time offset on a date field, a second offset, an offset that is not an ISO-8601 duration
+(`-30M`), and a moment compared with a non-temporal field. Do NOT model the clock into the data (a
+stored "deadline" column every writer must maintain) to work around this - the moment is the value.
+
 **generate** (scheduled record generation) - e.g. "on the 1st of every month, create an
 EmployeeTimesheet for each active employee". Per matching row, a new target record is created and
 saved through the target's generated repository, so its create-time logic (document numbering, status
@@ -2008,9 +2110,43 @@ integrations:
 
 **Rules:** exactly one event of the event axis; `method` from the allowed list; `url` required.
 
-### the event axis - what a notification / integration binds to
+**`payload:` - the declared envelope (use it whenever the receiver has a contract).** Without it the
+request body is the record as stored, which makes every column a public contract and cannot express
+an envelope (a type, a version, an idempotency key, a tenant). With it, the body is exactly what you
+declare:
 
-**Both** `notifications` and `integrations` declare **exactly one** `event:`, either
+```yaml
+integrations:
+  - name: requestUserAssignment
+    event: { onCreate: UserInvitation }
+    method: POST                          # a payload needs POST / PUT / PATCH - the rest send no body
+    url: "@config:ASSIGNMENT_URL"
+    payload:
+      type: "user.assignment.requested"   # literal
+      version: 1
+      messageId: "{uuid}"                 # minted per message
+      tenantId: "{tenant}"                # execution context
+      appId: "@config:APP_ID"             # configuration, resolved server-side
+      email: email                        # a field of the record
+      role: role.name                     # one hop off a to-one relation
+      requestedAt: "{now}"
+```
+
+A value is a **literal**, a **direct field**, or a **one-hop `relation.field`** of a to-one relation -
+the same three forms `notify` resolves, and multi-hop (`a.b.c`) is rejected the same way. `@config:KEY`
+reads the configuration. The context tokens are a **closed set** - `{uuid}`, `{now}` (an ISO-8601
+instant), `{tenant}`, `{user}` - and an unknown one is a parse **error**, never an empty value in a
+shipped message. A payload value is one whole value: there is no interpolation (`"Order {id} placed"`
+is rejected) and no nested object or list. A bare word that names no field is a **literal**; brace it
+(`"{email}"`) when you mean a reference and want the parser to check it. Keys keep their authored
+order.
+
+If a contract needs more than this it is an algorithm, not a payload - say so and hand off to a
+hand-written handler rather than stretching the block.
+
+### the event axis - what a notification / integration / departure binds to
+
+`notifications`, `integrations` and `outbound` departures each declare **exactly one** `event:`, either
 
 - an **entity lifecycle** event - `{ onCreate: <Entity> }` / `{ onUpdate: ... }` / `{ onDelete: ... }`;
 - a **process step** event - `{ onStepReached: { process: <Process>, step: <step> } }` or
@@ -2049,8 +2185,12 @@ integrations:
 
 **Rules for a step event:** the process must exist and declare a `trigger` (that is the record the
 event is about); the step must exist and be a `userTask` or a `serviceTask` (a decision, a wait or
-an end has no moment to observe). Any number of notifications and integrations may bind to the same
-step moment - the record is published once.
+an end has no moment to observe). Any number of consumers may bind to the same step moment - the
+record is published once.
+
+Every axis binding also takes an optional **`when:` guard** inside the `event:` map - a single
+comparison against a direct field of the record (`when: "channel != internal"`), which decides per
+record whether the reaction runs at all.
 
 ### inbound - an external system creates records
 
@@ -2073,6 +2213,49 @@ inbound:
 **Rules:** unique name, `create` must be a declared entity, and **exactly one arrival**: either a
 `path` or a `source` naming exactly one of `queue` / `topic` / `folder`. A `folder` source needs a
 `cron` (there is no file-system watch - the folder is polled); the other sources take none.
+
+### outbound - the app raises an event for another system
+
+**Use when:** something **outside the app must be told** that a record happened, and it listens on a
+queue or a topic rather than answering an HTTP call. Use `integrations:` instead when you are calling
+someone's API and want their answer - a departure is emitted and forgotten.
+
+```yaml
+outbound:
+  # the record's own JSON, on a queue (one consumer takes it)
+  - name: publishOrder
+    event: { onCreate: Order }
+    to: { queue: "codbex.orders" }
+  # a declared envelope, on a topic (every subscriber gets it), only for external channels
+  - name: announceActivation
+    event: { onStepCompleted: { process: OrderApproval, step: activate }, when: "channel != internal" }
+    to: { topic: "codbex.order-activations" }
+    payload:
+      type: "order.activated"
+      version: 1
+      messageId: "{uuid}"
+      tenantId: "{tenant}"
+      reference: number
+      customer: customer.name
+```
+
+**Rules:** unique name, one event of the event axis, and `to:` naming **exactly one** of
+`queue` / `topic` - both or neither is an error. `payload:` is the same declared envelope
+`integrations:` takes (same value forms, same closed token set); with no `payload:` the body is the
+record as stored.
+
+**Delivery semantics - say these out loud rather than let the author assume them.** The message is
+published after the write that raised the event is persisted, and is **not** transactional with it: a
+failed publish is logged and the write stands. There is no outbox, no exactly-once delivery and no
+ordering guarantee. If a contract needs any of those, say so - it is beyond what this construct
+promises.
+
+**A destination name belongs to the application, so it is tenant-scoped** - which is right for a
+channel this deployment both publishes and consumes, and wrong for one that IS a contract with someone
+else. Mark that one `global:` (`to: { topic: "global:codbex.orders" }`) and the other side binds to the
+plain name it was given. What the marker costs: the destination no longer carries the tenant, so a
+business tenant that matters downstream must travel in the payload - a `tenantId: "{tenant}"` key in
+the declared envelope is exactly that.
 
 ### rollups - maintain a count on a parent
 
@@ -2220,6 +2403,9 @@ name.
 | step `kind` | `userTask`, `serviceTask`, `decision`, `script`, `wait`, `end` |
 | wait event | `onCreate`, `onUpdate` (never `onDelete`) |
 | userTask timers | `timeout: { after: <ISO-8601 duration>, then: <step> }`, `expire: { until: <date/timestamp field>, then: <step> }` |
+| serviceTask `retry` | `{ count: <integer >= 1>, every: <ISO-8601 duration> }` - `delegate:` steps only |
+| serviceTask `onError` | a declared step or `end` - `delegate:` steps only; `{error}` (a whole-value `setField` value) is readable on the route |
+| process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | trigger `businessKeyStrategy` | `timestamp` |
 | lifecycle event | `onCreate`, `onUpdate`, `onDelete` |
@@ -2232,6 +2418,7 @@ name.
 | entity `function` | `Document`, `DocumentItem`, `Master`, `Detail`, `List`, `Setting`, `Calendar` (reserved-and-rejected: `Board`, `Gantt`, `Timeline`) |
 | field `function` | `DocumentTitle` |
 | relation `function` | `EntityStatus` |
+| entity `related` | `{ entity, model?, via?, label?, show? }` - a read-only register of the records REFERENCING this entity; `via:` is required only when the source points here more than once, and a composition child is refused (it is already an editable detail) |
 | entity `view` | `calendar`, `range`, `slots` |
 | report `kind` | `balance` |
 | report `chart` | `bar`, `line`, `pie`, `doughnut`, `polarArea`, `radar` |
@@ -2253,6 +2440,7 @@ name.
 - "who/which was assigned / in force / valid on that date (from a register with from-to dates)" -> **resolves**
 - "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)
 - "cancel the in-flight approval when the document is voided/cancelled (no orphaned Inbox task)" -> **processes** (`abortOn:`)
+- "retry the flaky external call, and record the failure on the record instead of an incident" -> **processes** (`delegate:` serviceTask with `retry:` + `onError:`, the failure message via `{error}`)
 - "a screen to enter / edit X" -> **forms**
 - "a button on X's view that opens a custom page / action" -> **actions**
 - "void / cancel / close / reopen a finished document (a guarded manual status change, per record)" -> **transitions**
@@ -2272,6 +2460,7 @@ name.
 - "expand a from-to span into day/week/month child rows / loan installments / vacation day items" -> **expansions**
 - "compute days between two dates on the form (working days / months)" -> **calculated field with a date function**
 - "reference a Customer/Country/Currency/UoM owned by another app" -> **uses + cross-model relation**
+- "show the invoices / timesheet lines / journal entries that reference THIS record, on its own page" -> **`related:`** on the referenced entity (read-only; a composition child is a detail instead)
 - "many-to-many between X and Y" -> **`kind: manyToMany`** (materializes the intermediate entity); **with extra fields on the link** -> author the **intermediate entity** (composition + manyToOne)
 
 ### expansions - generate child rows from a date span

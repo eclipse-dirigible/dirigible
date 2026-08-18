@@ -24,6 +24,7 @@ public class ProcessIntent {
     private String name;
     private String description;
     private Map<String, Object> trigger = new LinkedHashMap<>();
+    private List<ProcessVarIntent> vars = new ArrayList<>();
     private List<StepIntent> steps = new ArrayList<>();
     private Map<String, Object> abortOn = new LinkedHashMap<>();
 
@@ -49,6 +50,18 @@ public class ProcessIntent {
 
     public void setTrigger(Map<String, Object> trigger) {
         this.trigger = trigger == null ? new LinkedHashMap<>() : trigger;
+    }
+
+    /**
+     * The declared process variables ({@code vars:}) - the step data the steps'
+     * {@code produces:}/{@code uses:} lists must name. See {@link ProcessVarIntent}.
+     */
+    public List<ProcessVarIntent> getVars() {
+        return vars;
+    }
+
+    public void setVars(List<ProcessVarIntent> vars) {
+        this.vars = vars == null ? new ArrayList<>() : vars;
     }
 
     public List<StepIntent> getSteps() {

@@ -45,6 +45,7 @@ filters) are covered at the generation layer by `IntentEngineIT` and the parser 
 | [`schedules`](#schedules--cron) | cron: notify or generate records per matching row |
 | [`integrations`](#integrations--outbound-http) | outbound HTTP on a data change |
 | [`inbound`](#inbound--webhooks) | webhook that creates records |
+| [`outbound`](#outbound--emit-on-a-queue-or-topic) | emit a record on a queue or topic on an event |
 | [`permissions`](#permissions--roles) | roles |
 | [Planned](#planned--recognised-but-not-yet-implemented) | recognised, not yet implemented |
 
@@ -602,6 +603,23 @@ schedules:
       defaults: { Period: now }
 ```
 
+A `where` value is a literal or a **moment**: `CURRENT_DATE` / `CURRENT_TIMESTAMP` (`NOW`), optionally
+offset by a single signed ISO-8601 duration resolved against the clock of the run that fires - which is
+what makes a staleness sweep expressible:
+
+```yaml
+    where:
+      - { field: provisioningStatus, op: eq, value: Provisioning }
+      - { field: changedAt,          op: lt, value: "CURRENT_TIMESTAMP-PT30M" }   # stuck for 30 minutes
+      - { field: sentOn,             op: lt, value: "CURRENT_DATE-P7D" }          # unanswered for a week
+```
+
+Exactly one offset on one token - a moment vocabulary, not an expression language. The comparison
+happens in the queried field's own shape, so a `date` field takes `CURRENT_DATE` and a date-only amount
+(`P7D`/`P1M`/`P1Y`) while a `timestamp` field takes `CURRENT_TIMESTAMP` and any amount; a mismatched
+token, a time offset on a date, a second offset, or a moment on a non-temporal field is an authoring
+error rather than a query that silently never matches.
+
 ## integrations - outbound HTTP
 
 ```yaml
@@ -615,6 +633,32 @@ integrations:
 inbound:
   - { name: leadHook, path: /webhooks/lead, create: Lead }
 ```
+
+## outbound - emit on a queue or topic
+
+The mirror of `inbound`: when an event fires, emit a message. `to:` names exactly one of
+`queue`/`topic`; without a `payload:` the body is the record's own JSON.
+
+```yaml
+outbound:
+  - name: publishOrder
+    event: { onCreate: Order }
+    to: { queue: "codbex.orders" }
+  - name: announceActivation
+    event: { onStepCompleted: { process: OrderApproval, step: activate }, when: "channel != internal" }
+    to: { topic: "codbex.order-activations" }
+    payload:                                  # the declared envelope, as on integrations
+      type: "order.activated"
+      messageId: "{uuid}"
+      reference: number
+```
+
+The message is published after the write that raised the event is persisted and is **not**
+transactional with it - a failed publish is logged and the write stands. No outbox, no exactly-once,
+no ordering. A destination name is application-owned and therefore tenant-scoped; mark it `global:`
+when the queue or topic is a contract with a system outside this deployment (the platform marker from
+[#6766](https://github.com/eclipse-dirigible/dirigible/issues/6766) - the name is passed through
+verbatim, so nothing in the intent layer resolves it).
 
 ## permissions - roles
 
@@ -638,10 +682,9 @@ UI-test manifest, and its perspective in the generated Harmonia SPA + the shared
 - **Bridge fields on a generated `manyToMany` link** - the materialized link entity carries only its
   key and the two FKs; a link with its own data is authored as an explicit intermediate entity.
 - **Declarative glue actions beyond the current set** (see CLAUDE.md "Planned: declarative glue"):
-  `publish`/consume message, `generateDocument` (PDF), `assign`, process-step events, inbound
-  message/file events. Today's implemented glue: triggers, decision/form resolvers,
-  notifications, schedules, integrations, inbound webhooks, rollups, settlements, expansions,
-  generates, postings.
+  `generateDocument` (PDF), `assign`. Today's implemented glue: triggers, decision/form resolvers,
+  notifications, schedules, integrations, inbound arrivals (webhook / queue-topic / drop folder),
+  outbound departures, rollups, settlements, expansions, generates, postings.
 - **Cross-model schedule SOURCE** - a schedule's `entity` must be local (the generate target may
   be cross-model).
 - ~~`generates` completion hook~~ - LANDED (#6237): `sourceStatus` flips the source's

@@ -1,6 +1,9 @@
 package gen.events.${javaGenFolderName};
 
 import java.util.HashMap;
+#if($hasPayload)
+import java.util.LinkedHashMap;
+#end
 import java.util.Map;
 
 import org.eclipse.dirigible.sdk.component.Component;
@@ -9,13 +12,31 @@ import org.eclipse.dirigible.sdk.http.HttpClient;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
+#if($hasPayload || $hasGuard)
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+#end
+#if($hasPayload)
+#foreach($load in $relationLoads)
+import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity;
+import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository;
+#end
+#end
 
 /**
  * Forwards a ${entity} event to an external endpoint via ${clientMethod}.
  *
  * Generated from the intent integrations block - do not edit; it is re-generated with the
- * application. The event payload (the entity JSON) is sent as the request body. The target URL comes
- * from the intent (a literal or a configuration value).
+ * application. The target URL comes from the intent (a literal or a configuration value).
+#if($hasPayload)
+ * The request body is the payload declared in the intent - the contract this application sends,
+ * built from literals, record fields, one-hop relation values and the context tokens.
+#else
+ * The event payload (the entity JSON) is sent as the request body.
+#end
+#if($hasGuard)
+ * The event's `when` guard decides per record whether the call is made at all.
+#end
  */
 @Component("${javaGenFolderName}_${className}Integration")
 public class ${className}Integration implements MessageHandler {
@@ -36,10 +57,33 @@ public class ${className}Integration implements MessageHandler {
         if (url == null || url.isBlank()) {
             return;
         }
+#if($hasPayload || $hasGuard)
+        ${entity}Entity entity = Json.parse(message, ${entity}Entity.class);
+        if (entity == null) {
+            return;
+        }
+#end
+#if($hasGuard)
+        if (!(${guardExpression})) {
+            return;
+        }
+#end
+#if($hasPayload)
+#foreach($load in $relationLoads)
+        ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
+#end
+        Map<String, Object> payload = new LinkedHashMap<>();
+#foreach($field in $payloadFields)
+        payload.put(${field.keyLiteral}, ${field.expression});
+#end
+        String body = Json.stringify(payload);
+#elseif($hasBody)
+        String body = message;
+#end
         try {
 #if($hasBody)
             Map<String, Object> options = new HashMap<>();
-            options.put("text", message);
+            options.put("text", body);
             options.put("contentType", "application/json");
             HttpClient.${clientMethod}(url, Json.stringify(options));
 #else

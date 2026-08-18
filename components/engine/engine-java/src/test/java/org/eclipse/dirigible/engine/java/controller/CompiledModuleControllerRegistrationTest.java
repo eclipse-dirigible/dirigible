@@ -24,6 +24,7 @@ import org.eclipse.dirigible.engine.java.runtime.ClientClassLoaderHolder;
 import org.eclipse.dirigible.engine.java.runtime.JavaCompiledOutputDirectory;
 import org.eclipse.dirigible.engine.java.runtime.JavaLoader;
 import org.eclipse.dirigible.engine.java.runtime.JavaSourceCompiler;
+import org.eclipse.dirigible.engine.java.runtime.ModulesClassLoaderHolder;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -62,8 +63,8 @@ class CompiledModuleControllerRegistrationTest {
 
         JavaCompiledOutputDirectory outputDirectory = mock(JavaCompiledOutputDirectory.class);
         when(outputDirectory.get()).thenReturn(tempDir);
-        JavaLoader loader = new JavaLoader(new JavaSourceCompiler(), new ClientClassLoaderHolder(), container, List.of(controllerConsumer),
-                outputDirectory, NOOP_PUBLISHER);
+        JavaLoader loader = new JavaLoader(new JavaSourceCompiler(), new ClientClassLoaderHolder(), new ModulesClassLoaderHolder(),
+                container, List.of(controllerConsumer), outputDirectory, NOOP_PUBLISHER);
 
         // A compiled-module controller already on the classpath (no registry .java, no javac).
         Class<?> type = CompiledSampleController.class;
