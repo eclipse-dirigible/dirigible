@@ -131,15 +131,15 @@ class DependencyResolverTest {
     }
 
     @Test
-    void rejects_the_platform_scope_as_unsupported() throws IOException {
+    void resolves_platform_scoped_declarations_like_any_other() throws IOException {
         deploy("leaf", "1.0.0", "");
 
+        // scope is an activation concern (system classloader vs modules classloader) - the
+        // resolver itself is scope-agnostic
         ResolutionResult result = resolver.resolve(declared(new MavenDependency("com.example:leaf:1.0.0", Scope.PLATFORM, List.of())));
 
-        assertThat(result.artifacts()).isEmpty();
-        assertThat(result.failures()).containsKey("com.example:leaf:1.0.0");
-        assertThat(result.failures()
-                         .get("com.example:leaf:1.0.0")).contains("platform");
+        assertThat(result.failures()).isEmpty();
+        assertThat(result.artifacts()).containsExactly(localRepository.resolve("com/example/leaf/1.0.0/leaf-1.0.0.jar"));
     }
 
     private static MavenDependency module(String coordinate) {

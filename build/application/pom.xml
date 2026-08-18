@@ -263,6 +263,89 @@
                         </goals>
                         <configuration>
                             <classifier>executable</classifier>
+                            <!-- ZIP layout launches through PropertiesLauncher, so a plain
+                                 `java -jar` honors BOTH -Dloader.path (the /modules drop-in and the
+                                 resolved-modules seed) AND the Launcher-Agent-Class manifest entry
+                                 (which the JVM only processes for -jar launches). Without
+                                 loader.path the launcher behaves exactly like JarLauncher. -->
+                            <layout>ZIP</layout>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <!-- the JVM invokes the agent before main on `java -jar` launches (JEP 261),
+                                 handing the platform the Instrumentation that appends scope-platform
+                                 dependency jars to the system classloader without a restart; the
+                                 repackage goal preserves this entry in the executable jar -->
+                            <Launcher-Agent-Class>org.eclipse.dirigible.launcher.agent.DirigibleLauncherAgent</Launcher-Agent-Class>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>unpack-launcher-agent</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>unpack</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.eclipse.dirigible</groupId>
+                                    <artifactId>dirigible-components-core-launcher-agent</artifactId>
+                                    <version>${project.version}</version>
+                                    <outputDirectory>${project.build.directory}/launcher-agent-root</outputDirectory>
+                                    <includes>org/**</includes>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <!-- the root config points failsafe at the MAIN output (the tests-integrations
+                         convention); this module's ITs are ordinary test sources - they verify the
+                         packaged executable jar and must never ship inside it -->
+                    <testClassesDirectory>${project.build.testOutputDirectory}</testClassesDirectory>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <!-- The launcher agent's classes must sit at the executable jar's ROOT: the
+                             JVM loads the Launcher-Agent-Class through the system classloader before
+                             main, and only the jar root is on that classpath (BOOT-INF is not).
+                             Bound to pre-integration-test because Maven's parent-first plugin merge
+                             orders this plugin BEFORE spring-boot:repackage within the package phase;
+                             this phase is after package and before the failsafe ITs that verify the
+                             delivery. keepcompression preserves the STORED (uncompressed) nested
+                             BOOT-INF jars Spring Boot's loader requires. -->
+                        <id>inject-launcher-agent</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <zip destfile="${project.build.directory}/${project.build.finalName}-executable.jar" update="true" keepcompression="true">
+                                    <fileset dir="${project.build.directory}/launcher-agent-root" includes="org/**"/>
+                                </zip>
+                            </target>
                         </configuration>
                     </execution>
                 </executions>

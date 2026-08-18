@@ -48,12 +48,18 @@ delivers both halves of the module.
 
 **Getting such a jar onto the classpath of the shipped image (issue [#6592](https://github.com/eclipse-dirigible/dirigible/issues/6592)):**
 `build/application/Dockerfile` launches through Spring Boot's **`PropertiesLauncher`** with
-`-Dloader.path=/modules` (instead of `JarLauncher` via `-jar`), and creates an empty `/modules`. A
-downstream image `COPY`s module jars there, or they are volume-mounted at run time — **the platform jar
-is consumed verbatim**; never explode the fat jar to add jars to `BOOT-INF/lib`.
+`-Dloader.path=/modules,...`, and creates an empty `/modules`. Since #6779 the launch is a plain
+`java -jar` — the executable jar's **ZIP layout** makes `PropertiesLauncher` the manifest
+`Main-Class` (so `loader.path` keeps working), and `-jar` is what makes the JVM honor the
+`Launcher-Agent-Class` entry that powers `scope: "platform"` dependencies. A downstream image
+`COPY`s module jars there, or they are volume-mounted at run time — **the platform jar
+is consumed verbatim**; never explode the fat jar to add jars to `BOOT-INF/lib` (the launcher-agent
+classes at the jar ROOT are injected by the build itself, with the nested jars kept STORED — see
+`build/application/pom.xml`'s `inject-launcher-agent` execution and `LauncherAgentDeliveryIT`).
 
 - **Empty or missing `/modules` is a no-op** — `PropertiesLauncher` reads `Start-Class` from the jar's
-  manifest, so boot is identical to `java -jar` (verified: same startup lines, same startup time).
+  manifest, so boot is identical to the pre-ZIP-layout launch (verified: same startup lines, same
+  startup time).
 - `loader.path` entries are **prepended** to `BOOT-INF/classes` + `BOOT-INF/lib`, so in principle a
   drop-in jar could shadow a platform class. In practice it cannot happen by accident: module packages
   are `gen.*` / `custom.*`, which the platform does not use.

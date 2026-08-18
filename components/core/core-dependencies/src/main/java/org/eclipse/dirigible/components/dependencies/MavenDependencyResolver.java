@@ -111,16 +111,7 @@ class MavenDependencyResolver implements DependencyResolver {
     @Override
     public ResolutionResult resolve(Set<MavenDependency> declared) {
         Map<String, String> failures = new LinkedHashMap<>();
-        List<MavenDependency> resolvable = new ArrayList<>();
-        for (MavenDependency dependency : declared) {
-            if (dependency.scope() == MavenDependency.Scope.PLATFORM) {
-                failures.put(dependency.coordinate(), "Scope [platform] is reserved for a later phase and is not supported yet");
-                LOGGER.error("Cannot resolve maven dependency [{}]: scope [platform] is reserved for a later phase",
-                        dependency.coordinate());
-            } else {
-                resolvable.add(dependency);
-            }
-        }
+        List<MavenDependency> resolvable = new ArrayList<>(declared);
         if (resolvable.isEmpty()) {
             return new ResolutionResult(List.of(), Map.of(), failures);
         }
