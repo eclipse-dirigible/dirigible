@@ -141,7 +141,7 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
               .forEach(t -> {
                   t.setSchemaReference(schema);
                   // t.setSchema(schema.getName());
-                  t.setConstraints(new TableConstraints(t));
+                  t.setConstraints(carryUniqueConstraints(t));
                   TablesSynchronizer.assignParent(t);
               });
         schema.getViews()
@@ -307,6 +307,83 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
         } else {
             throw new IllegalArgumentException(
                     format("Error in parsing columns of table [{0}] in schema [{1}]", table.getName(), location));
+        }
+        setUniqueConstraints(location, structure, table);
+    }
+
+    /**
+     * The table's constraints, attached to the artefact tree.
+     *
+     * <p>
+     * The attachment is a fresh {@link TableConstraints} carrying the table back-reference, which used
+     * to mean discarding whatever the parse had just built. That silently emptied the composite unique
+     * keys a schema declares - they reached the file and went no further, so the business rule was
+     * created nowhere. They are carried over here.
+     *
+     * <p>
+     * The foreign keys a {@code .schema} may declare are deliberately NOT carried: they have never
+     * reached the database from this path either, and emitting them now would change the DDL of every
+     * already-generated application, which is a change of its own and not this one's to make.
+     *
+     * @param table the parsed table
+     * @return the constraints to attach
+     */
+    private static TableConstraints carryUniqueConstraints(Table table) {
+        TableConstraints attached = new TableConstraints(table);
+        TableConstraints parsed = table.getConstraints();
+        if (parsed != null && parsed.getUniqueIndexes() != null) {
+            for (TableConstraintUnique unique : parsed.getUniqueIndexes()) {
+                unique.setConstraints(attached);
+                attached.getUniqueIndexes()
+                        .add(unique);
+            }
+        }
+        return attached;
+    }
+
+    /**
+     * Reads a table's composite unique constraints. A single-column key rides on the column itself
+     * ({@code "unique": true}); a key spanning several columns - the business key that says what a row
+     * IS - has no other expression in a schema, and without this it could only be added to the database
+     * by hand, outside anything the next generation knows about.
+     *
+     * @param location the schema location
+     * @param structure the table structure
+     * @param table the table being built
+     */
+    private static void setUniqueConstraints(String location, JsonObject structure, Table table) {
+        JsonElement constraintsElement = structure.get("constraints");
+        if (constraintsElement == null || !constraintsElement.isJsonObject()) {
+            return;
+        }
+        JsonElement uniqueElement = constraintsElement.getAsJsonObject()
+                                                      .get("uniqueIndexes");
+        if (uniqueElement == null || !uniqueElement.isJsonArray()) {
+            return;
+        }
+        JsonArray uniqueIndexes = uniqueElement.getAsJsonArray();
+        for (int i = 0; i < uniqueIndexes.size(); i++) {
+            JsonObject uniqueIndex = uniqueIndexes.get(i)
+                                                  .getAsJsonObject();
+            JsonElement columnsElement = uniqueIndex.get("columns");
+            if (columnsElement == null || !columnsElement.isJsonArray()) {
+                throw new IllegalArgumentException(format("Unique constraint [{0}] of table [{1}] in schema [{2}] names no columns",
+                        uniqueIndex.get("name"), table.getName(), location));
+            }
+            JsonArray columnsArray = columnsElement.getAsJsonArray();
+            String[] columns = new String[columnsArray.size()];
+            for (int j = 0; j < columnsArray.size(); j++) {
+                columns[j] = columnsArray.get(j)
+                                         .getAsString();
+            }
+            TableConstraintUnique unique = new TableConstraintUnique();
+            unique.setName(uniqueIndex.get("name")
+                                      .getAsString());
+            unique.setColumns(columns);
+            unique.setConstraints(table.getConstraints());
+            table.getConstraints()
+                 .getUniqueIndexes()
+                 .add(unique);
         }
     }
 

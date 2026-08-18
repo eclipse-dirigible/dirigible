@@ -227,6 +227,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 100 }
 
+              # entity-level unique (#6763): the business key spanning more than one column. The
+              # schema gains the composite constraint over (PARTY, CODE) and a colliding write is
+              # answered with the authored message rather than a server error.
+              - name: PartyCode
+                unique:
+                  - { fields: [party, code], message: "This code is already registered for the party" }
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string, required: true, length: 50 }
+                relations:
+                  - { name: party, kind: manyToOne, to: Party, required: true }
+
               # first-class numbering, stampOn: create - the generated DAO allocates the real number
               # at insert from the tenant series that the module's AUTHORED .numbers artefact
               # provisions at publish. The intent references the series by NAME only; the shape
@@ -1355,6 +1367,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "locksWithMaster: false must leave the child's REST writes unguarded");
 
         String schema = contentOf("gen/emission/schema/" + PROJECT + ".schema");
+        // entity-level unique (#6763): the composite key has to reach the schema, which is the only
+        // place it can be created. Asserted here as well as at runtime so a regression says WHICH
+        // layer dropped it.
+        assertTrue(schema.contains("\"PartyCode_Party_Code\""), "the composite business key must be emitted into the schema: " + schema);
+        String partyCodeController = contentOf("gen/emission/api/partycode/PartyCodeController.java");
+        assertTrue(partyCodeController.contains("This code is already registered for the party"),
+                "the generated controller must carry the authored conflict message");
         assertTrue(schema.contains("EMISSION_UNIT_LANG"), "multilingual must emit the _LANG translation table into the schema");
         // manyToMany: the link entity is an ordinary entity from parse time on, so it must reach the
         // schema as its own table and the REST layer as its own (detail) controller. Asserting the
@@ -2590,6 +2609,39 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("{\"Id\":" + entryId + ",\"Date\":\"2026-01-15\",\"Account\":2,\"Status\":2}")
                                                  .when()
                                                  .put(API + "/entry/EntryController/" + entryId)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // entity-level unique (#6763): the composite key exists in the database (the second insert
+        // cannot land) AND the generated controller recognises which key was hit, so the caller is
+        // told what collided instead of getting a 500. The third write flips one column, which must
+        // be accepted - a constraint over (party, code) that rejected a different code would be a
+        // single-column unique wearing a composite name.
+        AtomicInteger partyId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> partyId.set(given().contentType("application/json")
+                                                             .body("{\"Name\":\"Unique Co\"}")
+                                                             .when()
+                                                             .post(API + "/party/PartyController")
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Party\":" + partyId.get() + ",\"Code\":\"AB-1\"}")
+                                                 .when()
+                                                 .post(API + "/partycode/PartyCodeController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Party\":" + partyId.get() + ",\"Code\":\"AB-1\"}")
+                                                 .when()
+                                                 .post(API + "/partycode/PartyCodeController")
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Party\":" + partyId.get() + ",\"Code\":\"AB-2\"}")
+                                                 .when()
+                                                 .post(API + "/partycode/PartyCodeController")
                                                  .then()
                                                  .statusCode(200));
 

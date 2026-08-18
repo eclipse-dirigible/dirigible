@@ -69,6 +69,7 @@ import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.eclipse.dirigible.components.intent.model.TransitionIntent;
+import org.eclipse.dirigible.components.intent.model.UniqueIntent;
 import org.eclipse.dirigible.components.intent.model.WidgetIntent;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -2469,12 +2470,84 @@ public final class IntentParser {
                     validateCheck(entity, check, byName, model.getAggregates(), issues);
                 }
             }
+            if (!entity.getUnique()
+                       .isEmpty()) {
+                validateUnique(entity, issues);
+            }
             if (!entity.getRelated()
                        .isEmpty()) {
                 validateRelated(entity, byName, usesAliases, issues);
             }
         }
         return entityNames;
+    }
+
+    /**
+     * {@code unique:} declares the business keys spanning more than one column - what a row IS when no
+     * single field says it. Every name must resolve to an own field or an own <b>to-one</b> relation of
+     * the entity: a to-one contributes its foreign-key column, which is what a pair like
+     * {@code (tenant, application)} means, while a to-many has no column on this side to constrain. A
+     * cross-model relation is rejected outright - the consumer stores a projection of the target, so
+     * there is no local column either. And a single-name key is rejected naming the field attribute it
+     * duplicates, because two ways to say the same thing is how the two drift apart.
+     *
+     * @param entity the entity carrying the keys
+     * @param issues the collecting issue list
+     */
+    private static void validateUnique(EntityIntent entity, List<String> issues) {
+        Map<String, RelationIntent> relations = new HashMap<>();
+        for (RelationIntent relation : entity.getRelations()) {
+            if (!isBlank(relation.getName())) {
+                relations.put(relation.getName(), relation);
+            }
+        }
+        Set<String> fields = new HashSet<>();
+        for (FieldIntent field : entity.getFields()) {
+            if (!isBlank(field.getName())) {
+                fields.add(field.getName());
+            }
+        }
+        Set<String> keys = new HashSet<>();
+        for (UniqueIntent unique : entity.getUnique()) {
+            String subject = "entity [" + entity.getName() + "] unique";
+            List<String> names = unique.getFields();
+            if (names.isEmpty()) {
+                issues.add(subject + " names no fields");
+                continue;
+            }
+            if (names.size() == 1) {
+                issues.add(subject + " [" + names.get(0) + "] spans a single field - declare unique: true on the field itself");
+                continue;
+            }
+            if (!keys.add(String.join(",", names))) {
+                issues.add(subject + " [" + String.join(", ", names) + "] is declared twice");
+            }
+            Set<String> seen = new HashSet<>();
+            for (String name : names) {
+                if (isBlank(name)) {
+                    issues.add(subject + " names a blank field");
+                    continue;
+                }
+                if (!seen.add(name)) {
+                    issues.add(subject + " names [" + name + "] twice - a key constrains each column once");
+                    continue;
+                }
+                RelationIntent relation = relations.get(name);
+                if (relation != null) {
+                    if (!("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                        issues.add(subject + " names [" + name + "], which is a " + relation.getKind()
+                                + " relation - only a field or a to-one relation has a column on this entity to constrain");
+                    } else if (relation.isCrossModel()) {
+                        issues.add(subject + " names the cross-model relation [" + name
+                                + "] - a cross-model target is stored as a projection, so this entity has no column for it");
+                    }
+                    continue;
+                }
+                if (!fields.contains(name)) {
+                    issues.add(subject + " names [" + name + "], which is not a field or to-one relation of [" + entity.getName() + "]");
+                }
+            }
+        }
     }
 
     /**

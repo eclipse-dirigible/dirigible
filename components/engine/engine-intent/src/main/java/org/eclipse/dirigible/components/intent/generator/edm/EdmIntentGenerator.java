@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
@@ -50,6 +51,7 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
+import org.eclipse.dirigible.components.intent.model.UniqueIntent;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -635,6 +637,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // Declarative validations. A List, so it lives only in the .model twin (the scalar-only
                 // .edm XML skips it via the Iterable guard), consumed by the DAO/REST templates.
                 entityMap.put("checks", checkMaps);
+            }
+            // Composite business keys. Like checks, a List living only in the .model twin - read by the
+            // schema template (which emits the constraint) and by the REST template (which turns the
+            // database's violation back into the authored message).
+            List<Map<String, Object>> uniqueMaps = buildUniqueConstraints(entity);
+            if (!uniqueMaps.isEmpty()) {
+                entityMap.put("uniqueConstraints", uniqueMaps);
             }
             entityMap.put("properties", properties);
             entityList.add(entityMap);
@@ -1650,6 +1659,65 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The entity's composite business keys, resolved to the physical columns they constrain.
+     *
+     * <p>
+     * A name is either an own field or an own to-one relation, and both take the same column form -
+     * {@code <ENTITY>_<NAME>} - so the two need no distinction here; the parser has already rejected
+     * anything with no column on this entity. The constraint is named
+     * {@code <Entity>_<Field1>_<Field2>}, the same descriptive concatenation the foreign keys use, so a
+     * regenerated model produces the identical name and the schema layer sees no change. That name is
+     * also the only handle the database gives back on a violation, which is how the generated
+     * controller finds the authored message again.
+     *
+     * @param entity the entity
+     * @return one map per declared key: its constraint name, its columns in order, and its message
+     */
+    private static List<Map<String, Object>> buildUniqueConstraints(EntityIntent entity) {
+        List<Map<String, Object>> constraints = new ArrayList<>();
+        for (UniqueIntent unique : entity.getUnique()) {
+            List<String> names = unique.getFields();
+            if (names.size() < 2) {
+                continue; // reported by the parser
+            }
+            List<Map<String, Object>> columns = new ArrayList<>(names.size());
+            StringBuilder constraintName = new StringBuilder(entity.getName());
+            for (String name : names) {
+                Map<String, Object> column = new LinkedHashMap<>();
+                column.put("name", IntentNaming.upperSnake(entity.getName()) + "_" + IntentNaming.upperSnake(name));
+                columns.add(column);
+                constraintName.append('_')
+                              .append(IntentNaming.pascalCase(name));
+            }
+            Map<String, Object> constraint = new LinkedHashMap<>();
+            constraint.put("name", constraintName.toString());
+            constraint.put("columns", columns);
+            constraint.put("columnsCsv", columns.stream()
+                                                .map(column -> String.valueOf(column.get("name")))
+                                                .collect(Collectors.joining(",")));
+            constraint.put("message", notBlank(unique.getMessage()) ? unique.getMessage()
+                    : "A " + IntentNaming.humanize(entity.getName())
+                                         .toLowerCase(Locale.ROOT)
+                            + " with the same " + humanizeJoin(names) + " already exists");
+            constraints.add(constraint);
+        }
+        return constraints;
+    }
+
+    /** {@code [tenant, application]} → {@code "tenant and application"}, for a default message. */
+    private static String humanizeJoin(List<String> names) {
+        List<String> humanized = new ArrayList<>(names.size());
+        for (String name : names) {
+            humanized.add(IntentNaming.humanize(name)
+                                      .toLowerCase(Locale.ROOT));
+        }
+        if (humanized.size() == 1) {
+            return humanized.get(0);
+        }
+        return String.join(", ", humanized.subList(0, humanized.size() - 1)) + " and " + humanized.get(humanized.size() - 1);
+    }
+
+    /**
      * The entity's {@code checks} as template-ready maps: {@code exactlyOne} carries the PascalCased
      * own fields; the document-level kinds additionally carry the resolved items entity, the items'
      * back-reference FK property, and the EntityStatus gate property - everything the DAO/REST
@@ -2514,7 +2582,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             sb.append("  <entity");
             List<Map<String, Object>> properties = (List<Map<String, Object>>) entity.getOrDefault("properties", List.of());
             for (Map.Entry<String, Object> attr : entity.entrySet()) {
-                if ("properties".equals(attr.getKey())) {
+                // EDM attributes are scalar. A structured value (checks, uniqueConstraints, ...) belongs
+                // only to the .model twin and would render here as a stringified Java collection - the
+                // same guard the mxGraph property cells already apply.
+                if ("properties".equals(attr.getKey()) || attr.getValue() instanceof Iterable || attr.getValue() instanceof Map) {
                     continue;
                 }
                 appendAttribute(sb, attr.getKey(), attr.getValue());
