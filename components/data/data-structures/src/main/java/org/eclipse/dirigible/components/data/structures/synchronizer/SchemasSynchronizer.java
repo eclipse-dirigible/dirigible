@@ -321,9 +321,16 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
      * created nowhere. They are carried over here.
      *
      * <p>
-     * The foreign keys a {@code .schema} may declare are deliberately NOT carried: they have never
-     * reached the database from this path either, and emitting them now would change the DDL of every
-     * already-generated application, which is a change of its own and not this one's to make.
+     * The foreign keys a {@code .schema} declares are dropped here, and that is the design, not a gap
+     * waiting to be closed: <b>a foreign key never becomes a database constraint</b>. Referential
+     * integrity is checked at the business layer - the generated repository and controller - because a
+     * constraint in the schema binds insert and delete ORDER into the database, where seeds, imports,
+     * regeneration and deletes would all have to obey an ordering nothing in the model asked for.
+     *
+     * <p>
+     * A unique key is the opposite case and does belong in the database: it says what a row
+     * <em>is</em>, so it has to hold for every writer at once - including the ones that never route
+     * through the application.
      *
      * @param table the parsed table
      * @return the constraints to attach
