@@ -1125,6 +1125,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return buildAborts(model, IntentSettings.parse("{}"));
     }
 
+    /** Test hook: build the {@code setters} glue collection without a repository. */
+    static List<Map<String, Object>> buildSettersForTest(IntentModel model) {
+        return buildSetters(model, IntentSettings.parse("{}"));
+    }
+
     /** Test hook: build the {@code rollups} glue collection without a repository. */
     static List<Map<String, Object>> buildRollupsForTest(IntentModel model) {
         return buildRollups(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
@@ -3342,6 +3347,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("field", setter.field());
             entry.put("value", setter.value());
             entry.put("relation", setter.relation() ? "true" : "false");
+            // The {error} token (whole-value, parser-enforced) reads the failure message the runtime
+            // conversion published instead of assigning a literal. Emitted only when used, so every
+            // other setter's descriptor stays byte-identical.
+            if (!setter.relation() && ProcessResilienceSupport.ERROR_TOKEN.equals(setter.value()
+                                                                                        .trim())) {
+                entry.put("errorMessage", "true");
+            }
             setters.add(entry);
         }
         return setters;

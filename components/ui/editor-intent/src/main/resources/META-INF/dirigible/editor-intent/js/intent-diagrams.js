@@ -204,6 +204,7 @@ window.IntentDiagrams = (() => {
                     const t = args[timer];
                     if (t && typeof t === 'object' && t.then) targets.push(t.then);
                 }
+                if (args['onError']) targets.push(args['onError']);
                 return targets.filter(t => t !== undefined && t !== null && String(t) !== '');
             };
             // Step name -> the innermost enclosing join id. A nested fork is claimed by the enclosing
@@ -300,6 +301,17 @@ window.IntentDiagrams = (() => {
                 if (expire && typeof expire === 'object' && expire.then) {
                     graph.insertEdge(parent, null, 'expires ' + String(expire.until || ''), byName[step.name], vertexFor(expire.then, joinOf[step.name]), edgeStyle(true));
                 }
+            }
+
+            // onError on a delegate service task draws as a dashed labelled edge to its error route -
+            // mirrors the error boundary event BpmnIntentGenerator emits; a declared retry cycle
+            // annotates the label so the diagram says how many attempts precede the route.
+            for (const step of steps) {
+                if (!step.args || !step.args['onError'] || !byName[step.name]) continue;
+                const retry = step.args['retry'];
+                const label = retry && typeof retry === 'object' && retry.count !== undefined && retry.count !== null
+                    ? 'on error (after ' + String(retry.count) + ' retries)' : 'on error';
+                graph.insertEdge(parent, null, label, byName[step.name], vertexFor(step.args['onError'], joinOf[step.name]), edgeStyle(true));
             }
 
             // abortOn: a transition into a listed status cancels the whole in-flight process (an

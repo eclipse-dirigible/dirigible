@@ -1101,6 +1101,43 @@ entity-agnostic helpers (e.g. a number generator over its own repository) belong
 and are called from the delegate (client Java compiles across all published projects). `delegate`
 cannot be combined with `setField` / `setRelationField` / `call`; `fields` values must be scalars.
 
+**Step resilience on a delegate: `retry:`, `onError:`, `{error}` and declared step data.** A
+delegate that talks to something remote - provision a schema, register a client in an identity
+provider, call a partner API - fails sometimes, and what happens then should be modeled, not left to
+the runtime's defaults. Both attributes apply to `delegate:` service tasks only:
+
+```yaml
+processes:
+  - name: TenantProvisioning
+    trigger: { onCreate: TenantApplication }
+    vars:
+      - { name: dbPassword, clearAfter: provisionApp }   # step data; cleared once provisionApp completes
+    steps:
+      - name: createSchema
+        kind: serviceTask
+        args: { delegate: custom.SchemaProvisioner, produces: [dbPassword], retry: { count: 3, every: PT30S }, onError: recordFailure }
+      - name: provisionApp
+        kind: serviceTask
+        args: { delegate: custom.AppProvisioner, uses: [dbPassword], retry: { count: 5, every: PT1M }, onError: recordFailure, next: done }
+      - { name: recordFailure, kind: serviceTask, args: { setField: failureMessage, value: "{error}", next: markFailed } }
+      - { name: markFailed,    kind: serviceTask, args: { setRelationField: Status, value: Failed, next: end } }
+      - { name: done, kind: end }
+```
+
+- `retry: { count: <n>, every: <ISO-8601 duration> }` - re-attempt the failed step `count` further
+  times, spaced by `every` (same vocabulary as `timeout.after`). `count` must be an integer >= 1.
+  Absent -> today's behaviour (existing files generate byte-identically).
+- `onError: <step | end>` - where the exhausted (or, with no `retry`, the first) failure routes,
+  validated like `next`/`then`. Route the main flow around the error steps with `next`, as with
+  decision branches. Absent -> the runtime's own incident, as today.
+- `{error}` - the failure message; a `setField` value of exactly `{error}` (the whole value) writes
+  it onto the record. Only resolvable on a step reachable from an `onError` route - nothing else
+  ever populates it.
+- `vars:` + `produces:`/`uses:` - declared step data: the delegate sets/reads the process variable
+  itself, the declaration is the contract, and an undeclared name in `produces`/`uses` is a parse
+  error. `clearAfter: <step>` removes the value once that serviceTask/userTask completes normally,
+  so a generated credential does not survive in the process history.
+
 **Waiting for a data event: `wait`.** A `wait` step **parks the process** until an entity lifecycle
 event resumes it - a support case waiting for the requester's reply, a dunning flow waiting for a
 payment, an order flow waiting for its goods receipt. Never model this as a user task looping back to
@@ -2293,6 +2330,9 @@ name.
 | step `kind` | `userTask`, `serviceTask`, `decision`, `script`, `wait`, `end` |
 | wait event | `onCreate`, `onUpdate` (never `onDelete`) |
 | userTask timers | `timeout: { after: <ISO-8601 duration>, then: <step> }`, `expire: { until: <date/timestamp field>, then: <step> }` |
+| serviceTask `retry` | `{ count: <integer >= 1>, every: <ISO-8601 duration> }` - `delegate:` steps only |
+| serviceTask `onError` | a declared step or `end` - `delegate:` steps only; `{error}` (a whole-value `setField` value) is readable on the route |
+| process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | trigger `businessKeyStrategy` | `timestamp` |
 | lifecycle event | `onCreate`, `onUpdate`, `onDelete` |
@@ -2327,6 +2367,7 @@ name.
 - "who/which was assigned / in force / valid on that date (from a register with from-to dates)" -> **resolves**
 - "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)
 - "cancel the in-flight approval when the document is voided/cancelled (no orphaned Inbox task)" -> **processes** (`abortOn:`)
+- "retry the flaky external call, and record the failure on the record instead of an incident" -> **processes** (`delegate:` serviceTask with `retry:` + `onError:`, the failure message via `{error}`)
 - "a screen to enter / edit X" -> **forms**
 - "a button on X's view that opens a custom page / action" -> **actions**
 - "void / cancel / close / reopen a finished document (a guarded manual status change, per record)" -> **transitions**

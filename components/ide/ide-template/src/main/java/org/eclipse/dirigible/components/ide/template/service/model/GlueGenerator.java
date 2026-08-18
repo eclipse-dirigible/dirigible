@@ -320,7 +320,8 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindSetter(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "process", "className", "entity", "perspective", "keyProperty", "keyAccessor", "field", "value", "relation");
+        copy(context, item, "process", "className", "entity", "perspective", "keyProperty", "keyAccessor", "field", "value", "relation",
+                "errorMessage");
         context.put("javaPerspective", sanitize(item, "perspective"));
     }
 

@@ -25,6 +25,7 @@ import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
+import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
 import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
@@ -53,6 +54,7 @@ import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.PermissionIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
+import org.eclipse.dirigible.components.intent.model.ProcessVarIntent;
 import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
 import org.eclipse.dirigible.components.intent.model.RelatedIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
@@ -126,12 +128,14 @@ public final class IntentParser {
      * the service task's actions - {@code ServiceTaskHandlerGenerator} scaffolds both from the same
      * keys.
      */
-    private static final Map<String, Set<String>> STEP_ARGS_BY_KIND = Map.of("userTask",
-            Set.of("assignee", "form", "timeout", "expire", "setRelationField", "value", "next"), "serviceTask",
-            Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next"), "script",
-            Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next"), "decision",
-            Set.of("if", "then", "else", "next"), "wait", Set.of("onCreate", "onUpdate", "via", "when", "next"), "parallel",
-            Set.of("branches", "next"), "end", Set.of("next"));
+    private static final Map<String, Set<String>> STEP_ARGS_BY_KIND =
+            Map.of("userTask", Set.of("assignee", "form", "timeout", "expire", "setRelationField", "value", "next"), "serviceTask",
+                    Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next", "retry",
+                            "onError", "produces", "uses"),
+                    "script",
+                    Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next"),
+                    "decision", Set.of("if", "then", "else", "next"), "wait", Set.of("onCreate", "onUpdate", "via", "when", "next"),
+                    "parallel", Set.of("branches", "next"), "end", Set.of("next"));
     /** Every arg the DSL knows, on any kind - anything else is a typo, not a misplacement. */
     private static final Set<String> KNOWN_STEP_ARGS = STEP_ARGS_BY_KIND.values()
                                                                         .stream()
@@ -3769,6 +3773,8 @@ public final class IntentParser {
             validateSetFieldSteps(process, triggerEntity, byName, model, issues);
             validateWaitSteps(process, triggerEntity, byName, issues);
             validateUserTaskTimers(process, triggerEntity, byName, issues);
+            validateStepResilience(process, issues);
+            validateProcessVars(process, issues);
             validateAbortOn(process, triggerEntity, byName, issues);
             validateParallelSteps(process, issues);
             validateTaskFormActions(process, model, issues);
@@ -3835,7 +3841,10 @@ public final class IntentParser {
         return kinds.size() == 1 ? "a " + kinds.get(0) : "a " + String.join(" / ", kinds);
     }
 
-    /** The authored maps nested in a step's args: the two boundary timers and the notify block. */
+    /**
+     * The authored maps nested in a step's args: the two boundary timers, the retry cycle and the
+     * notify block.
+     */
     private static void validateNestedStepArg(String subject, String key, Object value, List<String> issues) {
         if (!(value instanceof Map<?, ?> map)) {
             return; // shape is the business of the feature's own validator
@@ -3843,6 +3852,7 @@ public final class IntentParser {
         Set<String> vocabulary = switch (key) {
             case "timeout" -> Set.of("after", "then");
             case "expire" -> Set.of("until", "then");
+            case "retry" -> Set.of("count", "every");
             case "notify" -> NotificationIntent.BLOCK_KEYS;
             default -> null;
         };
@@ -4418,6 +4428,162 @@ public final class IntentParser {
     }
 
     /**
+     * Declarative step resilience on a {@code delegate} service task: {@code retry: { count: <n>,
+     * every: <ISO-8601 duration> }} re-attempts a failed step n further times, and {@code onError:
+     * <step | end>} routes the exhausted (or non-retried) failure like a decision branch. Both apply to
+     * {@code delegate} service tasks only (v1) - the runtime conversion that turns the final failed
+     * attempt into the caught BPMN error lives on the {@code flowable:class} delegate path. A
+     * {@code setField} value of {@code {error}} (the whole value, nothing else) reads the failure
+     * message and is therefore only resolvable on a step reachable from some {@code onError} route.
+     */
+    private static void validateStepResilience(ProcessIntent process, List<String> issues) {
+        Set<String> stepNames = new HashSet<>();
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() != null) {
+                stepNames.add(step.getName());
+            }
+        }
+        Set<String> errorReachable = null; // computed on first {error} use only
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() == null || step.getArgs() == null) {
+                continue;
+            }
+            String subject = "process [" + process.getName() + "] step [" + step.getName() + "]";
+            String delegate = stepArg(step, "delegate");
+            boolean hasDelegate = delegate != null && !delegate.isBlank();
+            Object retryRaw = step.getArgs()
+                                  .get("retry");
+            // A misplaced retry/onError (a non-serviceTask kind) is already reported by the by-kind
+            // vocabulary gate; the shape checks below would only be noise on top of it.
+            if (retryRaw != null && "serviceTask".equals(step.getKind())) {
+                if (!(retryRaw instanceof Map<?, ?> retry)) {
+                    issues.add(subject + " retry must be a map (e.g. `retry: { count: 3, every: PT30S }`)");
+                } else {
+                    if (!hasDelegate) {
+                        issues.add(subject + " declares retry but no delegate - step resilience applies to delegate service tasks"
+                                + " only (v1)");
+                    }
+                    Object count = retry.get("count");
+                    if (count == null) {
+                        issues.add(subject + " retry must declare `count` (how many further attempts, an integer >= 1)");
+                    } else {
+                        Integer parsed = ProcessResilienceSupport.retryCount(step);
+                        if (parsed == null || parsed < 1) {
+                            issues.add(subject + " retry `count` [" + count + "] must be an integer >= 1");
+                        }
+                    }
+                    Object every = retry.get("every");
+                    if (every == null || every.toString()
+                                              .isBlank()) {
+                        issues.add(subject + " retry must declare `every` (the ISO-8601 spacing between attempts, e.g. PT30S)");
+                    } else if (!isIso8601Duration(every.toString()
+                                                       .trim())) {
+                        issues.add(subject + " retry `every` [" + every + "] is not an ISO-8601 duration (e.g. PT30S, PT1M)");
+                    }
+                }
+            }
+            String onError = ProcessResilienceSupport.onError(step);
+            if (onError != null && "serviceTask".equals(step.getKind())) {
+                if (!hasDelegate) {
+                    issues.add(subject + " declares onError but no delegate - step resilience applies to delegate service tasks only (v1)");
+                }
+                if (!isRoutingLiteral(onError) && !stepNames.contains(onError)) {
+                    issues.add(subject + " `onError` references unknown step [" + onError + "]");
+                }
+            }
+            // {error} rides a setField value only; a setRelationField value is already forced to be an
+            // integer record id, so the token can never silently land there.
+            String value = stepArg(step, "value");
+            String setField = stepArg(step, "setField");
+            if (value != null && value.contains(ProcessResilienceSupport.ERROR_TOKEN) && setField != null && !setField.isBlank()) {
+                if (!value.trim()
+                          .equals(ProcessResilienceSupport.ERROR_TOKEN)) {
+                    issues.add(subject + " setField value [" + value + "] may use {error} only as the whole value");
+                } else {
+                    if (errorReachable == null) {
+                        errorReachable = ProcessResilienceSupport.errorReachableSteps(process);
+                    }
+                    if (!errorReachable.contains(step.getName())) {
+                        issues.add(subject + " setField value {error} is only resolvable on a step reachable from an onError route");
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Declared step data: {@code vars: [{ name, clearAfter? }]} on the process, referenced by the
+     * steps' {@code produces:}/{@code uses:} lists - an undeclared name in either is a parse error, so
+     * step data is always written down. A var name must be a plain identifier (it becomes a process
+     * variable and is cleared through an expression), and {@code clearAfter} must name a declared
+     * serviceTask/userTask step (the element the clearing end-listener attaches to).
+     */
+    private static void validateProcessVars(ProcessIntent process, List<String> issues) {
+        Map<String, StepIntent> stepsByName = new HashMap<>();
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() != null) {
+                stepsByName.put(step.getName(), step);
+            }
+        }
+        Set<String> varNames = new HashSet<>();
+        for (ProcessVarIntent var : process.getVars()) {
+            if (var.getName() == null || var.getName()
+                                            .isBlank()) {
+                issues.add("process [" + process.getName() + "] declares a var with no name");
+                continue;
+            }
+            String name = var.getName()
+                             .trim();
+            if (!name.matches("[A-Za-z_][A-Za-z0-9_]*")) {
+                issues.add("process [" + process.getName() + "] var [" + name + "] must be a plain identifier (letters, digits, _)");
+            }
+            if (!varNames.add(name)) {
+                issues.add("process [" + process.getName() + "] declares var [" + name + "] twice");
+            }
+            String clearAfter = var.getClearAfter();
+            if (clearAfter != null && !clearAfter.isBlank()) {
+                StepIntent step = stepsByName.get(clearAfter.trim());
+                if (step == null) {
+                    issues.add("process [" + process.getName() + "] var [" + name + "] clearAfter references unknown step [" + clearAfter
+                            + "]");
+                } else if (!"serviceTask".equals(step.getKind()) && !"script".equals(step.getKind())
+                        && !"userTask".equals(step.getKind())) {
+                    // A gateway / wait / end step emits no listener-bearing task element, so a clearAfter
+                    // there would be authored and silently never fire - the failure mode this module
+                    // refuses everywhere.
+                    issues.add("process [" + process.getName() + "] var [" + name + "] clearAfter [" + clearAfter
+                            + "] must name a serviceTask or userTask - the step whose completion clears the value");
+                }
+            }
+        }
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() == null || step.getArgs() == null) {
+                continue;
+            }
+            for (String listKey : List.of("produces", "uses")) {
+                Object raw = step.getArgs()
+                                 .get(listKey);
+                if (raw == null) {
+                    continue;
+                }
+                String subject = "process [" + process.getName() + "] step [" + step.getName() + "] " + listKey;
+                if (!(raw instanceof List<?> list)) {
+                    issues.add(subject + " must be a list of declared var names (e.g. `" + listKey + ": [dbPassword]`)");
+                    continue;
+                }
+                for (Object entry : list) {
+                    String varName = entry == null ? ""
+                            : entry.toString()
+                                   .trim();
+                    if (varName.isEmpty() || !varNames.contains(varName)) {
+                        issues.add(subject + " names undeclared var [" + entry + "] - declare it under the process `vars:`");
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * A process {@code abortOn: { status: [ids] | id, then: <step> }} cancels the in-flight instance
      * when the trigger entity transitions into a listed EntityStatus seed id. Requires a trigger entity
      * carrying a {@code function: EntityStatus} relation; {@code status} is a non-empty list of integer
@@ -4505,8 +4671,8 @@ public final class IntentParser {
      */
     private static boolean isRoutedToFromMainFlow(ProcessIntent process, String stepName) {
         for (StepIntent step : process.getSteps()) {
-            if (stepName.equals(stepArg(step, "next")) || stepName.equals(stepArg(step, "then"))
-                    || stepName.equals(stepArg(step, "else"))) {
+            if (stepName.equals(stepArg(step, "next")) || stepName.equals(stepArg(step, "then")) || stepName.equals(stepArg(step, "else"))
+                    || stepName.equals(stepArg(step, "onError"))) {
                 return true;
             }
         }

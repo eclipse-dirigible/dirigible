@@ -34,6 +34,12 @@ public class ${className} implements JavaDelegate {
         }
 #if($relation == "true")
         int updated = repository.updateProperty(((Number) key).${keyAccessor}(), "${field}", ${value});
+#elseif($errorMessage == "true")
+        // The {error} value: the failure message the resilience conversion published just before it
+        // raised the caught BPMN error that routed the flow here (empty when nothing published it).
+        Object errorMessage = execution.getVariable("__errorMessage");
+        int updated = repository.updateProperty(((Number) key).${keyAccessor}(), "${field}",
+                errorMessage == null ? "" : errorMessage.toString());
 #else
         int updated = repository.updateProperty(((Number) key).${keyAccessor}(), "${field}", "${value}");
 #end
