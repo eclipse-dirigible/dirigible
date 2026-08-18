@@ -26,6 +26,7 @@ import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
+import org.eclipse.dirigible.components.intent.generator.ScheduleSupport;
 import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
@@ -802,6 +803,7 @@ public final class IntentParser {
                     issues.add("schedule [" + name + "] where-condition uses unsupported operator [" + condition.getOp()
                             + "] (supported: eq/ne/gt/ge/lt/le/like)");
                 }
+                validateScheduleMoment(condition, source, "schedule [" + name + "]", issues);
             }
             // A schedule performs exactly one per-row action: notify (mail) or generate (create-from).
             boolean hasNotify = schedule.getNotify() != null;
@@ -1449,6 +1451,55 @@ public final class IntentParser {
         }
         if (!folder && cron) {
             issues.add(subject + " source declares a cron, which only a folder source polls on");
+        }
+    }
+
+    /**
+     * A {@code where} value that names a moment - the current date or timestamp, optionally offset by
+     * an ISO-8601 duration ({@code CURRENT_TIMESTAMP-PT30M}, {@code CURRENT_DATE+P7D}) - must be a
+     * moment the comparison can actually make.
+     *
+     * <p>
+     * Three ways it cannot, all of which would otherwise be a query that silently never matches: an
+     * offset that is not a single ISO-8601 amount the token's shape can carry (a date has no time
+     * component); a moment compared against a field that is not temporal at all; and a moment of the
+     * other shape than the field's - a timestamp handed to a date column. The last is checked for a
+     * bare token too, since "compared in the queried field's own shape" is the rule for the whole value
+     * form rather than a rule the offset introduced.
+     *
+     * <p>
+     * A field the source does not declare is left alone: it may be one of the {@code audit: true}
+     * columns (which is where a staleness sweep most often looks) or a field of a cross-model source,
+     * whose properties are only resolvable at generation time.
+     */
+    private static void validateScheduleMoment(ScheduleConditionIntent condition, EntityIntent source, String subject,
+            List<String> issues) {
+        ScheduleSupport.Moment moment = ScheduleSupport.moment(condition.getValue());
+        if (moment == null) {
+            return; // an ordinary literal
+        }
+        if (!moment.offsetValid()) {
+            issues.add(subject + " where-condition on [" + condition.getField() + "] has an offset [" + moment.duration()
+                    + "] that is not a single ISO-8601 duration this shape can carry"
+                    + (moment.shape() == ScheduleSupport.Moment.Shape.DATE
+                            ? " - a date takes a date-only amount (P7D / P1M / P1Y), not a time one"
+                            : " - use e.g. PT30M, PT12H, P7D or P1M"));
+            return;
+        }
+        FieldIntent field = source == null ? null : fieldByName(source, condition.getField());
+        if (field == null) {
+            return; // an audit column, or a cross-model source - resolved at generation time
+        }
+        ScheduleSupport.Moment.Shape fieldShape = ScheduleSupport.shapeOf(field.getType());
+        if (fieldShape == null) {
+            issues.add(subject + " where-condition compares the non-temporal field [" + condition.getField() + "] (type [" + field.getType()
+                    + "]) with the moment [" + condition.getValue() + "]");
+            return;
+        }
+        if (fieldShape != moment.shape()) {
+            issues.add(subject + " where-condition compares the [" + field.getType() + "] field [" + condition.getField()
+                    + "] with a moment of the other shape - use "
+                    + (fieldShape == ScheduleSupport.Moment.Shape.DATE ? "CURRENT_DATE" : "CURRENT_TIMESTAMP"));
         }
     }
 

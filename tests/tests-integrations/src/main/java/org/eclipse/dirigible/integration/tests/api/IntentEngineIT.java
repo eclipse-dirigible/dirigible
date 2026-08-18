@@ -259,7 +259,11 @@ class IntentEngineIT extends IntegrationTest {
                 cron: "0 0 9 * * ?"
                 entity: Order
                 where:
-                  - { field: orderDate, op: lt, value: CURRENT_DATE }
+                  # A moment RELATIVE to now (#6764) - "older than a week", which is what makes a
+                  # staleness sweep a sweep. The offset resolves against the clock of the run that
+                  # fires, and its shape must match the queried field's (a date takes a date-only
+                  # amount).
+                  - { field: orderDate, op: lt, value: "CURRENT_DATE-P7D" }
                 notify:
                   to: ops@example.com
                   subject: "Stale order {id} for {customer.name}"
@@ -717,8 +721,11 @@ class IntentEngineIT extends IntegrationTest {
                 job.contains("@Component") && job.contains("class StaleOrdersJob implements JobHandler")
                         && job.contains("return \"0 0 9 * * ?\""),
                 "the schedule should generate a self-describing @Component JobHandler whose cron() returns the expression");
-        assertTrue(job.contains("new OrderRepository().findAll(Criteria.create().lt(\"OrderDate\", java.time.LocalDate.now()))"),
-                "the job should query the entity with a typed Criteria built from the where clause");
+        assertTrue(
+                job.contains("new OrderRepository().findAll(Criteria.create()"
+                        + ".lt(\"OrderDate\", java.time.LocalDate.now().minus(java.time.Period.parse(\"P7D\"))))"),
+                "the job should query the entity with a typed Criteria built from the where clause, the relative moment resolved"
+                        + " against the run's clock rather than baked in at generation");
         assertTrue(job.contains("for (OrderEntity entity : rows)"), "the job should iterate the matching rows");
         assertTrue(
                 job.contains(
@@ -2915,8 +2922,10 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(
                 glue.contains("\"schedules\"") && glue.contains("\"name\": \"staleOrders\"") && glue.contains("\"cron\": \"0 0 9 * * ?\""),
                 "glue should carry the staleOrders schedule with its cron");
-        assertTrue(glue.contains("Criteria.create().lt(\\\"OrderDate\\\", java.time.LocalDate.now())"),
-                "glue should carry the schedule's typed Criteria expression");
+        assertTrue(
+                glue.contains("Criteria.create().lt(\\\"OrderDate\\\", java.time.LocalDate.now()"
+                        + ".minus(java.time.Period.parse(\\\"P7D\\\")))"),
+                "glue should carry the schedule's typed Criteria expression, the relative moment included");
         // Integrations: one per outbound integration, carrying the HTTP method + URL expression.
         assertTrue(glue.contains("\"integrations\"") && glue.contains("\"name\": \"pushOrderToWarehouse\"")
                 && glue.contains("\"clientMethod\": \"post\""), "glue should carry the pushOrderToWarehouse integration as a POST");
