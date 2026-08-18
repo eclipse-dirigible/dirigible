@@ -17,7 +17,10 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
- * The Class MessageProducer.
+ * Sends a message to a queue or a topic, resolving the physical destination from the tenant that is
+ * current at send time and stamping that tenant onto the message. See
+ * {@link DestinationNameManager} for the destination-naming contract this shares with
+ * {@link MessageConsumer} and with the subscribing sides.
  */
 @Component
 public class MessageProducer {

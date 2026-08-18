@@ -17,6 +17,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -26,6 +27,7 @@ import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.configurations.tenant.TenantConfigurationService;
 import org.eclipse.dirigible.components.listeners.config.ActiveMQConnectionArtifactsFactory;
+import org.eclipse.dirigible.components.listeners.service.DestinationNameManager;
 import org.eclipse.dirigible.components.listeners.service.TenantPropertyManager;
 import org.eclipse.dirigible.engine.java.component.ComponentContainer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
@@ -97,9 +99,20 @@ class ListenerClassConsumerTest {
         // ScheduledClassConsumerTest relies on for TenantContext.executeForEachTenant.
         when(tenantContext.execute(any(String.class), any())).thenAnswer(
                 invocation -> ((CallableResultAndException) invocation.getArgument(1)).call());
+        // The subscription fan-out: one (default) tenant is all this test needs, so the logical name
+        // is also the physical one. ListenerClassConsumerTenantSubscriptionTest covers the fan-out.
+        Tenant currentTenant = mock(Tenant.class);
+        when(currentTenant.getId()).thenReturn("default-tenant");
+        when(tenantContext.getCurrentTenant()).thenReturn(currentTenant);
+        when(tenantContext.executeForEachTenant(any())).thenAnswer(invocation -> {
+            ((CallableResultAndException) invocation.getArgument(0)).call();
+            return List.of();
+        });
+        DestinationNameManager destinationNameManager = mock(DestinationNameManager.class);
+        when(destinationNameManager.toTenantName("notifications")).thenReturn("notifications");
 
         ListenerClassConsumer listenerConsumer = new ListenerClassConsumer(componentContainer, connectionFactory, tenantContext,
-                tenantPropertyManager, defaultTenant, tenantConfigurationService);
+                tenantPropertyManager, defaultTenant, tenantConfigurationService, destinationNameManager);
         listenerConsumer.onClassLoaded(new LoadedClass("sample", RecordingHandler.class.getName(), RecordingHandler.class,
                 RecordingHandler.class.getClassLoader()));
 
