@@ -19,8 +19,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
+import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
@@ -1740,7 +1742,8 @@ public final class IntentParser {
             if (!names.add(name)) {
                 issues.add("duplicate integration [" + name + "]");
             }
-            validateEventBinding(integration.getEvent(), "integration [" + name + "]", entityNames, model, issues);
+            String subject = "integration [" + name + "]";
+            String eventEntity = validateEventBinding(integration.getEvent(), subject, entityNames, model, issues);
             String method = integration.getMethod();
             if (method != null && !method.isBlank() && !HTTP_METHODS.contains(method.trim()
                                                                                     .toUpperCase(Locale.ROOT))) {
@@ -1750,7 +1753,30 @@ public final class IntentParser {
                                                            .isBlank()) {
                 issues.add("integration [" + name + "] has no url");
             }
+            validateIntegrationPayload(integration, subject, eventEntity, model, issues);
         }
+    }
+
+    /**
+     * The declared {@code payload:} of an integration - the envelope it sends instead of the record as
+     * stored. The value forms and the closed context-token set are checked by {@link PayloadSupport};
+     * what belongs here is the transport rule: a method that carries no body has nowhere to put a
+     * payload, and accepting one there would generate a listener that resolves an envelope and throws
+     * it away.
+     */
+    private static void validateIntegrationPayload(IntegrationIntent integration, String subject, String eventEntity, IntentModel model,
+            List<String> issues) {
+        if (integration.getPayload()
+                       .isEmpty()) {
+            return;
+        }
+        if (!IntegrationSupport.hasBody(integration.getMethod())) {
+            issues.add(subject + " declares a payload, but its method [" + integration.getMethod()
+                    + "] sends no request body - a payload needs POST, PUT or PATCH");
+            return;
+        }
+        EntityIntent record = eventEntity == null ? null : entityByName(model, eventEntity);
+        PayloadSupport.validate(integration.getPayload(), record, IntentEntities.byName(model), subject, issues);
     }
 
     /**

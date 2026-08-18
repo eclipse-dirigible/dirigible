@@ -291,7 +291,7 @@ public final class NotificationSupport {
         return quote(rhs);
     }
 
-    private static String quote(String value) {
+    static String quote(String value) {
         return "\"" + value.replace("\\", "\\\\")
                            .replace("\"", "\\\"")
                            .replace("\n", "\\n")
@@ -299,8 +299,25 @@ public final class NotificationSupport {
                 + "\"";
     }
 
+    /**
+     * A resolver over one entity, for a caller that needs the path vocabulary on its own terms - the
+     * declared {@code payload:} of an outward-facing entry ({@link PayloadSupport}), which classifies
+     * its own value forms but must resolve a field / one-hop {@code relation.field} exactly the way a
+     * notification does, and accumulate the same relation loads.
+     *
+     * @param entity the entity the paths resolve against
+     * @param byName all LOCAL entities by name
+     * @param compositionParents composition-parent map (to resolve a target's perspective)
+     * @param crossModel resolver for a cross-model relation's owner facts, or {@code null}
+     * @return a fresh resolver
+     */
+    static Resolver resolver(EntityIntent entity, Map<String, EntityIntent> byName, Map<String, String> compositionParents,
+            CrossModelLookup crossModel) {
+        return new Resolver(entity, null, byName, compositionParents, crossModel);
+    }
+
     /** Resolves values/text against the event entity, accumulating the relation loads they require. */
-    private static final class Resolver {
+    static final class Resolver {
 
         private final EntityIntent entity;
         private final EntityIntent anchor;
@@ -390,7 +407,7 @@ public final class NotificationSupport {
          * @param recordScope whether the {@code record.<field>} scope may address the fan-out's anchor here
          *        (placeholders yes, the recipient no)
          */
-        private String access(String path, boolean recordScope) {
+        String access(String path, boolean recordScope) {
             if (APP_URL_TOKEN.equals(path)) {
                 return APP_URL_EXPRESSION;
             }
@@ -457,7 +474,7 @@ public final class NotificationSupport {
             return "(" + relationName + " == null ? null : " + relationName + "." + pascalField + ")";
         }
 
-        private RelationIntent toOneRelation(String name) {
+        RelationIntent toOneRelation(String name) {
             for (RelationIntent relation : entity.getRelations()) {
                 boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
                 if (toOne && name.equals(relation.getName())) {

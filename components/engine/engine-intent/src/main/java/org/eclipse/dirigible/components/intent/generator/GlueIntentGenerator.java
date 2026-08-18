@@ -99,7 +99,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> setters = buildSetters(model, settings);
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> schedules = buildSchedules(model, byName, compositionParents, settings, context);
-        List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings);
+        List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
         List<Map<String, Object>> inboundMessages = buildInboundMessages(model, byName, compositionParents, settings);
         List<Map<String, Object>> inboundFiles = buildInboundFiles(model, byName, compositionParents, settings);
@@ -1200,7 +1200,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /** Test hook: build the {@code integrations} glue collection without a repository. */
     static List<Map<String, Object>> buildIntegrationsForTest(IntentModel model) {
-        return buildIntegrations(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
+        return buildIntegrations(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                null);
     }
 
     /** Test hook: build the {@code stepEvents} glue collection without a repository. */
@@ -2749,7 +2750,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     private static List<Map<String, Object>> buildIntegrations(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> integrations = new ArrayList<>();
         for (IntegrationIntent integration : model.getIntegrations()) {
             if (integration.getName() == null || integration.getName()
@@ -2765,6 +2766,18 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 LOGGER.info("Settings opt-out: keeping existing listener for integration [{}] (not generated)", integration.getName());
                 continue;
             }
+            // The declared envelope, when there is one. A value that cannot be resolved (a cross-model
+            // relation.field the owner does not carry) drops the whole integration with the reason -
+            // sending the record instead would silently substitute a different contract.
+            PayloadSupport.Plan payload;
+            try {
+                payload = PayloadSupport.plan(integration.getPayload(), byName.get(entity), byName, compositionParents,
+                        crossModelLookup(model, context));
+            } catch (IllegalArgumentException ex) {
+                reportDroppedGlue(context,
+                        "Integration [" + integration.getName() + "]: " + ex.getMessage() + " - the integration was NOT generated");
+                continue;
+            }
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("name", integration.getName());
             entry.put("className", IntentNaming.pascalCase(integration.getName()));
@@ -2774,6 +2787,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("clientMethod", IntegrationSupport.clientMethod(integration.getMethod()));
             entry.put("hasBody", IntegrationSupport.hasBody(integration.getMethod()));
             entry.put("urlExpression", IntegrationSupport.urlExpression(integration.getUrl()));
+            entry.putAll(PayloadSupport.payloadFields(payload));
+            entry.put("relationLoads", relationLoads(payload == null ? List.of() : payload.loads()));
             integrations.add(entry);
         }
         return integrations;
@@ -3155,8 +3170,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan) {
+        return relationLoads(plan.loads());
+    }
+
+    private static List<Map<String, Object>> relationLoads(List<NotificationSupport.RelationLoad> resolved) {
         List<Map<String, Object>> loads = new ArrayList<>();
-        for (NotificationSupport.RelationLoad load : plan.loads()) {
+        for (NotificationSupport.RelationLoad load : resolved) {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("local", load.local());
             entry.put("targetEntity", load.targetEntity());
