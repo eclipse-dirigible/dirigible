@@ -695,6 +695,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 100 }
 
+              # generates step axis + mode: append (#6800): a shipment whose flow is observed at two
+              # moments, a log the observations are APPENDED to (several rows per source - the
+              # cardinality the at-most-once create-from could not express), and a summary minted
+              # ONCE for the same source on the same axis.
+              - name: Shipment
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 200 }
+              - name: ShipmentLog
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: step, type: string, length: 100 }
+                relations:
+                  - { name: Shipment, kind: manyToOne, to: Shipment }
+              - name: ShipmentSummary
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 200 }
+                relations:
+                  - { name: Shipment, kind: manyToOne, to: Shipment }
+
             aggregates:
               - name: ledgerTotal
                 of: Ledger
@@ -761,6 +782,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: markExpired, kind: serviceTask, args: { setField: state, value: EXPIRED, next: end } }
                   - { name: awaitReply,  kind: wait, args: { onCreate: RfqReply, via: Rfq, when: "internal == false", next: markReplied } }
                   - { name: markReplied, kind: serviceTask, args: { setField: state, value: REPLIED, next: end } }
+                  - { name: end, kind: end }
+
+              # generates step axis (#6800): every step is a serviceTask, so both observed moments -
+              # dispatch REACHED and settle COMPLETED - fire without any inbox interaction. The two
+              # appending create-froms and the one at-most-once create-from below bind to them.
+              - name: ShipmentFlow
+                trigger: { onCreate: Shipment }
+                steps:
+                  - { name: dispatch, kind: serviceTask, args: { setField: note, value: DISPATCHED, next: settle } }
+                  - { name: settle,   kind: serviceTask, args: { setField: note, value: SETTLED, next: end } }
                   - { name: end, kind: end }
 
               # abortOn: voiding the approval (CancelApproval -> status 3) cancels the confirm task.
@@ -989,6 +1020,39 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - note: "Slip {label}"
                     amount: "Total * 2"
                     when: "Total != 0"
+              # generates on the step axis with mode: append (#6800). TWO appending rules share the
+              # target AND the back-reference on purpose: that is legal under append (each row records
+              # a different moment), where mode: once would make the second one a permanent no-op.
+              # `button: true` on the second keeps the click, which appends as well - append is the
+              # ABSENCE of a guard, not a state-aware one.
+              - name: log-dispatch
+                from: Shipment
+                to: ShipmentLog
+                event: { onStepReached: { process: ShipmentFlow, step: dispatch }, mode: append }
+                map:
+                  Shipment: id
+                defaults:
+                  step: "dispatch"
+              - name: log-settle
+                from: Shipment
+                to: ShipmentLog
+                event: { onStepCompleted: { process: ShipmentFlow, step: settle }, mode: append }
+                button: true
+                map:
+                  Shipment: id
+                defaults:
+                  step: "settle"
+              # the DEFAULT cardinality on the very same axis: one summary per shipment, and a click
+              # after the event hands back the one that exists instead of minting a second.
+              - name: summary-from-shipment
+                from: Shipment
+                to: ShipmentSummary
+                event: { onStepCompleted: { process: ShipmentFlow, step: settle } }
+                button: true
+                map:
+                  Shipment: id
+                defaults:
+                  note: "summary"
               # Prompted create-from (#6685): a per-record action that collects the input the source
               # cannot derive (here: a manual line's note + amount) before creating a composition
               # child. The prompted values are posted with the source id and set on the target after
@@ -2185,6 +2249,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(generate.contains(".eq(\"Slip\", sourceId)") && generate.contains("return existing.get(0);"),
                 "an event-driven create-from must return the document already back-referencing the source");
 
+        // generates on the step axis + mode: append (#6800): the listener binds the step-scoped topic
+        // the generated emitter publishes the trigger entity on (NOT a lifecycle topic), and the
+        // appending create-from renders WITHOUT the existing-target lookup - while its at-most-once
+        // sibling on the same moment keeps it. The emitter itself exists because a create-from asked
+        // for that moment, with no notification or integration bound to it.
+        String logSettleOnEvent = contentOf("gen/events/emission/LogSettleGenerateOnEvent.java");
+        assertTrue(logSettleOnEvent.contains("-Shipment-step-ShipmentFlow-settle-completed"),
+                "a step-bound create-from must bind the step-scoped topic of the trigger entity");
+        assertTrue(
+                contentOf("gen/events/emission/LogDispatchGenerateOnEvent.java").contains("-Shipment-step-ShipmentFlow-dispatch-reached"),
+                "onStepReached must bind the reached moment's topic");
+        String logSettleGenerate = contentOf("gen/events/emission/LogSettleGenerate.java");
+        assertFalse(logSettleGenerate.contains(".eq(\"Shipment\", sourceId)"),
+                "mode: append must drop the existing-target lookup - every event appends a row");
+        assertTrue(logSettleGenerate.contains("target.Step = \"settle\";"),
+                "the appended row must still be built by the whole create-from (map + defaults)");
+        assertTrue(contentOf("gen/events/emission/SummaryFromShipmentGenerate.java").contains(".eq(\"Shipment\", sourceId)"),
+                "the default cardinality must keep the at-most-once lookup");
+        assertTrue(contentOf("gen/events/emission/ShipmentFlowSettleCompleted.java").contains("implements JavaDelegate"),
+                "a create-from asking for a step moment must get that moment's emitter, even as its only consumer");
+
         // generates prompt (#6685): the prompted controller takes a values map, enforces the
         // required input with a 400, and converts each posted value to the target field's Java type
         // (decimal -> BigDecimal). The action descriptor carries the prompt so the customActions
@@ -3323,6 +3408,101 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertInboundSourcesRuntime();
         assertOutboundDepartureRuntime();
         assertBpmEventsRuntime();
+        assertGeneratesStepAxisRuntime();
+    }
+
+    /**
+     * The step axis and both cardinalities of an event-driven create-from (#6800) at the outermost
+     * layer, on ONE shipment whose all-serviceTask flow runs by itself: the two appending create-froms
+     * bound to two moments of it append TWO log rows for that single source - sharing the target AND
+     * the back-reference, which is exactly what {@code mode: once} makes impossible - and clicking the
+     * kept button appends a THIRD, because append is the absence of a guard rather than a state-aware
+     * one. The at-most-once create-from bound to the SAME moment mints exactly one summary, and a click
+     * after the event hands back that one instead of a second.
+     */
+    private void assertGeneratesStepAxisRuntime() {
+        AtomicInteger shipmentId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> shipmentId.set(given().contentType("application/json")
+                                                                .body("{\"Note\":\"crate 7\"}")
+                                                                .when()
+                                                                .post(API + "/shipment/ShipmentController")
+                                                                .then()
+                                                                .statusCode(200)
+                                                                .extract()
+                                                                .path("Id")));
+
+        // Both moments of the process fired and each appended its own row - the step topic reached a
+        // create-from, which no construct could do before, and the second rule was NOT swallowed by the
+        // first one's back-reference.
+        restAssuredExecutor.execute(() -> {
+            String rows = "findAll { it.Shipment == " + shipmentId.get() + " }";
+            io.restassured.path.json.JsonPath logs = given().when()
+                                                            .get(API + "/shipmentlog/ShipmentLogController")
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .extract()
+                                                            .jsonPath();
+            assertEquals(2, logs.getList(rows)
+                                .size(),
+                    "each observed step moment must append its own log row");
+            assertEquals(List.of("dispatch", "settle"), logs.getList(rows + ".Step")
+                                                            .stream()
+                                                            .map(String::valueOf)
+                                                            .sorted()
+                                                            .toList(),
+                    "the appended rows must record which moment each of them is about");
+        }, 60);
+
+        // The at-most-once sibling on the same moment: exactly one summary.
+        AtomicInteger summaryId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> {
+            String rows = "findAll { it.Shipment == " + shipmentId.get() + " }";
+            io.restassured.path.json.JsonPath summaries = given().when()
+                                                                 .get(API + "/shipmentsummary/ShipmentSummaryController")
+                                                                 .then()
+                                                                 .statusCode(200)
+                                                                 .extract()
+                                                                 .jsonPath();
+            assertEquals(1, summaries.getList(rows)
+                                     .size(),
+                    "the default cardinality must mint exactly one summary per source");
+            summaryId.set(summaries.getInt(rows + ".Id[0]"));
+        }, 60);
+
+        // A click on the appending create-from's kept button appends a THIRD row...
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + shipmentId.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/LogSettleGenerate/run")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> {
+            String rows = "findAll { it.Shipment == " + shipmentId.get() + " }";
+            assertEquals(3, given().when()
+                                   .get(API + "/shipmentlog/ShipmentLogController")
+                                   .then()
+                                   .statusCode(200)
+                                   .extract()
+                                   .jsonPath()
+                                   .getList(rows)
+                                   .size(),
+                    "append carries no guard at all - a click after the events appends another row");
+        });
+
+        // ...while the same click on the at-most-once sibling hands back the summary that exists.
+        restAssuredExecutor.execute(() -> {
+            String summary = given().contentType("application/json")
+                                    .body("{\"id\":" + shipmentId.get() + "}")
+                                    .when()
+                                    .post("/services/java/" + PROJECT + "/gen/events/emission/SummaryFromShipmentGenerate/run")
+                                    .then()
+                                    .statusCode(200)
+                                    .extract()
+                                    .asString();
+            assertEquals(summaryId.get(), io.restassured.path.json.JsonPath.from(summary)
+                                                                           .getInt("Id"),
+                    "mode: once must still return the existing target on a second delivery");
+        });
     }
 
     /**

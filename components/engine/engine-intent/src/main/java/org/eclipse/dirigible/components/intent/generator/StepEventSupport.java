@@ -17,6 +17,7 @@ import java.util.Set;
 
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
+import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
@@ -35,8 +36,9 @@ import org.eclipse.dirigible.components.intent.model.StepIntent;
  * the id in the (clear-D) process context and publishes its JSON to a step-scoped topic. That topic
  * is the entity's own topic plus {@link #topicSuffix(Map) a step suffix}, so every consumer the
  * lifecycle events already feed - notifications with their relation loads, guards and print
- * attachments, integrations, outbound departures - binds to it and reads the payload unchanged. The
- * action vocabulary is therefore reused literally, not re-implemented per event kind.
+ * attachments, integrations, outbound departures, event-driven create-froms - binds to it and reads
+ * the payload unchanged. The action vocabulary is therefore reused literally, not re-implemented
+ * per event kind.
  *
  * <p>
  * The record a step event is about is the process's trigger entity: a process runs on one record,
@@ -260,6 +262,12 @@ public final class StepEventSupport {
         }
         for (OutboundIntent outbound : model.getOutbound()) {
             events.add(outbound.getEvent());
+        }
+        // A create-from bound to a step (#6800) is a consumer like any other, and may well be the ONLY
+        // one of that moment - without it here the moment would have no emitter and the listener would
+        // wait on a topic nobody publishes to.
+        for (GeneratesIntent generates : model.getGenerates()) {
+            events.add(generates.getEvent());
         }
         return events;
     }

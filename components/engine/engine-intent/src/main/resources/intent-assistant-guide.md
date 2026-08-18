@@ -1483,16 +1483,58 @@ generates:
         amount: Amount
 ```
 
-- Exactly one of `onTransition` (a status write - a `when: "<StatusRelation> == <status>"` guard is
-  **mandatory**, status by seeded NAME or id) or `onCreate` (the source's insert - the guard is optional,
-  for a source with no status lifecycle). The entity named there must be the SAME one `from:` declares:
-  the event says WHEN, `from:`/`fromUses:` say what and where. Never repeat the model as `model:`.
-- **`map:` must copy the source's `id` onto the target's to-one back to the source.** That
-  back-reference is the at-most-once guard: before creating anything the create-from looks for a target
-  that already back-references this source and returns it instead, so an event redelivery - or a click
-  afterwards - is a no-op rather than a duplicate document. Authoring an event without it is rejected.
+- Exactly one trigger, from either axis:
+  - the source's **lifecycle** - `onTransition` (a status write - a `when: "<StatusRelation> == <status>"`
+    guard is **mandatory**, status by seeded NAME or id) or `onCreate` (the source's insert - the guard is
+    optional, for a source with no status lifecycle). The entity named there must be the SAME one `from:`
+    declares: the event says WHEN, `from:`/`fromUses:` say what and where. Never repeat the model as
+    `model:`.
+  - a **process step** - `onStepReached` / `onStepCompleted: { process: <Process>, step: <step> }`, the
+    same event axis notifications / integrations / departures bind to (see "the event axis"). The process
+    must run ON the source (its `trigger:` entity is the `from:` entity - that record is what the step
+    event is about), the step must be a `userTask` or a `serviceTask`, and the source must be local (a
+    process and its steps belong to the model that declares them). `when:` stays optional here: the step
+    IS the moment. Use it when the follow-up document belongs to a point in a flow rather than to a
+    status - and as the route around a source whose write does not publish a transition.
+- **`map:` must copy the source's `id` onto the target's to-one back to the source** - in BOTH
+  cardinalities. Under the default `mode: once` it is the at-most-once guard: before creating anything the
+  create-from looks for a target that already back-references this source and returns it instead, so an
+  event redelivery - or a click afterwards - is a no-op rather than a duplicate document. Under
+  `mode: append` it is the appended row's provenance. Authoring an event without it is rejected.
+- **`mode:` - the cardinality.** `once` (default, today's behaviour) creates at most one target per
+  source. `append` creates one **per delivered event**: the "a row per step, a row per transition" shape -
+  a log entry, a protocol line, an activity record.
+
+```yaml
+processes:
+  - name: ClaimApproval
+    trigger: { onCreate: Claim }
+    steps:
+      - { name: review,   kind: userTask,    args: { assignee: approver, form: ReviewClaim } }
+      - { name: activate, kind: serviceTask, args: { setRelationField: Status, value: ACTIVE } }
+
+generates:
+  # one LogEntry appended every time the activate step completes - several per Claim, by design
+  - name: log-activation
+    from: Claim
+    to: LogEntry
+    event: { onStepCompleted: { process: ClaimApproval, step: activate }, mode: append }
+    map:
+      Claim: id                # back-reference: REQUIRED in both modes (the row's provenance here)
+      amount: amount
+    defaults:
+      step: "activate"         # which moment this row records - a literal per generates block
+      date: now
+```
+
+- **`append` is the ABSENCE of a guard, not a state-aware one.** Every qualifying event appends a row,
+  including a redelivery (the step topic is published after commit and is not transactional with the
+  step - the same at-least-once contract the event axis states for `outbound`). It is therefore the wrong
+  answer to "I voided the document and cannot regenerate it": that needs a state-aware guard on
+  `mode: once`, not a cardinality that would also mint a document on every later event. Anything that
+  must exist at most once keeps `mode: once`.
 - **The button is dropped by default** (declaring an event is how you say nobody has to click). Add
-  `button: true` to keep both triggers; the button then shares the same at-most-once guard.
+  `button: true` to keep both triggers; the button then shares the cardinality of the event.
 - `sourceStatus:` composes normally (the flip happens after the target exists, and cannot re-trigger the
   create-from because the guard has already claimed the source).
 - Use this over `posts` when the result is a **document with line items**: `posts` writes flat mapped
@@ -2144,9 +2186,10 @@ order.
 If a contract needs more than this it is an algorithm, not a payload - say so and hand off to a
 hand-written handler rather than stretching the block.
 
-### the event axis - what a notification / integration / departure binds to
+### the event axis - what a notification / integration / departure / create-from binds to
 
-`notifications`, `integrations` and `outbound` departures each declare **exactly one** `event:`, either
+`notifications`, `integrations`, `outbound` departures and event-driven `generates` create-froms each
+declare **exactly one** `event:`, either
 
 - an **entity lifecycle** event - `{ onCreate: <Entity> }` / `{ onUpdate: ... }` / `{ onDelete: ... }`;
 - a **process step** event - `{ onStepReached: { process: <Process>, step: <step> } }` or
@@ -2187,6 +2230,15 @@ integrations:
 event is about); the step must exist and be a `userTask` or a `serviceTask` (a decision, a wait or
 an end has no moment to observe). Any number of consumers may bind to the same step moment - the
 record is published once.
+
+An event-driven **`generates`** create-from binds to the same axis, with one narrowing of its own: the
+process must run on the create-from's `from:` entity (a create-from reads one source record, and the
+step event is about the process's trigger record). It also adds its own `onTransition` lifecycle event -
+see the `generates` section, together with `mode: once|append`.
+
+The step record is published **after commit** and is not transactional with the step, so every consumer
+of the axis is at-least-once: a redelivery re-notifies, re-forwards, or (under `mode: append`) appends a
+second row.
 
 Every axis binding also takes an optional **`when:` guard** inside the `event:` map - a single
 comparison against a direct field of the record (`when: "channel != internal"`), which decides per
@@ -2455,6 +2507,7 @@ name.
 - "on a schedule / every month, create a Y for each X / recurring invoices / auto-generate timesheets" -> **schedules** (`generate`)
 - "call an external API when X changes" -> **integrations**
 - "notify / call out when a task becomes available, or when a step is done" -> **notifications / integrations** with `event: { onStepReached | onStepCompleted: { process, step } }`
+- "append a log / protocol / activity row every time a step completes (or a status is set)" -> **generates** with `event: { onStepCompleted: { process, step }, mode: append }`
 - "let an external system create X" -> **inbound** (`path` for HTTP, `source: { queue | topic }` for a message, `source: { folder, cron }` for dropped files)
 - "keep a running count of children on the parent" -> **rollups**
 - "expand a from-to span into day/week/month child rows / loan installments / vacation day items" -> **expansions**

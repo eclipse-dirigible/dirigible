@@ -555,8 +555,11 @@ class GlueGenerator {
                 "itemLines", "fromItemEntity", "toItemEntity", "srcFkProperty", "toFkProperty", "itemFieldAssignments", "fromPerspective",
                 "sourceStatusProperty", "sourceStatusValue",
                 // The event half (issue #6711): the trigger kind, the status guard and the back-reference
-                // the at-most-once check reads, plus whether a button is contributed at all.
-                "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "backRefProperty",
+                // the at-most-once check reads, plus whether a button is contributed at all. The axis and
+                // the cardinality (issue #6800): the topic suffix the listener binds - a lifecycle one or
+                // a step-scoped one - and whether the create-from keeps its at-most-once lookup at all.
+                "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "backRefProperty", "isStep", "stepProcess",
+                "stepName", "topicSuffix", "appendMode",
                 // The declared input form (issue #6685): the prompted target properties with their
                 // pre-rendered value conversions - the template renders one block per entry.
                 "hasPrompt", "promptFields");

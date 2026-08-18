@@ -5338,7 +5338,7 @@ public final class IntentParser {
             if (!"entity".equals(scope) && !"page".equals(scope)) {
                 issues.add("generates [" + name + "] has invalid scope [" + scope + "] (expected 'entity' or 'page')");
             }
-            validateGeneratesEvent(g, name, source, crossModelSource, issues);
+            validateGeneratesEvent(g, name, source, crossModelSource, model, issues);
             validateMapSource(source, g.getMap(), "generates [" + name + "]", "map", issues);
             if (g.getItems() != null) {
                 GeneratesItemsIntent items = g.getItems();
@@ -5441,16 +5441,21 @@ public final class IntentParser {
     }
 
     /**
-     * Validate the optional {@code event} trigger of a create-from (issue #6711): exactly one of
-     * {@code onTransition} (a status write - the {@code when} status guard is mandatory) or
-     * {@code onCreate} (the source's insert - the guard is optional), naming the SAME entity
-     * {@code from} declares; the owning model is never repeated here, {@code fromUses} declares it. An
-     * event-driven create-from is at-most-once, and the guard is the target's back-reference to the
-     * source - so the {@code map} must copy the source's primary key onto it. Without an event,
-     * {@code button: false} is rejected: a create-from with neither trigger generates nothing at all.
+     * Validate the optional {@code event} trigger of a create-from (issues #6711, #6800): exactly one
+     * of the source's lifecycle ({@code onTransition} - a status write, the {@code when} status guard
+     * is mandatory - or {@code onCreate} - the source's insert, the guard optional), naming the SAME
+     * entity {@code from} declares, or a process step ({@code onStepReached}/{@code onStepCompleted}:
+     * <code>{ process, step }</code>) whose process runs ON that entity. The owning model is never
+     * repeated here, {@code fromUses} declares it.
+     *
+     * <p>
+     * The {@code map} must copy the source's primary key onto the target's back-reference in BOTH
+     * cardinalities: it is the at-most-once guard of the default {@code mode: once}, and the row's
+     * provenance under {@code mode: append}. Without an event, {@code button: false} is rejected: a
+     * create-from with neither trigger generates nothing at all.
      */
     private static void validateGeneratesEvent(GeneratesIntent g, String name, EntityIntent source, boolean crossModelSource,
-            List<String> issues) {
+            IntentModel model, List<String> issues) {
         String subject = "generates [" + name + "]";
         if (!g.isEventDriven()) {
             if (Boolean.FALSE.equals(g.getButton())) {
@@ -5463,11 +5468,21 @@ public final class IntentParser {
         if (event.get("model") != null) {
             issues.add(subject + " event must not declare model: - the source and its owning model are declared by from:/fromUses:");
         }
+        validateGeneratesEventMode(g, subject, issues);
         Object onTransition = event.get("onTransition");
         Object onCreate = event.get("onCreate");
-        if (onTransition == null && onCreate == null) {
-            issues.add(subject + " event requires `onTransition: " + g.getFrom() + "` (a status write) or `onCreate: " + g.getFrom()
-                    + "` (the source's insert)");
+        String stepKind = null;
+        for (String kind : STEP_EVENT_KINDS) {
+            if (event.get(kind) != null) {
+                stepKind = kind;
+            }
+        }
+        if (stepKind != null) {
+            validateGeneratesStepEvent(g, subject, stepKind, onTransition != null || onCreate != null, crossModelSource, model, issues);
+        } else if (onTransition == null && onCreate == null) {
+            issues.add(subject + " event requires `onTransition: " + g.getFrom() + "` (a status write), `onCreate: " + g.getFrom()
+                    + "` (the source's insert) or `onStepReached`/`onStepCompleted: { process: <Process>, step: <step> }`"
+                    + " (a moment in a process that runs on it)");
         } else if (onTransition != null && onCreate != null) {
             issues.add(subject + " event declares both onTransition and onCreate - exactly one trigger is allowed");
         } else {
@@ -5488,14 +5503,73 @@ public final class IntentParser {
                 issues.add(subject + " event when [" + when + "] must be `<Property> == <status seed id or name>`");
             }
         }
-        // The at-most-once guard: the target's own to-one back to the source, written from the source's
-        // primary key. A cross-model source's key field is read from the owner .model at generation
-        // time, so only the local case is checkable here - the glue generator fails loudly for the rest.
+        // The back-reference: the target's own to-one back to the source, written from the source's
+        // primary key. Required in BOTH cardinalities - the at-most-once guard under `once`, the row's
+        // provenance under `append` (a log row nothing points back at cannot be read). A cross-model
+        // source's key field is read from the owner .model at generation time, so only the local case
+        // is checkable here - the glue generator fails loudly for the rest.
         if (!crossModelSource && source != null && !g.getMap()
                                                      .containsValue(seedIdField(source))) {
             issues.add(subject + " is event-driven, so its map must copy the source's [" + seedIdField(source)
                     + "] onto the target's back-reference to it (e.g. `map: { " + g.getFrom() + ": " + seedIdField(source)
-                    + " }`) - that back-reference is the at-most-once guard against an event redelivery");
+                    + " }`) - that back-reference is the at-most-once guard against an event redelivery under mode: once,"
+                    + " and the created row's provenance under mode: append");
+        }
+    }
+
+    /**
+     * The {@code mode} of an event trigger (issue #6800): {@code once} (the default - at most one
+     * target row per source) or {@code append} (a row per delivered event). Anything else is refused
+     * rather than silently read as the default, which would turn a typo into a cardinality nobody
+     * authored.
+     */
+    private static void validateGeneratesEventMode(GeneratesIntent g, String subject, List<String> issues) {
+        Object mode = g.getEvent()
+                       .get("mode");
+        if (mode == null) {
+            return;
+        }
+        String declared = String.valueOf(mode)
+                                .trim();
+        if (!GeneratesIntent.MODE_ONCE.equals(declared) && !GeneratesIntent.MODE_APPEND.equals(declared)) {
+            issues.add(subject + " event has invalid mode [" + declared + "] (expected '" + GeneratesIntent.MODE_ONCE + "' - at most one "
+                    + g.getTo() + " per " + g.getFrom() + " - or '" + GeneratesIntent.MODE_APPEND + "' - one per delivered event)");
+        }
+    }
+
+    /**
+     * A create-from bound to a process step: the step must be an observable moment of a process that
+     * runs ON the source (the step event is delivered as a message about the process's trigger entity,
+     * which is what the create-from then reads by id), and the source must be local - a process and its
+     * steps belong to the model that declares them, so a cross-model source has none to bind to here.
+     * The {@code when} guard stays optional: the step already IS the moment.
+     */
+    private static void validateGeneratesStepEvent(GeneratesIntent g, String subject, String kind, boolean lifecycleToo,
+            boolean crossModelSource, IntentModel model, List<String> issues) {
+        if (lifecycleToo) {
+            issues.add(subject + " event declares " + kind + " next to onTransition/onCreate - exactly one trigger is allowed");
+            return;
+        }
+        if (crossModelSource) {
+            issues.add(subject + " event binds " + kind + " on a cross-model source (fromUses [" + g.getFromUses()
+                    + "]) - a process and its steps are local to the model that declares them; bind to onTransition/onCreate instead");
+            return;
+        }
+        String triggerEntity = validateStepEventBinding(g.getEvent(), kind, subject, model, issues);
+        if (triggerEntity == null) {
+            return; // already reported
+        }
+        if (g.getFrom() != null && !g.getFrom()
+                                     .isBlank()
+                && !triggerEntity.equals(g.getFrom())) {
+            issues.add(subject + " event " + kind + " names a process that runs on [" + triggerEntity + "], not on the from entity ["
+                    + g.getFrom() + "] - a step event is about the record its process runs on, which is the record the create-from reads");
+        }
+        Object when = g.getEvent()
+                       .get("when");
+        if (when != null && !String.valueOf(when)
+                                   .matches("\\s*\\w+\\s*==\\s*\\d+\\s*")) {
+            issues.add(subject + " event when [" + when + "] must be `<Property> == <status seed id or name>`");
         }
     }
 
