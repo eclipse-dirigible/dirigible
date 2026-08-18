@@ -137,6 +137,14 @@ public enum DirigibleConfig {
     /** The basic admin pass. */
     BASIC_ADMIN_PASS("DIRIGIBLE_BASIC_PASSWORD", toBase64("admin")),
 
+    /**
+     * Optional application-owned login page for the OAuth2 login profiles (cognito, keycloak). When
+     * set, unauthenticated browser requests are redirected to this page (typically under the already
+     * public {@code /public/web/}) instead of the identity provider, so the application hosts its own
+     * sign-in UX. Blank keeps the standard redirect to the provider.
+     */
+    SECURITY_LOGIN_PAGE("DIRIGIBLE_SECURITY_LOGIN_PAGE", null),
+
     /** Whether the Java LSP (JDT.LS) integration is enabled. */
     JAVA_LSP_ENABLED("DIRIGIBLE_JAVA_LSP_ENABLED", Boolean.TRUE.toString()),
 
