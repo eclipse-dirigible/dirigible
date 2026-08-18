@@ -1692,6 +1692,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             Map<String, Object> constraint = new LinkedHashMap<>();
             constraint.put("name", constraintName.toString());
             constraint.put("columns", columns);
+            // The PROPERTY names, for the .edm twin: the modeler declares a key over properties (so a
+            // later dataName change follows it), and resolves them to columns when it rebuilds the
+            // .model. The columns above are what the schema template emits.
+            constraint.put("properties", names.stream()
+                                              .map(IntentNaming::pascalCase)
+                                              .collect(Collectors.joining(",")));
             constraint.put("columnsCsv", columns.stream()
                                                 .map(column -> String.valueOf(column.get("name")))
                                                 .collect(Collectors.joining(",")));
@@ -2611,6 +2617,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
         }
         sb.append(" </entities>\n");
+        appendUniqueKeys(sb, entities);
         sb.append(" <perspectives>\n");
         for (Map<String, Object> perspective : perspectives) {
             sb.append("  <perspective><name>")
@@ -2629,6 +2636,60 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         appendMxGraphModel(sb, document, entities);
         sb.append("</model>\n");
         return sb.toString();
+    }
+
+    /**
+     * The composite business keys, as a top-level {@code <uniqueKeys>} section.
+     *
+     * <p>
+     * Top-level, beside {@code <perspectives>} and {@code <navigations>}, rather than nested in the
+     * entity - which is what lets the EDM modeler carry them at all. The modeler renders the canvas by
+     * decoding {@code <mxGraphModel>} and never reads the {@code <entities>} section, so a key nested
+     * there would have to live on an entity CELL, where it would be the first non-scalar value on a
+     * path whose generic codec has only ever seen attributes. The perspectives take the other route -
+     * an array on the graph model, loaded from the raw XML - and so does this.
+     *
+     * <p>
+     * Without this section a model authored from an intent, opened in the modeler and saved for any
+     * unrelated reason, would come back with its keys gone: the save regenerates the {@code .model}
+     * from the {@code .edm}, and what the {@code .edm} cannot say is simply lost.
+     *
+     * @param sb the buffer
+     * @param entities the built entities
+     */
+    private static void appendUniqueKeys(StringBuilder sb, List<Map<String, Object>> entities) {
+        List<Map<String, Object>> keys = new ArrayList<>();
+        for (Map<String, Object> entity : entities) {
+            Object declared = entity.get("uniqueConstraints");
+            if (declared instanceof List<?> list) {
+                for (Object element : list) {
+                    if (element instanceof Map<?, ?> constraint) {
+                        Map<String, Object> key = new LinkedHashMap<>();
+                        key.put("entity", entity.get("name"));
+                        key.put("name", constraint.get("name"));
+                        key.put("properties", constraint.get("properties"));
+                        key.put("message", constraint.get("message"));
+                        keys.add(key);
+                    }
+                }
+            }
+        }
+        if (keys.isEmpty()) {
+            return; // an .edm without keys stays byte-identical to one generated before they existed
+        }
+        sb.append(" <uniqueKeys>\n");
+        for (Map<String, Object> key : keys) {
+            sb.append("  <uniqueKey><entity>")
+              .append(escapeXmlText(key.get("entity")))
+              .append("</entity><name>")
+              .append(escapeXmlText(key.get("name")))
+              .append("</name><properties>")
+              .append(escapeXmlText(key.get("properties")))
+              .append("</properties><message>")
+              .append(escapeXmlText(key.get("message")))
+              .append("</message></uniqueKey>\n");
+        }
+        sb.append(" </uniqueKeys>\n");
     }
 
     /** Entity box width and row heights for the deterministic grid layout. */

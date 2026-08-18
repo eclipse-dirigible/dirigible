@@ -88,12 +88,42 @@ class EdmEntityUniqueTest {
      * render it as an attribute value and write it back on the next save.
      */
     @Test
-    void theStructuredValueStaysOutOfTheEdmXml() {
+    void theStructuredValueStaysOutOfTheEntityAttributes() {
         String xml = EdmIntentGenerator.buildEdmXmlForTest(IntentParser.parse(PROVISIONING), "provisioning");
 
         assertTrue(xml.contains("<entity"), "sanity: the XML twin was rendered");
-        assertFalse(xml.contains("uniqueConstraints="), "a structured value belongs only to the .model twin");
+        assertFalse(xml.contains("uniqueConstraints="), "a structured value is never an entity attribute");
         assertFalse(xml.contains("columnsCsv"), "and nothing of it leaks under another name");
+    }
+
+    /**
+     * The key still has to reach the {@code .edm}, as its own top-level section - otherwise opening an
+     * intent-generated model in the EDM modeler and saving it for any unrelated reason regenerates the
+     * {@code .model} from an {@code .edm} that never mentioned the key, and the constraint is gone with
+     * nothing reported.
+     */
+    @Test
+    void theKeyIsCarriedAsATopLevelSectionOverPropertyNames() {
+        String xml = EdmIntentGenerator.buildEdmXmlForTest(IntentParser.parse(PROVISIONING), "provisioning");
+
+        assertTrue(xml.contains("<uniqueKeys>"), "the .edm must carry the keys the modeler round-trips");
+        assertTrue(
+                xml.contains("<uniqueKey><entity>TenantApplication</entity>" + "<name>TenantApplication_Tenant_Application</name>"
+                        + "<properties>Tenant,Application</properties>"
+                        + "<message>This application is already provisioned for the tenant</message></uniqueKey>"),
+                "the section names PROPERTIES, not columns - so a later dataName change follows the key: " + xml);
+    }
+
+    @Test
+    void aModelWithoutKeysGrowsNoSection() {
+        String withoutKeys = PROVISIONING.replace("    unique:\n", "")
+                                         .replace(
+                                                 "      - { fields: [tenant, application], message: \"This application is already provisioned for the tenant\" }\n",
+                                                 "");
+
+        String xml = EdmIntentGenerator.buildEdmXmlForTest(IntentParser.parse(withoutKeys), "provisioning");
+
+        assertFalse(xml.contains("uniqueKeys"), "an .edm without keys stays byte-identical to one generated before they existed");
     }
 
     private static Map<String, Object> onlyConstraint(String yaml) {

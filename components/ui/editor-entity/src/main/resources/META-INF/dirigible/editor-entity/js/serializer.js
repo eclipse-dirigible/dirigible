@@ -283,6 +283,24 @@ function createModel(graph) {
 
 	model.push(' </entities>\n');
 
+	// Composite business keys, top-level like the perspectives below - never on an entity cell, whose
+	// generic mxCodec has only ever encoded scalars. Guarded on a non-empty list so a model without
+	// keys serializes exactly as it did before they existed.
+	if (graph.getModel().uniqueKeys && graph.getModel().uniqueKeys.length > 0) {
+		model.push(' <uniqueKeys>\n');
+		for (let i = 0; i < graph.getModel().uniqueKeys.length; i++) {
+			const key = graph.getModel().uniqueKeys[i];
+			let element = '  <uniqueKey>';
+			element += `<entity>${_.escape(key.entity)}</entity>`;
+			element += `<name>${_.escape(key.name)}</name>`;
+			element += `<properties>${_.escape((key.properties || []).join(','))}</properties>`;
+			if (key.message) element += `<message>${_.escape(key.message)}</message>`;
+			element += '</uniqueKey>\n';
+			model.push(element);
+		}
+		model.push(' </uniqueKeys>\n');
+	}
+
 	if (graph.getModel().perspectives) {
 		model.push(' <perspectives>\n');
 		for (let i = 0; i < graph.getModel().perspectives.length; i++) {
