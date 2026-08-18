@@ -18,6 +18,7 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -855,6 +856,20 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - { name: signalQueue, source: { queue: emission-signals }, create: Signal }
               - { name: signalDrop,  source: { folder: target/inbox-emission, cron: "0/2 * * * * ?" }, create: Signal }
 
+            # The departure half (#6767): the same record leaving on a queue, as a DECLARED envelope
+            # rather than the row as stored. The guard keeps an internal note off the wire, which is
+            # the assertion that the `when` of the event axis reaches a publisher at all.
+            outbound:
+              - name: publishSignal
+                event: { onCreate: Signal, when: "note != internal" }
+                to: { queue: emission-signals-out }
+                payload:
+                  type: "signal.raised"
+                  version: 1
+                  messageId: "{uuid}"
+                  tenantId: "{tenant}"
+                  note: note
+
             # transitions: the guarded on-demand status flip - Cancel is allowed only on a DRAFT
             # entry with nothing paid (Calc semantics: a null field reads as 0, so a never-paid
             # entry passes).
@@ -1662,6 +1677,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a folder source must emit a JobHandler polling that folder on the declared cron");
         assertTrue(fileImport.contains("SignalEntity[].class") && fileImport.contains("Files.move"),
                 "a file ingest must accept a batch and move every read file out of the drop folder");
+
+        // The glue event axis, outbound half (#6767): the publisher subscribes to the record's own
+        // event topic, guards, builds the DECLARED envelope and sends it on the named channel. A
+        // publisher that forwarded the row instead would put a different contract on the wire.
+        String publisher = contentOf("gen/events/emission/PublishSignalPublisher.java");
+        assertTrue(publisher.contains("return \"emission-test-Signal-Signal\";") && publisher.contains("ListenerKind.TOPIC"),
+                "a departure must subscribe to the topic the entity's repository publishes its create on");
+        assertTrue(publisher.contains("!java.util.Objects.equals(entity.Note, \"internal\")"),
+                "the event axis carries a when guard, and a departure must honour it");
+        assertTrue(
+                publisher.contains("payload.put(\"type\", \"signal.raised\")")
+                        && publisher.contains("payload.put(\"messageId\", java.util.UUID.randomUUID().toString())")
+                        && publisher.contains("payload.put(\"note\", entity.Note)"),
+                "the declared envelope must be built key by key, in the authored order");
+        assertTrue(publisher.contains("Producer.sendToQueue(\"emission-signals-out\", body)"),
+                "the departure must send on exactly the channel the intent names");
+        assertFalse(publisher.contains("throw new"),
+                "a failed departure is logged, never fatal - the write it reacts to is already committed");
 
         // abortOn (wave 2): the interrupting event subprocess + the correlating listener.
         String approvalBpmn = contentOf("ApprovalFlow.bpmn");
@@ -3236,6 +3269,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         assertManyToManyRuntime();
         assertInboundSourcesRuntime();
+        assertOutboundDepartureRuntime();
         assertBpmEventsRuntime();
     }
 
@@ -3278,6 +3312,48 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // Every read file leaves the drop folder, so the next tick cannot ingest it again.
         assertTrue(Files.exists(dropFolder.resolve("processed/signals.json")),
                 "an ingested file must be moved out of the drop folder, into processed/");
+    }
+
+    /**
+     * The outbound departure end to end (#6767): creating a record puts the DECLARED envelope on the
+     * declared queue, and a record the guard excludes puts nothing there. Only this layer can show it -
+     * the publisher being really subscribed, the envelope being really built, and the guard really
+     * running - which no assertion over the emitted source reaches.
+     */
+    private void assertOutboundDepartureRuntime() {
+        String signalApi = API + "/signal/SignalController";
+        // The guarded record first: the queue is FIFO, so had it departed it would arrive BEFORE the
+        // one that must, and the drain below would see it.
+        createSignal(signalApi, "internal");
+        createSignal(signalApi, "outbound-ok");
+
+        String departed = null;
+        for (int attempt = 0; attempt < 30 && departed == null; attempt++) {
+            String message = MessagingFacade.receiveFromQueue("emission-signals-out", 2000);
+            if (message == null) {
+                continue;
+            }
+            assertFalse(message.contains("\"internal\""), "a record the when guard excludes must never depart: " + message);
+            if (message.contains("outbound-ok")) {
+                departed = message;
+            }
+        }
+        assertNotNull(departed, "the created record must depart on the queue the intent names");
+        assertTrue(
+                departed.contains("\"type\":\"signal.raised\"") && departed.contains("\"version\":1")
+                        && departed.contains("\"note\":\"outbound-ok\""),
+                "the departure must carry the declared envelope, not the row: " + departed);
+        assertFalse(departed.contains("\"Note\""), "the envelope replaces the record - a stored column must not leak into it: " + departed);
+    }
+
+    /** Creates a Signal through the generated REST surface, which is what raises the departure. */
+    private void createSignal(String signalApi, String note) {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Note\":\"" + note + "\"}")
+                                                 .when()
+                                                 .post(signalApi)
+                                                 .then()
+                                                 .statusCode(200));
     }
 
     /**

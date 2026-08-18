@@ -46,8 +46,8 @@ The three categories, and the extension point that carries each:
 
 1. **Protocol adaptation** - talking to another system with a conversation shape: certificates,
    acknowledgements, retries, batch or file transports (an SFTP drop, a signed archive, polling).
-   `integrations:` and `inbound:` are deliberately one-line call-outs. Anything richer is a **Camel
-   route** in the same project, feeding the entity's ordinary write path.
+   `integrations:`, `inbound:` and `outbound:` are deliberately one-line call-outs. Anything richer is
+   a **Camel route** in the same project, feeding the entity's ordinary write path.
 2. **Algorithms** - checksums (national identifiers, account numbers), fuzzy matching, scoring,
    policy-driven tie-breaking. The DSL says this of `pattern` itself: a format check, not a semantic
    one. The modeled hooks are **`calculatedActionOnCreate` / `calculatedActionOnUpdate`** on a field
@@ -2118,9 +2118,9 @@ order.
 If a contract needs more than this it is an algorithm, not a payload - say so and hand off to a
 hand-written handler rather than stretching the block.
 
-### the event axis - what a notification / integration binds to
+### the event axis - what a notification / integration / departure binds to
 
-**Both** `notifications` and `integrations` declare **exactly one** `event:`, either
+`notifications`, `integrations` and `outbound` departures each declare **exactly one** `event:`, either
 
 - an **entity lifecycle** event - `{ onCreate: <Entity> }` / `{ onUpdate: ... }` / `{ onDelete: ... }`;
 - a **process step** event - `{ onStepReached: { process: <Process>, step: <step> } }` or
@@ -2159,8 +2159,12 @@ integrations:
 
 **Rules for a step event:** the process must exist and declare a `trigger` (that is the record the
 event is about); the step must exist and be a `userTask` or a `serviceTask` (a decision, a wait or
-an end has no moment to observe). Any number of notifications and integrations may bind to the same
-step moment - the record is published once.
+an end has no moment to observe). Any number of consumers may bind to the same step moment - the
+record is published once.
+
+Every axis binding also takes an optional **`when:` guard** inside the `event:` map - a single
+comparison against a direct field of the record (`when: "channel != internal"`), which decides per
+record whether the reaction runs at all.
 
 ### inbound - an external system creates records
 
@@ -2183,6 +2187,49 @@ inbound:
 **Rules:** unique name, `create` must be a declared entity, and **exactly one arrival**: either a
 `path` or a `source` naming exactly one of `queue` / `topic` / `folder`. A `folder` source needs a
 `cron` (there is no file-system watch - the folder is polled); the other sources take none.
+
+### outbound - the app raises an event for another system
+
+**Use when:** something **outside the app must be told** that a record happened, and it listens on a
+queue or a topic rather than answering an HTTP call. Use `integrations:` instead when you are calling
+someone's API and want their answer - a departure is emitted and forgotten.
+
+```yaml
+outbound:
+  # the record's own JSON, on a queue (one consumer takes it)
+  - name: publishOrder
+    event: { onCreate: Order }
+    to: { queue: "codbex.orders" }
+  # a declared envelope, on a topic (every subscriber gets it), only for external channels
+  - name: announceActivation
+    event: { onStepCompleted: { process: OrderApproval, step: activate }, when: "channel != internal" }
+    to: { topic: "codbex.order-activations" }
+    payload:
+      type: "order.activated"
+      version: 1
+      messageId: "{uuid}"
+      tenantId: "{tenant}"
+      reference: number
+      customer: customer.name
+```
+
+**Rules:** unique name, one event of the event axis, and `to:` naming **exactly one** of
+`queue` / `topic` - both or neither is an error. `payload:` is the same declared envelope
+`integrations:` takes (same value forms, same closed token set); with no `payload:` the body is the
+record as stored.
+
+**Delivery semantics - say these out loud rather than let the author assume them.** The message is
+published after the write that raised the event is persisted, and is **not** transactional with it: a
+failed publish is logged and the write stands. There is no outbox, no exactly-once delivery and no
+ordering guarantee. If a contract needs any of those, say so - it is beyond what this construct
+promises.
+
+**A destination name belongs to the application, so it is tenant-scoped** - which is right for a
+channel this deployment both publishes and consumes, and wrong for one that IS a contract with someone
+else. Mark that one `global:` (`to: { topic: "global:codbex.orders" }`) and the other side binds to the
+plain name it was given. What the marker costs: the destination no longer carries the tenant, so a
+business tenant that matters downstream must travel in the payload - a `tenantId: "{tenant}"` key in
+the declared envelope is exactly that.
 
 ### rollups - maintain a count on a parent
 

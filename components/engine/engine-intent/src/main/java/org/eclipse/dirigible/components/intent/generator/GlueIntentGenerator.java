@@ -29,6 +29,7 @@ import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
 import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.InboundSourceIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
+import org.eclipse.dirigible.components.intent.model.OutboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
@@ -103,6 +104,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
         List<Map<String, Object>> inboundMessages = buildInboundMessages(model, byName, compositionParents, settings);
         List<Map<String, Object>> inboundFiles = buildInboundFiles(model, byName, compositionParents, settings);
+        List<Map<String, Object>> outbound = buildOutbound(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> stepEvents = buildStepEvents(model, compositionParents, settings);
         List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> expansions = buildExpansions(model, byName, compositionParents, settings);
@@ -122,9 +124,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && assignees.isEmpty() && timerLoaders.isEmpty()
                 && waits.isEmpty() && aborts.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty()
                 && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && inboundMessages.isEmpty() && inboundFiles.isEmpty()
-                && stepEvents.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty()
-                && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty() && numbering.isEmpty()
-                && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty() && resolves.isEmpty()) {
+                && outbound.isEmpty() && stepEvents.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty()
+                && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty()
+                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty() && resolves.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -145,6 +147,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("inbound", inbound);
         glue.put("inboundMessages", inboundMessages);
         glue.put("inboundFiles", inboundFiles);
+        glue.put("outbound", outbound);
         // One emitter per observed process-step moment, deduplicated across every notification and
         // integration bound to it: the delegate the BPMN generator inserts at that boundary publishes
         // the trigger entity on the step topic those consumers already bind to.
@@ -1225,6 +1228,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return buildInboundFiles(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
     }
 
+    /** Test hook: build the {@code outbound} glue collection without a repository. */
+    static List<Map<String, Object>> buildOutboundForTest(IntentModel model) {
+        return buildOutbound(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                null);
+    }
+
     /** Test hook: build the {@code inbound} (HTTP webhook) glue collection without a repository. */
     static List<Map<String, Object>> buildInboundForTest(IntentModel model) {
         return buildInbound(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
@@ -1585,6 +1594,22 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     private static String stringArg(Map<String, Object> map, String key) {
         Object value = map == null ? null : map.get(key);
         return value == null ? null : value.toString();
+    }
+
+    /**
+     * The guard keys of an event binding: the Java condition, plus whether there is one at all - a
+     * template that only needs the record in order to evaluate a guard must not parse it otherwise (a
+     * departure with no payload forwards the message it received verbatim).
+     *
+     * @param event the {@code event:} binding map
+     * @return the {@code guardExpression} / {@code hasGuard} keys
+     */
+    private static Map<String, Object> guardFields(Map<String, Object> event) {
+        String guard = NotificationSupport.guard(stringArg(event, "when"));
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("guardExpression", guard);
+        fields.put("hasGuard", !"true".equals(guard));
+        return fields;
     }
 
     /** Test hook: build the {@code resolves} glue collection without a repository. */
@@ -2792,11 +2817,75 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("clientMethod", IntegrationSupport.clientMethod(integration.getMethod()));
             entry.put("hasBody", IntegrationSupport.hasBody(integration.getMethod()));
             entry.put("urlExpression", IntegrationSupport.urlExpression(integration.getUrl()));
+            // The event axis carries a `when` guard and every other consumer of the axis honours it -
+            // an integration that ignored it forwarded records the author had excluded.
+            entry.putAll(guardFields(integration.getEvent()));
             entry.putAll(PayloadSupport.payloadFields(payload));
             entry.put("relationLoads", relationLoads(payload == null ? List.of() : payload.loads()));
             integrations.add(entry);
         }
         return integrations;
+    }
+
+    /**
+     * The outbound departures: one self-describing {@code MessageHandler} each, subscribed to the event
+     * topic the record is already published on and re-publishing it - as the record's JSON, or as the
+     * declared envelope - on the queue or topic the entry names.
+     *
+     * <p>
+     * The publisher is a subscriber, which is what gives the construct its stated semantics for free:
+     * the write is already committed by the time the event message is delivered, so a failed departure
+     * can never fail the write it reacts to.
+     */
+    private static List<Map<String, Object>> buildOutbound(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
+        List<Map<String, Object>> departures = new ArrayList<>();
+        for (OutboundIntent outbound : model.getOutbound()) {
+            if (outbound.getName() == null || outbound.getName()
+                                                      .isBlank()) {
+                continue;
+            }
+            // Either axis - see the notification builder: a step event carries the trigger entity.
+            String entity = StepEventSupport.eventEntity(model, outbound.getEvent());
+            if (entity == null || !byName.containsKey(entity)) {
+                continue;
+            }
+            OutboundSupport.Target target = OutboundSupport.target(outbound.getTo());
+            if (target == null) {
+                continue; // parser already reported "exactly one of queue/topic"
+            }
+            if (!settings.shouldGenerate("outbound", outbound.getName())) {
+                LOGGER.info("Settings opt-out: keeping existing publisher for outbound [{}] (not generated)", outbound.getName());
+                continue;
+            }
+            // The declared envelope, when there is one. A value that cannot be resolved (a cross-model
+            // relation.field the owner does not carry) drops the whole departure with the reason -
+            // emitting the record instead would silently put a different contract on the wire.
+            PayloadSupport.Plan payload;
+            try {
+                payload = PayloadSupport.plan(outbound.getPayload(), byName.get(entity), byName, compositionParents,
+                        crossModelLookup(model, context));
+            } catch (IllegalArgumentException ex) {
+                reportDroppedGlue(context,
+                        "Outbound [" + outbound.getName() + "]: " + ex.getMessage() + " - the departure was NOT generated");
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", outbound.getName());
+            entry.put("className", IntentNaming.pascalIdentifier(outbound.getName()));
+            entry.put("entity", entity);
+            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
+            entry.put("topicSuffix", StepEventSupport.topicSuffix(outbound.getEvent()));
+            entry.put("destination", target.destination());
+            entry.put("channel", target.channel()
+                                       .name());
+            entry.put("producerMethod", target.producerMethod());
+            entry.putAll(guardFields(outbound.getEvent()));
+            entry.putAll(PayloadSupport.payloadFields(payload));
+            entry.put("relationLoads", relationLoads(payload == null ? List.of() : payload.loads()));
+            departures.add(entry);
+        }
+        return departures;
     }
 
     private static List<Map<String, Object>> buildSchedules(IntentModel model, Map<String, EntityIntent> byName,
