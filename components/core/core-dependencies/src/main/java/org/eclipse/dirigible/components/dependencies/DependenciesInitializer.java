@@ -20,7 +20,8 @@ import org.springframework.stereotype.Component;
 /**
  * Resolves the maven dependencies declared across the registry projects at startup - ordered after
  * the synchronization initializer, so the project.json files are present in the registry. The
- * resolved jars join the application classpath on the next restart.
+ * resolved jars are activated through the modules classloader immediately; the run also arms the
+ * declaration watcher by recording the first fingerprint.
  */
 @Order(ApplicationReadyEventListeners.DEPENDENCIES_INITIALIZER)
 @Component

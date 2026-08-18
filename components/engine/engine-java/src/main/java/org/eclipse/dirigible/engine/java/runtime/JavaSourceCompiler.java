@@ -42,7 +42,7 @@ public class JavaSourceCompiler {
 
     /** Test-only convenience: uses an empty classpath index (relies on {@code java.class.path}). */
     public JavaSourceCompiler() {
-        this(new ClassPathIndex());
+        this(new ClassPathIndex(new ModulesClassLoaderHolder()));
     }
 
     @Autowired

@@ -78,8 +78,8 @@ class JavaLoaderTest {
         recording = new RecordingConsumer();
         JavaCompiledOutputDirectory outputDirectory = mock(JavaCompiledOutputDirectory.class);
         when(outputDirectory.get()).thenReturn(tempDir);
-        loader = new JavaLoader(new JavaSourceCompiler(), holder, container, List.of(handlerConsumer, recording), outputDirectory,
-                NOOP_PUBLISHER);
+        loader = new JavaLoader(new JavaSourceCompiler(), holder, new ModulesClassLoaderHolder(), container,
+                List.of(handlerConsumer, recording), outputDirectory, NOOP_PUBLISHER);
     }
 
     @Test
@@ -165,8 +165,8 @@ class JavaLoaderTest {
         ClientClassLoaderHolder freshHolder = new ClientClassLoaderHolder();
         JavaCompiledOutputDirectory outputDirectory = mock(JavaCompiledOutputDirectory.class);
         when(outputDirectory.get()).thenReturn(tempDir);
-        JavaLoader localLoader = new JavaLoader(new JavaSourceCompiler(), freshHolder, new ComponentContainer(new ClientBeansHolder()),
-                List.of(throwingConsumer, recording), outputDirectory, NOOP_PUBLISHER);
+        JavaLoader localLoader = new JavaLoader(new JavaSourceCompiler(), freshHolder, new ModulesClassLoaderHolder(),
+                new ComponentContainer(new ClientBeansHolder()), List.of(throwingConsumer, recording), outputDirectory, NOOP_PUBLISHER);
 
         localLoader.rebuild(List.of(handlerSource("client.Bomb", "boom"), handlerSource("client.Bystander", "fine")));
 
