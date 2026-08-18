@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.base.tenant.TenantPostProvisioningStep;
 import org.eclipse.dirigible.components.jobs.domain.Job;
 import org.eclipse.dirigible.components.jobs.handler.JavaJobExecutor;
 import org.eclipse.dirigible.components.jobs.manager.JobsManager;
@@ -58,10 +59,22 @@ import org.springframework.stereotype.Component;
  * registration carries it over instead of switching the job back on - a class load happens at every
  * server start and on every client-Java rebuild. A genuinely unloaded class, or a job that a
  * reloaded class no longer declares, unschedules and removes its rows.
+ *
+ * <p>
+ * <b>Tenants outlive a generation.</b> The per-tenant fan-out below runs at class-load time, and a
+ * client-Java generation is JVM-wide and only rebuilt when the Java synchronizer goes dirty on a
+ * publish - so a tenant provisioned afterwards would have no {@code Job} row and no Quartz trigger
+ * for any client-Java job, with nothing in the Jobs perspective to point at the cause. This
+ * consumer is therefore also a {@link TenantPostProvisioningStep} that re-registers what it is
+ * tracking once a provisioning round completes, exactly as the sibling
+ * {@code ListenerClassConsumer} tops up a late tenant's subscriptions. The top-up needs no
+ * per-tenant bookkeeping of its own because a registration is idempotent by construction: it lands
+ * on the existing row and {@link JobsManager#scheduleJob} returns early once the job and its
+ * trigger are there.
  */
 @Component
 @Order(400)
-public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean {
+public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean, TenantPostProvisioningStep {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ScheduledClassConsumer.class);
 
@@ -73,8 +86,8 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
     private final JobService jobService;
     private final TenantContext tenantContext;
 
-    /** fqn -> the base job names it registered (a class may declare several @Scheduled methods). */
-    private final ConcurrentMap<String, List<String>> registered = new ConcurrentHashMap<>();
+    /** fqn -> the jobs it declared (a class may declare several @Scheduled methods). */
+    private final ConcurrentMap<String, List<JobDeclaration>> registered = new ConcurrentHashMap<>();
 
     @Autowired
     public ScheduledClassConsumer(ComponentContainer componentContainer, JobsManager jobsManager, JobService jobService,
@@ -113,11 +126,11 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         // rather than unregistering everything first. A re-registration must find (and update) the
         // existing Job row, because that row carries operator state - above all the enabled flag,
         // which a delete-then-recreate would silently reset to true (#6626).
-        List<String> names = new ArrayList<>();
+        List<JobDeclaration> declarations = new ArrayList<>();
 
         if (jobHandler) {
             JobHandler job = (JobHandler) instance;
-            register(names, info.fqn(), info.fqn(), job.cron());
+            declarations.add(JobDeclaration.of(info.fqn(), job.cron()));
         } else {
             for (Method method : type.getDeclaredMethods()) {
                 Scheduled annotation = method.getAnnotation(Scheduled.class);
@@ -128,23 +141,48 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
                     LOGGER.error("@Scheduled method [{}#{}] must be public and take no parameters; skipped.", info.fqn(), method.getName());
                     continue;
                 }
-                register(names, info.fqn(), info.fqn() + "#" + method.getName(), annotation.expression());
+                declarations.add(JobDeclaration.of(info.fqn() + "#" + method.getName(), annotation.expression()));
             }
         }
 
-        if (names.isEmpty()) {
+        if (declarations.isEmpty()) {
             unregister(info.fqn());
             LOGGER.warn("Scheduled job [{}] produced no schedule.", info.fqn());
             return;
         }
-        retainOnly(info.fqn(), names);
-        registered.put(info.fqn(), names);
+        List<JobDeclaration> scheduled = new ArrayList<>();
+        for (JobDeclaration declaration : declarations) {
+            if (register(declaration)) {
+                scheduled.add(declaration);
+            }
+        }
+        retainOnly(info.fqn(), scheduled);
+        registered.put(info.fqn(), scheduled);
     }
 
     @Override
     public void onClassUnloaded(LoadedClass info) {
         unregister(info.fqn());
         LOGGER.info("Unscheduled Java class [{}].", info.fqn());
+    }
+
+    /**
+     * Re-register every job of every loaded class, so a tenant provisioned after the last client-Java
+     * rebuild gets its {@code Job} rows and Quartz triggers too. Called once a provisioning round has
+     * actually provisioned something - {@code TenantsProvisioner} skips the post-provisioning steps
+     * when no tenant was in INITIAL status - so this is not a per-round cost.
+     *
+     * <p>
+     * Unlike the listener consumer's top-up this does not track which tenants it has already covered,
+     * and does not need to: re-registering finds the existing row and updates it in place (keeping the
+     * operator's enabled flag), and {@link JobsManager#scheduleJob} returns early when the job and its
+     * trigger already exist. A second consumer on a JMS destination competes for messages; a second
+     * registration of the same job is a no-op.
+     */
+    @Override
+    public void execute() {
+        registered.values()
+                  .forEach(declarations -> declarations.forEach(this::register));
     }
 
     @Override
@@ -158,9 +196,18 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
     /**
      * Register one job (a JobHandler class or a single @Scheduled method) as a Job on the shared
      * scheduler.
+     *
+     * <p>
+     * Serialized against the other registrations: the post-provisioning top-up runs on the provisioning
+     * thread and a rebuild registers from the synchronizer's, and the find-then-save below is exactly
+     * the window in which two of them could insert the same job row twice.
+     *
+     * @return true if the job is now registered in every tenant
      */
-    private void register(List<String> sink, String fqn, String handler, String expression) {
-        String name = handler.replace('#', '.');
+    private synchronized boolean register(JobDeclaration declaration) {
+        String name = declaration.name();
+        String handler = declaration.handler();
+        String expression = declaration.expression();
         // Register the job PER TENANT (like the JS .job/scheduled.ts synchronizer does): each tenant
         // gets its own scheduled row + tenant-prefixed Quartz job. The job body runs in that tenant's
         // context at fire time (the jobs engine restores it from the job data), so a global client
@@ -199,11 +246,12 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
                 jobsManager.scheduleJob(job);
                 return null;
             });
-            sink.add(name);
             LOGGER.info("Registered client-Java job [{}] (handler [{}]) with cron '{}' on the shared scheduler.", name, handler,
                     expression);
+            return true;
         } catch (Exception e) {
             LOGGER.error("Failed to register client-Java job [{}] with cron '{}': {}", handler, expression, e.getMessage(), e);
+            return false;
         }
     }
 
@@ -212,27 +260,34 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
      * was renamed or removed. The ones it still declares were just re-registered onto their existing
      * rows, so they keep their operator state.
      */
-    private void retainOnly(String fqn, List<String> current) {
-        List<String> previous = registered.get(fqn);
+    private void retainOnly(String fqn, List<JobDeclaration> current) {
+        List<JobDeclaration> previous = registered.get(fqn);
         if (previous == null) {
             return;
         }
-        List<String> stale = new ArrayList<>(previous);
-        stale.removeAll(current);
+        List<String> currentNames = current.stream()
+                                           .map(JobDeclaration::name)
+                                           .toList();
+        List<String> stale = previous.stream()
+                                     .map(JobDeclaration::name)
+                                     .filter(name -> !currentNames.contains(name))
+                                     .toList();
         remove(stale);
     }
 
     /** Unschedule + remove the Job rows a class previously registered (per tenant). */
     private void unregister(String fqn) {
-        List<String> names = registered.remove(fqn);
-        if (names == null) {
+        List<JobDeclaration> declarations = registered.remove(fqn);
+        if (declarations == null) {
             return;
         }
-        remove(names);
+        remove(declarations.stream()
+                           .map(JobDeclaration::name)
+                           .toList());
     }
 
     /** Unschedule + delete the given job rows, per tenant. */
-    private void remove(List<String> names) {
+    private synchronized void remove(List<String> names) {
         for (String name : names) {
             try {
                 tenantContext.executeForEachTenant(() -> {
@@ -252,6 +307,19 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
             } catch (Exception e) {
                 LOGGER.warn("Failed to unregister client-Java job [{}]: {}", name, e.getMessage());
             }
+        }
+    }
+
+    /**
+     * One job a loaded class declares: the {@code Job} row's name, the handler the jobs engine
+     * dispatches to ({@code <fqn>} or {@code <fqn>#<method>}), and its cron expression. Kept per class
+     * because a re-registration - for a late tenant, above all - needs the whole declaration, not just
+     * the name it produced.
+     */
+    private record JobDeclaration(String name, String handler, String expression) {
+
+        static JobDeclaration of(String handler, String expression) {
+            return new JobDeclaration(handler.replace('#', '.'), handler, expression);
         }
     }
 
