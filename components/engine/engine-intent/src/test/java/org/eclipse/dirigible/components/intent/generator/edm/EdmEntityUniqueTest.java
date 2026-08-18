@@ -106,7 +106,7 @@ class EdmEntityUniqueTest {
     void theKeyIsCarriedAsATopLevelSectionOverPropertyNames() {
         String xml = EdmIntentGenerator.buildEdmXmlForTest(IntentParser.parse(PROVISIONING), "provisioning");
 
-        assertTrue(xml.contains("<uniqueKeys>"), "the .edm must carry the keys the modeler round-trips");
+        assertTrue(xml.contains("<constraints>"), "the .edm must carry the keys the modeler round-trips");
         assertTrue(
                 xml.contains("<uniqueKey><entity>TenantApplication</entity>" + "<name>TenantApplication_Tenant_Application</name>"
                         + "<properties>Tenant,Application</properties>"
@@ -123,7 +123,7 @@ class EdmEntityUniqueTest {
 
         String xml = EdmIntentGenerator.buildEdmXmlForTest(IntentParser.parse(withoutKeys), "provisioning");
 
-        assertFalse(xml.contains("uniqueKeys"), "an .edm without keys stays byte-identical to one generated before they existed");
+        assertFalse(xml.contains("<constraints>"), "an .edm without keys stays byte-identical to one generated before they existed");
     }
 
     private static Map<String, Object> onlyConstraint(String yaml) {

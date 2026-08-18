@@ -56,11 +56,11 @@ export function transform(workspaceName, projectName, filePath) {
         // same way a <relation> is. A key the model cannot resolve (a renamed or deleted entity, an
         // unknown property) is DROPPED rather than emitted: a constraint over a column that is not
         // there fails the whole schema, and silently doing nothing is the lesser of the two.
-        if (raw.model.uniqueKeys && raw.model.uniqueKeys.uniqueKey) {
-            if (Array.isArray(raw.model.uniqueKeys.uniqueKey)) {
-                raw.model.uniqueKeys.uniqueKey.forEach(key => { transformUniqueKey(key, root.model.entities) });
+        if (raw.model.constraints && raw.model.constraints.uniqueKey) {
+            if (Array.isArray(raw.model.constraints.uniqueKey)) {
+                raw.model.constraints.uniqueKey.forEach(key => { transformUniqueKey(key, root.model.entities) });
             } else {
-                transformUniqueKey(raw.model.uniqueKeys.uniqueKey, root.model.entities);
+                transformUniqueKey(raw.model.constraints.uniqueKey, root.model.entities);
             }
         }
 

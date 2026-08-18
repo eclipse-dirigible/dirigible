@@ -2639,15 +2639,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The composite business keys, as a top-level {@code <uniqueKeys>} section.
+     * The composite business keys, as {@code <uniqueKey>} entries of the top-level
+     * {@code <constraints>} section.
      *
      * <p>
-     * Top-level, beside {@code <perspectives>} and {@code <navigations>}, rather than nested in the
-     * entity - which is what lets the EDM modeler carry them at all. The modeler renders the canvas by
-     * decoding {@code <mxGraphModel>} and never reads the {@code <entities>} section, so a key nested
-     * there would have to live on an entity CELL, where it would be the first non-scalar value on a
-     * path whose generic codec has only ever seen attributes. The perspectives take the other route -
-     * an array on the graph model, loaded from the raw XML - and so does this.
+     * The section is named for constraints rather than for keys so that a later constraint kind is a
+     * new entry beside {@code <uniqueKey>}, not a second section. Top-level, beside
+     * {@code <perspectives>} and {@code <navigations>}, rather than nested in the entity - which is
+     * what lets the EDM modeler carry them at all. The modeler renders the canvas by decoding
+     * {@code <mxGraphModel>} and never reads the {@code <entities>} section, so a key nested there
+     * would have to live on an entity CELL, where it would be the first non-scalar value on a path
+     * whose generic codec has only ever seen attributes. The perspectives take the other route - an
+     * array on the graph model, loaded from the raw XML - and so does this.
      *
      * <p>
      * Without this section a model authored from an intent, opened in the modeler and saved for any
@@ -2677,7 +2680,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (keys.isEmpty()) {
             return; // an .edm without keys stays byte-identical to one generated before they existed
         }
-        sb.append(" <uniqueKeys>\n");
+        sb.append(" <constraints>\n");
         for (Map<String, Object> key : keys) {
             sb.append("  <uniqueKey><entity>")
               .append(escapeXmlText(key.get("entity")))
@@ -2689,7 +2692,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
               .append(escapeXmlText(key.get("message")))
               .append("</message></uniqueKey>\n");
         }
-        sb.append(" </uniqueKeys>\n");
+        sb.append(" </constraints>\n");
     }
 
     /** Entity box width and row heights for the deterministic grid layout. */

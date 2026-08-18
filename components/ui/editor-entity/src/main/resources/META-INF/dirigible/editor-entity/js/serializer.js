@@ -287,7 +287,7 @@ function createModel(graph) {
 	// generic mxCodec has only ever encoded scalars. Guarded on a non-empty list so a model without
 	// keys serializes exactly as it did before they existed.
 	if (graph.getModel().uniqueKeys && graph.getModel().uniqueKeys.length > 0) {
-		model.push(' <uniqueKeys>\n');
+		model.push(' <constraints>\n');
 		for (let i = 0; i < graph.getModel().uniqueKeys.length; i++) {
 			const key = graph.getModel().uniqueKeys[i];
 			let element = '  <uniqueKey>';
@@ -298,7 +298,7 @@ function createModel(graph) {
 			element += '</uniqueKey>\n';
 			model.push(element);
 		}
-		model.push(' </uniqueKeys>\n');
+		model.push(' </constraints>\n');
 	}
 
 	if (graph.getModel().perspectives) {

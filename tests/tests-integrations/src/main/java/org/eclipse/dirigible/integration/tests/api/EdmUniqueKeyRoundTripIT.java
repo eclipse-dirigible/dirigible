@@ -26,7 +26,7 @@ import io.restassured.path.json.JsonPath;
  * reported (#6795).
  *
  * <p>
- * That is what makes the {@code <uniqueKeys>} section load-bearing rather than cosmetic: a
+ * That is what makes the {@code <constraints>} section load-bearing rather than cosmetic: a
  * composite business key authored in an intent has to survive somebody opening the model in the
  * modeler and pressing Save. This drives the real save endpoint, which fires the real on-save
  * transformer, and reads the {@code .model} it produced.
@@ -50,11 +50,11 @@ class EdmUniqueKeyRoundTripIT extends IntegrationTest {
                        <property name="Application" dataName="TENANT_APPLICATION_APPLICATION" dataType="INTEGER"></property>
                       </entity>
                      </entities>
-                     <uniqueKeys>
+                     <constraints>
                       <uniqueKey><entity>TenantApplication</entity><name>TenantApplication_Tenant_Application</name>\
                     <properties>Tenant,Application</properties><message>This application is already provisioned for the tenant</message></uniqueKey>
                       <uniqueKey><entity>Ghost</entity><name>Ghost_A_B</name><properties>A,B</properties><message>never</message></uniqueKey>
-                     </uniqueKeys>
+                     </constraints>
                      <perspectives>
                       <perspective><name>Provisioning</name><label>Provisioning</label><icon>/services/web/resources/unicons/copy.svg</icon><order>1</order></perspective>
                      </perspectives>

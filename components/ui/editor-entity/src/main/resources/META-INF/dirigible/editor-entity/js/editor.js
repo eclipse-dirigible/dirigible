@@ -1409,9 +1409,10 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 				if (element.localName === "model") {
 					for (let j = 0; j < element.children.length; j++) {
 						let keys = element.children[j];
-						if (keys.localName === "uniqueKeys") {
+						if (keys.localName === "constraints") {
 							for (let k = 0; k < keys.children.length; k++) {
 								let item = keys.children[k];
+								if (item.localName !== "uniqueKey") continue;
 								let copy = { properties: [] };
 								for (let m = 0; m < item.children.length; m++) {
 									let attribute = item.children[m];
