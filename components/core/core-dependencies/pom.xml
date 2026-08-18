@@ -39,6 +39,12 @@
             <artifactId>dirigible-components-core-java</artifactId>
         </dependency>
 
+        <!-- Launcher agent - the Instrumentation holder behind the platform dependency scope -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-launcher-agent</artifactId>
+        </dependency>
+
         <!-- Initializers - the per-jar registry payload expander -->
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>

@@ -85,7 +85,7 @@ class DependencySynchronizer {
         this.loaderHolder = loaderHolder;
         this.classpathExpander = classpathExpander;
         this.eventPublisher = eventPublisher;
-        this.launchClasspathJars = launchClasspathJars();
+        this.launchClasspathJars = DependencyPaths.launchClasspathJars();
     }
 
     /**
@@ -110,16 +110,26 @@ class DependencySynchronizer {
     }
 
     /**
-     * Reconciles the resolved JAR set into a new modules-classloader generation.
+     * Reconciles the resolved JAR sets into a new modules-classloader generation. The platform-tier
+     * JARs ride in the generation too - that puts them on the compile classpath for registry
+     * {@code .java} sources and fires the rebuild event; at runtime parent-first delegation serves them
+     * from the system classloader once appended. They skip the module-tier validation (native libraries
+     * are exactly what the platform tier exists for) and never carry registry payload.
      *
      * @param localRepository the local repository the artifacts live in, for coordinate derivation
-     * @param resolvedJars the resolved JAR set
+     * @param moduleJars the resolved module-tier JAR set
+     * @param platformJars the resolved platform-tier JAR set
      * @param mediated the mediated versions, forwarded to the change event
      * @return the outcome
      */
-    synchronized SwapOutcome swap(Path localRepository, List<Path> resolvedJars, Map<String, String> mediated) {
+    synchronized SwapOutcome swap(Path localRepository, List<Path> moduleJars, List<Path> platformJars, Map<String, String> mediated) {
         List<Path> target = new ArrayList<>(launchClasspathJars);
-        for (Path jar : resolvedJars) {
+        for (Path jar : platformJars) {
+            if (!target.contains(jar)) {
+                target.add(jar);
+            }
+        }
+        for (Path jar : moduleJars) {
             if (!target.contains(jar)) {
                 target.add(jar);
             }
@@ -131,17 +141,21 @@ class DependencySynchronizer {
             return SwapOutcome.kept(null);
         }
 
+        Set<Path> platformTier = new LinkedHashSet<>(platformJars);
         List<Path> added = target.stream()
                                  .filter(jar -> !currentJars.contains(jar))
                                  .toList();
         List<Path> removed = currentJars.stream()
                                         .filter(jar -> !target.contains(jar))
                                         .toList();
+        List<Path> addedModuleTier = added.stream()
+                                          .filter(jar -> !platformTier.contains(jar))
+                                          .toList();
 
         // validate everything BEFORE the first side effect - an aborted swap leaves generation N
         // installed and serving, with no partial state anywhere
         Map<Path, Inspection> inspections = new LinkedHashMap<>();
-        for (Path jar : added) {
+        for (Path jar : addedModuleTier) {
             Inspection inspection;
             try {
                 inspection = ModuleJarInspector.inspect(jar);
@@ -154,7 +168,7 @@ class DependencySynchronizer {
                            .isEmpty()) {
                 String error = "Jar [" + jar.getFileName() + "] contains native libraries " + inspection.nativeLibraries()
                         + " which the swappable module tier cannot host (a native library binds to exactly one classloader)."
-                        + " Declare it with scope \"platform\" once supported, or bake it into the image.";
+                        + " Declare it with scope \"platform\" instead, or bake it into the image.";
                 LOGGER.error("Dependency swap aborted: {}", error);
                 return SwapOutcome.kept(error);
             }
@@ -162,7 +176,10 @@ class DependencySynchronizer {
         }
 
         warnOnPlatformShadowing(inspections);
-        reconcileRegistryPayload(added, removed, inspections);
+        List<Path> removedModuleTier = removed.stream()
+                                              .filter(jar -> !platformTier.contains(jar))
+                                              .toList();
+        reconcileRegistryPayload(addedModuleTier, removedModuleTier, inspections);
 
         loaderHolder.swap(target);
         int generation = loaderHolder.generation();
@@ -264,60 +281,8 @@ class DependencySynchronizer {
      * @return the coordinate, or the file name when the jar is not a local-repository artifact
      */
     private static String coordinate(Path localRepository, Path jar) {
-        if (!jar.startsWith(localRepository)) {
-            return String.valueOf(jar.getFileName());
-        }
-        Path relative = localRepository.relativize(jar);
-        int segments = relative.getNameCount();
-        if (segments < 4) {
-            return String.valueOf(jar.getFileName());
-        }
-        String version = relative.getName(segments - 2)
-                                 .toString();
-        String artifactId = relative.getName(segments - 3)
-                                    .toString();
-        String groupId = relative.subpath(0, segments - 3)
-                                 .toString()
-                                 .replace(relative.getFileSystem()
-                                                  .getSeparator(),
-                                         ".");
-        return groupId + ":" + artifactId + ":" + version;
+        return DependencyPaths.coordinate(localRepository, jar);
     }
 
-    /**
-     * The jars already on the launch classpath via {@code loader.path} / {@code LOADER_PATH} - they
-     * seed every generation, so the drop-in {@code /modules} behavior stays intact (their classes
-     * resolve parent-first from the application classloader anyway).
-     *
-     * @return the launch-classpath jars
-     */
-    private static List<Path> launchClasspathJars() {
-        String property = System.getProperty("loader.path");
-        String raw = property != null ? property : System.getenv("LOADER_PATH");
-        if (raw == null || raw.isBlank()) {
-            return List.of();
-        }
-        List<Path> jars = new ArrayList<>();
-        for (String segment : raw.split(",")) {
-            String trimmed = segment.trim();
-            if (trimmed.isEmpty()) {
-                continue;
-            }
-            Path path = Path.of(trimmed);
-            if (Files.isDirectory(path)) {
-                try (var stream = Files.list(path)) {
-                    stream.filter(candidate -> candidate.toString()
-                                                        .endsWith(".jar"))
-                          .sorted()
-                          .forEach(jars::add);
-                } catch (IOException e) {
-                    LOGGER.warn("Could not list the loader.path directory [{}]", path, e);
-                }
-            } else if (Files.isRegularFile(path) && trimmed.endsWith(".jar")) {
-                jars.add(path);
-            }
-        }
-        return List.copyOf(jars);
-    }
 
 }

@@ -72,8 +72,22 @@ public final class MavenFixtures {
      * @return the built jar
      */
     public static Path buildPlainJar(Path workDir, String jarName, Map<String, String> sources) {
+        return buildPlainJar(workDir, jarName, sources, Map.of());
+    }
+
+    /**
+     * Builds a plain library jar from the given sources plus raw extra entries - e.g. a
+     * {@code META-INF/services/java.sql.Driver} entry for a JDBC driver fixture.
+     *
+     * @param workDir a scratch directory
+     * @param jarName the jar file name
+     * @param sources FQN to source
+     * @param extraEntries raw entries as entry name to content
+     * @return the built jar
+     */
+    public static Path buildPlainJar(Path workDir, String jarName, Map<String, String> sources, Map<String, String> extraEntries) {
         Path classesDir = compile(workDir, jarName, sources);
-        return jar(workDir.resolve(jarName), classesDir, null, Map.of());
+        return jar(workDir.resolve(jarName), classesDir, null, extraEntries);
     }
 
     /**

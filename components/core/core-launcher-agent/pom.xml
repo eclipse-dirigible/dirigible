@@ -1,0 +1,42 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- Parents the ROOT pom, not components-parent: the agent loads in the JVM before the
+         application exists, so it must stay free of every framework dependency the components
+         parent injects. -->
+    <parent>
+        <groupId>org.eclipse.dirigible</groupId>
+        <artifactId>dirigible-parent</artifactId>
+        <version>15.0.0-SNAPSHOT</version>
+        <relativePath>../../../pom.xml</relativePath>
+    </parent>
+
+    <name>Components - Core - Launcher Agent</name>
+    <artifactId>dirigible-components-core-launcher-agent</artifactId>
+    <packaging>jar</packaging>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <!-- -javaagent delivery (integration tests, non-jar launches) -->
+                            <Premain-Class>org.eclipse.dirigible.launcher.agent.DirigibleLauncherAgent</Premain-Class>
+                            <Agent-Class>org.eclipse.dirigible.launcher.agent.DirigibleLauncherAgent</Agent-Class>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <properties>
+        <license.header.location>../../../licensing-header.txt</license.header.location>
+        <parent.pom.folder>../../../</parent.pom.folder>
+    </properties>
+
+</project>

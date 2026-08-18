@@ -18,8 +18,12 @@ import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -49,6 +53,9 @@ class DependenciesService {
     /** The dependency synchronizer. */
     private final DependencySynchronizer dependencySynchronizer;
 
+    /** The platform scope installer. */
+    private final PlatformScopeInstaller platformScopeInstaller;
+
     /** The loader holder. */
     private final ModulesClassLoaderHolder loaderHolder;
 
@@ -65,14 +72,17 @@ class DependenciesService {
      * @param resolver the resolver
      * @param linker the linker
      * @param dependencySynchronizer the dependency synchronizer
+     * @param platformScopeInstaller the platform scope installer
      * @param loaderHolder the loader holder
      */
     DependenciesService(ProjectDependenciesCollector collector, DependencyResolver resolver, ResolvedModulesLinker linker,
-            DependencySynchronizer dependencySynchronizer, ModulesClassLoaderHolder loaderHolder) {
+            DependencySynchronizer dependencySynchronizer, PlatformScopeInstaller platformScopeInstaller,
+            ModulesClassLoaderHolder loaderHolder) {
         this.collector = collector;
         this.resolver = resolver;
         this.linker = linker;
         this.dependencySynchronizer = dependencySynchronizer;
+        this.platformScopeInstaller = platformScopeInstaller;
         this.loaderHolder = loaderHolder;
     }
 
@@ -96,61 +106,103 @@ class DependenciesService {
     }
 
     /**
-     * Runs the union resolution and reconciles the result into the running system. On any failure -
-     * declaration, resolution or swap validation - the installed modules-classloader generation keeps
-     * serving and the failure is reported in the returned state.
+     * Runs the resolution of both dependency tiers and reconciles the results into the running system -
+     * the platform tier (appended to the system classloader) first, then the module tier (the swappable
+     * modules classloader). A failure on one tier never aborts the other; on any module-tier failure
+     * the installed modules-classloader generation keeps serving.
      *
      * @return the resolved state
      */
     synchronized DependenciesState resolveAndActivate() {
         DeclaredDependencies declared = collector.collect();
         lastDeclaredFingerprint = declared.fingerprint();
-        ResolutionResult result = resolver.resolve(declared.dependencies());
-        Map<String, String> failures = new LinkedHashMap<>(declared.errors());
-        failures.putAll(result.failures());
+        Set<MavenDependency> platformDeclared = scoped(declared, MavenDependency.Scope.PLATFORM);
+        Set<MavenDependency> moduleDeclared = scoped(declared, MavenDependency.Scope.MODULE);
         Path localRepository = MavenResolverConfig.fromConfiguration()
                                                   .localRepository();
 
+        // platform tier - append-only system-classloader additions; its failures never gate the
+        // module swap
+        ResolutionResult platformResult =
+                platformDeclared.isEmpty() ? new ResolutionResult(List.of(), Map.of(), Map.of()) : resolver.resolve(platformDeclared);
+        List<PlatformScopeInstaller.PlatformArtifactState> platformStates =
+                platformDeclared.isEmpty() ? List.of() : platformScopeInstaller.install(localRepository, platformResult.artifacts());
+
+        // module tier - gated on the declaration errors and its own resolution failures only
+        ResolutionResult moduleResult = resolver.resolve(moduleDeclared);
+        Map<String, String> moduleGate = new LinkedHashMap<>(declared.errors());
+        moduleGate.putAll(moduleResult.failures());
         SwapOutcome outcome;
-        if (failures.isEmpty()) {
-            outcome = dependencySynchronizer.swap(localRepository, result.artifacts(), result.mediated());
+        if (moduleGate.isEmpty()) {
+            outcome = dependencySynchronizer.swap(localRepository, moduleResult.artifacts(), platformResult.artifacts(),
+                    moduleResult.mediated());
         } else {
             outcome = SwapOutcome.kept(null);
             LOGGER.error("Not swapping the dependency layer: [{}] declaration/resolution failure(s) - the installed generation keeps "
-                    + "serving. Failures: {}", failures.size(), failures);
+                    + "serving. Failures: {}", moduleGate.size(), moduleGate);
         }
+
+        Map<String, String> failures = new LinkedHashMap<>(declared.errors());
+        failures.putAll(platformResult.failures());
+        failures.putAll(moduleResult.failures());
         if (outcome.error() != null) {
             failures.put(SWAP_FAILURE_KEY, outcome.error());
         }
-        // the resolved-modules directory stays maintained as the seed of the next launch's
-        // classpath; stale links are removed only after a fully clean pass
-        linker.sync(localRepository, result.artifacts(), failures.isEmpty());
+
+        // both tiers seed the next launch's classpath through the resolved-modules directory;
+        // stale links are removed only after a fully clean pass
+        List<Path> allArtifacts = new ArrayList<>(moduleResult.artifacts());
+        for (Path artifact : platformResult.artifacts()) {
+            if (!allArtifacts.contains(artifact)) {
+                allArtifacts.add(artifact);
+            }
+        }
+        linker.sync(localRepository, allArtifacts, failures.isEmpty());
+
+        Map<String, String> mediated = new LinkedHashMap<>(moduleResult.mediated());
+        mediated.putAll(platformResult.mediated());
 
         DependenciesState state = new DependenciesState(isDynamicEnabled(), declared.dependencies()
                                                                                     .stream()
                                                                                     .map(MavenDependency::coordinate)
                                                                                     .toList(),
-                result.artifacts()
-                      .stream()
-                      .map(Path::toString)
-                      .toList(),
-                result.mediated(), failures, localRepository.toString(), linker.directory()
-                                                                               .toString(),
+                allArtifacts.stream()
+                            .map(Path::toString)
+                            .toList(),
+                mediated, failures, platformStates, localRepository.toString(), linker.directory()
+                                                                                      .toString(),
                 loaderHolder.generation(), loaderHolder.retiredGenerationsLive(), Instant.now());
         lastState.set(state);
         LOGGER.info(
-                "Maven dependency resolution completed: [{}] declared, [{}] jar(s) {}, [{}] mediated, [{}] failure(s), "
-                        + "classloader generation [{}]",
+                "Maven dependency resolution completed: [{}] declared, [{}] jar(s) {}, [{}] platform-scoped, [{}] mediated, "
+                        + "[{}] failure(s), classloader generation [{}]",
                 state.declared()
                      .size(),
                 state.artifacts()
                      .size(),
-                outcome.swapped() ? "active" : "resolved (generation kept)", state.mediated()
-                                                                                  .size(),
+                outcome.swapped() ? "active" : "resolved (generation kept)", platformStates.size(), state.mediated()
+                                                                                                         .size(),
                 state.failures()
                      .size(),
                 state.classLoaderGeneration());
         return state;
+    }
+
+    /**
+     * The declared dependencies of one scope.
+     *
+     * @param declared the declared dependencies
+     * @param scope the scope
+     * @return the dependencies of that scope, in declaration order
+     */
+    private static Set<MavenDependency> scoped(DeclaredDependencies declared, MavenDependency.Scope scope) {
+        Set<MavenDependency> result = new LinkedHashSet<>();
+        for (MavenDependency dependency : declared.dependencies()) {
+            if (dependency.scope() == scope) {
+                result.add(dependency);
+            }
+        }
+        return result;
     }
 
     /**

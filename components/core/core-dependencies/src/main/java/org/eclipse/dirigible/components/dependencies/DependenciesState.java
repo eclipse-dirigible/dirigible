@@ -22,6 +22,7 @@ import java.util.Map;
  * @param mediated the versions chosen where more than one was requested, keyed by
  *        groupId:artifactId
  * @param failures the per-coordinate failure messages
+ * @param platform the per-artifact activation states of the platform-scoped dependencies
  * @param localRepository the local repository, null before the first resolution
  * @param resolvedModulesDirectory the directory the resolved jars are linked into (the launch-time
  *        seed; at runtime the jars are served by the modules classloader directly)
@@ -30,8 +31,8 @@ import java.util.Map;
  * @param resolvedAt when the state was resolved, null before the first resolution
  */
 record DependenciesState(boolean enabled, List<String> declared, List<String> artifacts, Map<String, String> mediated,
-        Map<String, String> failures, String localRepository, String resolvedModulesDirectory, int classLoaderGeneration,
-        int retiredClassLoaders, Instant resolvedAt) {
+        Map<String, String> failures, List<PlatformScopeInstaller.PlatformArtifactState> platform, String localRepository,
+        String resolvedModulesDirectory, int classLoaderGeneration, int retiredClassLoaders, Instant resolvedAt) {
 
     /**
      * The state before the first resolution.
@@ -41,7 +42,8 @@ record DependenciesState(boolean enabled, List<String> declared, List<String> ar
      * @return the empty state
      */
     static DependenciesState empty(boolean enabled, String resolvedModulesDirectory) {
-        return new DependenciesState(enabled, List.of(), List.of(), Map.of(), Map.of(), null, resolvedModulesDirectory, 0, 0, null);
+        return new DependenciesState(enabled, List.of(), List.of(), Map.of(), Map.of(), List.of(), null, resolvedModulesDirectory, 0, 0,
+                null);
     }
 
     /**
@@ -53,7 +55,7 @@ record DependenciesState(boolean enabled, List<String> declared, List<String> ar
      * @return the state
      */
     DependenciesState refreshed(boolean enabled, int classLoaderGeneration, int retiredClassLoaders) {
-        return new DependenciesState(enabled, declared, artifacts, mediated, failures, localRepository, resolvedModulesDirectory,
+        return new DependenciesState(enabled, declared, artifacts, mediated, failures, platform, localRepository, resolvedModulesDirectory,
                 classLoaderGeneration, retiredClassLoaders, resolvedAt);
     }
 
