@@ -58,11 +58,12 @@ final class UnknownKeyValidator {
     private static final Map<Class<?>, Map<String, Field>> KEYS = new ConcurrentHashMap<>();
 
     /**
-     * The entity-lifecycle / process-step axes a notification, an integration or a departure may bind
-     * to.
+     * The entity-event / process-step axes a notification, an integration or a departure may bind to.
+     * {@code onTransition} is the status channel - a workflow setter, a {@code transitions:} button and
+     * a {@code generates} completion hook publish {@code -transitioned} and never {@code -updated}.
      */
     private static final Set<String> GLUE_EVENT_KEYS =
-            Set.of("onCreate", "onUpdate", "onDelete", "onStepReached", "onStepCompleted", "when");
+            Set.of("onCreate", "onUpdate", "onDelete", "onTransition", "onStepReached", "onStepCompleted", "when");
 
     /**
      * Author-facing maps whose keys are a closed vocabulary, keyed by {@code <SimpleClassName>#<field>}
@@ -76,7 +77,8 @@ final class UnknownKeyValidator {
      * stays listed here, so the author gets that message rather than "unknown key".
      */
     private static final Map<String, Set<String>> MAP_KEYS = Map.ofEntries(
-            Map.entry("ProcessIntent#trigger", Set.of("onCreate", "onUpdate", "onDelete", "when", "businessKey", "businessKeyStrategy")),
+            Map.entry("ProcessIntent#trigger",
+                    Set.of("onCreate", "onUpdate", "onDelete", "onTransition", "when", "businessKey", "businessKeyStrategy")),
             Map.entry("ProcessIntent#abortOn", Set.of("status", "then")), Map.entry("NotificationIntent#event", GLUE_EVENT_KEYS),
             Map.entry("NotificationIntent#event.onStepReached", Set.of("process", "step")),
             Map.entry("NotificationIntent#event.onStepCompleted", Set.of("process", "step")),

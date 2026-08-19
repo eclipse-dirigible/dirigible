@@ -28,6 +28,7 @@ import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
+import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
 import org.eclipse.dirigible.components.intent.generator.ScheduleSupport;
 import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
@@ -134,14 +135,13 @@ public final class IntentParser {
      * the service task's actions - {@code ServiceTaskHandlerGenerator} scaffolds both from the same
      * keys.
      */
-    private static final Map<String, Set<String>> STEP_ARGS_BY_KIND =
-            Map.of("userTask", Set.of("assignee", "form", "timeout", "expire", "setRelationField", "value", "next"), "serviceTask",
-                    Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next", "retry",
-                            "onError", "produces", "uses"),
-                    "script",
-                    Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next"),
-                    "decision", Set.of("if", "then", "else", "next"), "wait", Set.of("onCreate", "onUpdate", "via", "when", "next"),
-                    "parallel", Set.of("branches", "next"), "end", Set.of("next"));
+    private static final Map<String, Set<String>> STEP_ARGS_BY_KIND = Map.of("userTask",
+            Set.of("assignee", "form", "timeout", "expire", "setRelationField", "value", "next"), "serviceTask",
+            Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next", "retry",
+                    "onError", "produces", "uses"),
+            "script", Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next"),
+            "decision", Set.of("if", "then", "else", "next"), "wait", Set.of("onCreate", "onUpdate", "onTransition", "via", "when", "next"),
+            "parallel", Set.of("branches", "next"), "end", Set.of("next"));
     /** Every arg the DSL knows, on any kind - anything else is a typo, not a misplacement. */
     private static final Set<String> KNOWN_STEP_ARGS = STEP_ARGS_BY_KIND.values()
                                                                         .stream()
@@ -154,8 +154,14 @@ public final class IntentParser {
      */
     private static final Set<String> STEP_ARGS_CHECKED_BY_KIND_ELSEWHERE =
             Set.of("setField", "setRelationField", "delegate", "notify", "timeout", "expire");
-    /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
-    private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
+    /**
+     * Entity events a declarative-glue item (notification, integration, departure, process trigger) can
+     * bind to. {@code onTransition} is the STATUS axis - a workflow setter, a {@code transitions:}
+     * button and a {@code generates} completion hook publish {@code -transitioned} and never
+     * {@code -updated}, so without it the whole update half of the DSL was deaf to every status the
+     * system itself writes.
+     */
+    private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete", "onTransition");
     /**
      * The process-step half of the glue event axis - each names a <code>{ process, step }</code> pair
      * rather than an entity.
@@ -1968,7 +1974,7 @@ public final class IntentParser {
             }
         }
         if (declared != 1) {
-            issues.add(subject + " must declare exactly one of onCreate/onUpdate/onDelete/onStepReached/onStepCompleted");
+            issues.add(subject + " must declare exactly one of onCreate/onUpdate/onDelete/onTransition/onStepReached/onStepCompleted");
         }
         return entity;
     }
@@ -3945,7 +3951,8 @@ public final class IntentParser {
                 }
             }
             if (triggerEvents > 1) {
-                issues.add("process [" + process.getName() + "] trigger must declare at most one of onCreate/onUpdate/onDelete");
+                issues.add(
+                        "process [" + process.getName() + "] trigger must declare at most one of onCreate/onUpdate/onDelete/onTransition");
             }
             // An optional businessKey flags which trigger-entity field becomes the started process
             // instance's BPM business key; it must be a field of the triggered entity.
@@ -3955,7 +3962,7 @@ public final class IntentParser {
             if (businessKey != null) {
                 if (triggerEntity == null) {
                     issues.add("process [" + process.getName()
-                            + "] trigger declares businessKey but no onCreate/onUpdate/onDelete event to start on");
+                            + "] trigger declares businessKey but no onCreate/onUpdate/onDelete/onTransition event to start on");
                 } else {
                     EntityIntent triggered = byName.get(triggerEntity);
                     businessKeyField = triggered == null ? null : fieldByName(triggered, businessKey.toString());
@@ -4510,11 +4517,12 @@ public final class IntentParser {
     }
 
     /**
-     * A {@code wait} step parks the process on an entity lifecycle event: exactly one of
-     * {@code onCreate}/{@code onUpdate} naming a declared entity; when that entity is not the trigger
-     * entity itself, {@code via:} must name the to-one relation of the <b>event</b> entity that walks
-     * to the trigger entity (the record carrying the parked instance's {@code ProcessId}). Without
-     * these checks a typo would leave the process parked forever instead of failing at parse time.
+     * A {@code wait} step parks the process on an entity event: exactly one of
+     * {@code onCreate}/{@code onUpdate}/{@code onTransition} naming a declared entity; when that entity
+     * is not the trigger entity itself, {@code via:} must name the to-one relation of the <b>event</b>
+     * entity that walks to the trigger entity (the record carrying the parked instance's
+     * {@code ProcessId}). Without these checks a typo would leave the process parked forever instead of
+     * failing at parse time.
      */
     private static void validateWaitSteps(ProcessIntent process, String triggerEntity, Map<String, EntityIntent> byName,
             List<String> issues) {
@@ -4524,11 +4532,13 @@ public final class IntentParser {
             }
             if (stepArg(step, "onDelete") != null) {
                 issues.add("process [" + process.getName() + "] wait [" + step.getName()
-                        + "] cannot bind onDelete - a deleted record cannot resume a wait (use onCreate/onUpdate)");
+                        + "] cannot bind onDelete - a deleted record cannot resume a wait (use onCreate/onUpdate/onTransition)");
             }
             int events = 0;
             String eventEntity = null;
-            for (String kind : List.of("onCreate", "onUpdate")) {
+            // The generator's own list, so the vocabulary a wait accepts and the topic it subscribes
+            // to cannot drift apart.
+            for (String kind : ProcessWaitSupport.EVENT_KINDS) {
                 String target = stepArg(step, kind);
                 if (target != null) {
                     events++;
@@ -4537,7 +4547,7 @@ public final class IntentParser {
             }
             if (events != 1) {
                 issues.add("process [" + process.getName() + "] wait [" + step.getName()
-                        + "] must declare exactly one of onCreate/onUpdate naming the resuming entity event");
+                        + "] must declare exactly one of onCreate/onUpdate/onTransition naming the resuming entity event");
                 continue;
             }
             if (!byName.containsKey(eventEntity)) {

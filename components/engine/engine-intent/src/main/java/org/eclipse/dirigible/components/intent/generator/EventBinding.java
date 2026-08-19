@@ -12,14 +12,22 @@ package org.eclipse.dirigible.components.intent.generator;
 import java.util.Map;
 
 /**
- * Shared reading of an {@code event: { onCreate|onUpdate|onDelete: <Entity> }} binding map - the
- * common entity-lifecycle hook used by notifications, integrations and other declarative glue. Maps
- * the event kind to the per-operation topic suffix the Java DAO publishes to (create = unsuffixed
- * base topic; update/delete = {@code -updated}/{@code -deleted}).
+ * Shared reading of an {@code event: { onCreate|onUpdate|onDelete|onTransition: <Entity> }} binding
+ * map - the common entity-event hook used by notifications, integrations, departures, process
+ * triggers and {@code wait} steps. Maps the event kind to the topic suffix its publisher uses
+ * (create = unsuffixed base topic; update/delete = {@code -updated}/{@code -deleted}).
+ *
+ * <p>
+ * {@code onTransition} is the STATUS axis, and it is a separate channel rather than a flavour of
+ * update: a workflow setter, a {@code transitions:} button and a {@code generates} completion hook
+ * all write the status through the targeted primitives and publish {@code -transitioned}, never
+ * {@code -updated} - deliberately, so a system write cannot re-fire the onUpdate reactions meant
+ * for a person's edit. The consequence was that the {@code -updated} half of the DSL could not
+ * observe a status change at all; binding to it is what this kind exists for.
  */
 public final class EventBinding {
 
-    private static final String[] KINDS = {"onCreate", "onUpdate", "onDelete"};
+    private static final String[] KINDS = {"onCreate", "onUpdate", "onDelete", "onTransition"};
 
     private EventBinding() {}
 
@@ -52,8 +60,9 @@ public final class EventBinding {
     }
 
     /**
-     * @param kind the lifecycle event kind
-     * @return the topic suffix ({@code ""} for create, {@code -updated}/{@code -deleted} otherwise)
+     * @param kind the event kind
+     * @return the topic suffix ({@code ""} for create, else
+     *         {@code -updated}/{@code -deleted}/{@code -transitioned})
      */
     public static String topicSuffix(String kind) {
         if ("onUpdate".equals(kind)) {
@@ -61,6 +70,9 @@ public final class EventBinding {
         }
         if ("onDelete".equals(kind)) {
             return "-deleted";
+        }
+        if ("onTransition".equals(kind)) {
+            return "-transitioned";
         }
         return "";
     }
