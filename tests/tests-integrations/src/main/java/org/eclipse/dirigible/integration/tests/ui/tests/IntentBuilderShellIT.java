@@ -17,6 +17,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
+import org.awaitility.Awaitility;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -126,16 +127,31 @@ public class IntentBuilderShellIT extends UserInterfaceIntegrationTest {
         openBuilder();
 
         // Alpine started and the Builder's own stores registered - a mis-ordered or missing script
-        // leaves the page rendering nothing while every endpoint behind it stays green.
-        Object bootstrapped = Selenide.executeJavaScript("return !!(window.Alpine && Alpine.store('intent')"
-                + " && Alpine.store('conversation') && Alpine.store('publish') && window.IntentDiagrams);");
-        Assertions.assertTrue(Boolean.TRUE.equals(bootstrapped), "The Builder shell failed to bootstrap its stores and renderer.");
+        // leaves the page rendering nothing while every endpoint behind it stays green. Polled rather
+        // than sampled once: openBuilder() returns as soon as navigation does, and the shell's scripts
+        // are deferred, so a single probe races the boot and reports a healthy page as broken on a slow
+        // runner. A genuinely mis-ordered script never registers the stores, so it still fails - just at
+        // the timeout instead of instantly.
+        Awaitility.await()
+                  // In the calling thread: Selenide binds its WebDriver per-thread, so a probe on
+                  // Awaitility's own poll thread finds no driver at all.
+                  .pollInSameThread()
+                  .atMost(Duration.ofSeconds(60))
+                  .pollInterval(Duration.ofMillis(250))
+                  .untilAsserted(() -> {
+                      Object bootstrapped = Selenide.executeJavaScript("return !!(window.Alpine && Alpine.store('intent')"
+                              + " && Alpine.store('conversation') && Alpine.store('publish') && window.IntentDiagrams);");
+                      Assertions.assertTrue(Boolean.TRUE.equals(bootstrapped),
+                              "The Builder shell failed to bootstrap its stores and renderer.");
+                  });
 
-        // The first-run surface is there: the invitation and the composer.
+        // The first-run surface is there: the invitation and the composer. Explicit deadlines, like every
+        // other wait in this class - Selenide's default is 4s, and Alpine renders these AFTER the stores
+        // the poll above waits for, so the default races the boot rather than testing it.
         Selenide.$(By.xpath("//*[contains(text(), 'Describe the application you need')]"))
-                .shouldBe(Condition.visible);
+                .shouldBe(Condition.visible, Duration.ofSeconds(30));
         Selenide.$(By.id("builder-input"))
-                .shouldBe(Condition.visible);
+                .shouldBe(Condition.visible, Duration.ofSeconds(30));
 
         // The assistant IS configured here (the stub), so the shell must not claim otherwise.
         Selenide.$(By.xpath("//*[contains(text(), 'is not configured on this instance')]"))
@@ -159,8 +175,9 @@ public class IntentBuilderShellIT extends UserInterfaceIntegrationTest {
     void a_conversation_becomes_a_published_application() {
         openBuilder();
 
+        // The composer appears once the shell has booted, which openBuilder() does not wait for.
         Selenide.$(By.id("builder-input"))
-                .shouldBe(Condition.visible)
+                .shouldBe(Condition.visible, Duration.ofSeconds(60))
                 .setValue("I need an expense tracker.");
         Selenide.$(By.cssSelector("button[aria-label='Send']"))
                 .shouldBe(Condition.enabled)
