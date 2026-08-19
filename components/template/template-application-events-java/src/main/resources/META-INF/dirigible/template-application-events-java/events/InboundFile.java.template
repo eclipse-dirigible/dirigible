@@ -7,6 +7,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
+#if($lookups.size() > 0)
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+#end
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.job.JobHandler;
 import org.eclipse.dirigible.sdk.log.Logger;
@@ -27,6 +30,18 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * translations and the create event all fire as they do for any other write. Every file is then
  * moved out of the drop folder, into "processed" or into "failed", so the same records are never
  * ingested twice and a rejected file stays inspectable.
+#if($hasAccept)
+ *
+ * The declared accept gate (${acceptSummary}) is applied per record. A record that does not match is
+ * IGNORED, and the file still counts as processed - a batch is not a failure because it carries
+ * something this receiver does not understand.
+#end
+#if($hasMap)
+ *
+ * Each record is an envelope, read as one and projected onto the entity by the declared map. A
+ * business-key lookup that resolves to no single row fails the WHOLE file into "failed": a drop file
+ * is one delivery, so it is re-dropped whole rather than half-ingested.
+#end
  *
  * Self-describing JobHandler (strong-interface style): the schedule comes from the interface, not a
  * &#64;Scheduled annotation.
@@ -90,6 +105,50 @@ public class ${className}FileImport implements JobHandler {
     private int save(String content) {
         String payload = content == null ? "" : content.trim();
         ${entity}Repository repository = new ${entity}Repository();
+#if($hasEnvelope)
+        // Read as envelopes so the declared gate and map apply per record, with a single record handled
+        // as a batch of one - one code path, whichever shape the file holds.
+        java.util.Map<?, ?>[] envelopes = payload.startsWith("[") ? Json.parse(payload, java.util.Map[].class)
+                : new java.util.Map<?, ?>[] {Json.parse(payload, java.util.Map.class)};
+        if (envelopes == null) {
+            throw new IllegalArgumentException("the file holds no readable ${entity} record");
+        }
+#if(!$hasMap)
+        ${entity}Entity[] records = payload.startsWith("[") ? Json.parse(payload, ${entity}Entity[].class)
+                : new ${entity}Entity[] {Json.parse(payload, ${entity}Entity.class)};
+        if (records == null || records.length != envelopes.length) {
+            throw new IllegalArgumentException("the file holds no readable ${entity} record");
+        }
+#end
+        int saved = 0;
+#if($hasAccept)
+        int ignored = 0;
+#end
+        for (int index = 0; index < envelopes.length; index++) {
+            java.util.Map<?, ?> envelope = envelopes[index];
+            if (envelope == null) {
+                throw new IllegalArgumentException("record " + (index + 1) + " of the file is not a readable JSON object");
+            }
+#if($hasAccept)
+            if (!(${acceptExpression})) {
+                ignored++;
+                continue;
+            }
+#end
+#if($hasMap)
+            repository.save(project(envelope, index + 1));
+#else
+            repository.save(records[index]);
+#end
+            saved++;
+        }
+#if($hasAccept)
+        if (ignored > 0) {
+            LOG.warn("Inbound ${name}: [{}] record(s) of the file do not match accept [{}] - ignored", ignored, ${acceptSummaryLiteral});
+        }
+#end
+        return saved;
+#else
         if (payload.startsWith("[")) {
             ${entity}Entity[] batch = Json.parse(payload, ${entity}Entity[].class);
             if (batch == null) {
@@ -106,7 +165,43 @@ public class ${className}FileImport implements JobHandler {
         }
         repository.save(entity);
         return 1;
+#end
     }
+#if($hasMap)
+
+    /**
+     * One envelope, projected onto a record by the declared map. An unresolvable business-key lookup
+     * throws, which is what fails the whole file: a null relation would be a record nobody can trace
+     * back, and a partially ingested batch would have nothing left to re-drop.
+     */
+    private ${entity}Entity project(java.util.Map<?, ?> envelope, int record) {
+        ${entity}Entity entity = new ${entity}Entity();
+#foreach($field in $mapFields)
+        {
+            Object raw = envelope.get(${field.fromLiteral});
+            if (raw != null) {
+                entity.${field.property} = ${field.expression};
+            }
+        }
+#end
+#foreach($lookup in $lookups)
+        Object ${lookup.local}Key = envelope.get(${lookup.fromLiteral});
+        if (${lookup.local}Key == null) {
+            throw new IllegalArgumentException("record " + record + " carries nothing to resolve ${lookup.property} by");
+        }
+        java.util.List<gen.${javaGenFolderName}.data.${lookup.javaTargetPerspective}.${lookup.targetEntity}Entity> ${lookup.local}Matches =
+                new gen.${javaGenFolderName}.data.${lookup.javaTargetPerspective}.${lookup.targetEntity}Repository()
+                        .findAll(Criteria.create()
+                                         .eq("${lookup.byProperty}", ${lookup.byValueExpression}));
+        if (${lookup.local}Matches.size() != 1) {
+            throw new IllegalArgumentException(
+                    "record " + record + ": no unique ${lookup.targetEntity} matches ${lookup.byProperty} [" + ${lookup.local}Key + "]");
+        }
+        entity.${lookup.property} = ${lookup.local}Matches.get(0).${lookup.targetKeyProperty};
+#end
+        return entity;
+    }
+#end
 
     /**
      * Move the file out of the drop folder, keeping its name unless that would overwrite an earlier
