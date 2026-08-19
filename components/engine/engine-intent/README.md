@@ -44,7 +44,7 @@ filters) are covered at the generation layer by `IntentEngineIT` and the parser 
 | [`notifications`](#notifications--email-on-change) | email on create/update/delete |
 | [`schedules`](#schedules--cron) | cron: notify or generate records per matching row |
 | [`integrations`](#integrations--outbound-http) | outbound HTTP on a data change |
-| [`inbound`](#inbound--webhooks) | webhook that creates records |
+| [`inbound`](#inbound--webhooks-queues-and-drop-folders) | an arrival that creates records, optionally gated and mapped |
 | [`outbound`](#outbound--emit-on-a-queue-or-topic) | emit a record on a queue or topic on an event |
 | [`permissions`](#permissions--roles) | roles |
 | [Planned](#planned--recognised-but-not-yet-implemented) | recognised, not yet implemented |
@@ -627,12 +627,35 @@ integrations:
   - { name: pushNewMember, event: { onCreate: Member }, method: POST, url: "https://api.example.com/members" }
 ```
 
-## inbound - webhooks
+## inbound - webhooks, queues and drop folders
 
 ```yaml
 inbound:
   - { name: leadHook, path: /webhooks/lead, create: Lead }
 ```
+
+An arrival may declare how its payload is READ, on any of the three shapes - what the payload looks
+like has nothing to do with what it travelled on. Without these keys the payload deserializes straight
+into the entity, which works only when the sender's JSON already **is** the entity, field for field:
+
+```yaml
+inbound:
+  - name: userAssignments
+    source: { queue: "global:codbex.user-assignment-requests" }
+    accept: { type: user.assignment.requested, version: 1 }   # anything else: warn and ignore
+    create: TenantUserAssignment
+    map:
+      messageId: messageId                                     # entity field <- envelope key
+      tenant:    { lookup: Tenant, by: tenantId, from: tenantId }   # business key -> relation FK
+```
+
+`accept:` gates on the envelope keys it names; a message that does not match is **acknowledged and
+ignored** with a warning (202 on a webhook, a skipped record in a drop file), never failed into
+redelivery - a sender rolling out a new version must not fill the receiver's error queue. `map:`
+projects the envelope onto the record, and a `lookup:` resolves a **business key to a relation**: `by:`
+must be a **unique** field of the target (or its primary key), since a lookup that could match several
+rows would silently pick one, and one that matches nothing **rejects** the arrival rather than storing a
+null relation. Everything still saves through the entity's own repository. v1 lookups are same-model.
 
 ## outbound - emit on a queue or topic
 

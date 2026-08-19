@@ -19,6 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.intent.generator.ArrivalSupport;
 import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
@@ -230,6 +231,7 @@ public final class IntentParser {
         // together with the structural issues below.
         List<String> issues = new ArrayList<>();
         UnknownKeyValidator.collect(tree, issues);
+        collectEmptyArrivalValues(tree, issues);
         // Statuses may be referenced by their seeded NAME; resolve them to ids on the raw tree so the
         // typed mapping, every validator and every generator keep seeing the integers they always saw.
         StatusSymbolResolver.resolve(tree);
@@ -1411,9 +1413,16 @@ public final class IntentParser {
      * exactly one arrival: an HTTP {@code path} or a {@code source} naming exactly one of a queue, a
      * topic or a polled folder. Declaring both (or neither) is ambiguous about what gets generated, so
      * it fails at parse rather than silently generating one of them.
+     *
+     * <p>
+     * An entry may additionally declare how the arrival is READ - an {@code accept:} gate and a
+     * {@code map:} projection onto the entity, including the business-key lookups that fill its
+     * relations. {@link ArrivalSupport} owns those rules; they apply to all three arrivals, since what
+     * the payload looks like has nothing to do with what it travelled on.
      */
     private static void validateInbound(IntentModel model, Set<String> entityNames, List<String> issues) {
         Set<String> names = new HashSet<>();
+        Map<String, EntityIntent> byName = IntentEntities.byName(model);
         for (InboundIntent inbound : model.getInbound()) {
             String name = inbound.getName();
             if (name == null || name.isBlank()) {
@@ -1437,6 +1446,7 @@ public final class IntentParser {
             if (inbound.getCreate() == null || !entityNames.contains(inbound.getCreate())) {
                 issues.add(subject + " creates unknown entity [" + inbound.getCreate() + "]");
             }
+            ArrivalSupport.validate(inbound, byName.get(inbound.getCreate()), byName, subject, issues);
         }
     }
 
@@ -3522,6 +3532,39 @@ public final class IntentParser {
         }
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
+        }
+    }
+
+    /**
+     * A valueless key inside an arrival's {@code accept:} or {@code map:} is reported from the raw
+     * tree, because the typed mapping drops it: Gson omits a null value, so {@code accept: { type: }}
+     * arrives as an EMPTY gate - every message accepted - and {@code map: { email: }} as a field nobody
+     * fills. Both are the exact "authored, then silently dropped" outcome this parser refuses
+     * everywhere else, and neither is visible once the key is gone.
+     *
+     * @param tree the raw YAML tree
+     * @param issues the collecting issue list
+     */
+    private static void collectEmptyArrivalValues(Object tree, List<String> issues) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("inbound") instanceof List<?> arrivals)) {
+            return;
+        }
+        for (Object arrivalNode : arrivals) {
+            if (!(arrivalNode instanceof Map<?, ?> arrival)) {
+                continue;
+            }
+            String subject = "inbound [" + arrival.get("name") + "]";
+            for (String block : List.of("accept", "map")) {
+                if (!(arrival.get(block) instanceof Map<?, ?> declared)) {
+                    continue;
+                }
+                for (Map.Entry<?, ?> entry : declared.entrySet()) {
+                    if (entry.getValue() == null) {
+                        issues.add(subject + " " + block + " [" + entry.getKey() + "] has no value"
+                                + ("accept".equals(block) ? " to gate on" : " - name the envelope key it is filled from"));
+                    }
+                }
+            }
         }
     }
 

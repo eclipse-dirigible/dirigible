@@ -2219,6 +2219,43 @@ inbound:
 `path` or a `source` naming exactly one of `queue` / `topic` / `folder`. A `folder` source needs a
 `cron` (there is no file-system watch - the folder is polled); the other sources take none.
 
+#### accept + map - when the payload is an envelope, not the record
+
+The shape above only works when the sender's JSON already **is** the entity, field for field. A real
+arrival contract is an envelope, and the two keys below read it. Both are optional, both work on all
+three arrivals (what the payload looks like has nothing to do with what it travelled on), and omitting
+them keeps today's behaviour exactly.
+
+```yaml
+inbound:
+  - name: userAssignments
+    source: { queue: "global:codbex.user-assignment-requests" }
+    accept: { type: user.assignment.requested, version: 1 }   # anything else: warn and ignore
+    create: TenantUserAssignment
+    map:
+      messageId: messageId                                     # entity field <- envelope key
+      email:     email
+      tenant:      { lookup: Tenant,         by: tenantId, from: tenantId }   # business key -> FK
+      role:        { lookup: AssignmentRole, by: name,     from: role }
+```
+
+- **`accept:`** gates on the envelope keys you declare (a type, a version). A message that does not
+  match is **acknowledged and ignored with a warning** - never failed, since failing it would only have
+  it redelivered, and a sender rolling out v2 must not fill this receiver's error queue. On a webhook
+  the answer is 202; in a drop file that record is skipped and the file still counts as processed.
+- **`map:`** projects envelope keys onto the entity's own fields and relations. A key the map does not
+  name is not the record's business. Each value is either an envelope key or a **lookup**.
+- **`lookup:`** resolves a **business key to a relation** - the envelope says `tenantId: "acme"` and the
+  record stores the `Tenant` foreign key. `by:` must be a **unique** field of the target (or its primary
+  key): a lookup that could match several rows would silently pick one, so a non-unique `by:` fails at
+  Generate. A lookup that matches nothing **rejects the arrival** with a clear log - never a null
+  relation. v1 is same-model: the looked-up entity must be declared in this model.
+
+Everything still saves through the entity's own repository, so validations, translations and the create
+event fire exactly as for any other write. Do not map the primary key - it is generated on insert; give
+the arrival's own identifier a `unique: true` field of its own instead (which is also what makes a
+redelivery refuse itself).
+
 ### outbound - the app raises an event for another system
 
 **Use when:** something **outside the app must be told** that a record happened, and it listens on a
@@ -2461,6 +2498,7 @@ name.
 - "call an external API when X changes" -> **integrations**
 - "notify / call out when a task becomes available, or when a step is done" -> **notifications / integrations** with `event: { onStepReached | onStepCompleted: { process, step } }`
 - "let an external system create X" -> **inbound** (`path` for HTTP, `source: { queue | topic }` for a message, `source: { folder, cron }` for dropped files)
+- "the arriving payload is an envelope, not the record" -> **inbound `map:`** (+ `lookup:` to turn a business key into a relation, and `accept:` to ignore the message types this app does not understand)
 - "keep a running count of children on the parent" -> **rollups**
 - "expand a from-to span into day/week/month child rows / loan installments / vacation day items" -> **expansions**
 - "compute days between two dates on the form (working days / months)" -> **calculated field with a date function**

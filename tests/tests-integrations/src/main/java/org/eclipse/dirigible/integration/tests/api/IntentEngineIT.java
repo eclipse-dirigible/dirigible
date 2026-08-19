@@ -75,7 +75,9 @@ class IntentEngineIT extends IntegrationTest {
                 fields:
                   - { name: id,      type: integer, primaryKey: true, generated: true }
                   - { name: name,    type: string,  required: true, length: 100 }
-                  - { name: code2,   type: string,  length: 2 }
+                  # An ISO alpha-2 code identifies exactly one country, which is what makes it legal
+                  # as an arrival's business key (an inbound lookup refuses a non-unique `by`).
+                  - { name: code2,   type: string,  length: 2, unique: true }
 
               - name: Customer
                 fields:
@@ -297,6 +299,18 @@ class IntentEngineIT extends IntegrationTest {
               - name: ingestOrder
                 path: /ingest
                 create: Order
+              # Mapping on arrival (#6769): the payload is an ENVELOPE, so a gate decides whether this
+              # app understands it and a map projects it onto the record - including the business key
+              # that becomes a relation. The webhook above declares neither, so both shapes are proven
+              # from one intent.
+              - name: ingestPartnerOrder
+                source: { queue: orders.partner }
+                accept: { type: order.placed, version: 1 }
+                create: Order
+                map:
+                  orderDate: placedOn
+                  total:     amount
+                  country:   { lookup: Country, by: code2, from: countryCode }
 
             rollups:
               - name: customerOrderCount
@@ -790,10 +804,48 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(webhook.contains("@Controller") && webhook.contains("class IngestOrderWebhook"),
                 "the inbound webhook should be a @Controller");
         assertTrue(webhook.contains("@Post(\"/ingest\")"), "the webhook should expose the declared path");
+        // The body is BOUND, not parsed out of a String: the platform reads the request straight into
+        // the declared parameter type, so `@Body String` could only ever accept a JSON *string* and
+        // answered 400 to the object every real sender posts. Nothing exercised the endpoint until
+        // #6769 came to use it, which is exactly how it stayed broken - hence the assertion on the
+        // parameter type, not merely on the save.
         assertTrue(
-                webhook.contains("OrderEntity entity = Json.parse(body, OrderEntity.class)")
+                webhook.contains("public String ingest(@Body OrderEntity entity)")
                         && webhook.contains("new OrderRepository().save(entity)"),
-                "the webhook should deserialize the payload and save it through the repository");
+                "the webhook should bind the posted JSON as the entity and save it through the repository");
+        assertTrue(webhook.contains("Response.setContentType(\"application/json\")"),
+                "the webhook answers JSON, so it must declare it - a caller should not have to guess");
+        assertFalse(webhook.contains("envelope"),
+                "an arrival declaring no accept/map must generate exactly what it always did - the payload IS the record");
+
+        // Mapping on arrival (#6769): the same ingest, read as an envelope. The gate, the typed
+        // projection and the business-key lookup are all pre-rendered by the intent layer, so this is
+        // the outermost place they can be checked short of running them.
+        String mapped = contentOf("gen/events/orders/IngestPartnerOrderConsumer.java");
+        assertTrue(mapped.contains("java.util.Map<?, ?> envelope = Json.parse(message, java.util.Map.class)"),
+                "a mapped arrival reads the payload as an envelope, not as the entity");
+        assertTrue(
+                mapped.contains("\"order.placed\".equals(envelope.get(\"type\"))")
+                        && mapped.contains("((Number) envelope.get(\"version\")).doubleValue() == 1"),
+                "the accept gate compares a string by equals and a number as a double - every number in a parsed envelope is one");
+        assertTrue(mapped.contains("does not match accept") && mapped.contains("acknowledged and ignored"),
+                "a message this app does not understand is acknowledged and ignored with a warning, never failed into redelivery");
+        // The conversions are the field's own, off the envelope's untyped value.
+        assertTrue(
+                mapped.contains("entity.OrderDate = org.eclipse.dirigible.sdk.utils.LenientJavaTime.parseLocalDate(String.valueOf(raw))"),
+                "a date field converts through the lenient parser");
+        assertTrue(mapped.contains("entity.Total = new java.math.BigDecimal(String.valueOf(raw))"),
+                "a decimal field converts through BigDecimal - the envelope's numbers are Doubles");
+        // The lookup: a setting entity's repository lives under the shared Settings perspective, so a
+        // settings-unaware resolution would import a package that does not exist.
+        assertTrue(
+                mapped.contains("new gen.orders.data.settings.CountryRepository()")
+                        && mapped.contains(".eq(\"Code2\", String.valueOf(lookupCountryKey))"),
+                "the lookup queries the target's unique field through its own repository");
+        assertTrue(mapped.contains("entity.Country = lookupCountryMatches.get(0).Id"),
+                "what the record stores is the looked-up row's primary key");
+        assertTrue(mapped.contains("no unique Country matches") && mapped.contains("NOT ingested"),
+                "a lookup that resolves to no single row rejects the arrival instead of storing a null relation");
 
         // Rollups: two self-describing @Component MessageHandlers (child create/delete) that recompute the
         // parent counter via Criteria.
@@ -1198,6 +1250,49 @@ class IntentEngineIT extends IntegrationTest {
         String relationSetter = contentOf("gen/events/provisioning/TenantProvisioningMarkFailed.java");
         assertTrue(relationSetter.contains("updateProperty") && relationSetter.contains(", \"Status\", 3)"),
                 "the relation setter keeps assigning the unquoted seed id");
+    }
+
+    @Test
+    void parse_rejects_an_arrival_mapping_that_cannot_hold() {
+        // The whole point of the uniqueness rule: a lookup on a non-unique field could match several
+        // rows, and silently picking one is worse than failing. Reported together with the rest, so an
+        // author fixes the arrival in one pass rather than one message at a time.
+        String yaml = """
+                name: provisioning
+                entities:
+                  - name: Tenant
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: tenantId, type: string, unique: true }
+                      - { name: name, type: string }
+                  - name: TenantUserAssignment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: email, type: string }
+                    relations:
+                      - { name: tenant, kind: manyToOne, to: Tenant }
+                inbound:
+                  - name: userAssignments
+                    source: { queue: assignments }
+                    accept: { type: [a, b] }
+                    create: TenantUserAssignment
+                    map:
+                      emial: email
+                      tenant: { lookup: Tenant, by: name, form: tenantName }
+                """;
+        restAssuredExecutor.execute(() -> given().contentType("text/plain")
+                                                 .body(yaml)
+                                                 .when()
+                                                 .post(PARSE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("issues", hasItems(
+                                                         "inbound [userAssignments] accept [type] must be a scalar - a gate compares an envelope key with one value",
+                                                         "inbound [userAssignments] map [emial] is not a field or a to-one relation of [TenantUserAssignment]",
+                                                         "inbound [userAssignments] map [tenant] lookup declares unknown key [form] - a lookup names lookup, by and from",
+                                                         "inbound [userAssignments] map [tenant] lookup has no from - the envelope key carrying the business key",
+                                                         "inbound [userAssignments] map [tenant] lookup matches on [name], which is not unique on [Tenant] - declare unique: true on it,"
+                                                                 + " since a lookup that could match several rows would silently pick one")));
     }
 
     @Test

@@ -43,11 +43,14 @@ import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import ch.qos.logback.classic.Level;
 
 /**
  * DSL emission + runtime coverage: for the intent features whose enforcement lives in GENERATED
@@ -567,6 +570,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
+                relations:
+                  # Filled by the mapped arrival below from the e-mail its envelope carries - never
+                  # posted as an id. Optional, so the three unmapped arrivals keep working unchanged.
+                  - { name: raisedBy, kind: manyToOne, to: Person }
 
               # expansions: the generated child set is OWNED by the expansion, so the master's DELETE
               # has to take it with it (#6821). Nothing else would - a foreign key never becomes a
@@ -899,6 +906,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - { name: signalHook,  path: /signal, create: Signal }
               - { name: signalQueue, source: { queue: emission-signals }, create: Signal }
               - { name: signalDrop,  source: { folder: target/inbox-emission, cron: "0/2 * * * * ?" }, create: Signal }
+              # Mapping on arrival (#6769): the payload is an ENVELOPE, so a gate decides whether this
+              # app understands it and a map projects it onto the record - including the business key
+              # (an e-mail) that becomes the raisedBy relation. The three arrivals above declare
+              # neither key, which is what keeps them proving the unmapped path at the same time.
+              - name: signalEnvelope
+                source: { queue: emission-signal-envelopes }
+                accept: { type: signal.raised, version: 1 }
+                create: Signal
+                map:
+                  note:     message
+                  raisedBy: { lookup: Person, by: email, from: raisedBy }
 
             # The departure half (#6767): the same record leaving on a queue, as a DECLARED envelope
             # rather than the row as stored. The guard keeps an internal note off the wire, which is
@@ -1748,6 +1766,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a folder source must emit a JobHandler polling that folder on the declared cron");
         assertTrue(fileImport.contains("SignalEntity[].class") && fileImport.contains("Files.move"),
                 "a file ingest must accept a batch and move every read file out of the drop folder");
+
+        // Mapping on arrival (#6769): the gate, the projection and the business-key lookup. The three
+        // arrivals above must be untouched by it - that is what "omitting the keys changes nothing"
+        // means, and only asserting the absence proves it.
+        assertFalse(consumer.contains("envelope"), "an arrival declaring no accept/map keeps reading the payload AS the record");
+        String mapped = contentOf("gen/events/emission/SignalEnvelopeConsumer.java");
+        assertTrue(mapped.contains("java.util.Map<?, ?> envelope = Json.parse(message, java.util.Map.class)"),
+                "a mapped arrival reads the payload as an envelope");
+        assertTrue(
+                mapped.contains("\"signal.raised\".equals(envelope.get(\"type\"))")
+                        && mapped.contains("((Number) envelope.get(\"version\")).doubleValue() == 1")
+                        && mapped.contains("acknowledged and ignored"),
+                "the accept gate must compare both declared keys and IGNORE a message it does not match, never fail it");
+        assertTrue(mapped.contains("entity.Note = String.valueOf(raw)") && mapped.contains("envelope.get(\"message\")"),
+                "a mapped field is filled from the envelope key the map names, not from its own name");
+        assertTrue(
+                mapped.contains(".eq(\"Email\", String.valueOf(lookupRaisedByKey))")
+                        && mapped.contains("entity.RaisedBy = lookupRaisedByMatches.get(0).Id"),
+                "the lookup resolves the target's unique field and stores its primary key");
+        assertTrue(mapped.contains("no unique Person matches") && mapped.contains("NOT ingested"),
+                "an unresolvable lookup rejects the arrival rather than storing a null relation");
 
         // The glue event axis, outbound half (#6767): the publisher subscribes to the record's own
         // event topic, guards, builds the DECLARED envelope and sends it on the named channel. A
@@ -3428,6 +3467,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     private void assertInboundSourcesRuntime() {
         String signalApi = API + "/signal/SignalController";
 
+        // The HTTP arrival, POSTed for real. It had never been until #6769 needed it, and it did not
+        // work: the platform binds a request body straight into the declared parameter type, so the
+        // `@Body String` the template used could only accept a JSON *string* and answered 400 to the
+        // object every sender posts. Asserting the emitted source could not have shown that.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Note\":\"from the webhook\"}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/SignalHookWebhook/signal")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Note", equalTo("from the webhook")));
+
         MessagingFacade.sendToQueue("emission-signals", "{\"Note\":\"from the queue\"}");
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(signalApi)
@@ -3457,6 +3508,49 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // Every read file leaves the drop folder, so the next tick cannot ingest it again.
         assertTrue(Files.exists(dropFolder.resolve("processed/signals.json")),
                 "an ingested file must be moved out of the drop folder, into processed/");
+
+        assertArrivalMappingRuntime(signalApi);
+    }
+
+    /**
+     * Mapping on arrival end to end (#6769). The three outcomes only exist at this layer: the emitted
+     * source can show that a lookup was generated, not that it resolves a name to the row's id, that a
+     * gate really drops what it does not match, and that an unresolvable key really stores nothing.
+     *
+     * <p>
+     * The two refused envelopes are published FIRST and the accepted one last, so the arrival of the
+     * accepted record proves the refused ones were already consumed - one queue, one consumer, in order
+     * - and their absence is a fact rather than a race.
+     */
+    private void assertArrivalMappingRuntime(String signalApi) {
+        // Attached here rather than in a field: Spring re-initializes logback while it starts the
+        // context, which drops an appender attached any earlier.
+        LogsAsserter consumerLogs = new LogsAsserter("app.gen.events.emission.SignalEnvelopeConsumer", Level.WARN);
+
+        MessagingFacade.sendToQueue("emission-signal-envelopes", envelope("envelope-v2", 2, "other@example.com"));
+        MessagingFacade.sendToQueue("emission-signal-envelopes", envelope("envelope-nobody", 1, "nobody@example.com"));
+        MessagingFacade.sendToQueue("emission-signal-envelopes", envelope("envelope-ok", 1, "other@example.com"));
+
+        // The business key becomes the relation: Person row 2 is deliberately not the first row, so a
+        // RaisedBy of 2 can only be the lookup having matched the e-mail the envelope sent.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(signalApi)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("find { it.Note == 'envelope-ok' }.RaisedBy", equalTo(2))
+                                                 .body("Note", not(hasItem("envelope-v2")))
+                                                 .body("Note", not(hasItem("envelope-nobody"))),
+                60);
+
+        // Both refusals are observable - which is the whole point of ignoring rather than failing: a
+        // silent drop and a working receiver look identical from the outside.
+        consumerLogs.assertLoggedMessage("does not match accept", Level.WARN);
+        consumerLogs.assertLoggedMessage("no unique Person matches", Level.ERROR);
+    }
+
+    /** The arrival contract as a sender writes it: an envelope, not the row. */
+    private static String envelope(String message, int version, String raisedBy) {
+        return "{\"type\":\"signal.raised\",\"version\":" + version + ",\"message\":\"" + message + "\",\"raisedBy\":\"" + raisedBy + "\"}";
     }
 
     /**
