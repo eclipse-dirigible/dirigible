@@ -110,6 +110,19 @@ instantiate client classes.
   trigger-now was written out separately once and stayed JavaScript-only, so triggering a client-Java job
   ran its class name as a JS path and 500'd (#6305).
 - `ListenerClassConsumer` — listeners → ActiveMQ; re-establishes the message's tenant context.
+  **A topic subscription is DURABLE**, because this consumer tears every subscription down and
+  re-registers it on each republish, and a plain topic subscriber receives only what is published
+  while it is connected — so an event raised in that window was dropped, and a record created
+  mid-republish silently never started its process or ran its glue. The broker therefore holds a
+  topic's messages against a `clientId` + subscription name derived from the handler's label and the
+  tenant-resolved destination; that id must stay **stable**, since a varying one would open an empty
+  subscription on every reload and strand the messages held for the previous one. Queues are left as
+  plain consumers — a queue already retains messages for an absent consumer. Two consequences: a
+  topic's messages now accumulate in the broker's store (SystemDB) while a handler is down instead of
+  being discarded, and a subscription nobody reconnects to is reclaimed only by the broker's
+  `offlineDurableSubscriberTimeout` (7 days, set in `MessagingConfig`) — the consumer cannot
+  unsubscribe on its own, because `onClassUnloaded` fires for a *replaced* class as well as a deleted
+  one, and a class deleted while the server was down is never reported at all.
 - `WebsocketClassConsumer` + `JavaWebsocketRegistry` — websockets; `WebsocketProcessor`
   (`engine-websockets`) calls `JavaWebsocketRegistry.dispatch(...)` reflectively (keeps that module free
   of an `engine-java` dependency).
