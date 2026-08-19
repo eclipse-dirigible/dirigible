@@ -21,7 +21,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * The maven dependency resolution surface - the current declared / resolved state and the on-demand
- * union resolution. The resolved jars join the application classpath on the next restart.
+ * union resolution. The resolved jars take effect immediately through the swappable modules
+ * classloader; no restart is required.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_CORE + "dependencies")
@@ -51,14 +52,15 @@ class DependenciesEndpoint {
     }
 
     /**
-     * Runs the union resolution on demand.
+     * Runs the union resolution on demand - in frozen mode this re-activates the locked set and
+     * surfaces any declaration the lock does not carry.
      *
      * @return the resolved state
      */
     @PostMapping("resolve")
     @RolesAllowed({"ADMINISTRATOR", "OPERATOR"})
     ResponseEntity<DependenciesState> resolve() {
-        if (!dependenciesService.isDynamicEnabled()) {
+        if (!dependenciesService.isDynamicEnabled() && !dependenciesService.isFrozen()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Dynamic dependency resolution is disabled - set DIRIGIBLE_DEPENDENCIES_DYNAMIC=true to enable it");
         }

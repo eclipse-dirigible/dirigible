@@ -217,6 +217,16 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
         rebuildAll();
     }
 
+    /**
+     * Recompiles and reloads the whole client codebase outside a synchronization pass - called after a
+     * dependency-layer swap, so client sources compile against the new JAR set and the new
+     * {@code ClientClassLoader} generation parents on the new modules classloader. {@code JavaLoader}'s
+     * own synchronization serializes this with a concurrently running pass.
+     */
+    void rebuildOnDependenciesChanged() {
+        rebuildAll();
+    }
+
     private void rebuildAll() {
         List<JavaFile> all = javaFileService.getAll();
         List<JavaLoader.ClientSource> sources = new ArrayList<>(all.size());

@@ -64,7 +64,15 @@ public class ListenersManager {
     public void startListener(org.eclipse.dirigible.components.listeners.domain.Listener listenerEntity) {
         ListenerDescriptor listenerDescriptor = listenerCreator.fromEntity(listenerEntity);
         if (LISTENERS.containsKey(listenerDescriptor)) {
-            LOGGER.warn("Message consumer for listener [{}] already running!", listenerDescriptor);
+            if (DestinationNameManager.isGlobal(listenerEntity.getName())) {
+                // Every provisioned tenant reaches this artefact, and a global destination resolves to
+                // one physical name for all of them - so the tenants after the first share the single
+                // subscription that is already open. Expected, not a misconfiguration.
+                LOGGER.debug("Listener [{}] is bound to a global destination and is already running for the whole deployment.",
+                        listenerDescriptor);
+            } else {
+                LOGGER.warn("Message consumer for listener [{}] already running!", listenerDescriptor);
+            }
             return;
 
         }

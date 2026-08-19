@@ -209,7 +209,16 @@ public class ${name}Controller {
 #if($hasReferenceValidations)
         validateReferences(entity);
 #end
+#if($uniqueConstraints && !$uniqueConstraints.isEmpty())
+        ${name}Entity saved;
+        try {
+            saved = repository.save(entity);
+        } catch (RuntimeException e) {
+            throw duplicateOrRethrow(e);
+        }
+#else
         ${name}Entity saved = repository.save(entity);
+#end
         return repository.findOne(saved.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end).orElse(saved);
     }
 #if($attachmentEntity)
@@ -289,14 +298,30 @@ public class ${name}Controller {
 #if($hasReferenceValidations)
         validateReferences(existing);
 #end
+#if($uniqueConstraints && !$uniqueConstraints.isEmpty())
+        try {
+            return repository.update(existing);
+        } catch (RuntimeException e) {
+            throw duplicateOrRethrow(e);
+        }
+#else
         return repository.update(existing);
+#end
 #else
         entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = id;
         validate(entity);
 #if($hasReferenceValidations)
         validateReferences(entity);
 #end
+#if($uniqueConstraints && !$uniqueConstraints.isEmpty())
+        try {
+            return repository.update(entity);
+        } catch (RuntimeException e) {
+            throw duplicateOrRethrow(e);
+        }
+#else
         return repository.update(entity);
+#end
 #end
     }
 
@@ -337,6 +362,44 @@ public class ${name}Controller {
             throw e;
         }
     }
+
+#if($uniqueConstraints && !$uniqueConstraints.isEmpty())
+
+    /**
+     * The composite business keys of ${name}, keyed by the constraint name the database names in the
+     * violation it raises. The names are the ones the model emitted, so this map and the schema cannot
+     * drift.
+     */
+    private static final Map<String, String> DUPLICATE_MESSAGES = Map.ofEntries(
+#foreach($uniqueConstraint in $uniqueConstraints)
+            Map.entry("${uniqueConstraint.name}", "${uniqueConstraint.message}")#if($foreach.hasNext),#end
+#end
+    );
+
+    /**
+     * A write that collided with one of those keys is a conflict the caller can act on - answered with
+     * the authored message - and anything else is rethrown untouched. Matching is on the constraint
+     * name inside the driver's message, which is the only handle the database gives back; every
+     * dialect names the violated constraint there.
+     */
+    private static RuntimeException duplicateOrRethrow(RuntimeException e) {
+        if (isConstraintViolation(e)) {
+            for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+                String message = cause.getMessage();
+                if (message == null) {
+                    continue;
+                }
+                String upper = message.toUpperCase(Locale.ROOT);
+                for (Map.Entry<String, String> constraint : DUPLICATE_MESSAGES.entrySet()) {
+                    if (upper.contains(constraint.getKey().toUpperCase(Locale.ROOT))) {
+                        return new ResponseStatusException(HttpStatus.CONFLICT, constraint.getValue());
+                    }
+                }
+            }
+        }
+        return e;
+    }
+#end
 
     /** Whether a persistence failure is (caused by) a database constraint violation. */
     private static boolean isConstraintViolation(Throwable e) {

@@ -1,0 +1,66 @@
+name: provisioning
+description: Step resilience demo - retry, onError, {error} and cleared step data (dirigible #6762)
+
+entities:
+  - name: ProvisioningStatus
+    function: Setting
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, required: true, length: 100 }
+
+  - name: TenantApplication
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: title, type: string, required: true, length: 200 }
+      - { name: generatedKey, type: string, length: 100 }
+      - { name: failureMessage, type: string, length: 500 }
+    relations:
+      - { name: Status, kind: manyToOne, to: ProvisioningStatus, function: EntityStatus, init: 1 }
+
+processes:
+  - name: TenantProvisioning
+    trigger: { onCreate: TenantApplication }
+    # Declared step data: the schema step produces the credential, the app step consumes it,
+    # and once the app step completes the value is removed from the instance data (and its history).
+    vars:
+      - { name: dbPassword, clearAfter: provisionApp }
+    steps:
+      # Fails its first two attempts per tenant, succeeds on the third - the declared retry
+      # (count: 3 further attempts, 10s apart) recovers it without any incident.
+      - name: createSchema
+        kind: serviceTask
+        args:
+          delegate: custom.SchemaProvisioner
+          produces: [dbPassword]
+          retry: { count: 3, every: PT10S }
+          onError: recordFailure
+          next: provisionApp
+      # Always fails when the tenant's title contains "fail" - after 1 + 2 attempts the exhausted
+      # failure converts to the caught error and routes to recordFailure instead of dead-lettering.
+      - name: provisionApp
+        kind: serviceTask
+        args:
+          delegate: custom.AppProvisioner
+          uses: [dbPassword]
+          retry: { count: 2, every: PT10S }
+          onError: recordFailure
+          next: markDone
+      - name: markDone
+        kind: serviceTask
+        args: { setRelationField: Status, value: Provisioned, next: end }
+      # The error route: {error} is the FINAL attempt's failure message.
+      - name: recordFailure
+        kind: serviceTask
+        args: { setField: failureMessage, value: "{error}", next: markFailed }
+      - name: markFailed
+        kind: serviceTask
+        args: { setRelationField: Status, value: Failed, next: end }
+      - { name: end, kind: end }
+
+seeds:
+  - name: provisioning-statuses
+    entity: ProvisioningStatus
+    rows:
+      - { id: 1, name: Requested }
+      - { id: 2, name: Provisioned }
+      - { id: 3, name: Failed }

@@ -45,8 +45,8 @@ class GlueGenerator {
     /** The names of the collections this generator handles. */
     private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
             "aborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles",
-            "stepEvents", "rollups", "expansions", "settlements", "generates", "generateEvents", "transitions", "sends", "posts",
-            "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
+            "outbound", "stepEvents", "rollups", "expansions", "settlements", "generates", "generateEvents", "transitions", "sends",
+            "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -99,6 +99,7 @@ class GlueGenerator {
             case "inbound" -> each(collection, source, content, model, parameters, GlueGenerator::bindInbound);
             case "inboundMessages" -> each(collection, source, content, model, parameters, GlueGenerator::bindInboundMessage);
             case "inboundFiles" -> each(collection, source, content, model, parameters, GlueGenerator::bindInboundFile);
+            case "outbound" -> each(collection, source, content, model, parameters, GlueGenerator::bindOutbound);
             case "stepEvents" -> each(collection, source, content, model, parameters, GlueGenerator::bindStepEvent);
             case "expansions" -> each(collection, source, content, model, parameters, GlueGenerator::bindExpansion);
             case "settlements" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlement);
@@ -320,7 +321,8 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindSetter(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "process", "className", "entity", "perspective", "keyProperty", "keyAccessor", "field", "value", "relation");
+        copy(context, item, "process", "className", "entity", "perspective", "keyProperty", "keyAccessor", "field", "value", "relation",
+                "errorMessage");
         context.put("javaPerspective", sanitize(item, "perspective"));
     }
 
@@ -423,7 +425,12 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindIntegration(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "name", "className", "entity", "perspective", "topicSuffix", "clientMethod", "hasBody", "urlExpression");
+        copy(context, item, "name", "className", "entity", "perspective", "topicSuffix", "clientMethod", "hasBody", "urlExpression",
+                "guardExpression", "hasGuard", "hasPayload", "payloadFields");
+        // The declared payload reads the record and, for a one-hop value, a related record - the same
+        // loads a notification performs, so the same package resolution applies.
+        context.put("javaPerspective", sanitize(item, "perspective"));
+        context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
     }
 
     /**
@@ -462,6 +469,22 @@ class GlueGenerator {
     private static void bindInboundFile(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "folder", "cron");
         context.put("javaPerspective", sanitize(item, "perspective"));
+    }
+
+    /**
+     * Binds an outbound departure - the publisher that emits the record on a queue or a topic when its
+     * event fires. Reads the record (and, for a one-hop payload value, a related record) exactly as an
+     * integration does, so the same package resolution applies.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindOutbound(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "name", "className", "entity", "perspective", "topicSuffix", "destination", "channel", "producerMethod",
+                "guardExpression", "hasGuard", "hasPayload", "payloadFields");
+        context.put("javaPerspective", sanitize(item, "perspective"));
+        context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
     }
 
     /**

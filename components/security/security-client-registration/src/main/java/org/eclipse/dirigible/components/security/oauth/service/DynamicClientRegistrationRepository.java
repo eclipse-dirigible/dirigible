@@ -99,7 +99,15 @@ public class DynamicClientRegistrationRepository
 
     @Override
     public org.springframework.security.oauth2.client.registration.ClientRegistration findByRegistrationId(String registrationId) {
-        return REGISTRATIONS.get(registrationId);
+        org.springframework.security.oauth2.client.registration.ClientRegistration registration = REGISTRATIONS.get(registrationId);
+        if (registration == null) {
+            // the store is populated when something iterates it - historically the generated login
+            // page. A direct lookup can come first (a custom login page, a native login), so a miss
+            // triggers the same initialization before giving up.
+            iterator();
+            registration = REGISTRATIONS.get(registrationId);
+        }
+        return registration;
     }
 
     public Optional<ClientRegistration> findById(String id) {

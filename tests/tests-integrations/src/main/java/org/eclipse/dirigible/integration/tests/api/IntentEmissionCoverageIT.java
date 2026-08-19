@@ -18,6 +18,7 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -226,6 +227,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 100 }
+
+              # entity-level unique (#6763): the business key spanning more than one column. The
+              # schema gains the composite constraint over (PARTY, CODE) and a colliding write is
+              # answered with the authored message rather than a server error.
+              - name: PartyCode
+                unique:
+                  - { fields: [party, code], message: "This code is already registered for the party" }
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string, required: true, length: 50 }
+                relations:
+                  - { name: party, kind: manyToOne, to: Party, required: true }
 
               # first-class numbering, stampOn: create - the generated DAO allocates the real number
               # at insert from the tenant series that the module's AUTHORED .numbers artefact
@@ -537,6 +550,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Rfq, kind: manyToOne, to: Rfq, composition: true, required: true }
 
+              # Step resilience (#6762): the tenant-provisioning shape - a flaky remote call retried
+              # on a declared cycle, a produced secret consumed downstream and cleared, an exhausted
+              # failure routed to a recorded {error} message.
+              - name: Provision
+                fields:
+                  - { name: id,             type: integer, primaryKey: true, generated: true }
+                  - { name: title,          type: string, length: 200 }
+                  - { name: generatedKey,   type: string, length: 100 }
+                  - { name: failureMessage, type: string, length: 500 }
+
               # The non-HTTP inbound arrivals (#6537) ingest into an entity of their own: an ingested
               # record must not start a process, or the queue/file scenarios would seed extra Inbox
               # tasks the RFQ scenarios pick up by name.
@@ -748,6 +771,42 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: confirm, kind: userTask, args: { assignee: approver } }
                   - { name: end, kind: end }
 
+              # step resilience (#6762): the flaky call succeeds on its LAST declared attempt (the
+              # delegate counts invocations, so GeneratedKey == KEY-3 pins the R<count+1> cycle),
+              # the produced secret flows through `uses` into the writer and is cleared once it
+              # completes, and the doomed call after the hold exhausts its single retry and routes
+              # its FINAL attempt's message into the record via {error}.
+              - name: ProvisionFlow
+                trigger: { onCreate: Provision }
+                vars:
+                  - { name: apiKey, clearAfter: storeKey }
+                steps:
+                  - name: flakyCall
+                    kind: serviceTask
+                    args:
+                      delegate: custom.FlakyProvisioner
+                      produces: [apiKey]
+                      retry: { count: 2, every: PT2S }
+                      onError: recordFailure
+                      next: storeKey
+                  - name: storeKey
+                    kind: serviceTask
+                    args: { delegate: custom.ProvisionKeyWriter, uses: [apiKey], next: hold }
+                  - name: hold
+                    kind: userTask
+                    args: { assignee: operator, next: doomedCall }
+                  - name: doomedCall
+                    kind: serviceTask
+                    args:
+                      delegate: custom.DoomedProvisioner
+                      retry: { count: 1, every: PT2S }
+                      onError: recordFailure
+                      next: end
+                  - name: recordFailure
+                    kind: serviceTask
+                    args: { setField: failureMessage, value: "{error}", next: end }
+                  - { name: end, kind: end }
+
               # a SENDING step: the serviceTask's whole work is the mail about the trigger record.
               # No attach here (the transition below covers the attachment), and the Bills this test
               # creates carry no Person - so at runtime the delegate takes its no-recipient no-op
@@ -808,6 +867,20 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - { name: signalHook,  path: /signal, create: Signal }
               - { name: signalQueue, source: { queue: emission-signals }, create: Signal }
               - { name: signalDrop,  source: { folder: target/inbox-emission, cron: "0/2 * * * * ?" }, create: Signal }
+
+            # The departure half (#6767): the same record leaving on a queue, as a DECLARED envelope
+            # rather than the row as stored. The guard keeps an internal note off the wire, which is
+            # the assertion that the `when` of the event axis reaches a publisher at all.
+            outbound:
+              - name: publishSignal
+                event: { onCreate: Signal, when: "note != internal" }
+                to: { queue: emission-signals-out }
+                payload:
+                  type: "signal.raised"
+                  version: 1
+                  messageId: "{uuid}"
+                  tenantId: "{tenant}"
+                  note: note
 
             # transitions: the guarded on-demand status flip - Cancel is allowed only on a DRAFT
             # entry with nothing paid (Calc semantics: a null field reads as 0, so a never-paid
@@ -1049,11 +1122,93 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             }
             """;
 
+    /**
+     * The flaky remote call of the resilience scenario: fails on its first two invocations and succeeds
+     * on the third, producing the declared {@code apiKey} step data with the attempt count baked in -
+     * so the record asserting {@code KEY-3} pins the declared retry cycle to exactly one initial
+     * attempt plus {@code count: 2} further ones.
+     */
+    private static final String FLAKY_PROVISIONER_JAVA = """
+            package custom;
+
+            import java.util.concurrent.atomic.AtomicInteger;
+
+            import org.flowable.engine.delegate.DelegateExecution;
+            import org.flowable.engine.delegate.JavaDelegate;
+
+            public class FlakyProvisioner implements JavaDelegate {
+
+                private static final AtomicInteger ATTEMPTS = new AtomicInteger();
+
+                @Override
+                public void execute(DelegateExecution execution) {
+                    int attempt = ATTEMPTS.incrementAndGet();
+                    if (attempt < 3) {
+                        throw new IllegalStateException("schema provisioning failed (attempt " + attempt + ")");
+                    }
+                    execution.setVariable("apiKey", "KEY-" + attempt);
+                }
+            }
+            """;
+
+    /**
+     * The consumer of the produced step data: writes the {@code apiKey} process variable onto the
+     * record through the generated repository's targeted write (the sanctioned system-column path).
+     */
+    private static final String PROVISION_KEY_WRITER_JAVA = """
+            package custom;
+
+            import org.flowable.engine.delegate.DelegateExecution;
+            import org.flowable.engine.delegate.JavaDelegate;
+
+            import gen.emission.data.provision.ProvisionRepository;
+
+            public class ProvisionKeyWriter implements JavaDelegate {
+
+                @Override
+                public void execute(DelegateExecution execution) {
+                    Object key = execution.getVariable("Id");
+                    Object apiKey = execution.getVariable("apiKey");
+                    if (!(key instanceof Number id) || apiKey == null) {
+                        return;
+                    }
+                    new ProvisionRepository().updateProperty(id.intValue(), "GeneratedKey", apiKey.toString());
+                }
+            }
+            """;
+
+    /**
+     * The always-failing call: its declared {@code retry: { count: 1 }} allows exactly two attempts, so
+     * the {@code {error}} message the record ends with must be the SECOND attempt's - proving the
+     * conversion fires precisely on the exhausted attempt, not the first.
+     */
+    private static final String DOOMED_PROVISIONER_JAVA = """
+            package custom;
+
+            import java.util.concurrent.atomic.AtomicInteger;
+
+            import org.flowable.engine.delegate.DelegateExecution;
+            import org.flowable.engine.delegate.JavaDelegate;
+
+            public class DoomedProvisioner implements JavaDelegate {
+
+                private static final AtomicInteger ATTEMPTS = new AtomicInteger();
+
+                @Override
+                public void execute(DelegateExecution execution) {
+                    throw new IllegalStateException("partner registration refused (attempt " + ATTEMPTS.incrementAndGet() + ")");
+                }
+            }
+            """;
+
     @Test
     void generated_code_contains_every_feature_enforcement_and_the_published_app_enforces_it() {
         writeIntent(INTENT_YAML);
         writeProjectFile("emission.numbers", NUMBERS_JSON);
         writeProjectFile("custom/QuoteTariffAction.java", TARIFF_ACTION_JAVA);
+        writeProjectFile("custom/FlakyProvisioner.java", FLAKY_PROVISIONER_JAVA);
+        writeProjectFile("custom/ProvisionKeyWriter.java", PROVISION_KEY_WRITER_JAVA);
+        writeProjectFile("custom/DoomedProvisioner.java", DOOMED_PROVISIONER_JAVA);
         // Generate: the models AND the code from them, in one call - the production path. The engine
         // runs each recipe with the template and parameters the project's .settings declare, so a
         // parameter-gated producer (javaRuntime gates the leafOnly repository class, say) is exercised
@@ -1227,6 +1382,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "locksWithMaster: false must leave the child's REST writes unguarded");
 
         String schema = contentOf("gen/emission/schema/" + PROJECT + ".schema");
+        // entity-level unique (#6763): the composite key has to reach the schema, which is the only
+        // place it can be created. Asserted here as well as at runtime so a regression says WHICH
+        // layer dropped it.
+        assertTrue(schema.contains("\"PartyCode_Party_Code\""), "the composite business key must be emitted into the schema: " + schema);
+        String partyCodeController = contentOf("gen/emission/api/partycode/PartyCodeController.java");
+        assertTrue(partyCodeController.contains("This code is already registered for the party"),
+                "the generated controller must carry the authored conflict message");
         assertTrue(schema.contains("EMISSION_UNIT_LANG"), "multilingual must emit the _LANG translation table into the schema");
         // manyToMany: the link entity is an ordinary entity from parse time on, so it must reach the
         // schema as its own table and the REST layer as its own (detail) controller. Asserting the
@@ -1534,6 +1696,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a folder source must emit a JobHandler polling that folder on the declared cron");
         assertTrue(fileImport.contains("SignalEntity[].class") && fileImport.contains("Files.move"),
                 "a file ingest must accept a batch and move every read file out of the drop folder");
+
+        // The glue event axis, outbound half (#6767): the publisher subscribes to the record's own
+        // event topic, guards, builds the DECLARED envelope and sends it on the named channel. A
+        // publisher that forwarded the row instead would put a different contract on the wire.
+        String publisher = contentOf("gen/events/emission/PublishSignalPublisher.java");
+        assertTrue(publisher.contains("return \"emission-test-Signal-Signal\";") && publisher.contains("ListenerKind.TOPIC"),
+                "a departure must subscribe to the topic the entity's repository publishes its create on");
+        assertTrue(publisher.contains("!java.util.Objects.equals(entity.Note, \"internal\")"),
+                "the event axis carries a when guard, and a departure must honour it");
+        assertTrue(
+                publisher.contains("payload.put(\"type\", \"signal.raised\")")
+                        && publisher.contains("payload.put(\"messageId\", java.util.UUID.randomUUID().toString())")
+                        && publisher.contains("payload.put(\"note\", entity.Note)"),
+                "the declared envelope must be built key by key, in the authored order");
+        assertTrue(publisher.contains("Producer.sendToQueue(\"emission-signals-out\", body)"),
+                "the departure must send on exactly the channel the intent names");
+        assertFalse(publisher.contains("throw new"),
+                "a failed departure is logged, never fatal - the write it reacts to is already committed");
 
         // abortOn (wave 2): the interrupting event subprocess + the correlating listener.
         String approvalBpmn = contentOf("ApprovalFlow.bpmn");
@@ -2021,6 +2201,28 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the action descriptor must carry the prompt and the target entity for the dialog's metadata lookup");
         assertTrue(promptedDescriptor.contains("\"name\": \"Amount\""),
                 "prompt entries must carry the PascalCase property names the detail registration uses");
+
+        // step resilience (#6762): the declared retry becomes a failed-job retry cycle on the
+        // delegate task (R<count+1> - the R number counts TOTAL attempts), onError an error boundary
+        // catching the INTENT_STEP_FAILED error the runtime conversion raises for the final failed
+        // attempt, clearAfter an end-listener removing the produced secret, and the {error} setter a
+        // read of the published failure-message variable.
+        String provisionBpmn = contentOf("ProvisionFlow.bpmn");
+        assertTrue(provisionBpmn.contains("<flowable:failedJobRetryTimeCycle>R3/PT2S</flowable:failedJobRetryTimeCycle>"),
+                "retry count: 2 must emit an R3 failed-job retry cycle on the flaky delegate task");
+        assertTrue(provisionBpmn.contains("<flowable:failedJobRetryTimeCycle>R2/PT2S</flowable:failedJobRetryTimeCycle>"),
+                "retry count: 1 must emit an R2 failed-job retry cycle on the doomed delegate task");
+        assertTrue(
+                provisionBpmn.contains("errorCode=\"INTENT_STEP_FAILED\"")
+                        && provisionBpmn.contains(
+                                "<boundaryEvent id=\"flakyCallError\" attachedToRef=\"flakyCall\" cancelActivity=\"true\">")
+                        && provisionBpmn.contains("sourceRef=\"doomedCallError\" targetRef=\"recordFailure\""),
+                "onError must emit the intent error definition, a cancelling boundary per step and the routed flow");
+        assertTrue(provisionBpmn.contains("${execution.removeVariable('apiKey')}"),
+                "clearAfter must emit the end-listener removing the produced secret from the instance data");
+        String failureSetter = contentOf("gen/events/emission/ProvisionFlowRecordFailure.java");
+        assertTrue(failureSetter.contains("execution.getVariable(\"__errorMessage\")"),
+                "the {error} setter must read the failure message the conversion published");
     }
 
     /**
@@ -2440,6 +2642,39 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("{\"Id\":" + entryId + ",\"Date\":\"2026-01-15\",\"Account\":2,\"Status\":2}")
                                                  .when()
                                                  .put(API + "/entry/EntryController/" + entryId)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // entity-level unique (#6763): the composite key exists in the database (the second insert
+        // cannot land) AND the generated controller recognises which key was hit, so the caller is
+        // told what collided instead of getting a 500. The third write flips one column, which must
+        // be accepted - a constraint over (party, code) that rejected a different code would be a
+        // single-column unique wearing a composite name.
+        AtomicInteger partyId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> partyId.set(given().contentType("application/json")
+                                                             .body("{\"Name\":\"Unique Co\"}")
+                                                             .when()
+                                                             .post(API + "/party/PartyController")
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Party\":" + partyId.get() + ",\"Code\":\"AB-1\"}")
+                                                 .when()
+                                                 .post(API + "/partycode/PartyCodeController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Party\":" + partyId.get() + ",\"Code\":\"AB-1\"}")
+                                                 .when()
+                                                 .post(API + "/partycode/PartyCodeController")
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Party\":" + partyId.get() + ",\"Code\":\"AB-2\"}")
+                                                 .when()
+                                                 .post(API + "/partycode/PartyCodeController")
                                                  .then()
                                                  .statusCode(200));
 
@@ -3086,6 +3321,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         assertManyToManyRuntime();
         assertInboundSourcesRuntime();
+        assertOutboundDepartureRuntime();
         assertBpmEventsRuntime();
     }
 
@@ -3128,6 +3364,48 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // Every read file leaves the drop folder, so the next tick cannot ingest it again.
         assertTrue(Files.exists(dropFolder.resolve("processed/signals.json")),
                 "an ingested file must be moved out of the drop folder, into processed/");
+    }
+
+    /**
+     * The outbound departure end to end (#6767): creating a record puts the DECLARED envelope on the
+     * declared queue, and a record the guard excludes puts nothing there. Only this layer can show it -
+     * the publisher being really subscribed, the envelope being really built, and the guard really
+     * running - which no assertion over the emitted source reaches.
+     */
+    private void assertOutboundDepartureRuntime() {
+        String signalApi = API + "/signal/SignalController";
+        // The guarded record first: the queue is FIFO, so had it departed it would arrive BEFORE the
+        // one that must, and the drain below would see it.
+        createSignal(signalApi, "internal");
+        createSignal(signalApi, "outbound-ok");
+
+        String departed = null;
+        for (int attempt = 0; attempt < 30 && departed == null; attempt++) {
+            String message = MessagingFacade.receiveFromQueue("emission-signals-out", 2000);
+            if (message == null) {
+                continue;
+            }
+            assertFalse(message.contains("\"internal\""), "a record the when guard excludes must never depart: " + message);
+            if (message.contains("outbound-ok")) {
+                departed = message;
+            }
+        }
+        assertNotNull(departed, "the created record must depart on the queue the intent names");
+        assertTrue(
+                departed.contains("\"type\":\"signal.raised\"") && departed.contains("\"version\":1")
+                        && departed.contains("\"note\":\"outbound-ok\""),
+                "the departure must carry the declared envelope, not the row: " + departed);
+        assertFalse(departed.contains("\"Note\""), "the envelope replaces the record - a stored column must not leak into it: " + departed);
+    }
+
+    /** Creates a Signal through the generated REST surface, which is what raises the departure. */
+    private void createSignal(String signalApi, String note) {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Note\":\"" + note + "\"}")
+                                                 .when()
+                                                 .post(signalApi)
+                                                 .then()
+                                                 .statusCode(200));
     }
 
     /**
@@ -3289,6 +3567,97 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                       .anyMatch(task -> "Review".equals(task.get("name")));
             assertTrue(!reviewLeft, "the cancelling expire must withdraw the review task, got: " + tasks);
         }, 30);
+
+        assertStepResilienceRuntime();
+    }
+
+    /**
+     * Step resilience (#6762) at the outermost layer, one instance end to end: the flaky delegate fails
+     * twice and the declared {@code retry: { count: 2, every: PT2S }} re-runs it until the THIRD
+     * attempt succeeds ({@code GeneratedKey == KEY-3} pins the R3 cycle exactly); the produced secret
+     * flowed through {@code uses} into the writer and is GONE from the live instance data once its
+     * {@code clearAfter} step completed; and after the hold task the doomed delegate exhausts its
+     * single retry, the runtime conversion turns the SECOND attempt's failure into the caught BPMN
+     * error, and the {@code onError} route records that exact message on the record via {@code {error}}
+     * - instead of the dead-letter incident it would be without the declaration.
+     */
+    private void assertStepResilienceRuntime() {
+        String provisionApi = API + "/provision/ProvisionController";
+        AtomicInteger provision = new AtomicInteger();
+        restAssuredExecutor.execute(() -> provision.set(given().contentType("application/json")
+                                                               .body("{\"Title\":\"tenant A\"}")
+                                                               .when()
+                                                               .post(provisionApi)
+                                                               .then()
+                                                               .statusCode(200)
+                                                               .extract()
+                                                               .path("Id")));
+
+        // The retries recovered the flaky call and the produced apiKey reached the record through
+        // the `uses` step. KEY-3 = one initial attempt + the two declared re-attempts, no more.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(provisionApi + "/" + provision.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("GeneratedKey", equalTo("KEY-3")),
+                180);
+
+        // clearAfter: the instance parks at the hold task with the secret already removed from its
+        // live variables - it must not survive in the process data (or its history).
+        AtomicReference<String> processId = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> processId.set(given().when()
+                                                               .get(provisionApi + "/" + provision.get())
+                                                               .then()
+                                                               .statusCode(200)
+                                                               .extract()
+                                                               .path("ProcessId")));
+        restAssuredExecutor.execute(() -> {
+            List<Map<String, Object>> variables = given().when()
+                                                         .get("/services/bpm/bpm-processes/instance/" + processId.get() + "/variables")
+                                                         .then()
+                                                         .statusCode(200)
+                                                         .extract()
+                                                         .jsonPath()
+                                                         .getList("$");
+            assertTrue(variables.stream()
+                                .anyMatch(variable -> "Id".equals(variable.get("name"))),
+                    "the live instance must be inspectable (its context variables present), got: " + variables);
+            assertTrue(variables.stream()
+                                .noneMatch(variable -> "apiKey".equals(variable.get("name"))),
+                    "clearAfter must remove the produced secret from the instance data, got: " + variables);
+        }, 30);
+
+        // Completing the hold releases the doomed call: retry count 1 = exactly two attempts, and
+        // the recorded {error} message is the FINAL attempt's - the conversion fired on exhaustion,
+        // not on the first failure, and the incident path was never taken.
+        AtomicReference<String> holdTaskId = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> {
+            List<Map<String, Object>> tasks = given().when()
+                                                     .get("/services/inbox/tasks?type=groups")
+                                                     .then()
+                                                     .statusCode(200)
+                                                     .extract()
+                                                     .jsonPath()
+                                                     .getList("$");
+            Map<String, Object> hold = tasks.stream()
+                                            .filter(task -> "Hold".equals(task.get("name")))
+                                            .findFirst()
+                                            .orElseThrow(() -> new AssertionError(
+                                                    "the resilience flow must park at the hold task, got: " + tasks));
+            holdTaskId.set(String.valueOf(hold.get("id")));
+        }, 90);
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"action\":\"COMPLETE\"}")
+                                                 .when()
+                                                 .post("/services/inbox/tasks/" + holdTaskId.get())
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(provisionApi + "/" + provision.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("FailureMessage", equalTo("partner registration refused (attempt 2)")),
+                180);
     }
 
     /**

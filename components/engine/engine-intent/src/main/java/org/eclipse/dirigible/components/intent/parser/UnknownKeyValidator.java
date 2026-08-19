@@ -57,7 +57,10 @@ final class UnknownKeyValidator {
     /** Declared key -> field, per model class. Reflection is done once per class. */
     private static final Map<Class<?>, Map<String, Field>> KEYS = new ConcurrentHashMap<>();
 
-    /** The entity-lifecycle / process-step axes a notification or an integration may bind to. */
+    /**
+     * The entity-lifecycle / process-step axes a notification, an integration or a departure may bind
+     * to.
+     */
     private static final Set<String> GLUE_EVENT_KEYS =
             Set.of("onCreate", "onUpdate", "onDelete", "onStepReached", "onStepCompleted", "when");
 
@@ -80,6 +83,8 @@ final class UnknownKeyValidator {
             Map.entry("IntegrationIntent#event", GLUE_EVENT_KEYS),
             Map.entry("IntegrationIntent#event.onStepReached", Set.of("process", "step")),
             Map.entry("IntegrationIntent#event.onStepCompleted", Set.of("process", "step")),
+            Map.entry("OutboundIntent#event", GLUE_EVENT_KEYS), Map.entry("OutboundIntent#event.onStepReached", Set.of("process", "step")),
+            Map.entry("OutboundIntent#event.onStepCompleted", Set.of("process", "step")),
             Map.entry("PostingIntent#event", Set.of("onTransition", "onCreate", "when", "model")),
             Map.entry("PostingIntent#rule", Set.of("entity", "match")),
             Map.entry("GeneratesIntent#event", Set.of("onTransition", "onCreate", "when", "model")),

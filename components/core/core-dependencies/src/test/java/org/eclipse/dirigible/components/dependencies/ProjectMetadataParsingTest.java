@@ -75,12 +75,16 @@ class ProjectMetadataParsingTest {
     void collects_the_maven_declarations_and_skips_the_git_ones() {
         Set<MavenDependency> dependencies = new LinkedHashSet<>();
         Map<String, String> errors = new LinkedHashMap<>();
+        Map<String, Set<String>> declaredBy = new LinkedHashMap<>();
 
-        ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(PROJECT_JSON), dependencies, errors);
+        ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(PROJECT_JSON), dependencies, errors,
+                declaredBy);
 
         assertThat(errors).isEmpty();
         assertThat(dependencies).containsExactly(new MavenDependency("com.businessintents:employees:1.4.0", Scope.MODULE, List.of()),
                 new MavenDependency("com.example:widget:2.1.0", Scope.MODULE, List.of("com.fasterxml.jackson.core:*")));
+        assertThat(declaredBy).containsEntry("com.businessintents:employees:1.4.0", Set.of("my-project"))
+                              .containsEntry("com.example:widget:2.1.0", Set.of("my-project"));
     }
 
     @Test
@@ -95,9 +99,11 @@ class ProjectMetadataParsingTest {
                 """;
         Set<MavenDependency> dependencies = new LinkedHashSet<>();
         Map<String, String> errors = new LinkedHashMap<>();
+        Map<String, Set<String>> declaredBy = new LinkedHashMap<>();
 
         try (LogCaptor logCaptor = LogCaptor.forClass(ProjectDependenciesCollector.class)) {
-            ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies, errors);
+            ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies, errors,
+                    declaredBy);
 
             assertThat(logCaptor.getWarnLogs()).anySatisfy(message -> assertThat(message).contains("npm")
                                                                                          .contains("my-project"));
@@ -118,8 +124,9 @@ class ProjectMetadataParsingTest {
                 """;
         Set<MavenDependency> dependencies = new LinkedHashSet<>();
         Map<String, String> errors = new LinkedHashMap<>();
+        Map<String, Set<String>> declaredBy = new LinkedHashMap<>();
 
-        ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies, errors);
+        ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies, errors, declaredBy);
 
         assertThat(dependencies).isEmpty();
         assertThat(errors).containsKey("com.example:widget:[1.0,2.0)");
@@ -138,8 +145,9 @@ class ProjectMetadataParsingTest {
                 """;
         Set<MavenDependency> dependencies = new LinkedHashSet<>();
         Map<String, String> errors = new LinkedHashMap<>();
+        Map<String, Set<String>> declaredBy = new LinkedHashMap<>();
 
-        ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies, errors);
+        ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies, errors, declaredBy);
 
         assertThat(dependencies).isEmpty();
         assertThat(errors).containsKey("my-project");
@@ -157,8 +165,9 @@ class ProjectMetadataParsingTest {
                 """;
         Set<MavenDependency> dependencies = new LinkedHashSet<>();
         Map<String, String> errors = new LinkedHashMap<>();
+        Map<String, Set<String>> declaredBy = new LinkedHashMap<>();
 
-        ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies, errors);
+        ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies, errors, declaredBy);
 
         // parsed here - rejected as unsupported by the resolver until phase 3
         assertThat(errors).isEmpty();

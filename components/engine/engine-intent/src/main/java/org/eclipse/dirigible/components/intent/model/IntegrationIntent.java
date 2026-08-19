@@ -18,9 +18,16 @@ import java.util.Map;
  *
  * <p>
  * {@link #event} is the same {@code onCreate}/{@code onUpdate}/{@code onDelete} binding the
- * notifications use. The generated {@code @Listener} forwards the entity JSON (the event payload)
- * to {@link #url} via {@link #method}. The URL is a literal or {@code @config:KEY} (read
- * server-side from the configuration). Custom body mapping and headers are a later increment.
+ * notifications use. The generated {@code @Listener} sends the request to {@link #url} via
+ * {@link #method}. The URL is a literal or {@code @config:KEY} (read server-side from the
+ * configuration). Custom headers are a later increment.
+ *
+ * <p>
+ * The request body is the entity JSON as stored, unless the entry declares a {@link #payload} - a
+ * key/value envelope built from literals, record fields, one-hop {@code relation.field} paths,
+ * {@code @config:KEY} lookups and the four context tokens (see
+ * {@link org.eclipse.dirigible.components.intent.generator.PayloadSupport}). Forwarding the raw
+ * record makes every column a public contract; a declared payload is the contract instead.
  */
 public class IntegrationIntent {
 
@@ -28,6 +35,7 @@ public class IntegrationIntent {
     private Map<String, Object> event = new LinkedHashMap<>();
     private String method = "POST";
     private String url;
+    private Map<String, Object> payload = new LinkedHashMap<>();
 
     public String getName() {
         return name;
@@ -59,5 +67,13 @@ public class IntegrationIntent {
 
     public void setUrl(String url) {
         this.url = url;
+    }
+
+    public Map<String, Object> getPayload() {
+        return payload;
+    }
+
+    public void setPayload(Map<String, Object> payload) {
+        this.payload = payload == null ? new LinkedHashMap<>() : payload;
     }
 }

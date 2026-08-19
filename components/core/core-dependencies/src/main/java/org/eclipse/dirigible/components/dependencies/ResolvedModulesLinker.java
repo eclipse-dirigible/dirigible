@@ -27,8 +27,9 @@ import java.util.stream.Stream;
 
 /**
  * Maintains the resolved-modules directory - the stable directory the launch classpath includes
- * (see the loader.path entry in the application's Dockerfile). Resolved jars are linked in at their
- * mediated versions; they join the application classpath on the next restart.
+ * (see the loader.path entry in the application's Dockerfile). At runtime the resolved jars are
+ * served by the swappable modules classloader; this directory is the seed that keeps them on the
+ * classpath from the first moment of the next launch.
  */
 @Component
 class ResolvedModulesLinker {
@@ -71,8 +72,32 @@ class ResolvedModulesLinker {
             removeStaleEntries(directory, desired.keySet());
         }
         desired.forEach((name, target) -> place(directory.resolve(name), target));
-        LOGGER.info("Resolved-modules directory [{}] holds [{}] jar(s) - they join the application classpath on the next restart",
-                directory, desired.size());
+        // the directory is operator configuration - strip line breaks so a crafted value cannot
+        // forge log entries
+        LOGGER.info("Resolved-modules directory [{}] holds [{}] jar(s) - the seed of the next launch's classpath", directory.toString()
+                                                                                                                            .replace('\r',
+                                                                                                                                    '_')
+                                                                                                                            .replace('\n',
+                                                                                                                                    '_'),
+                desired.size());
+    }
+
+    /**
+     * Removes one artifact's link from the resolved-modules directory - the eviction path for an
+     * artifact whose integrity verification failed, so the next launch's classpath never carries it.
+     *
+     * @param localRepository the local repository the artifact lives in
+     * @param artifact the artifact path inside it
+     */
+    void remove(Path localRepository, Path artifact) {
+        Path link = directory().resolve(linkName(localRepository, artifact));
+        try {
+            if (Files.deleteIfExists(link)) {
+                LOGGER.warn("Evicted [{}] from the resolved-modules directory - its integrity verification failed", link.getFileName());
+            }
+        } catch (IOException e) {
+            LOGGER.warn("Could not evict the dependency jar [{}]", link, e);
+        }
     }
 
     /**

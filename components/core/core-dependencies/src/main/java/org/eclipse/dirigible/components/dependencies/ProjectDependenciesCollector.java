@@ -56,9 +56,10 @@ class ProjectDependenciesCollector {
     DeclaredDependencies collect() {
         Set<MavenDependency> dependencies = new LinkedHashSet<>();
         Map<String, String> errors = new LinkedHashMap<>();
+        Map<String, Set<String>> declaredBy = new LinkedHashMap<>();
         ICollection registry = repository.getCollection(IRepositoryStructure.PATH_REGISTRY_PUBLIC);
         if (!registry.exists()) {
-            return new DeclaredDependencies(dependencies, errors);
+            return new DeclaredDependencies(dependencies, errors, declaredBy);
         }
         for (ICollection project : registry.getCollections()) {
             IResource descriptor = project.getResource(ProjectMetadata.PROJECT_METADATA_FILE_NAME);
@@ -74,10 +75,10 @@ class ProjectDependenciesCollector {
                 continue;
             }
             if (metadata != null) {
-                collectDeclared(project.getName(), metadata, dependencies, errors);
+                collectDeclared(project.getName(), metadata, dependencies, errors, declaredBy);
             }
         }
-        return new DeclaredDependencies(dependencies, errors);
+        return new DeclaredDependencies(dependencies, errors, declaredBy);
     }
 
     /**
@@ -88,8 +89,10 @@ class ProjectDependenciesCollector {
      * @param metadata the parsed project.json
      * @param dependencies the collected dependencies to add to
      * @param errors the declaration errors to add to
+     * @param declaredBy the declaring projects per coordinate to add to
      */
-    static void collectDeclared(String project, ProjectMetadata metadata, Set<MavenDependency> dependencies, Map<String, String> errors) {
+    static void collectDeclared(String project, ProjectMetadata metadata, Set<MavenDependency> dependencies, Map<String, String> errors,
+            Map<String, Set<String>> declaredBy) {
         for (ProjectMetadataDependency declared : metadata.getDependencies()) {
             String type = declared.getType();
             if (ProjectMetadataDependency.TYPE_GIT.equalsIgnoreCase(type)) {
@@ -109,6 +112,8 @@ class ProjectDependenciesCollector {
                 MavenDependency.Scope scope = MavenDependency.Scope.parse(declared.getScope());
                 List<String> exclusions = declared.getExclusions();
                 dependencies.add(new MavenDependency(id, scope, exclusions == null ? List.of() : exclusions));
+                declaredBy.computeIfAbsent(id, key -> new LinkedHashSet<>())
+                          .add(project);
             } catch (IllegalArgumentException e) {
                 errors.put(id, "Project [" + project + "]: " + e.getMessage());
                 LOGGER.error("Invalid maven dependency [{}] declared by project [{}]", id, project, e);

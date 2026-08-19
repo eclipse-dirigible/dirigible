@@ -33,6 +33,7 @@ import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
 import org.eclipse.dirigible.components.intent.generator.ProcessAbortSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
+import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessTimerSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessTimerSupport.TimerLoad;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
@@ -368,6 +369,16 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             flows.add(new SequenceFlow("flow_" + timer.id() + "_then", timer.id(),
                     targets.resolve(timer.thenTarget(), regions.joinOf(timer.attachedTo())), null));
         }
+        // Error boundary events on delegate service tasks (onError:) - the exhausted (or non-retried)
+        // failure is converted to the INTENT_STEP_FAILED BPMN error by the engine-bpm-flowable runtime
+        // and routed here, like a decision branch.
+        List<BoundaryError> boundaryErrors = collectBoundaryErrors(steps);
+        for (BoundaryError error : boundaryErrors) {
+            flows.add(new SequenceFlow("flow_" + error.id() + "_then", error.id(),
+                    targets.resolve(error.thenTarget(), regions.joinOf(error.attachedTo())), null));
+        }
+        // The end-listeners clearing declared vars (clearAfter:) once their step completes.
+        Map<String, List<String>> clearsByStep = ProcessResilienceSupport.clearsByStep(process);
         String processId = process.getName();
         StringBuilder sb = new StringBuilder(4096);
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
@@ -403,6 +414,17 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
               .append(escapeXmlAttribute(abortMessage))
               .append("\"></message>\n");
         }
+        // The error the onError boundary events catch - raised by the engine-bpm-flowable conversion
+        // for a delegate's final failed attempt (a string contract, like ${JavaTask}).
+        if (!boundaryErrors.isEmpty()) {
+            sb.append("  <error id=\"")
+              .append(ProcessResilienceSupport.ERROR_ID)
+              .append("\" name=\"")
+              .append(escapeXmlAttribute(IntentNaming.humanize(ProcessResilienceSupport.ERROR_ID)))
+              .append("\" errorCode=\"")
+              .append(ProcessResilienceSupport.ERROR_CODE)
+              .append("\"></error>\n");
+        }
         sb.append("  <process id=\"")
           .append(escapeXmlAttribute(processId))
           .append("\" name=\"")
@@ -425,20 +447,23 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                                               .isBlank()) {
                 continue;
             }
-            appendStepElement(sb, step, rolesByLowerName, projectName, processId, eventsPackage, candidateGroupsExtra);
+            appendStepElement(sb, step, rolesByLowerName, projectName, processId, eventsPackage, candidateGroupsExtra, clearsByStep);
         }
         for (BoundaryTimer timer : boundaryTimers) {
             appendBoundaryTimer(sb, timer);
+        }
+        for (BoundaryError error : boundaryErrors) {
+            appendBoundaryError(sb, error);
         }
         sb.append("    <endEvent id=\"")
           .append(END_ID)
           .append("\"></endEvent>\n");
         if (hasAbort) {
-            appendAbortHandler(sb, processId, abortThenStep, projectName, eventsPackage);
+            appendAbortHandler(sb, processId, abortThenStep, projectName, eventsPackage, clearsByStep);
         }
         writeSequenceFlows(sb, flows);
         sb.append("  </process>\n");
-        appendBpmnDiagram(sb, processId, effectiveSteps, flows, steps, boundaryTimers, hasAbort, abortThenStep, targets);
+        appendBpmnDiagram(sb, processId, effectiveSteps, flows, steps, boundaryTimers, boundaryErrors, hasAbort, abortThenStep, targets);
         sb.append("</definitions>\n");
         return sb.toString();
     }
@@ -495,6 +520,42 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("    </boundaryEvent>\n");
     }
 
+    /**
+     * An error boundary event on a delegate service task ({@code onError:}): always cancelling - the
+     * failed task's token leaves through the boundary - catching the {@code INTENT_STEP_FAILED} error
+     * the runtime raises for the final failed attempt, and routing to the declared target like a
+     * decision branch.
+     */
+    private record BoundaryError(String id, String attachedTo, String thenTarget) {
+    }
+
+    /** The error boundary events declared across the (augmented) step list, in declaration order. */
+    private static List<BoundaryError> collectBoundaryErrors(List<StepIntent> steps) {
+        List<BoundaryError> errors = new ArrayList<>();
+        for (StepIntent step : steps) {
+            if (step.getName() == null || (!"serviceTask".equals(step.getKind()) && !"script".equals(step.getKind()))) {
+                continue;
+            }
+            String onError = ProcessResilienceSupport.onError(step);
+            if (onError != null) {
+                errors.add(new BoundaryError(ProcessResilienceSupport.errorBoundaryId(step.getName()), step.getName(), onError));
+            }
+        }
+        return errors;
+    }
+
+    private static void appendBoundaryError(StringBuilder sb, BoundaryError error) {
+        sb.append("    <boundaryEvent id=\"")
+          .append(escapeXmlAttribute(error.id()))
+          .append("\" attachedToRef=\"")
+          .append(escapeXmlAttribute(error.attachedTo()))
+          .append("\" cancelActivity=\"true\">\n");
+        sb.append("      <errorEventDefinition errorRef=\"")
+          .append(ProcessResilienceSupport.ERROR_ID)
+          .append("\"></errorEventDefinition>\n");
+        sb.append("    </boundaryEvent>\n");
+    }
+
     // ----- abortOn: interrupting message event subprocess --------------------------------------
 
     /** The element ids of a process's abort event subprocess (derived from the process id). */
@@ -517,8 +578,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * user tasks, parked waits and armed timers) when the correlating glue fires the message. Placing
      * the interruption in an event subprocess avoids wrapping the main flow in a subprocess.
      */
-    private static void appendAbortHandler(StringBuilder sb, String processId, StepIntent cleanup, String projectName,
-            String eventsPackage) {
+    private static void appendAbortHandler(StringBuilder sb, String processId, StepIntent cleanup, String projectName, String eventsPackage,
+            Map<String, List<String>> clearsByStep) {
         String startId = abortStartId(processId);
         String endId = abortEndId(processId);
         sb.append("    <subProcess id=\"")
@@ -535,7 +596,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("      </startEvent>\n");
         String afterStart = endId;
         if (cleanup != null) {
-            appendServiceTask(sb, cleanup, projectName, processId, eventsPackage);
+            appendServiceTask(sb, cleanup, projectName, processId, eventsPackage, clearsFor(cleanup, clearsByStep));
             afterStart = cleanup.getName();
         }
         sb.append("      <endEvent id=\"")
@@ -822,15 +883,16 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
-            String processName, String eventsPackage, String candidateGroupsExtra) {
+            String processName, String eventsPackage, String candidateGroupsExtra, Map<String, List<String>> clearsByStep) {
         String kind = step.getKind() == null ? "userTask" : step.getKind();
+        List<String> clears = clearsFor(step, clearsByStep);
         switch (kind) {
             case "userTask":
-                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra);
+                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra, clears);
                 break;
             case "serviceTask":
             case "script":
-                appendServiceTask(sb, step, projectName, processName, eventsPackage);
+                appendServiceTask(sb, step, projectName, processName, eventsPackage, clears);
                 break;
             case "decision":
                 appendExclusiveGateway(sb, step);
@@ -846,13 +908,32 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 break;
             default:
                 LOGGER.warn("Unknown step kind [{}] for step [{}] - rendering as userTask", kind, step.getName());
-                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra);
+                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra, clears);
                 break;
         }
     }
 
+    /** The declared vars cleared once this step completes ({@code clearAfter}), or none. */
+    private static List<String> clearsFor(StepIntent step, Map<String, List<String>> clearsByStep) {
+        List<String> clears = step.getName() == null ? null : clearsByStep.get(step.getName());
+        return clears == null ? List.of() : clears;
+    }
+
+    /**
+     * The {@code event="end"} execution listeners removing {@code clearAfter}-declared variables from
+     * the instance data once the step completes normally, so a generated credential does not survive in
+     * the process history. Plain expression listeners - no delegate class to generate or load.
+     */
+    private static void appendClearVariableListeners(StringBuilder sb, List<String> clears) {
+        for (String variable : clears) {
+            sb.append("        <flowable:executionListener event=\"end\" expression=\"${execution.removeVariable('")
+              .append(escapeXmlAttribute(variable))
+              .append("')}\"></flowable:executionListener>\n");
+        }
+    }
+
     private static void appendUserTask(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
-            String candidateGroupsExtra) {
+            String candidateGroupsExtra, List<String> clears) {
         String assignee = stringArg(step, "assignee");
         String form = stringArg(step, "form");
         sb.append("    <userTask id=\"")
@@ -895,10 +976,17 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
               .append(escapeXmlAttribute(formPageUrl(projectName, form)))
               .append("\"");
         }
-        sb.append("></userTask>\n");
+        if (clears.isEmpty()) {
+            sb.append("></userTask>\n");
+        } else {
+            sb.append(">\n      <extensionElements>\n");
+            appendClearVariableListeners(sb, clears);
+            sb.append("      </extensionElements>\n    </userTask>\n");
+        }
     }
 
-    private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName, String processName, String eventsPackage) {
+    private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName, String processName, String eventsPackage,
+            List<String> clears) {
         // Five service-task shapes:
         // - a generator-synthesized resolver carries a javaHandler (a client JavaDelegate FQN) -> JavaTask;
         // - an author-declared serviceTask with a `setField` -> JavaTask bound to the <events
@@ -918,7 +1006,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // this is how a reusable, parameterized delegate (e.g. a document number generator) is invoked.
         String delegate = stringArg(step, "delegate");
         if (delegate != null && !delegate.isBlank()) {
-            appendDelegateServiceTask(sb, step, moduleScopedDelegate(delegate.trim(), eventsPackage));
+            appendDelegateServiceTask(sb, step, moduleScopedDelegate(delegate.trim(), eventsPackage), clears);
             return;
         }
         String javaHandler = stringArg(step, "javaHandler");
@@ -954,13 +1042,17 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append("\" flowable:async=\"true\" flowable:delegateExpression=\"")
           .append(java ? "${JavaTask}" : "${JSTask}")
           .append("\">\n");
-        if (handlerValue != null && !handlerValue.isBlank()) {
+        boolean hasHandler = handlerValue != null && !handlerValue.isBlank();
+        if (hasHandler || !clears.isEmpty()) {
             sb.append("      <extensionElements>\n");
-            sb.append("        <flowable:field name=\"handler\">\n");
-            sb.append("          <flowable:string><![CDATA[")
-              .append(handlerValue)
-              .append("]]></flowable:string>\n");
-            sb.append("        </flowable:field>\n");
+            if (hasHandler) {
+                sb.append("        <flowable:field name=\"handler\">\n");
+                sb.append("          <flowable:string><![CDATA[")
+                  .append(handlerValue)
+                  .append("]]></flowable:string>\n");
+                sb.append("        </flowable:field>\n");
+            }
+            appendClearVariableListeners(sb, clears);
             sb.append("      </extensionElements>\n");
         }
         sb.append("    </serviceTask>\n");
@@ -992,7 +1084,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * the declared {@code fields} into the delegate, so a reusable, parameterized delegate can be
      * configured per step.
      */
-    private static void appendDelegateServiceTask(StringBuilder sb, StepIntent step, String delegateClass) {
+    private static void appendDelegateServiceTask(StringBuilder sb, StepIntent step, String delegateClass, List<String> clears) {
         sb.append("    <serviceTask id=\"")
           .append(escapeXmlAttribute(step.getName()))
           .append("\" name=\"")
@@ -1001,7 +1093,12 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append(escapeXmlAttribute(delegateClass))
           .append("\">\n");
         Map<String, String> fields = delegateFields(step);
-        if (!fields.isEmpty()) {
+        // retry: { count, every } -> the Flowable failed-job retry cycle (R<count+1>/<every> - the R
+        // number counts TOTAL attempts). The task is already flowable:async, so the cycle re-runs the
+        // failed job with the declared spacing; exhaustion dead-letters (an incident) unless an onError
+        // boundary converts it.
+        String retryCycle = ProcessResilienceSupport.retryCycle(step);
+        if (!fields.isEmpty() || retryCycle != null || !clears.isEmpty()) {
             sb.append("      <extensionElements>\n");
             for (Map.Entry<String, String> field : fields.entrySet()) {
                 sb.append("        <flowable:field name=\"")
@@ -1012,6 +1109,12 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                   .append("]]></flowable:string>\n");
                 sb.append("        </flowable:field>\n");
             }
+            if (retryCycle != null) {
+                sb.append("        <flowable:failedJobRetryTimeCycle>")
+                  .append(escapeXmlAttribute(retryCycle))
+                  .append("</flowable:failedJobRetryTimeCycle>\n");
+            }
+            appendClearVariableListeners(sb, clears);
             sb.append("      </extensionElements>\n");
         }
         sb.append("    </serviceTask>\n");
@@ -1280,7 +1383,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * graph, so re-generation stays byte-stable; the modeler re-routes on first manual edit.
      */
     private static void appendBpmnDiagram(StringBuilder sb, String processId, List<String> effectiveIds, List<SequenceFlow> flows,
-            List<StepIntent> steps, List<BoundaryTimer> boundaryTimers, boolean hasAbort, StepIntent abortCleanup, TargetResolver targets) {
+            List<StepIntent> steps, List<BoundaryTimer> boundaryTimers, List<BoundaryError> boundaryErrors, boolean hasAbort,
+            StepIntent abortCleanup, TargetResolver targets) {
         // A boundary event has no column of its own - it rides its host task's border. For the layered
         // layout its outgoing branch still needs a rank, so each boundary flow contributes a pseudo-flow
         // from the HOST task to the branch target (the real boundary flow is invisible to the layout:
@@ -1293,17 +1397,21 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                                                                                                            .joinOf(timer.attachedTo())),
                     null));
         }
+        for (BoundaryError error : boundaryErrors) {
+            layoutFlows.add(new SequenceFlow(
+                    "layout_" + error.id(), error.attachedTo(), targets.resolve(error.thenTarget(), targets.regions()
+                                                                                                           .joinOf(error.attachedTo())),
+                    null));
+        }
         Map<String, int[]> bounds = layout(effectiveIds, layoutFlows, steps);
         // Boundary shapes overlap the host task's bottom edge (the modeler convention), fanning left
-        // from the bottom-right corner when a task carries both a timeout and an expire timer.
-        Map<String, Integer> timersOnHost = new HashMap<>();
+        // from the bottom-right corner when a task carries more than one boundary event.
+        Map<String, Integer> boundariesOnHost = new HashMap<>();
         for (BoundaryTimer timer : boundaryTimers) {
-            int[] host = bounds.get(timer.attachedTo());
-            if (host == null) {
-                continue;
-            }
-            int index = timersOnHost.merge(timer.attachedTo(), 1, Integer::sum) - 1;
-            bounds.put(timer.id(), new int[] {host[0] + host[2] - 15 - index * 40, host[1] + host[3] - 15, 31, 31});
+            placeBoundaryShape(bounds, boundariesOnHost, timer.id(), timer.attachedTo());
+        }
+        for (BoundaryError error : boundaryErrors) {
+            placeBoundaryShape(bounds, boundariesOnHost, error.id(), error.attachedTo());
         }
 
         sb.append("  <bpmndi:BPMNDiagram id=\"BPMNDiagram_")
@@ -1355,6 +1463,16 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         }
         sb.append("    </bpmndi:BPMNPlane>\n");
         sb.append("  </bpmndi:BPMNDiagram>\n");
+    }
+
+    /** Place a boundary event's shape on its host task's bottom edge, fanning left per host. */
+    private static void placeBoundaryShape(Map<String, int[]> bounds, Map<String, Integer> boundariesOnHost, String id, String attachedTo) {
+        int[] host = bounds.get(attachedTo);
+        if (host == null) {
+            return;
+        }
+        int index = boundariesOnHost.merge(attachedTo, 1, Integer::sum) - 1;
+        bounds.put(id, new int[] {host[0] + host[2] - 15 - index * 40, host[1] + host[3] - 15, 31, 31});
     }
 
     /** Y of the abort event subprocess row, below the main flow's lanes. */
