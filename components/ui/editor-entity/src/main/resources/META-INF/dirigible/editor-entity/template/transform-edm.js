@@ -16,7 +16,10 @@ import { XML } from "@aerokit/sdk/utils";
 
 // Structured (List/Map) attributes the EDM generator / serializer write as JSON strings in flat attributes
 // so the .edm stays lossless; parse them back into objects so the .model matches the intent's .model (#6826).
-const ENTITY_STRUCTURED = ['rollupGuard', 'checks', 'uniqueConstraints', 'labelParts', 'aggregateKeys', 'relatedEntities'];
+// uniqueConstraints is intentionally NOT here: the composite-unique-key feature emits it as a
+// <constraints>/<uniqueKey> section that transformUniqueKey rebuilds, so parsing it here too would
+// duplicate it (#6826).
+const ENTITY_STRUCTURED = ['rollupGuard', 'checks', 'labelParts', 'aggregateKeys', 'relatedEntities'];
 const PROPERTY_STRUCTURED = ['lookupColumns'];
 
 function parseStructured(obj, keys) {

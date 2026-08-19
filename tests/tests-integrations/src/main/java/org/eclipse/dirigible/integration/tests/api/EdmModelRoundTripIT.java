@@ -127,8 +127,10 @@ class EdmModelRoundTripIT extends IntegrationTest {
         JsonObject modelFromIntent = parseModel(contentOf("rt.model"));
 
         // The generator must have written the structured values into the .edm (as JSON attributes),
-        // otherwise there is nothing for the transform to read back.
-        for (String key : new String[] {"rollupGuard", "checks", "uniqueConstraints", "labelParts", "relatedEntities", "lookupColumns"}) {
+        // otherwise there is nothing for the transform to read back. uniqueConstraints is excluded here:
+        // it is owned by the composite-unique-key feature, which emits it as a <constraints> section, not
+        // a JSON attribute.
+        for (String key : new String[] {"rollupGuard", "checks", "labelParts", "relatedEntities", "lookupColumns"}) {
             assertTrue(edm.contains(key + "=\""), "the .edm must carry the structured value [" + key + "] as an attribute");
         }
 
@@ -151,11 +153,19 @@ class EdmModelRoundTripIT extends IntegrationTest {
         // rebuilt from the .edm - the acceptance criterion "the .model generated from the .edm equals
         // the .model from intent" for exactly the values that were being dropped.
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Category", "labelParts");
-        assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Category", "uniqueConstraints");
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Category", "relatedEntities");
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Booking", "checks");
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Booking", "rollupGuard");
         assertPropertyStructuredEquals(modelFromIntent, modelFromEdm, "Product", "Category", "lookupColumns");
+
+        // uniqueConstraints is owned by the composite-unique-key feature (a <constraints> section, not a
+        // JSON attribute); this fix must not double it. Guard against the duplication that would occur if
+        // both mechanisms wrote it: exactly one entry after the round-trip.
+        JsonElement uniqueConstraints = entity(modelFromEdm, "Category").get("uniqueConstraints");
+        assertNotNull(uniqueConstraints, "uniqueConstraints must survive the round-trip (via the <constraints> feature)");
+        assertEquals(1, uniqueConstraints.getAsJsonArray()
+                                         .size(),
+                "uniqueConstraints must appear exactly once - not duplicated by both the feature and this fix");
 
         // The headline symptom: rollupGuard is a non-empty object on Booking after the round-trip.
         JsonElement rollupGuard = entity(modelFromEdm, "Booking").get("rollupGuard");
