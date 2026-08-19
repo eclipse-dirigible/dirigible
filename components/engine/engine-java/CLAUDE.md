@@ -48,12 +48,18 @@ delivers both halves of the module.
 
 **Getting such a jar onto the classpath of the shipped image (issue [#6592](https://github.com/eclipse-dirigible/dirigible/issues/6592)):**
 `build/application/Dockerfile` launches through Spring Boot's **`PropertiesLauncher`** with
-`-Dloader.path=/modules` (instead of `JarLauncher` via `-jar`), and creates an empty `/modules`. A
-downstream image `COPY`s module jars there, or they are volume-mounted at run time — **the platform jar
-is consumed verbatim**; never explode the fat jar to add jars to `BOOT-INF/lib`.
+`-Dloader.path=/modules,...`, and creates an empty `/modules`. Since #6779 the launch is a plain
+`java -jar` — the executable jar's **ZIP layout** makes `PropertiesLauncher` the manifest
+`Main-Class` (so `loader.path` keeps working), and `-jar` is what makes the JVM honor the
+`Launcher-Agent-Class` entry that powers `scope: "platform"` dependencies. A downstream image
+`COPY`s module jars there, or they are volume-mounted at run time — **the platform jar
+is consumed verbatim**; never explode the fat jar to add jars to `BOOT-INF/lib` (the launcher-agent
+classes at the jar ROOT are injected by the build itself, with the nested jars kept STORED — see
+`build/application/pom.xml`'s `inject-launcher-agent` execution and `LauncherAgentDeliveryIT`).
 
 - **Empty or missing `/modules` is a no-op** — `PropertiesLauncher` reads `Start-Class` from the jar's
-  manifest, so boot is identical to `java -jar` (verified: same startup lines, same startup time).
+  manifest, so boot is identical to the pre-ZIP-layout launch (verified: same startup lines, same
+  startup time).
 - `loader.path` entries are **prepended** to `BOOT-INF/classes` + `BOOT-INF/lib`, so in principle a
   drop-in jar could shadow a platform class. In practice it cannot happen by accident: module packages
   are `gen.*` / `custom.*`, which the platform does not use.
@@ -119,6 +125,27 @@ mixes them. There is **no** reflective by-name fallback.
 | Job | `@Component implements JobHandler` → `String cron()` + `void run()` (like `org.quartz.Job`) | `@Scheduled(expression=…)` on a `@Component` method |
 | Listener | `@Component implements MessageHandler` → `String destination()`, default `ListenerKind kind()`, `onMessage(String)`, default `onError` (like `jakarta.jms.MessageListener`) | `@Listener(name=…, kind=…)` on a `@Component` `void m(String)` method |
 | WebSocket | `@Component implements WebsocketHandler` → `String endpoint()` + default lifecycle callbacks (like `TextWebSocketHandler`) | `@Websocket(endpoint=…)` class + `@OnOpen`/`@OnMessage`/`@OnError`/`@OnClose` methods (like Jakarta `@ServerEndpoint`; the endpoint has no method-level home) |
+
+**Throwing means different things in a job and in a listener — the idiom is identical, the outcome is
+not.** A `JobHandler` that throws is caught by `JobExecutionService`, recorded as a **FAILED job-log
+row** and rethrown to Quartz, so the failure is a first-class operational record: it shows up in the
+Jobs perspective and in the Monitoring shell's failed-jobs tile, and the run can be triggered again.
+A `MessageHandler` that throws is **logged with its stack trace** by `ListenerClassConsumer.dispatch`
+— and that is all: the JMS session is `AUTO_ACKNOWLEDGE` and the exception never reaches the broker,
+so **the message is acknowledged and gone**. No retry, no dead letter, no operational record, nothing
+to re-run. (Before that log line existed, a throwing listener produced no output at all — the
+handler's own `onError` defaults to a no-op — which made every failure inside generated intent glue
+invisible.)
+
+Two consequences worth internalizing before writing either kind of handler:
+
+- **Do not read a listener throw as recoverable.** The generated templates use the same
+  `throw new RuntimeException(…)` idiom in `Job.java.template` and in
+  `Notification`/`Integration.java.template`; in the job it escalates, in the listener it only
+  narrates. A developer copying the job pattern into a listener loses the work, not just the alert.
+- **Work that must not be lost needs its own arrangement** — an idempotent re-run path keyed on
+  something durable, or a reconciliation job that finds records left in a pre-handler state. This is
+  why an event-sourced write in generated glue is written to be replayable rather than transactional.
 
 ## `JavaHandler` (low-level REST)
 

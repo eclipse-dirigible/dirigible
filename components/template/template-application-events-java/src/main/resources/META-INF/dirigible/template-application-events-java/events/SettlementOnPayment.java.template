@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -24,6 +26,8 @@ import gen.${paymentGenFolder}.data.${paymentJavaPerspective}.${paymentEntity}En
  */
 @Component("${javaGenFolderName}_${name}OnPayment")
 public class ${name}OnPayment implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${name}OnPayment");
 
     @Override
     public String destination() {
@@ -67,6 +71,11 @@ public class ${name}OnPayment implements MessageHandler {
             create(invoice.${invoicePk}, payment.${paymentPk}, alloc);
             pot = pot.subtract(alloc);
         }
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Settlement ${name}: the listener on [{}] failed - [{}]", destination(), error);
     }
 
     private static BigDecimal open(${invoiceEntity}Entity invoice) {

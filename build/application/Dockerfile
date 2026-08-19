@@ -37,9 +37,11 @@ COPY target/dirigible-application-*-executable.jar dirigible.jar
 # the classpath on the NEXT restart. Mount /root/.dirigible on a volume to keep them across runs.
 RUN mkdir -p /modules /root/.dirigible/resolved-modules
 
-# PropertiesLauncher (instead of the default JarLauncher) is what makes -Dloader.path work; it reads
-# the Start-Class from /dirigible.jar's manifest, so the application boots exactly as with -jar.
-ENTRYPOINT ["java", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED", "--add-opens", "java.base/java.nio=ALL-UNNAMED", "-cp", "/dirigible.jar", "-Dloader.path=/modules,/root/.dirigible/resolved-modules", "org.springframework.boot.loader.launch.PropertiesLauncher"]
+# A -jar launch: the executable jar's ZIP layout makes PropertiesLauncher the Main-Class (so
+# -Dloader.path keeps working), and -jar is what makes the JVM honor the Launcher-Agent-Class
+# manifest entry - the launcher agent that lets scope-platform dependency jars (JDBC drivers,
+# JNI-bearing libraries) be appended to the system classloader without a restart.
+ENTRYPOINT ["java", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED", "--add-opens", "java.base/java.nio=ALL-UNNAMED", "-Dloader.path=/modules,/root/.dirigible/resolved-modules", "-jar", "/dirigible.jar"]
 
 # 8080 for the spring boot application,
 # 8081 for graalium debug port

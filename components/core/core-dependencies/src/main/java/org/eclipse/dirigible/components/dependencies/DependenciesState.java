@@ -17,44 +17,55 @@ import java.util.Map;
  * The declared / resolved dependency state the endpoint reports.
  *
  * @param enabled whether dynamic dependency resolution is enabled on this instance
+ * @param frozen whether the instance runs in frozen mode (the lockfile is the resolution)
  * @param declared the declared coordinates
+ * @param declaredBy the declaring projects per declared coordinate
  * @param artifacts the resolved jar paths inside the local repository
  * @param mediated the versions chosen where more than one was requested, keyed by
  *        groupId:artifactId
  * @param failures the per-coordinate failure messages
+ * @param platform the per-artifact activation states of the platform-scoped dependencies
+ * @param report the per-artifact status report - every artifact carries one of active,
+ *        pending-restart, shadowed, mediated, failed or frozen-mismatch
  * @param localRepository the local repository, null before the first resolution
  * @param resolvedModulesDirectory the directory the resolved jars are linked into (the launch-time
  *        seed; at runtime the jars are served by the modules classloader directly)
+ * @param lockfile the lockfile path
  * @param classLoaderGeneration the installed modules-classloader generation number
  * @param retiredClassLoaders how many retired generations are still pinned by live references
  * @param resolvedAt when the state was resolved, null before the first resolution
  */
-record DependenciesState(boolean enabled, List<String> declared, List<String> artifacts, Map<String, String> mediated,
-        Map<String, String> failures, String localRepository, String resolvedModulesDirectory, int classLoaderGeneration,
-        int retiredClassLoaders, Instant resolvedAt) {
+record DependenciesState(boolean enabled, boolean frozen, List<String> declared, Map<String, List<String>> declaredBy,
+        List<String> artifacts, Map<String, String> mediated, Map<String, String> failures,
+        List<PlatformScopeInstaller.PlatformArtifactState> platform, List<ArtifactStatus> report, String localRepository,
+        String resolvedModulesDirectory, String lockfile, int classLoaderGeneration, int retiredClassLoaders, Instant resolvedAt) {
 
     /**
      * The state before the first resolution.
      *
      * @param enabled whether dynamic dependency resolution is enabled
+     * @param frozen whether the instance runs in frozen mode
      * @param resolvedModulesDirectory the resolved-modules directory
+     * @param lockfile the lockfile path
      * @return the empty state
      */
-    static DependenciesState empty(boolean enabled, String resolvedModulesDirectory) {
-        return new DependenciesState(enabled, List.of(), List.of(), Map.of(), Map.of(), null, resolvedModulesDirectory, 0, 0, null);
+    static DependenciesState empty(boolean enabled, boolean frozen, String resolvedModulesDirectory, String lockfile) {
+        return new DependenciesState(enabled, frozen, List.of(), Map.of(), List.of(), Map.of(), Map.of(), List.of(), List.of(), null,
+                resolvedModulesDirectory, lockfile, 0, 0, null);
     }
 
     /**
-     * The same state with the enabled flag and the classloader counters re-read.
+     * The same state with the mode flags and the classloader counters re-read.
      *
-     * @param enabled the current flag value
+     * @param enabled the current enabled flag value
+     * @param frozen the current frozen flag value
      * @param classLoaderGeneration the current generation number
      * @param retiredClassLoaders the current pinned retired-generation count
      * @return the state
      */
-    DependenciesState refreshed(boolean enabled, int classLoaderGeneration, int retiredClassLoaders) {
-        return new DependenciesState(enabled, declared, artifacts, mediated, failures, localRepository, resolvedModulesDirectory,
-                classLoaderGeneration, retiredClassLoaders, resolvedAt);
+    DependenciesState refreshed(boolean enabled, boolean frozen, int classLoaderGeneration, int retiredClassLoaders) {
+        return new DependenciesState(enabled, frozen, declared, declaredBy, artifacts, mediated, failures, platform, report,
+                localRepository, resolvedModulesDirectory, lockfile, classLoaderGeneration, retiredClassLoaders, resolvedAt);
     }
 
 }

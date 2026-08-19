@@ -134,14 +134,44 @@
                          OOM instead of letting a heap-thrashing JVM drag the job out for hours.
                          argLine here REPLACES the root pom's (no merge) - keep the add-opens list. -->
                     <reuseForks>false</reuseForks>
+                    <!-- The -javaagent is the launcher agent the executable jar delivers via its
+                         Launcher-Agent-Class manifest entry in production; the ITs run from the
+                         plain classpath, so the flag is the equivalent delivery here. It only
+                         captures Instrumentation - PlatformScopeDependencyIT exercises the
+                         scope-platform appends through it. -->
                     <argLine>
                         -Xmx6g
                         -XX:+ExitOnOutOfMemoryError
                         --add-opens=java.base/java.lang=ALL-UNNAMED
                         --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
                         --add-opens=java.base/java.nio=ALL-UNNAMED
+                        -javaagent:${project.build.directory}/launcher-agent.jar
                     </argLine>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-launcher-agent</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>copy</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.eclipse.dirigible</groupId>
+                                    <artifactId>dirigible-components-core-launcher-agent</artifactId>
+                                    <version>${project.version}</version>
+                                    <destFileName>launcher-agent.jar</destFileName>
+                                    <outputDirectory>${project.build.directory}</outputDirectory>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>

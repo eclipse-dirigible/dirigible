@@ -1,0 +1,253 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="dependencies" ng-controller="DependenciesController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-dependencies/configs/dependencies-view.js"></script>
+        <meta name="platform-links" category="ng-view">
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar compact="true" has-title="true">
+            <span bk-object-status status="{{ state.frozen ? 'critical' : 'informative' }}" text="{{ state.frozen ? 'FROZEN' : 'DYNAMIC' }}" inverted="true"></span>
+            <bk-toolbar-spacer fixed-width="12px"></bk-toolbar-spacer>
+            <bk-toolbar-title>Generation {{ state.classLoaderGeneration }}{{ state.resolvedAt ? ' · resolved ' + (state.resolvedAt | date:'medium') : ' · not resolved yet' }}</bk-toolbar-title>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-input compact="true" type="search" placeholder="Search" style="max-width: 240px" ng-keyup="search($event)" ng-model="searchField.text"></bk-input>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button compact="true" label="Refresh" ng-click="load()"></bk-button>
+            <bk-button compact="true" label="{{ resolving ? 'Resolving…' : 'Resolve' }}" ng-disabled="resolving" ng-click="resolve()"></bk-button>
+            <bk-button compact="true" label="Add Dependency…" state="emphasized" ng-click="openAddDialog()"></bk-button>
+        </bk-toolbar>
+        <bk-message-strip type="{{ message.type }}" ng-if="message.text">{{ message.text }}</bk-message-strip>
+        <div bk-scrollbar class="bk-full-height">
+            <table bk-table display-mode="compact" outer-borders="none">
+                <thead bk-table-header sticky="true" interactive="false">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Coordinate</th>
+                        <th bk-table-header-cell>Scope</th>
+                        <th bk-table-header-cell>Declared by</th>
+                        <th bk-table-header-cell>Status</th>
+                        <th bk-table-header-cell>Details</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="entry in state.report track by $index" hoverable="true" activable="false" ng-hide="entry.hidden">
+                        <td bk-table-cell><span class="bk-font--mono">{{ entry.coordinate }}</span></td>
+                        <td bk-table-cell fit-content="true">{{ entry.scope || '-' }}</td>
+                        <td bk-table-cell fit-content="true">{{ declaredByOf(entry.coordinate) }}</td>
+                        <td bk-table-cell fit-content="true">
+                            <span bk-object-status status="{{ badge(entry.status) }}" text="{{ entry.status }}" inverted="true" style="white-space: nowrap;"></span>
+                        </td>
+                        <td bk-table-cell>{{ entry.message }}</td>
+                    </tr>
+                    <tr bk-table-row ng-if="!state.report.length">
+                        <td bk-table-cell no-data="true">No dependencies are declared - add a maven entry to a project.json and publish the project.</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="bk-padding--sm" style="opacity: 0.75">
+                <div>Lockfile: <span class="bk-font--mono">{{ state.lockfile }}</span></div>
+                <div>Local repository: <span class="bk-font--mono">{{ state.localRepository || '-' }}</span></div>
+                <div>Resolved-modules seed: <span class="bk-font--mono">{{ state.resolvedModulesDirectory }}</span></div>
+            </div>
+        </div>
+
+        <bk-dialog visible="addDialog.visible" window-min-width="480px">
+            <bk-dialog-header title="Add Dependency"></bk-dialog-header>
+            <bk-dialog-body class="bk-padding">
+                <bk-message-strip type="error" ng-if="addDialog.error">{{ addDialog.error }}</bk-message-strip>
+                <bk-fieldset>
+                    <bk-form-group horizontal="false">
+                        <bk-form-label for="ad-workspace" required colon="true">Workspace</bk-form-label>
+                        <bk-select id="ad-workspace" class="bk-full-width" placeholder="Select a workspace" dropdown-fixed="true" ng-model="addDialog.workspace">
+                            <bk-option ng-repeat="w in addDialog.workspaces" text="{{ w }}" value="w"></bk-option>
+                        </bk-select>
+                    </bk-form-group>
+                    <bk-form-group horizontal="false">
+                        <bk-form-label for="ad-project" required colon="true">Project</bk-form-label>
+                        <bk-select id="ad-project" class="bk-full-width" placeholder="Select a project" dropdown-fixed="true" ng-model="addDialog.project">
+                            <bk-option ng-repeat="p in addDialog.projects" text="{{ p }}" value="p"></bk-option>
+                        </bk-select>
+                    </bk-form-group>
+                    <bk-form-group>
+                        <bk-form-item>
+                            <bk-form-label for="ad-id" required colon="true">Coordinate (groupId:artifactId:version)</bk-form-label>
+                            <bk-input id="ad-id" type="text" placeholder="org.jsoup:jsoup:1.17.2" ng-model="addDialog.id" ng-change="validate()" state="{{ addDialog.id && !addDialog.valid ? 'error' : '' }}"></bk-input>
+                        </bk-form-item>
+                    </bk-form-group>
+                    <bk-form-group horizontal="false">
+                        <bk-form-label for="ad-scope" colon="true">Scope</bk-form-label>
+                        <bk-select id="ad-scope" class="bk-full-width" dropdown-fixed="true" ng-model="addDialog.scope">
+                            <bk-option text="module (default) - swappable, restartless add/upgrade/remove" value="'module'"></bk-option>
+                            <bk-option text="platform - system classloader; JDBC drivers and native libraries" value="'platform'"></bk-option>
+                        </bk-select>
+                    </bk-form-group>
+                </bk-fieldset>
+            </bk-dialog-body>
+            <bk-dialog-footer compact="true">
+                <bk-bar-element>
+                    <bk-button label="Add" state="emphasized" ng-disabled="!addDialog.valid || !addDialog.workspace || !addDialog.project || addDialog.saving" ng-click="addDependency()"></bk-button>
+                </bk-bar-element>
+                <bk-bar-element>
+                    <bk-button label="Cancel" state="transparent" ng-click="addDialog.visible = false"></bk-button>
+                </bk-bar-element>
+            </bk-dialog-footer>
+        </bk-dialog>
+
+        <script type="text/javascript">
+            angular.module('dependencies', ['platformView', 'blimpKit']).controller('DependenciesController', ($scope, $http, $timeout) => {
+                const STATE_URL = '/services/core/dependencies';
+                const WORKSPACES_URL = '/services/ide/workspaces';
+                // exact versions only - version ranges and blanks are rejected, same as the backend
+                const GAV_PATTERN = /^[^\s:]+:[^\s:]+:[^\s:,\[\]\(\)]+$/;
+                $scope.state = { report: [] };
+                $scope.searchField = { text: '' };
+                $scope.message = { text: '', type: 'information' };
+                $scope.resolving = false;
+                $scope.addDialog = { visible: false, workspaces: [], projects: [], scope: 'module', valid: false };
+
+                $scope.badge = (status) => {
+                    if (status === 'active') return 'positive';
+                    if (status === 'mediated') return 'informative';
+                    if (status === 'pending-restart' || status === 'shadowed') return 'critical';
+                    return 'negative'; // failed, frozen-mismatch
+                };
+
+                $scope.declaredByOf = (coordinate) => {
+                    const projects = ($scope.state.declaredBy || {})[coordinate];
+                    return projects && projects.length ? projects.join(', ') : '-';
+                };
+
+                $scope.load = () => {
+                    $http.get(STATE_URL).then((response) => {
+                        $scope.state = response.data;
+                        $scope.applySearch();
+                    }, (error) => {
+                        console.error(error);
+                        $scope.message = { text: 'The dependencies state could not be loaded.', type: 'error' };
+                    });
+                };
+
+                $scope.resolve = () => {
+                    $scope.resolving = true;
+                    $http.post(STATE_URL + '/resolve').then((response) => {
+                        $scope.state = response.data;
+                        $scope.applySearch();
+                        const failures = Object.keys($scope.state.failures || {}).length;
+                        $scope.message = failures
+                            ? { text: failures + ' failure(s) - see the report below.', type: 'error' }
+                            : { text: 'Resolution completed cleanly.', type: 'success' };
+                    }, (error) => {
+                        console.error(error);
+                        $scope.message = { text: (error.data && error.data.message) || 'The resolution failed.', type: 'error' };
+                    }).finally(() => {
+                        $scope.resolving = false;
+                    });
+                };
+
+                $scope.applySearch = () => {
+                    const needle = $scope.searchField.text.toLowerCase();
+                    ($scope.state.report || []).forEach((entry) => {
+                        entry.hidden = needle && !(`${entry.coordinate}${entry.status}${entry.message}`.toLowerCase()
+                                                                                                       .includes(needle));
+                    });
+                };
+                let to = 0;
+                $scope.search = () => {
+                    if (to) $timeout.cancel(to);
+                    to = $timeout($scope.applySearch, 200);
+                };
+
+                $scope.openAddDialog = () => {
+                    $scope.addDialog = { visible: true, workspaces: [], projects: [], scope: 'module', id: '', valid: false };
+                    $http.get(WORKSPACES_URL).then((response) => {
+                        $scope.addDialog.workspaces = response.data || [];
+                        if ($scope.addDialog.workspaces.length === 1) {
+                            $scope.addDialog.workspace = $scope.addDialog.workspaces[0];
+                        }
+                    });
+                };
+
+                $scope.$watch('addDialog.workspace', (workspace) => {
+                    if (!workspace) return;
+                    $http.get(`${WORKSPACES_URL}/${encodeURIComponent(workspace)}`).then((response) => {
+                        $scope.addDialog.projects = (response.data.projects || []).map((project) => project.name);
+                    });
+                });
+
+                $scope.validate = () => {
+                    $scope.addDialog.valid = GAV_PATTERN.test(($scope.addDialog.id || '').trim());
+                    $scope.addDialog.error = $scope.addDialog.valid || !($scope.addDialog.id || '').trim()
+                        ? ''
+                        : 'Expected groupId:artifactId:version with an exact version - ranges are not supported.';
+                };
+
+                $scope.addDependency = () => {
+                    const dialog = $scope.addDialog;
+                    if (!dialog.workspace || !dialog.project || !dialog.valid) {
+                        dialog.error = 'Select a workspace and a project and enter a valid coordinate.';
+                        return;
+                    }
+                    dialog.saving = true;
+                    const fileUrl = `${WORKSPACES_URL}/${encodeURIComponent(dialog.workspace)}/${encodeURIComponent(dialog.project)}/project.json`;
+                    $http.get(fileUrl).then((response) => {
+                        save(typeof response.data === 'object' ? response.data : JSON.parse(response.data), false);
+                    }, () => {
+                        // no project.json yet - a minimal one is created around the declaration
+                        save({ guid: dialog.project, dependencies: [], actions: [] }, true);
+                    });
+
+                    const save = (descriptor, create) => {
+                        descriptor.dependencies = descriptor.dependencies || [];
+                        const id = dialog.id.trim();
+                        if (descriptor.dependencies.some((dependency) => dependency.type === 'maven' && dependency.id === id)) {
+                            dialog.error = `The project already declares [${id}].`;
+                            dialog.saving = false;
+                            return;
+                        }
+                        const entry = { type: 'maven', id: id };
+                        if (dialog.scope === 'platform') entry.scope = 'platform';
+                        descriptor.dependencies.push(entry);
+                        const content = JSON.stringify(descriptor, null, 4);
+                        const request = create
+                            ? $http.post(fileUrl, content, { headers: { 'Content-Type': 'text/plain' } })
+                            : $http.put(fileUrl, content, { headers: { 'Content-Type': 'text/plain' } });
+                        request.then(() => {
+                            dialog.visible = false;
+                            $scope.message = {
+                                text: `[${id}] added to ${dialog.project}/project.json - publish the project to activate it.`,
+                                type: 'success'
+                            };
+                        }, (error) => {
+                            console.error(error);
+                            dialog.error = 'The project.json could not be updated.';
+                        }).finally(() => {
+                            dialog.saving = false;
+                        });
+                    };
+                };
+
+                $scope.load();
+            });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

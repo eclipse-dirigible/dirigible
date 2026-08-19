@@ -29,10 +29,14 @@ public record MavenDependency(String coordinate, Scope scope, List<String> exclu
      */
     public enum Scope {
 
-        /** The dependency joins the module classpath - the only scope supported in this phase. */
+        /** The dependency joins the swappable module classpath - add, upgrade and remove restartlessly. */
         MODULE,
 
-        /** Reserved for a later phase - parsed, but rejected as unsupported. */
+        /**
+         * The dependency is appended to the system classloader - for JDBC drivers and JNI-bearing libraries
+         * that a swappable loader cannot host. Adding is restartless; upgrade and removal take effect at
+         * the next launch (the append-only contract).
+         */
         PLATFORM;
 
         /**

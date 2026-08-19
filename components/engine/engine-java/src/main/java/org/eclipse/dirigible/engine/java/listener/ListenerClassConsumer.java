@@ -354,6 +354,11 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
             });
         } catch (Exception e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
+            // This log IS the failure report. The handler's own onError defaults to a no-op, and the
+            // session is AUTO_ACKNOWLEDGE, so the message is acknowledged and gone either way - without
+            // this line a throwing handler leaves no trace anywhere: no log, no retry, no dead letter.
+            // Pass the throwable, not just its message, or the stack trace dies here.
+            LOGGER.error("@Listener [{}] failed handling a message: {}", label, cause.getMessage(), cause);
             dispatcher.onError(cause.getMessage(), label);
         }
     }

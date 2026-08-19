@@ -24,7 +24,9 @@ import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.collection.CollectResult;
+import org.eclipse.aether.collection.DependencyCollectionContext;
 import org.eclipse.aether.collection.DependencyCollectionException;
+import org.eclipse.aether.collection.DependencySelector;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.graph.Exclusion;
@@ -40,18 +42,22 @@ import org.eclipse.aether.resolution.ArtifactResolutionException;
 import org.eclipse.aether.resolution.ArtifactResult;
 import org.eclipse.aether.supplier.RepositorySystemSupplier;
 import org.eclipse.aether.util.artifact.JavaScopes;
+import org.eclipse.aether.util.graph.selector.AndDependencySelector;
 import org.eclipse.aether.util.graph.transformer.ConflictResolver;
 import org.eclipse.aether.util.repository.AuthenticationBuilder;
 import org.eclipse.aether.util.repository.DefaultAuthenticationSelector;
 import org.eclipse.aether.util.repository.DefaultMirrorSelector;
 import org.eclipse.aether.util.repository.DefaultProxySelector;
 import org.eclipse.dirigible.components.dependencies.MavenResolverConfig.MavenRepository;
+import org.eclipse.dirigible.components.dependencies.ResolutionResult.ResolvedArtifact;
+import org.eclipse.dirigible.components.dependencies.ResolutionResult.Shadowed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -63,7 +69,10 @@ import java.util.stream.Collectors;
 /**
  * The {@link DependencyResolver} over the Apache Maven Artifact Resolver - coordinates are taken
  * programmatically (no POM generation, no external mvn binary) and resolved in one union collect
- * request so Maven's standard version mediation applies globally.
+ * request so Maven's standard version mediation applies globally. Every coordinate the
+ * {@link ProvidedBom} lists is treated as provided - never downloaded, pruned from the graph - and
+ * a declared coordinate the platform provides at a different version is reported as shadowed (see
+ * {@link ProvidedBom} for why the report, not child-first loading, is the feature).
  */
 @Component
 class MavenDependencyResolver implements DependencyResolver {
@@ -73,24 +82,30 @@ class MavenDependencyResolver implements DependencyResolver {
     /** The configuration source - read on every resolution so runtime changes take effect. */
     private final Supplier<MavenResolverConfig> configSupplier;
 
+    /** The provided-BOM source - what the platform image already ships. */
+    private final Supplier<ProvidedBom> bomSupplier;
+
     /** The repository system - thread-safe and configuration-independent, created once. */
     private final RepositorySystem repositorySystem;
 
     /**
-     * Instantiates the resolver reading its configuration from the environment.
+     * Instantiates the resolver reading its configuration from the environment and the provided-BOM
+     * from the classpath.
      */
     MavenDependencyResolver() {
-        this(MavenResolverConfig::fromConfiguration);
+        this(MavenResolverConfig::fromConfiguration, ProvidedBom::fromClasspath);
     }
 
     /**
-     * Instantiates the resolver with an explicit configuration source - the constructor the unit tests
-     * use to point at file-based fixture repositories.
+     * Instantiates the resolver with explicit configuration and provided-BOM sources - the constructor
+     * the unit tests use to point at file-based fixture repositories.
      *
      * @param configSupplier the configuration source
+     * @param bomSupplier the provided-BOM source
      */
-    MavenDependencyResolver(Supplier<MavenResolverConfig> configSupplier) {
+    MavenDependencyResolver(Supplier<MavenResolverConfig> configSupplier, Supplier<ProvidedBom> bomSupplier) {
         this.configSupplier = configSupplier;
+        this.bomSupplier = bomSupplier;
         this.repositorySystem = new RepositorySystemSupplier().get();
     }
 
@@ -111,18 +126,12 @@ class MavenDependencyResolver implements DependencyResolver {
     @Override
     public ResolutionResult resolve(Set<MavenDependency> declared) {
         Map<String, String> failures = new LinkedHashMap<>();
-        List<MavenDependency> resolvable = new ArrayList<>();
-        for (MavenDependency dependency : declared) {
-            if (dependency.scope() == MavenDependency.Scope.PLATFORM) {
-                failures.put(dependency.coordinate(), "Scope [platform] is reserved for a later phase and is not supported yet");
-                LOGGER.error("Cannot resolve maven dependency [{}]: scope [platform] is reserved for a later phase",
-                        dependency.coordinate());
-            } else {
-                resolvable.add(dependency);
-            }
-        }
+        ProvidedBom bom = bomSupplier.get();
+        List<String> provided = new ArrayList<>();
+        List<Shadowed> shadowed = new ArrayList<>();
+        List<MavenDependency> resolvable = partition(declared, bom, provided, shadowed);
         if (resolvable.isEmpty()) {
-            return new ResolutionResult(List.of(), Map.of(), failures);
+            return new ResolutionResult(List.of(), Map.of(), Map.of(), failures, provided, shadowed);
         }
 
         // the collect request merges duplicate groupId:artifactId root dependencies before conflict
@@ -139,7 +148,7 @@ class MavenDependencyResolver implements DependencyResolver {
         }
 
         MavenResolverConfig config = configSupplier.get();
-        DefaultRepositorySystemSession session = newSession(config);
+        DefaultRepositorySystemSession session = newSession(config, bom);
         List<RemoteRepository> repositories = remoteRepositories(session, config);
         String repositoriesDescription = describe(repositories);
         LOGGER.info("Resolving [{}] declared maven dependency(ies) from repositories [{}] into local repository [{}]", resolvable.size(),
@@ -154,28 +163,70 @@ class MavenDependencyResolver implements DependencyResolver {
                     repositoriesDescription, e);
             resolvable.forEach(
                     dependency -> failures.putIfAbsent(dependency.coordinate(), "Dependency graph collection failed: " + e.getMessage()));
-            return new ResolutionResult(List.of(), Map.of(), failures);
+            return new ResolutionResult(List.of(), Map.of(), Map.of(), failures, provided, shadowed);
         }
 
         Map<String, String> winnerVersions = new LinkedHashMap<>();
         List<DependencyNode> winners = new ArrayList<>();
-        walk(collectResult.getRoot(), requestedVersions, winnerVersions, winners);
+        Map<DependencyNode, String> winnerVia = new IdentityHashMap<>();
+        walk(collectResult.getRoot(), null, requestedVersions, winnerVersions, winners, winnerVia);
 
-        List<Path> artifacts = resolveArtifacts(session, winners, failures, repositoriesDescription);
+        List<ResolvedArtifact> resolved = resolveArtifacts(session, winners, winnerVia, failures, repositoriesDescription);
         Map<String, String> mediated = mediated(requestedVersions, winnerVersions);
-        mediated.forEach((ga, version) -> LOGGER.info("Version mediation chose [{}:{}] out of the requested versions {}", ga, version,
-                requestedVersions.get(ga)));
-        return new ResolutionResult(artifacts, mediated, failures);
+        Map<String, Set<String>> contested = new LinkedHashMap<>();
+        mediated.forEach((ga, version) -> {
+            contested.put(ga, requestedVersions.get(ga));
+            LOGGER.info("Version mediation chose [{}:{}] out of the requested versions {}", ga, version, requestedVersions.get(ga));
+        });
+        return new ResolutionResult(resolved, mediated, contested, failures, provided, shadowed);
+    }
+
+    /**
+     * Partitions the declared dependencies against the provided-BOM: a coordinate the platform provides
+     * at the declared version is satisfied without a download, one it provides at a different version
+     * is reported as shadowed (parent-first delegation would serve the platform's version anyway), and
+     * everything else proceeds to resolution.
+     *
+     * @param declared the declared dependencies
+     * @param bom the provided-BOM
+     * @param provided the platform-satisfied coordinates to add to
+     * @param shadowed the shadowed declarations to add to
+     * @return the dependencies to resolve
+     */
+    private List<MavenDependency> partition(Set<MavenDependency> declared, ProvidedBom bom, List<String> provided,
+            List<Shadowed> shadowed) {
+        List<MavenDependency> resolvable = new ArrayList<>();
+        for (MavenDependency dependency : declared) {
+            String[] parts = dependency.coordinate()
+                                       .split(":", -1);
+            String groupArtifact = parts[0] + ":" + parts[1];
+            String providedVersion = bom.providedVersion(groupArtifact);
+            if (providedVersion == null) {
+                resolvable.add(dependency);
+            } else if (providedVersion.equals(parts[2])) {
+                provided.add(dependency.coordinate());
+                LOGGER.info("Declared [{}] is provided by the platform - satisfied without a download", dependency.coordinate());
+            } else {
+                shadowed.add(new Shadowed(groupArtifact, parts[2], providedVersion));
+                LOGGER.warn(
+                        "Declared [{}] is SHADOWED: requested [{}], the platform provides [{}] - parent-first delegation serves"
+                                + " the platform's version, so the declared version is inert and is not downloaded",
+                        groupArtifact, parts[2], providedVersion);
+            }
+        }
+        return resolvable;
     }
 
     /**
      * Creates the session - local repository, offline mode, verbose conflict resolution (so version
-     * mediation is reportable) and the settings.xml mirror / proxy / server selectors.
+     * mediation is reportable), the settings.xml mirror / proxy / server selectors and the provided-BOM
+     * pruning selector.
      *
      * @param config the configuration
+     * @param bom the provided-BOM
      * @return the session
      */
-    private DefaultRepositorySystemSession newSession(MavenResolverConfig config) {
+    private DefaultRepositorySystemSession newSession(MavenResolverConfig config, ProvidedBom bom) {
         DefaultRepositorySystemSession session = MavenRepositorySystemUtils.newSession();
         session.setLocalRepositoryManager(repositorySystem.newLocalRepositoryManager(session, new LocalRepository(config.localRepository()
                                                                                                                         .toFile())));
@@ -186,6 +237,11 @@ class MavenDependencyResolver implements DependencyResolver {
         // remote repositories are instance-level operator configuration - a repository declared
         // inside a dependency's POM must not redirect where artifacts are downloaded from
         session.setIgnoreArtifactDescriptorRepositories(true);
+        if (!bom.isEmpty()) {
+            // a platform-provided transitive is pruned with its subtree - the platform already
+            // carries what its own version needs, exactly like Maven's provided scope
+            session.setDependencySelector(new AndDependencySelector(session.getDependencySelector(), new ProvidedPruningSelector(bom)));
+        }
         Settings settings = readSettings(config.settingsXml());
         if (settings != null) {
             session.setMirrorSelector(mirrorSelector(settings));
@@ -193,6 +249,54 @@ class MavenDependencyResolver implements DependencyResolver {
             session.setAuthenticationSelector(authenticationSelector(settings));
         }
         return session;
+    }
+
+    /**
+     * Prunes platform-provided coordinates from the dependency graph - they are never downloaded and
+     * never enter the modules tier; at runtime parent-first delegation serves the platform's copy.
+     */
+    private static final class ProvidedPruningSelector implements DependencySelector {
+
+        /** The provided-BOM. */
+        private final ProvidedBom bom;
+
+        /**
+         * Instantiates a new selector.
+         *
+         * @param bom the provided-BOM
+         */
+        private ProvidedPruningSelector(ProvidedBom bom) {
+            this.bom = bom;
+        }
+
+        /**
+         * Select dependency.
+         *
+         * @param dependency the dependency
+         * @return false when the platform provides the coordinate
+         */
+        @Override
+        public boolean selectDependency(Dependency dependency) {
+            Artifact artifact = dependency.getArtifact();
+            String providedVersion = bom.providedVersion(artifact.getGroupId() + ":" + artifact.getArtifactId());
+            if (providedVersion == null) {
+                return true;
+            }
+            LOGGER.debug("Transitive [{}:{}:{}] is provided by the platform as [{}] - pruned from the graph", artifact.getGroupId(),
+                    artifact.getArtifactId(), artifact.getVersion(), providedVersion);
+            return false;
+        }
+
+        /**
+         * Derive child selector.
+         *
+         * @param context the context
+         * @return this selector - the decision is context-free
+         */
+        @Override
+        public DependencySelector deriveChildSelector(DependencyCollectionContext context) {
+            return this;
+        }
     }
 
     /**
@@ -223,15 +327,18 @@ class MavenDependencyResolver implements DependencyResolver {
     /**
      * Walks the verbose dependency graph - conflict losers are retained as leaves carrying the winner
      * reference, so both the winners (the classpath) and every requested version (the mediation report)
-     * come out of one walk.
+     * come out of one walk. Each winner is attributed to the declared root whose subtree it was first
+     * seen in, so the lockfile can record how a transitive artifact entered the classpath.
      *
      * @param node the node whose children are walked
+     * @param via the declared root owning this subtree, null at the graph root
      * @param requestedVersions all requested versions per groupId:artifactId
      * @param winnerVersions the winning version per groupId:artifactId
      * @param winners the winner nodes in graph order
+     * @param winnerVia the declared root per winner node, absent for the roots themselves
      */
-    private void walk(DependencyNode node, Map<String, Set<String>> requestedVersions, Map<String, String> winnerVersions,
-            List<DependencyNode> winners) {
+    private void walk(DependencyNode node, String via, Map<String, Set<String>> requestedVersions, Map<String, String> winnerVersions,
+            List<DependencyNode> winners, Map<DependencyNode, String> winnerVia) {
         for (DependencyNode child : node.getChildren()) {
             Artifact artifact = child.getArtifact();
             if (artifact == null) {
@@ -246,8 +353,12 @@ class MavenDependencyResolver implements DependencyResolver {
             }
             if (winnerVersions.putIfAbsent(ga, artifact.getVersion()) == null && isClasspathScope(child)) {
                 winners.add(child);
+                if (via != null) {
+                    winnerVia.put(child, via);
+                }
             }
-            walk(child, requestedVersions, winnerVersions, winners);
+            String childVia = via != null ? via : ga + ":" + artifact.getVersion();
+            walk(child, childVia, requestedVersions, winnerVersions, winners, winnerVia);
         }
     }
 
@@ -269,12 +380,13 @@ class MavenDependencyResolver implements DependencyResolver {
      *
      * @param session the session
      * @param winners the winner nodes
+     * @param winnerVia the declared root per winner node
      * @param failures the per-coordinate failures to add to
      * @param repositoriesDescription the repositories, for the error log
-     * @return the resolved jar paths
+     * @return the resolved artifacts
      */
-    private List<Path> resolveArtifacts(RepositorySystemSession session, List<DependencyNode> winners, Map<String, String> failures,
-            String repositoriesDescription) {
+    private List<ResolvedArtifact> resolveArtifacts(RepositorySystemSession session, List<DependencyNode> winners,
+            Map<DependencyNode, String> winnerVia, Map<String, String> failures, String repositoriesDescription) {
         List<ArtifactRequest> requests = winners.stream()
                                                 .map(ArtifactRequest::new)
                                                 .toList();
@@ -284,12 +396,15 @@ class MavenDependencyResolver implements DependencyResolver {
         } catch (ArtifactResolutionException e) {
             results = e.getResults();
         }
-        List<Path> artifacts = new ArrayList<>();
+        List<ResolvedArtifact> artifacts = new ArrayList<>();
         for (ArtifactResult result : results) {
             if (result.isResolved()) {
-                artifacts.add(result.getArtifact()
-                                    .getFile()
-                                    .toPath());
+                Artifact resolved = result.getArtifact();
+                String coordinate = resolved.getGroupId() + ":" + resolved.getArtifactId() + ":" + resolved.getVersion();
+                artifacts.add(new ResolvedArtifact(coordinate, resolved.getFile()
+                                                                       .toPath(),
+                        winnerVia.get(result.getRequest()
+                                            .getDependencyNode())));
             } else {
                 Artifact artifact = result.getRequest()
                                           .getArtifact();

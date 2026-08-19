@@ -2139,11 +2139,14 @@ class IntentEngineIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200));
 
-        // The glue carries the two per-event expansion handlers with the pre-rendered Java pieces.
+        // The glue carries the per-event expansion handlers with the pre-rendered Java pieces - the
+        // (re)generation pair plus the cleanup that takes the generated rows down with their master.
         String glue = contentOf("loans.glue");
         assertTrue(glue.contains("\"expansions\""), "the .glue should carry the expansions collection");
         assertTrue(glue.contains("InstallmentsExpansionOnCreate"), "an OnCreate handler entry is expected");
         assertTrue(glue.contains("InstallmentsExpansionOnUpdate"), "an OnUpdate handler entry is expected");
+        assertTrue(glue.contains("\"expansionCleanups\""), "the .glue should carry the expansionCleanups collection");
+        assertTrue(glue.contains("InstallmentsExpansionOnDelete"), "an OnDelete cleanup entry is expected");
 
         // The EntityStatus relation lands as the DOCUMENT_STATUS widget on a NON-document entity.
         String model = contentOf("loans.model");
@@ -2164,6 +2167,19 @@ class IntentEngineIT extends IntegrationTest {
                 "the count write-back must not full-row merge (updateWithoutEvent) - that reverts concurrent writes to other columns");
         String onUpdate = contentOf("gen/events/loans/InstallmentsExpansionOnUpdate.java");
         assertTrue(onUpdate.contains("intent-test-Loan-Loan-updated\""), "the OnUpdate handler binds the -updated topic");
+
+        // The master's delete removes the rows the expansion generated. Nothing else would: a foreign
+        // key never becomes a database constraint, so the rows would otherwise outlive their master as
+        // orphans and keep feeding the roll-ups and reports. They go through the child repository, so
+        // each row's delete event still fires.
+        String onDelete = contentOf("gen/events/loans/InstallmentsExpansionOnDelete.java");
+        assertTrue(onDelete.contains("intent-test-Loan-Loan-deleted\""), "the OnDelete handler binds the -deleted topic");
+        assertTrue(onDelete.contains("LoanInstallmentRepository children = new LoanInstallmentRepository()"),
+                "the cleanup must delete through the child repository so the per-row delete events fire");
+        assertTrue(onDelete.contains("Criteria.create().eq(\"Loan\", master.Id)"), "the cleanup must scope to the master's own rows");
+        assertTrue(onDelete.contains("children.delete(row)"), "the cleanup must delete every generated row");
+        assertFalse(onDelete.contains("updateProperty"), "the cleanup must not write back to the master - the master row is gone");
+        assertFalse(onDelete.contains("${"), "the cleanup template must render every placeholder");
 
         // Harmonia UI: the status renders as the title-bar badge (not an editable input) and the
         // calculated field previews live via the calc evaluator with the date functions.
