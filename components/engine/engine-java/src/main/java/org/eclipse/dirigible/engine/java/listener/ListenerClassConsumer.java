@@ -269,6 +269,10 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
             Session session = connectionFactory.createSession(connection);
             Destination destination =
                     subscription.kind() == ListenerKind.TOPIC ? session.createTopic(destinationName) : session.createQueue(destinationName);
+            // Bound the retries, exactly as the JavaScript listener path does. Without this the broker
+            // still retries a failed delivery, but on its own defaults rather than a budget this
+            // project chose - and the two listener paths would disagree about how forgiving they are.
+            connectionFactory.configureRedeliveryPolicy(connection, destination);
             MessageConsumer consumer = session.createConsumer(destination);
             consumer.setMessageListener(msg -> dispatch(msg, subscription.dispatcher(), label));
             LOGGER.info("Java @Listener [{}] connected to {} '{}' for {}.", label, subscription.kind(), destinationName, scope);
@@ -355,6 +359,12 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
         } catch (Exception e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             dispatcher.onError(cause.getMessage(), label);
+            // Let the failure reach the broker. Swallowing it here acknowledged the message and lost
+            // the event permanently: no retry, no dead letter, and handlers whose correctness depends
+            // on a second delivery - the generated posting glue repairs a half-written post on
+            // redelivery - could never run their repair. Throwing hands the message back so the
+            // redelivery policy configured above retries it, and dead-letters it once exhausted.
+            throw new IllegalStateException("@Listener [" + label + "] failed handling a message", cause);
         }
     }
 
