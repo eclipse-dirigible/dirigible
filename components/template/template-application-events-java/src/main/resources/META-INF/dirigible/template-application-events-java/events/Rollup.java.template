@@ -2,6 +2,8 @@ package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -29,6 +31,8 @@ import gen.${parentGenFolder}.data.${javaParentPerspective}.${parentEntity}Repos
  */
 @Component("${javaGenFolderName}_${className}")
 public class ${className} implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}");
 
     @Override
     public String destination() {
@@ -58,5 +62,10 @@ ${aggregateBlock}
         if (changed) {
             parents.updateDerived(entity.${fkProperty}, derived);
         }
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Rollup ${className}: the listener on [{}] failed - [{}]", destination(), error);
     }
 }

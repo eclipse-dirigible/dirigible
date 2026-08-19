@@ -2,6 +2,8 @@ package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.sdk.bpm.Process;
 import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -21,6 +23,8 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  */
 @Component("${javaGenFolderName}_${process}Trigger")
 public class ${process}Trigger implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${process}Trigger");
 
     private final ${entity}Repository repository;
 
@@ -105,5 +109,10 @@ public class ${process}Trigger implements MessageHandler {
             repository.updateProperty(entity.${keyProperty}, "${businessKeyProperty}", minted);
         }
 #end
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Trigger ${process}: the listener on [{}] failed - [{}]", destination(), error);
     }
 }
