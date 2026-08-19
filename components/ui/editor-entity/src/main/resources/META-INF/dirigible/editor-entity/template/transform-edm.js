@@ -52,6 +52,18 @@ export function transform(workspaceName, projectName, filePath) {
             console.error("Invalid source model: 'entities' element is null");
         }
 
+        // Composite business keys - declared top-level, resolved back onto their entity by name, the
+        // same way a <relation> is. A key the model cannot resolve (a renamed or deleted entity, an
+        // unknown property) is DROPPED rather than emitted: a constraint over a column that is not
+        // there fails the whole schema, and silently doing nothing is the lesser of the two.
+        if (raw.model.constraints && raw.model.constraints.uniqueKey) {
+            if (Array.isArray(raw.model.constraints.uniqueKey)) {
+                raw.model.constraints.uniqueKey.forEach(key => { transformUniqueKey(key, root.model.entities) });
+            } else {
+                transformUniqueKey(raw.model.constraints.uniqueKey, root.model.entities);
+            }
+        }
+
         if (raw.model.perspectives) {
             if (raw.model.perspectives.perspective) {
                 if (Array.isArray(raw.model.perspectives.perspective)) {
@@ -104,6 +116,39 @@ export function transform(workspaceName, projectName, filePath) {
             property[propertyName.substring(1, propertyName.length)] = raw[propertyName];
         }
         return property;
+    }
+
+    function transformUniqueKey(raw, entities) {
+        const entity = entities.find(candidate => candidate.name === raw.entity);
+        if (!entity) {
+            console.error("Skipping unique key [" + raw.name + "]: it names no entity [" + raw.entity + "] of this model");
+            return;
+        }
+        const properties = (raw.properties || '').split(',')
+            .map(name => name.trim())
+            .filter(name => name.length > 0);
+        if (properties.length < 2) {
+            console.error("Skipping unique key [" + raw.name + "] of [" + raw.entity + "]: a key spans two or more properties");
+            return;
+        }
+        const columns = [];
+        for (let i = 0; i < properties.length; i++) {
+            const property = entity.properties.find(candidate => candidate.name === properties[i]);
+            if (!property || !property.dataName) {
+                console.error("Skipping unique key [" + raw.name + "] of [" + raw.entity + "]: it names no property [" + properties[i] + "]");
+                return;
+            }
+            columns.push({ name: property.dataName });
+        }
+        if (!entity.uniqueConstraints) {
+            entity.uniqueConstraints = [];
+        }
+        entity.uniqueConstraints.push({
+            name: raw.name,
+            columns: columns,
+            columnsCsv: columns.map(column => column.name).join(','),
+            message: raw.message ? raw.message : 'A ' + raw.entity + ' with the same ' + properties.join(', ') + ' already exists',
+        });
     }
 
     function transformRelation(relation, entities) {
