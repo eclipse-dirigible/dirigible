@@ -585,6 +585,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 rollups.add(rollupEntry(base, className + "RollupOnUpdate", "-updated"));
             }
             rollups.add(rollupEntry(base, className + "RollupOnDelete", "-deleted"));
+            // Re-parenting: the child's create/update/delete events all name the parent it belongs to NOW,
+            // so the parent it moved AWAY from is named by no event of theirs and kept the child's
+            // contribution forever (#6819). The DAO publishes the row on "-rekeyed" whenever a grouping
+            // column moves - the previous row from the full-row write, both the previous and the written
+            // one from the targeted writes that publish no "-updated" at all. It is the same recompute
+            // keyed on the payload's FK, so one handler repairs whichever side the payload names.
+            rollups.add(rollupEntry(base, className + "RollupOnRekey", "-rekeyed"));
         }
         return rollups;
     }

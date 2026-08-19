@@ -605,12 +605,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 entityMap.put("labelExpression", entity.getLabel());
                 entityMap.put("labelParts", buildLabelParts(entity, byName));
             }
-            // An entity that is the SOURCE of an aggregate carries its grouping keys (the union across
-            // every aggregate over it) plus its pk, so the DAO can notice on update that a key MOVED and
-            // let the aggregate repair the tuple the row left behind. Recomputing the tuple it moved
-            // INTO is already event-driven; the tuple it left has no event of its own.
-            List<Map<String, String>> aggregateKeys = new ArrayList<>();
-            Set<String> seenAggregateKeys = new LinkedHashSet<>();
+            // An entity whose rows are GROUPED by something maintained asynchronously - the keys of every
+            // aggregate over it, and the parent FK of every roll-up it feeds - carries those columns plus
+            // its pk, so the DAO can notice that a write MOVED the row between groups. A move has two
+            // sides and only one of them has an event of its own, so the DAO publishes the row on the
+            // dedicated "-rekeyed" topic for the aggregate / roll-up handlers to repair the other.
+            List<Map<String, String>> groupingKeys = new ArrayList<>();
+            Set<String> seenGroupingKeys = new LinkedHashSet<>();
             if (model.getAggregates() != null) {
                 for (AggregateIntent a : model.getAggregates()) {
                     if (a.getOf() == null || !a.getOf()
@@ -618,19 +619,23 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         continue;
                     }
                     for (String key : a.getBy()) {
-                        String fk = IntentNaming.pascalCase(key);
-                        if (seenAggregateKeys.add(fk)) {
-                            Map<String, String> pair = new LinkedHashMap<>();
-                            pair.put("key", fk);
-                            aggregateKeys.add(pair);
-                        }
+                        addGroupingKey(groupingKeys, seenGroupingKeys, key);
                     }
                 }
             }
-            if (!aggregateKeys.isEmpty()) {
-                entityMap.put("aggregateKeys", aggregateKeys);
-                FieldIntent aggregatePk = primaryKeyOf(entity);
-                entityMap.put("aggregateSourcePk", aggregatePk == null ? "Id" : IntentNaming.pascalCase(aggregatePk.getName()));
+            // A roll-up groups its child rows by ONE column - the `via` relation's FK - and re-parenting a
+            // child is the ordinary way that column moves. Without it here, only aggregate sources were
+            // tracked and a re-parented roll-up child left its former parent's total stale forever (#6819).
+            for (RollupIntent rollup : model.getRollups()) {
+                if (rollup.getVia() != null && entity.getName()
+                                                     .equals(rollup.getEntity())) {
+                    addGroupingKey(groupingKeys, seenGroupingKeys, rollup.getVia());
+                }
+            }
+            if (!groupingKeys.isEmpty()) {
+                entityMap.put("groupingKeys", groupingKeys);
+                FieldIntent groupingPk = primaryKeyOf(entity);
+                entityMap.put("groupingSourcePk", groupingPk == null ? "Id" : IntentNaming.pascalCase(groupingPk.getName()));
             }
             List<Map<String, Object>> checkMaps = buildChecks(entity, byName, model.getAggregates());
             if (!checkMaps.isEmpty()) {
@@ -2338,6 +2343,23 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         link.put("referenced", relation.getTo());
         link.put("referencedProperty", keyFieldName(target));
         return link;
+    }
+
+    /**
+     * Records one grouping column of an entity, de-duplicated: an aggregate key and a roll-up's
+     * {@code via} FK can name the same relation, and the DAO must compare it once.
+     *
+     * @param keys the collected grouping columns
+     * @param seen the property names already collected
+     * @param name the authored relation / field name
+     */
+    private static void addGroupingKey(List<Map<String, String>> keys, Set<String> seen, String name) {
+        String property = IntentNaming.pascalCase(name);
+        if (seen.add(property)) {
+            Map<String, String> pair = new LinkedHashMap<>();
+            pair.put("key", property);
+            keys.add(pair);
+        }
     }
 
     /** The target entity's primary-key field, or null when the target is unknown or has no PK. */
