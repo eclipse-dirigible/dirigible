@@ -43,10 +43,11 @@ import static org.eclipse.dirigible.components.ide.template.service.model.ModelV
 class GlueGenerator {
 
     /** The names of the collections this generator handles. */
-    private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
-            "aborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles",
-            "outbound", "stepEvents", "rollups", "expansions", "settlements", "generates", "generateEvents", "transitions", "sends",
-            "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
+    private static final List<String> COLLECTIONS =
+            List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits", "aborts", "setters", "writers",
+                    "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles", "outbound", "stepEvents",
+                    "rollups", "expansions", "expansionCleanups", "settlements", "settlementListeners", "generates", "generateEvents",
+                    "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -102,7 +103,9 @@ class GlueGenerator {
             case "outbound" -> each(collection, source, content, model, parameters, GlueGenerator::bindOutbound);
             case "stepEvents" -> each(collection, source, content, model, parameters, GlueGenerator::bindStepEvent);
             case "expansions" -> each(collection, source, content, model, parameters, GlueGenerator::bindExpansion);
+            case "expansionCleanups" -> each(collection, source, content, model, parameters, GlueGenerator::bindExpansionCleanup);
             case "settlements" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlement);
+            case "settlementListeners" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlementListener);
             // Both collections carry the SAME create-from descriptors (generateEvents is the
             // event-driven subset), so they share one binding - the listener and the create-from it
             // calls cannot be rendered from divergent data.
@@ -443,6 +446,7 @@ class GlueGenerator {
     private static void bindInbound(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "path");
         context.put("javaPerspective", sanitize(item, "perspective"));
+        bindArrival(item, context);
     }
 
     /**
@@ -456,6 +460,7 @@ class GlueGenerator {
     private static void bindInboundMessage(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "destination", "listenerKind");
         context.put("javaPerspective", sanitize(item, "perspective"));
+        bindArrival(item, context);
     }
 
     /**
@@ -469,6 +474,32 @@ class GlueGenerator {
     private static void bindInboundFile(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "folder", "cron");
         context.put("javaPerspective", sanitize(item, "perspective"));
+        bindArrival(item, context);
+    }
+
+    /**
+     * Binds the declared arrival mapping every inbound shape shares: the {@code accept:} gate and the
+     * {@code map:} projection, including the business-key lookups that fill the record's relations. A
+     * lookup imports the looked-up entity's repository, so its package segment is resolved the way
+     * every other cross-entity import is.
+     *
+     * <p>
+     * Unlike {@link #relationLoads(Object, Map)} this needs no generation parameters: a lookup reads an
+     * entity of the SAME model, so there is no owner generation folder to resolve against. Widening it
+     * to a cross-model target is what would bring them back.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     */
+    private static void bindArrival(Map<String, Object> item, Map<String, Object> context) {
+        copy(context, item, "hasEnvelope", "hasAccept", "acceptExpression", "acceptSummary", "acceptSummaryLiteral", "hasMap", "mapFields");
+        List<Object> lookups = new ArrayList<>();
+        for (Map<String, Object> lookup : asMaps(item.get("lookups"))) {
+            Map<String, Object> resolved = ModelValues.copy(lookup);
+            resolved.put("javaTargetPerspective", sanitize(lookup, "targetPerspective"));
+            lookups.add(resolved);
+        }
+        context.put("lookups", lookups);
     }
 
     /**
@@ -501,7 +532,7 @@ class GlueGenerator {
     }
 
     /**
-     * Binds a period expansion - the handler that regenerates a master's child rows across a date span.
+     * Binds a period expansion - the handler that reconciles a master's child rows across a date span.
      * Only the period step is derived here; the type-dependent pieces arrive pre-rendered.
      *
      * @param item the descriptor
@@ -509,8 +540,8 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindExpansion(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "className", "masterEntity", "masterPerspective", "masterPk", "childEntity", "fkProperty", "startProperty",
-                "endProperty", "mapProperty", "unit", "criteriaExpression");
+        copy(context, item, "className", "masterEntity", "masterPerspective", "masterPk", "childEntity", "childPk", "fkProperty",
+                "startProperty", "endProperty", "mapProperty", "unit", "criteriaExpression");
         context.put("javaMasterPerspective", sanitize(item, "masterPerspective"));
         context.put("javaChildPerspective", sanitize(item, "childPerspective"));
         String unit = str(item, "unit");
@@ -526,6 +557,22 @@ class GlueGenerator {
     }
 
     /**
+     * Binds an expansion cleanup - the handler that removes an expansion's generated rows when their
+     * master is deleted. It needs only the master's identity and the child set's criteria, so the span,
+     * unit, defaults and spread the regeneration binds are deliberately absent.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindExpansionCleanup(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "className", "masterEntity", "masterPerspective", "masterPk", "childEntity", "criteriaExpression");
+        context.put("javaMasterPerspective", sanitize(item, "masterPerspective"));
+        context.put("javaChildPerspective", sanitize(item, "childPerspective"));
+        context.put("topicSuffix", strOr(item, "topicSuffix", "-deleted"));
+    }
+
+    /**
      * Binds an auto-settlement - the listener and delegate pair that applies a payment to an invoice
      * through their junction.
      *
@@ -535,12 +582,25 @@ class GlueGenerator {
      */
     private static void bindSettlement(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "match", "order", "invoiceEntity", "invoicePk", "invoiceTotal", "invoicePaid", "invoiceStatus",
-                "payableCondition", "junctionEntity", "junctionFkInvoice", "junctionFkPayment", "junctionAmount", "paymentEntity",
-                "paymentPk", "paymentPot", "paymentTopic");
+                "payableCondition", "junctionEntity", "junctionPk", "junctionFkInvoice", "junctionFkPayment", "junctionAmount",
+                "paymentEntity", "paymentPk", "paymentPot", "paymentTopic");
         context.put("invoiceJavaPerspective", sanitize(item, "invoicePerspective"));
         context.put("junctionJavaPerspective", sanitize(item, "junctionPerspective"));
         context.put("paymentGenFolder", truthy(item, "crossModel") ? sanitize(item, "paymentModel") : str(parameters, "javaGenFolderName"));
         context.put("paymentJavaPerspective", sanitize(item, "paymentPerspective"));
+    }
+
+    /**
+     * Binds one payment listener of an auto-settlement - the same descriptor as the settlement itself,
+     * rendered once per bound payment event (create, correction).
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindSettlementListener(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        bindSettlement(item, context, parameters);
+        copy(context, item, "className", "topicSuffix");
     }
 
     /**
@@ -555,11 +615,23 @@ class GlueGenerator {
                 "itemLines", "fromItemEntity", "toItemEntity", "srcFkProperty", "toFkProperty", "itemFieldAssignments", "fromPerspective",
                 "sourceStatusProperty", "sourceStatusValue",
                 // The event half (issue #6711): the trigger kind, the status guard and the back-reference
-                // the at-most-once check reads, plus whether a button is contributed at all.
-                "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "backRefProperty",
+                // the at-most-once check reads, plus whether a button is contributed at all. The axis and
+                // the cardinality (issue #6800): the topic suffix the listener binds - a lifecycle one or
+                // a step-scoped one - and whether the create-from keeps its at-most-once lookup at all.
+                "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "backRefProperty", "isStep", "stepProcess",
+                "stepName", "appendMode",
+                // The state half of that guard (issue #6814): which of the target's statuses retire it, so
+                // a cancelled or voided document stops blocking its replacement. Gated on the boolean - a
+                // .glue written before this key existed keeps the existence-only guard it always had.
+                "hasRetiredStatus", "retiredStatusProperty", "retiredStatusCondition",
                 // The declared input form (issue #6685): the prompted target properties with their
                 // pre-rendered value conversions - the template renders one block per entry.
                 "hasPrompt", "promptFields");
+        // The topic the listener binds is the glue's to state and the template's to emit verbatim - but
+        // a .glue written before the step axis (issue #6800) carries no suffix at all, and a bare
+        // reference renders as its own literal into a destination nothing ever publishes on. An absent
+        // one is the lifecycle suffix that shape implied: none for a create, -transitioned otherwise.
+        context.put("topicSuffix", strOr(item, "topicSuffix", truthy(item, "isCreate") ? "" : "-transitioned"));
         context.put("fromJavaPerspective", sanitize(item, "fromPerspective"));
         // The SOURCE's gen folder / owning project: this project unless the source belongs to another
         // model (intent `fromUses:`). That is what lets a create-from be authored on the module owning
@@ -803,10 +875,11 @@ class GlueGenerator {
      * total from the store, which makes them idempotent and self-healing.
      *
      * <p>
-     * The fourth, re-keyed, variant is the same handler fed the previous row: the repository publishes
-     * that event only when a grouping key actually moved, and recomputing the former tuple - which no
-     * longer contains the row - drops the total it left behind. Without it, editing a grouping key
-     * leaves a stale aggregate on the tuple the row moved out of.
+     * The fourth, re-keyed, variant is the same handler fed a row whose grouping moved: the repository
+     * publishes that event only when a grouping key actually changed - the previous row, so recomputing
+     * the former tuple, which no longer contains it, drops the total it left behind, and on the
+     * targeted write path the written row as well, since that path publishes no "-updated" for the
+     * tuple the row moved into. Without it, editing a grouping key leaves a stale aggregate behind.
      *
      * @param source the template source
      * @param content the template content

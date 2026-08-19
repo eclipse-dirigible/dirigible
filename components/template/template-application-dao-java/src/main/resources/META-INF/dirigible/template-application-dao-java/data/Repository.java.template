@@ -299,15 +299,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
         }
 #end
-#if($aggregateKeys && $aggregateKeys.size() > 0)
-        // Aggregate rekey: this entity groups an aggregate, so a change to one of its grouping keys
-        // MOVES the row between tuples. The tuple it moves into is recomputed off the "-updated" event
-        // like any other change; the tuple it LEAVES has no event of its own, so capture the previous
-        // row here and publish it on the dedicated "-rekeyed" topic after the write (below). Only the
-        // aggregate handlers listen there, so no other reaction sees a second event.
-        ${name}Entity aggregatePrevious = findById(entity.${aggregateSourcePk});
-        boolean aggregateRekeyed = aggregatePrevious != null && (false#foreach($k in $aggregateKeys)
-                || !java.util.Objects.equals(aggregatePrevious.${k.key}, entity.${k.key})#end);
+#if($groupingKeys && $groupingKeys.size() > 0)
+        // Rekey: this entity's rows are GROUPED by something maintained asynchronously (an aggregate's
+        // keys, a roll-up's parent FK), so a change to one of those columns MOVES the row between groups.
+        // The group it moves into is recomputed off the "-updated" event like any other change; the group
+        // it LEAVES has no event of its own, so capture the previous row here and publish it on the
+        // dedicated "-rekeyed" topic after the write (below). Only the aggregate / roll-up handlers listen
+        // there, so no other reaction sees a second event.
+        ${name}Entity groupingPrevious = findById(entity.${groupingSourcePk});
+        boolean groupingMoved = groupingPrevious != null && (false#foreach($k in $groupingKeys)
+                || !java.util.Objects.equals(groupingPrevious.${k.key}, entity.${k.key})#end);
 #end
 #if($hasLabel)
         computeName(entity);
@@ -343,12 +344,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
         // Publish the update event (suffixed topic) so intent reactions under gen/events can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-updated", Json.stringify(updated));
-#if($aggregateKeys && $aggregateKeys.size() > 0)
-        if (aggregateRekeyed) {
-            // Published AFTER the write, carrying the PREVIOUS row: the aggregate handler recomputes
-            // that row's old key-tuple from the store, which no longer contains this row, so the total
-            // it left behind drops instead of staying stale.
-            Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(aggregatePrevious));
+#if($groupingKeys && $groupingKeys.size() > 0)
+        if (groupingMoved) {
+            // Published AFTER the write, carrying the PREVIOUS row: the aggregate / roll-up handler
+            // recomputes that row's old group from the store, which no longer contains this row, so the
+            // total it left behind drops instead of staying stale.
+            Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(groupingPrevious));
         }
 #end
 #if($documentItem)
@@ -382,16 +383,21 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #if($history == "true")
         ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
-        ${name}Entity historyAfter = super.update(entity);
+        ${name}Entity updated = super.update(entity);
         // A system write (no user event), recorded as such so the trail separates what the application
         // did from what a person did.
-        History.recordUpdate(HISTORY_TABLE, historyAfter.${pkPropertyName}, History.SYSTEM, historyBefore, historyAfter, HISTORY_PROPERTIES);
-        return historyAfter;
+        History.recordUpdate(HISTORY_TABLE, updated.${pkPropertyName}, History.SYSTEM, historyBefore, updated, HISTORY_PROPERTIES);
 #else
-        return super.update(entity);
+        ${name}Entity updated = super.update(entity);
 #end
+#if($documentItem)
+        // A system write is still a line change: the event is suppressed here, the arithmetic is not.
+        // Keep the document consistent exactly as update() does (no async roll-up).
+        new ${documentItem.parentEntity}Repository().recalculate(updated.${documentItem.fkProperty});
+#end
+        return updated;
     }
-#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || $history == "true")
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || $history == "true" || $documentItem || ($groupingKeys && $groupingKeys.size() > 0))
 
     /**
      * Targeted single-column write with this entity's semantics preserved: routed through
@@ -410,20 +416,56 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * applied to a FRESH copy of the row first, so the declarative gate checks (and the stored label
      * Name) see the row as it will be after the write - then only the named columns (plus a changed
      * Name) are persisted in one statement. The workflow setters/writers come through here; a plain
-     * pass-through to the base targeted write would silently skip the posting gate.
+     * pass-through to the base targeted write would silently skip the posting gate - and, on a document
+     * line, leave the master summing to something other than its lines.
+#if($groupingKeys && $groupingKeys.size() > 0)
+     *
+     * <p>
+     * Still event-free for the reactions: the only event it can publish is {@code "-rekeyed"}, and only
+     * when the write MOVED the row between groups - a topic nothing but the generated aggregate /
+     * roll-up handlers subscribes to.
+#end
      */
     @Override
     public int updateProperties(Object id, java.util.Map<String, Object> values) {
         if (values == null || values.isEmpty()) {
             return 0;
         }
-#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges)
+#if($groupingKeys && $groupingKeys.size() > 0)
+        // Rekey on the TARGETED path: a workflow setter, a resolver and a task-form writer move a
+        // grouping column exactly as a user edit does, but they publish no "-updated" - so without this
+        // neither side of the move would ever be recomputed (#6819). The row as it stands before the
+        // write is snapshotted as JSON here, so applying the incoming values below cannot mutate it.
+        String groupingPrevious = null;
+        boolean groupingMoved = false;
+#end
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || $documentItem || ($groupingKeys && $groupingKeys.size() > 0))
         ${name}Entity entity = findOne(id).orElse(null);
+#if($documentItem)
+        // The document this line belongs to as it stands BEFORE the write - a targeted write may also
+        // MOVE the line to another document, and the one it leaves behind has no write of its own to
+        // resum it.
+        Object documentBefore = entity == null ? null : entity.${documentItem.fkProperty};
+#end
+#end
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || ($groupingKeys && $groupingKeys.size() > 0))
         if (entity != null) {
+#if($documentChecks && $documentChecks.size() > 0)
+            // What this write is ABOUT, read before the label recompute below may add a column of its
+            // own: the gate applies to what a person or a workflow authored, not to the platform's own
+            // bookkeeping.
+            boolean authoredWrite = touchesAuthoredColumn(values);
+#end
 #if($lifecycleEdges)
             // The status as it stands BEFORE the targeted write - a transition button, a workflow
             // setter and a glue action all arrive here, and all of them are moves in the state machine.
             Object lifecyclePrevious = entity.${lifecycleStatusProperty};
+#end
+#if($groupingKeys && $groupingKeys.size() > 0)
+            groupingPrevious = Json.stringify(entity);
+#foreach($k in $groupingKeys)
+            Object groupingPrevious${k.key} = entity.${k.key};
+#end
 #end
             values = new java.util.LinkedHashMap<>(values);
             for (java.util.Map.Entry<String, Object> value : values.entrySet()) {
@@ -434,6 +476,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                     throw new IllegalArgumentException("Unknown property [" + value.getKey() + "]", e);
                 }
             }
+#if($groupingKeys && $groupingKeys.size() > 0)
+            groupingMoved = false#foreach($k in $groupingKeys)
+                    || !java.util.Objects.equals(groupingPrevious${k.key}, entity.${k.key})#end;
+#end
 #if($hasLabel)
             // A targeted write may change a label input (a workflow status hop, a stamped number) -
             // recompute the display name from the post-write row and carry it in the same statement.
@@ -448,8 +494,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #if($documentChecks && $documentChecks.size() > 0)
             // The workflow transition (the setter flipping the status to POSTED) comes through here -
-            // the gate check makes an unbalanced document fail the transition, not silently post.
-            enforceChecks(entity);
+            // the gate check makes an unbalanced document fail the transition, not silently post. It
+            // does NOT apply to a write that touches only platform-owned columns: the process id a
+            // trigger stamps back says which process handles this document, which no document check has
+            // an opinion about, and refusing it left a started instance with nothing pointing at it
+            // (#6815) - strictly worse than an unbalanced document that records its process.
+            if (authoredWrite) {
+                enforceChecks(entity);
+            }
 #end
         }
 #end
@@ -458,14 +510,46 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // workflow write-back, a stamped number), so the trail attributes it to SYSTEM - a person
         // reading the record must be able to tell those apart from an edit somebody made.
         ${name}Entity historyBefore = super.findById(id);
-        int historyUpdated = super.updateProperties(id, values);
-        if (historyUpdated > 0) {
+        int updatedCount = super.updateProperties(id, values);
+        if (updatedCount > 0) {
             History.recordUpdate(HISTORY_TABLE, id, History.SYSTEM, historyBefore, super.findById(id), HISTORY_PROPERTIES);
         }
-        return historyUpdated;
 #else
-        return super.updateProperties(id, values);
+        int updatedCount = super.updateProperties(id, values);
 #end
+#if($documentItem)
+        if (updatedCount > 0 && (values.containsKey("${documentItem.fkProperty}")#foreach($f in $documentItem.fields) || values.containsKey("${f.field}")#end)) {
+            // A line written by a TARGETED primitive - a workflow setField, a glue updateProperty /
+            // updateProperties / updateDerived - moves the document's totals exactly as a full save or
+            // update does, so it resums the master here too. Without this the header displayed, printed
+            // and posted a total that did not equal the sum of its lines. Guarded on the columns
+            // actually written, so a targeted write that touches nothing aggregated (a status hop, a
+            // process write-back) costs no extra query. The master's recalculate persists through its
+            // own targeted write, so this cannot turn into a full-row write of the header.
+            Object documentAfter = values.containsKey("${documentItem.fkProperty}")
+                    ? values.get("${documentItem.fkProperty}")
+                    : documentBefore;
+            if (documentAfter != null) {
+                new ${documentItem.parentEntity}Repository().recalculate(documentAfter);
+            }
+            if (documentBefore != null && !documentBefore.equals(documentAfter)) {
+                // The line MOVED: resum the document it left, which nothing else is going to touch.
+                new ${documentItem.parentEntity}Repository().recalculate(documentBefore);
+            }
+        }
+#end
+#if($groupingKeys && $groupingKeys.size() > 0)
+        if (updatedCount > 0 && groupingMoved) {
+            // BOTH sides of the move, on the one topic only the aggregate / roll-up handlers listen to -
+            // so no other reaction sees a second event, which is why this path can signal them without
+            // re-publishing "-updated". The previous row names the group the row LEFT (recomputed without
+            // it, its total drops instead of staying stale); the written row names the one it moved INTO,
+            // which on the targeted path gets no event of its own at all.
+            Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-rekeyed", groupingPrevious);
+            Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(entity));
+        }
+#end
+        return updatedCount;
     }
 #end
 
@@ -480,7 +564,8 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * #6306). The {@code "-updated"} event still fires so downstream reactions - notably a transitive
      * roll-up whose own parent sits above this row - keep cascading exactly as they did when the handler
      * persisted the full row. Routed through {@link #updateProperties} so an entity that declares
-     * {@code checks:} still runs its gate and a labelled entity still refreshes its stored display Name.
+     * {@code checks:} still runs its gate, a labelled entity still refreshes its stored display Name,
+     * and a document line still resums the master it belongs to.
      */
     public int updateDerived(Object id, java.util.Map<String, Object> values) {
         if (values == null || values.isEmpty()) {
@@ -495,8 +580,8 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         }
         return count;
     }
-
 #if($lifecycleEdges)
+
     /**
      * The declarative state machine (intent {@code lifecycle:}): the WHOLE set of legal status edges,
      * as {@code 1&gt;2} source-to-target id pairs.
@@ -582,6 +667,32 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #end
 #if($documentChecks && $documentChecks.size() > 0)
+
+    /**
+     * Platform-owned columns: the system writes them on the record's behalf and nothing a person or a
+     * workflow authors ever lands in them. The process trigger's {@code ProcessId} is the one that
+     * matters here - it records WHICH process handles the record, and it is written after the instance
+     * has already started.
+     */
+    private static final java.util.List<String> SYSTEM_PROPERTIES = java.util.List.of("ProcessId");
+
+    /**
+     * Whether a targeted write is about a column somebody authored, as opposed to only the platform's own
+     * bookkeeping. A write of the second kind cannot move this document into a gated status, nor break
+     * what the gate checks, so the gate has nothing to say about it.
+     *
+     * @param values the properties the write carries
+     * @return true when at least one of them is authored
+     */
+    private static boolean touchesAuthoredColumn(java.util.Map<String, Object> values) {
+        for (String property : values.keySet()) {
+            if (!SYSTEM_PROPERTIES.contains(property)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Declarative document checks (intent {@code checks:}): each runs when the document is persisted
      * carrying its gate status. Throws {@code ValidationException} with the authored message - mapped to

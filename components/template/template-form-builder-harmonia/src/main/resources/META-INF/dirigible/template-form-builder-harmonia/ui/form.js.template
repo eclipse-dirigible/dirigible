@@ -27,6 +27,10 @@
  * below map those onto ctx so the same code runs unchanged here.
  */
 
+// How many records a relation picker offers. The generated list endpoint pages at 20 by default, so a
+// limit has to be asked for; a picker that silently truncated would read as "the record is not there".
+const RELATION_OPTIONS_LIMIT = 1000;
+
 // Self-contained fetch client (no window.App): every form URL is absolute (/services/...).
 const harmoniaHttp = {
   // Returns { data, status }. The status matters to the AngularJS $http shim below, whose callers
@@ -96,6 +100,7 @@ ${code}
 document.addEventListener('alpine:init', () => {
   Alpine.data('harmoniaForm', () => ({
     model: {},
+    relationOptions: {},     // FK property -> [{value, label}] for the `editable` relation pickers
     state: 'ready',          // ready | submitting | success | error
     message: '',
     _ctx: null,
@@ -155,7 +160,7 @@ document.addEventListener('alpine:init', () => {
                   if (entity && typeof entity === 'object') {
                     Object.keys(entity).forEach((k) => { self.model[k] = entity[k]; });
                   }
-                  return self.resolveRelationNames();
+                  return Promise.all([self.resolveRelationNames(), self.loadRelationOptions()]);
                 })
                 .catch((e) => console.warn('[form] could not load live entity', e));
             }
@@ -192,14 +197,61 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    // Load the option list of each `editable` relation picker from the __<Fk>EntityUrl the trigger
+    // seeded - the same locator the read-only FK display uses, so this page still knows no controller
+    // path. The label property comes from __<Fk>EntityLabel; a record it does not carry falls back to
+    // the id, so an option is never blank. Values are stringified: an option's data-value is an HTML
+    // attribute, and an unstringified numeric FK matches no option and renders the select empty.
+    // Best-effort per picker - a missing locator or an unreachable controller leaves an empty list.
+    async loadRelationOptions() {
+      const selects = window.__harmoniaRelationSelects || [];
+      await Promise.all(selects.map(async (select) => {
+        const url = this.model[select.urlVar];
+        if (!url) return;
+        const label = this.model[select.labelVar];
+        try {
+          // The generated controller's list endpoint pages at 20 by default; %24limit is the encoded
+          // form of the limit query parameter it declares (its name starts with a dollar sign, which
+          // this Velocity-rendered file must not carry literally).
+          const rows = await harmoniaHttp.get(url + '?%24limit=' + RELATION_OPTIONS_LIMIT);
+          if (!Array.isArray(rows)) return;
+          if (rows.length === RELATION_OPTIONS_LIMIT) {
+            console.warn('[form] relation picker', select.model, 'shows the first', RELATION_OPTIONS_LIMIT, 'records only');
+          }
+          this.relationOptions[select.model] = rows.map((row) => {
+            const value = row[select.valueProperty];
+            const text = label ? row[label] : null;
+            return { value: String(value), label: (text === null || text === undefined || text === '') ? String(value) : text };
+          });
+          // Match the option values' type so the current selection shows up as selected.
+          const current = this.model[select.model];
+          if (current !== null && current !== undefined && current !== '') this.model[select.model] = String(current);
+        } catch (e) { console.warn('[form] could not load options for', select.model, e); }
+      }));
+    },
+
+    // The selected option's label, for a relation rendered read-only (a picker the author disabled).
+    // Falls back to the raw value until the options arrive.
+    relationLabel(property) {
+      const value = this.model[property];
+      if (value === null || value === undefined || value === '') return '—';
+      const option = (this.relationOptions[property] || []).find((o) => o.value === String(value));
+      return option ? option.label : String(value);
+    },
+
     // Resolve each foreign key to its display name: the trigger seeded __<Fk>EntityUrl + __<Fk>EntityLabel
     // for every to-one relation, so fetch the related record and replace the raw FK id in the model with
     // its label. Independent + best-effort - a missing URL/record just leaves the id (the documented
     // fallback). Runs after the live entity is loaded, since the FK ids come from that entity.
+    // A relation rendered as an `editable` PICKER is deliberately skipped: its model must keep the id
+    // (the select matches its options on it, and the Writer persists it into the FK column), and the
+    // name is already what its options display.
     async resolveRelationNames() {
+      const picked = new Set((window.__harmoniaRelationSelects || []).map((s) => s.model));
       const keys = Object.keys(this.model).filter((k) => /^__.+EntityUrl$/.test(k));
       await Promise.all(keys.map(async (key) => {
         const fk = key.slice(2, key.length - 'EntityUrl'.length); // __CustomerEntityUrl -> Customer
+        if (picked.has(fk)) return;
         const url = this.model[key];
         const label = this.model['__' + fk + 'EntityLabel'];
         const id = this.model[fk];

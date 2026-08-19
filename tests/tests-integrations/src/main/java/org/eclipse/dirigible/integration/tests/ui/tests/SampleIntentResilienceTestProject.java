@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.eclipse.dirigible.tests.base.BaseTestProject;
+import org.eclipse.dirigible.tests.base.BaseIntentTestProject;
 import org.eclipse.dirigible.tests.base.ProjectUtil;
 import org.eclipse.dirigible.tests.framework.ide.EdmView;
 import org.eclipse.dirigible.tests.framework.ide.IDE;
@@ -50,10 +50,9 @@ import org.springframework.stereotype.Component;
  */
 @Lazy
 @Component
-class SampleIntentResilienceTestProject extends BaseTestProject {
+class SampleIntentResilienceTestProject extends BaseIntentTestProject {
 
     private static final String PROJECT = "sample-intent-resilience";
-    private static final String INTENT_FILE = "app.intent";
     private static final String TENANT_API =
             "/services/java/" + PROJECT + "/gen/provisioning/api/tenantapplication/" + "TenantApplicationController";
 
@@ -61,24 +60,12 @@ class SampleIntentResilienceTestProject extends BaseTestProject {
     private static final int STATUS_PROVISIONED = 2;
     private static final int STATUS_FAILED = 3;
 
-    private final IntentEditorView intentEditorView;
     private final RestAssuredExecutor restAssuredExecutor;
 
     SampleIntentResilienceTestProject(IDE ide, ProjectUtil projectUtil, EdmView edmView, IntentEditorView intentEditorView,
             RestAssuredExecutor restAssuredExecutor) {
-        super(PROJECT, ide, projectUtil, edmView);
-        this.intentEditorView = intentEditorView;
+        super(PROJECT, ide, projectUtil, edmView, intentEditorView);
         this.restAssuredExecutor = restAssuredExecutor;
-    }
-
-    @Override
-    public void configure() {
-        copyToWorkspace();
-        // Opening the workbench logs into the IDE and binds the browser session - the same prologue
-        // BaseTestProject.generateEDM performs before driving its editor view.
-        getIde().openWorkbench();
-        intentEditorView.generate(getProjectResourcesFolder(), INTENT_FILE);
-        publish();
     }
 
     @Override

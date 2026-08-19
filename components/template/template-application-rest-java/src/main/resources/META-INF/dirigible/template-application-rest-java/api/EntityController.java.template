@@ -364,7 +364,6 @@ public class ${name}Controller {
     }
 
 #if($uniqueConstraints && !$uniqueConstraints.isEmpty())
-
     /**
      * The composite business keys of ${name}, keyed by the constraint name the database names in the
      * violation it raises. The names are the ones the model emitted, so this map and the schema cannot
@@ -399,8 +398,8 @@ public class ${name}Controller {
         }
         return e;
     }
-#end
 
+#end
     /** Whether a persistence failure is (caused by) a database constraint violation. */
     private static boolean isConstraintViolation(Throwable e) {
         for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {

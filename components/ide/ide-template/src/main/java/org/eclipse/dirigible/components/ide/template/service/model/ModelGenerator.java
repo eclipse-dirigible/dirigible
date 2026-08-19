@@ -610,6 +610,10 @@ class ModelGenerator {
             documentItem.put("parentEntity", master.get("name"));
             documentItem.put("javaParentPerspective", NamingHelper.sanitizeJavaIdentifier(str(master, "perspectiveName")));
             documentItem.put("fkProperty", fkProperty);
+            // The same aggregate field names, on the item side: a targeted write (a workflow setField, a
+            // glue updateProperty/updateProperties) recomputes the master only when it touches one of
+            // these columns - or the FK itself, which moves the line between documents.
+            documentItem.put("fields", new ArrayList<>(fields));
             child.put("documentItem", documentItem);
         }
     }

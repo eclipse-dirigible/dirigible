@@ -75,7 +75,9 @@ class IntentEngineIT extends IntegrationTest {
                 fields:
                   - { name: id,      type: integer, primaryKey: true, generated: true }
                   - { name: name,    type: string,  required: true, length: 100 }
-                  - { name: code2,   type: string,  length: 2 }
+                  # An ISO alpha-2 code identifies exactly one country, which is what makes it legal
+                  # as an arrival's business key (an inbound lookup refuses a non-unique `by`).
+                  - { name: code2,   type: string,  length: 2, unique: true }
 
               - name: Customer
                 fields:
@@ -297,6 +299,18 @@ class IntentEngineIT extends IntegrationTest {
               - name: ingestOrder
                 path: /ingest
                 create: Order
+              # Mapping on arrival (#6769): the payload is an ENVELOPE, so a gate decides whether this
+              # app understands it and a map projects it onto the record - including the business key
+              # that becomes a relation. The webhook above declares neither, so both shapes are proven
+              # from one intent.
+              - name: ingestPartnerOrder
+                source: { queue: orders.partner }
+                accept: { type: order.placed, version: 1 }
+                create: Order
+                map:
+                  orderDate: placedOn
+                  total:     amount
+                  country:   { lookup: Country, by: code2, from: countryCode }
 
             rollups:
               - name: customerOrderCount
@@ -790,10 +804,48 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(webhook.contains("@Controller") && webhook.contains("class IngestOrderWebhook"),
                 "the inbound webhook should be a @Controller");
         assertTrue(webhook.contains("@Post(\"/ingest\")"), "the webhook should expose the declared path");
+        // The body is BOUND, not parsed out of a String: the platform reads the request straight into
+        // the declared parameter type, so `@Body String` could only ever accept a JSON *string* and
+        // answered 400 to the object every real sender posts. Nothing exercised the endpoint until
+        // #6769 came to use it, which is exactly how it stayed broken - hence the assertion on the
+        // parameter type, not merely on the save.
         assertTrue(
-                webhook.contains("OrderEntity entity = Json.parse(body, OrderEntity.class)")
+                webhook.contains("public String ingest(@Body OrderEntity entity)")
                         && webhook.contains("new OrderRepository().save(entity)"),
-                "the webhook should deserialize the payload and save it through the repository");
+                "the webhook should bind the posted JSON as the entity and save it through the repository");
+        assertTrue(webhook.contains("Response.setContentType(\"application/json\")"),
+                "the webhook answers JSON, so it must declare it - a caller should not have to guess");
+        assertFalse(webhook.contains("envelope"),
+                "an arrival declaring no accept/map must generate exactly what it always did - the payload IS the record");
+
+        // Mapping on arrival (#6769): the same ingest, read as an envelope. The gate, the typed
+        // projection and the business-key lookup are all pre-rendered by the intent layer, so this is
+        // the outermost place they can be checked short of running them.
+        String mapped = contentOf("gen/events/orders/IngestPartnerOrderConsumer.java");
+        assertTrue(mapped.contains("java.util.Map<?, ?> envelope = Json.parse(message, java.util.Map.class)"),
+                "a mapped arrival reads the payload as an envelope, not as the entity");
+        assertTrue(
+                mapped.contains("\"order.placed\".equals(envelope.get(\"type\"))")
+                        && mapped.contains("((Number) envelope.get(\"version\")).doubleValue() == 1"),
+                "the accept gate compares a string by equals and a number as a double - every number in a parsed envelope is one");
+        assertTrue(mapped.contains("does not match accept") && mapped.contains("acknowledged and ignored"),
+                "a message this app does not understand is acknowledged and ignored with a warning, never failed into redelivery");
+        // The conversions are the field's own, off the envelope's untyped value.
+        assertTrue(
+                mapped.contains("entity.OrderDate = org.eclipse.dirigible.sdk.utils.LenientJavaTime.parseLocalDate(String.valueOf(raw))"),
+                "a date field converts through the lenient parser");
+        assertTrue(mapped.contains("entity.Total = new java.math.BigDecimal(String.valueOf(raw))"),
+                "a decimal field converts through BigDecimal - the envelope's numbers are Doubles");
+        // The lookup: a setting entity's repository lives under the shared Settings perspective, so a
+        // settings-unaware resolution would import a package that does not exist.
+        assertTrue(
+                mapped.contains("new gen.orders.data.settings.CountryRepository()")
+                        && mapped.contains(".eq(\"Code2\", String.valueOf(lookupCountryKey))"),
+                "the lookup queries the target's unique field through its own repository");
+        assertTrue(mapped.contains("entity.Country = lookupCountryMatches.get(0).Id"),
+                "what the record stores is the looked-up row's primary key");
+        assertTrue(mapped.contains("no unique Country matches") && mapped.contains("NOT ingested"),
+                "a lookup that resolves to no single row rejects the arrival instead of storing a null relation");
 
         // Rollups: two self-describing @Component MessageHandlers (child create/delete) that recompute the
         // parent counter via Criteria.
@@ -1194,6 +1246,72 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void the_status_channel_is_bindable_by_notifications_and_waits() {
+        // -transitioned and -updated are disjoint channels: a workflow setRelationField, a transitions:
+        // button and a generates completion hook publish the former and never the latter, so the whole
+        // -updated half of the DSL was deaf to every status the system itself wrote. A notification on
+        // onUpdate simply never fired, and a wait on onUpdate parked forever - while abortOn: bound
+        // that same channel, so a transition could KILL an instance but never resume one.
+        writeIntent("""
+                name: fines
+                entities:
+                  - name: FineStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Driver
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: email, type: string }
+                  - name: Fine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                    relations:
+                      - { name: driver, kind: manyToOne, to: Driver }
+                      - { name: Status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+                seeds:
+                  - name: fineStatuses
+                    entity: FineStatus
+                    rows:
+                      - { id: 1, name: NEW }
+                      - { id: 2, name: IDENTIFIED }
+                processes:
+                  - name: Identify
+                    trigger: { onCreate: Fine }
+                    steps:
+                      - { name: attribute, kind: serviceTask, args: { setRelationField: Status, value: IDENTIFIED } }
+                      - { name: awaitAttribution, kind: wait, args: { onTransition: Fine, next: done } }
+                      - { name: done, kind: end }
+                notifications:
+                  - name: fineAttributed
+                    event: { onTransition: Fine }
+                    to: driver.email
+                    subject: "Fine {number} attributed"
+                    body: "Your fine has been attributed to you."
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "fines.glue");
+
+        // The notification subscribes to the channel the setter actually publishes on...
+        String notification = contentOf("gen/events/fines/FineAttributedNotification.java");
+        assertTrue(notification.contains("return \"" + PROJECT + "-Fine-Fine-transitioned\";"),
+                "an onTransition notification must bind the -transitioned topic, got: " + notification);
+        // ...and so does the wait, which is what lets a transition RESUME a parked instance.
+        String wait = contentOf("gen/events/fines/IdentifyAwaitAttributionWait.java");
+        assertTrue(wait.contains("return \"" + PROJECT + "-Fine-Fine-transitioned\";"),
+                "an onTransition wait must bind the -transitioned topic, got: " + wait);
+        // The setter on the same entity is the publisher the two now hear.
+        String setter = contentOf("gen/events/fines/IdentifyAttribute.java");
+        assertTrue(setter.contains("Producer.sendToTopic(\"" + PROJECT + "-Fine-Fine-transitioned\", transitioned)"),
+                "the setter must publish the very topic the notification and the wait subscribe to");
+    }
+
+    @Test
     void step_resilience_emits_retry_cycle_error_boundary_clear_listener_and_error_glue() {
         // Declarative step resilience (#6762): a delegate serviceTask's `retry: { count, every }`
         // becomes a Flowable failed-job retry cycle (R<count+1> - the R number counts TOTAL attempts),
@@ -1279,6 +1397,49 @@ class IntentEngineIT extends IntegrationTest {
         String relationSetter = codeOf("gen/events/provisioning/TenantProvisioningMarkFailed.java");
         assertTrue(relationSetter.contains("updateProperty") && relationSetter.contains(", \"Status\", 3)"),
                 "the relation setter keeps assigning the unquoted seed id");
+    }
+
+    @Test
+    void parse_rejects_an_arrival_mapping_that_cannot_hold() {
+        // The whole point of the uniqueness rule: a lookup on a non-unique field could match several
+        // rows, and silently picking one is worse than failing. Reported together with the rest, so an
+        // author fixes the arrival in one pass rather than one message at a time.
+        String yaml = """
+                name: provisioning
+                entities:
+                  - name: Tenant
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: tenantId, type: string, unique: true }
+                      - { name: name, type: string }
+                  - name: TenantUserAssignment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: email, type: string }
+                    relations:
+                      - { name: tenant, kind: manyToOne, to: Tenant }
+                inbound:
+                  - name: userAssignments
+                    source: { queue: assignments }
+                    accept: { type: [a, b] }
+                    create: TenantUserAssignment
+                    map:
+                      emial: email
+                      tenant: { lookup: Tenant, by: name, form: tenantName }
+                """;
+        restAssuredExecutor.execute(() -> given().contentType("text/plain")
+                                                 .body(yaml)
+                                                 .when()
+                                                 .post(PARSE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("issues", hasItems(
+                                                         "inbound [userAssignments] accept [type] must be a scalar - a gate compares an envelope key with one value",
+                                                         "inbound [userAssignments] map [emial] is not a field or a to-one relation of [TenantUserAssignment]",
+                                                         "inbound [userAssignments] map [tenant] lookup declares unknown key [form] - a lookup names lookup, by and from",
+                                                         "inbound [userAssignments] map [tenant] lookup has no from - the envelope key carrying the business key",
+                                                         "inbound [userAssignments] map [tenant] lookup matches on [name], which is not unique on [Tenant] - declare unique: true on it,"
+                                                                 + " since a lookup that could match several rows would silently pick one")));
     }
 
     @Test
@@ -1734,8 +1895,9 @@ class IntentEngineIT extends IntegrationTest {
     @Test
     void settlement_generates_on_payment_listener_and_on_invoice_delegate() {
         // A settlement auto-allocates a Payment across a Customer's open Invoices (oldest first) via the
-        // InvoicePayment junction: an onPayment MessageHandler (payment create) + an onInvoice
-        // JavaDelegate (wired as a delegate: service task once the invoice is payable).
+        // InvoicePayment junction: an onPayment MessageHandler per bound payment event (create and
+        // correction) + an onInvoice JavaDelegate (wired as a delegate: service task once the invoice is
+        // payable).
         String yaml = """
                 name: settle
                 entities:
@@ -1792,6 +1954,20 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(onPayment.contains("s == 3 || s == 4 || s == 6"), "it should only allocate to invoices in a payable status");
         assertTrue(onPayment.contains("new InvoicePaymentRepository().save(row)"),
                 "it should create allocation rows through the junction repository (never the generic Store)");
+        assertTrue(onPayment.contains("return \"" + PROJECT + "-Payment-Payment\";"),
+                "the create listener should bind the bare payment topic");
+
+        // A payment corrected after it was booked - or created incomplete and completed later - must be
+        // re-allocated, so the same recompute is bound to the payment's update event too (#6818).
+        String onPaymentUpdated = contentOf("gen/events/settle/AutoSettleOnPaymentUpdated.java");
+        assertTrue(onPaymentUpdated.contains("class AutoSettleOnPaymentUpdated implements MessageHandler"),
+                "a second settlement listener should be generated for the payment's correction event");
+        assertTrue(onPaymentUpdated.contains("return \"" + PROJECT + "-Payment-Payment-updated\";"),
+                "it should bind the payment's update topic");
+        assertTrue(onPaymentUpdated.contains("release(payment.Id, pot.negate())"),
+                "a payment corrected below what it already covers should release the excess allocation");
+        assertTrue(onPaymentUpdated.contains(".orderByDesc(\"Id\")") && onPaymentUpdated.contains("rows.delete(row)"),
+                "the release should give back the newest allocations first, through the junction repository");
 
         String onInvoice = codeOf("gen/events/settle/AutoSettleOnInvoice.java");
         assertTrue(onInvoice.contains("class AutoSettleOnInvoice implements JavaDelegate"),
@@ -1869,10 +2045,12 @@ class IntentEngineIT extends IntegrationTest {
                 "the business key must be the minted number field");
         // Targeted single-column writes, never a full-row update: a stale snapshot merge would revert
         // concurrent writes (the ProcessId write-back race). No event either - a system write.
-        assertTrue(trigger.contains("repository.updateProperty(entity.Id, \"ProcessId\", processId)"),
-                "ProcessId must be persisted via a targeted single-column update, not a full-row merge");
-        assertTrue(trigger.contains("repository.updateProperty(entity.Id, \"Number\", minted)"),
+        assertTrue(trigger.contains("repository.updateProperty(entity.Id, \"Number\", entity.Number)"),
                 "the minted number must be persisted via its own targeted single-column update");
+        // The instance is started WITH the minted key, so storing it must PRECEDE the start: a failure
+        // afterwards would leave a running instance correlated on a key the record does not carry.
+        assertTrue(trigger.indexOf("repository.updateProperty(entity.Id, \"Number\"") < trigger.indexOf("Process.start("),
+                "the minted business key must be persisted before the process is started");
         assertFalse(trigger.contains("updateWithoutEvent"),
                 "the trigger must not merge its stale full-row snapshot back (the ProcessId write-back race)");
     }
@@ -1926,6 +2104,63 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         assertTrue(codeOf("custom/OrderNumberAction.java").contains("MY IMPLEMENTATION"),
                 "the developer's calculated action must be preserved across regeneration");
+    }
+
+    @Test
+    void process_trigger_records_the_process_id_first_and_cancels_the_instance_when_it_cannot() {
+        // The guard against starting a second instance IS the stamped ProcessId, so the write-back is the
+        // only step allowed to follow the start - and if it does not land, the instance is cancelled
+        // rather than left running with nothing pointing at it (issue #6815).
+        String yaml = """
+                name: orders
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesOrder
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: total,    type: decimal }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                processes:
+                  - name: Approve
+                    trigger: { onCreate: SalesOrder }
+                    steps:
+                      - { name: review, kind: serviceTask }
+                      - { name: done,   kind: end }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "orders.glue");
+
+        String trigger = contentOf("gen/events/orders/ApproveTrigger.java");
+        // Every process variable rides the START payload - all of them are known beforehand, so there is
+        // no post-start setVariable that could fail (or, for a process without a wait state, run against
+        // an instance that already finished inside Process.start).
+        assertTrue(trigger.contains("variables.put(\"__entityUrl\",") && trigger.contains("variables.put(\"__entityId\", entity.Id)"),
+                "the entity locators must be seeded as start-payload variables");
+        assertTrue(
+                trigger.contains("variables.put(\"__CustomerEntityUrl\",") && trigger.contains("variables.put(\"__CustomerEntityLabel\","),
+                "the FK locators must be seeded as start-payload variables too");
+        assertTrue(trigger.contains("Process.start(\"Approve\", businessKey, Json.stringify(variables))"),
+                "the start must carry the whole variable map");
+        assertFalse(trigger.contains("Process.setVariable("), "no process variable may be set after the start");
+        // The write-back is a TARGETED single-column write, so it keeps the entity's bookkeeping (the
+        // change trail, the stored label) while touching nothing else on the row. It is the generated
+        // repository that must not be able to REFUSE it - asserted where those gates are emitted.
+        assertTrue(trigger.contains("repository.updateProperty(entity.Id, \"ProcessId\", processId)"),
+                "ProcessId must be persisted through the targeted single-column write");
+        // A swallowed start (the platform logs and returns null) must not be recorded as a ProcessId.
+        assertTrue(trigger.contains("if (processId == null)"), "a failed start must be reported, not written back as a null ProcessId");
+        // Nothing points at the instance in either failure mode - the row is gone, or the write threw.
+        assertTrue(trigger.contains("Process.cancel(processId,"), "an unrecorded instance must be cancelled");
+        assertTrue(trigger.contains("cancelStarted(processId);") && trigger.contains("throw e;"),
+                "the write-back failure must cancel the instance and re-throw");
     }
 
     @Test
@@ -2223,11 +2458,14 @@ class IntentEngineIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200));
 
-        // The glue carries the two per-event expansion handlers with the pre-rendered Java pieces.
+        // The glue carries the per-event expansion handlers with the pre-rendered Java pieces - the
+        // reconciliation pair plus the cleanup that takes the generated rows down with their master.
         String glue = contentOf("loans.glue");
         assertTrue(glue.contains("\"expansions\""), "the .glue should carry the expansions collection");
         assertTrue(glue.contains("InstallmentsExpansionOnCreate"), "an OnCreate handler entry is expected");
         assertTrue(glue.contains("InstallmentsExpansionOnUpdate"), "an OnUpdate handler entry is expected");
+        assertTrue(glue.contains("\"expansionCleanups\""), "the .glue should carry the expansionCleanups collection");
+        assertTrue(glue.contains("InstallmentsExpansionOnDelete"), "an OnDelete cleanup entry is expected");
 
         // The EntityStatus relation lands as the DOCUMENT_STATUS widget on a NON-document entity.
         String model = contentOf("loans.model");
@@ -2242,12 +2480,36 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(onCreate.contains("intent-test-Loan-Loan\""), "the OnCreate handler binds the master's create topic");
         assertTrue(onCreate.contains("d.plusMonths(1)"), "unit month steps by month");
         assertTrue(onCreate.contains("total.subtract(share.multiply("), "the last row absorbs the rounding remainder");
+
+        // The child set is RECONCILED, not rebuilt (#6817): a handler has no transaction boundary, so
+        // wiping every row before recreating the set meant a failure partway through committed the
+        // deletes and only some of the inserts - rows destroyed for good. Only the rows that fell out
+        // of the span may be deleted, the rows whose period survives are kept and re-spread in place.
+        assertTrue(onCreate.contains("kept.putIfAbsent(row.DueDate, row)"), "a row whose period survives the span change must be kept");
+        assertTrue(onCreate.contains("!wanted.contains(row.DueDate)"), "only a row outside the new span may be deleted");
+        assertTrue(onCreate.contains("children.updateDerived(child.Id, reshare)"),
+                "a kept row's share is re-spread in place, as a targeted write that still publishes -updated for the roll-ups");
+        assertFalse(onCreate.matches("(?s).*for \\(LoanInstallmentEntity row : existing\\) \\{\\s*children\\.delete\\(row\\);.*"),
+                "the unconditional wipe of the whole child set must be gone");
         assertTrue(onCreate.contains("new LoanRepository().updateProperty(master.Id, \"Periods\", Integer.valueOf(periods.size()))"),
                 "the count write-back must be a targeted single-column updateProperty");
         assertFalse(onCreate.contains("updateWithoutEvent"),
                 "the count write-back must not full-row merge (updateWithoutEvent) - that reverts concurrent writes to other columns");
         String onUpdate = codeOf("gen/events/loans/InstallmentsExpansionOnUpdate.java");
         assertTrue(onUpdate.contains("intent-test-Loan-Loan-updated\""), "the OnUpdate handler binds the -updated topic");
+
+        // The master's delete removes the rows the expansion generated. Nothing else would: a foreign
+        // key never becomes a database constraint, so the rows would otherwise outlive their master as
+        // orphans and keep feeding the roll-ups and reports. They go through the child repository, so
+        // each row's delete event still fires.
+        String onDelete = contentOf("gen/events/loans/InstallmentsExpansionOnDelete.java");
+        assertTrue(onDelete.contains("intent-test-Loan-Loan-deleted\""), "the OnDelete handler binds the -deleted topic");
+        assertTrue(onDelete.contains("LoanInstallmentRepository children = new LoanInstallmentRepository()"),
+                "the cleanup must delete through the child repository so the per-row delete events fire");
+        assertTrue(onDelete.contains("Criteria.create().eq(\"Loan\", master.Id)"), "the cleanup must scope to the master's own rows");
+        assertTrue(onDelete.contains("children.delete(row)"), "the cleanup must delete every generated row");
+        assertFalse(onDelete.contains("updateProperty"), "the cleanup must not write back to the master - the master row is gone");
+        assertFalse(onDelete.contains("${"), "the cleanup template must render every placeholder");
 
         // Harmonia UI: the status renders as the title-bar badge (not an editable input) and the
         // calculated field previews live via the calc evaluator with the date functions.
@@ -2717,6 +2979,70 @@ class IntentEngineIT extends IntegrationTest {
                 "the writer must persist the edited columns in one targeted multi-column write");
         assertFalse(writer.contains("updateWithoutEvent"),
                 "the writer must NOT full-row merge (updateWithoutEvent) - that reverts concurrent writes to unedited columns");
+    }
+
+    @Test
+    void an_editable_relation_renders_a_record_picker_and_writes_the_chosen_foreign_key() {
+        // The "a person picks the related record" fallback, INSIDE the process: `editable` accepts a
+        // to-one relation, so the officer chooses the driver on the task form instead of the flow
+        // needing a second user action on a separate entity form. The two generated halves are the
+        // picker (whose option list is located by the process variables the trigger seeds - this layer
+        // never spells a controller path) and the write-back of the chosen id into the FK column.
+        writeIntent("""
+                name: fines
+                entities:
+                  - name: Driver
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Fine
+                    fields:
+                      - { name: id,      type: integer, primaryKey: true, generated: true }
+                      - { name: vehicle, type: string }
+                    relations:
+                      - { name: driver, kind: manyToOne, to: Driver }
+                processes:
+                  - name: Identify
+                    trigger: { onCreate: Fine }
+                    steps:
+                      - { name: identify, kind: userTask, args: { assignee: officer, form: IdentifyDriver } }
+                      - { name: done,     kind: end }
+                forms:
+                  - name: IdentifyDriver
+                    forEntity: Fine
+                    fields: [vehicle, driver]
+                    editable: [driver]
+                    actions: [identify]
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        String form = contentOf("IdentifyDriver.form");
+        assertTrue(form.contains("\"controlId\": \"input-select\""), "an editable relation should render as a picker, not a text input");
+        assertTrue(form.contains("\"model\": \"Driver\""), "the picker binds the FK property, which is what the Writer persists");
+        assertTrue(form.contains("\"options\": \"__DriverEntityUrl\""),
+                "the option list is located by the trigger-seeded process variable, never by a path baked in here");
+        assertTrue(form.contains("\"optionLabel\": \"__DriverEntityLabel\"") && form.contains("\"optionValue\": \"Id\""), form);
+        assertFalse(form.contains("/services/java/"), "an intent generator must not emit a template-engine path: " + form);
+
+        generateFromModel("template-application-events-java/template/template.js", "fines.glue");
+        String writer = contentOf("gen/events/fines/IdentifyIdentifyWrite.java");
+        assertTrue(writer.contains("Object DriverValue = execution.getVariable(\"Driver\");"),
+                "the chosen id arrives as the FK's own process variable");
+        assertTrue(writer.contains("values.put(\"Driver\", DriverValue instanceof Number ? ((Number) DriverValue).intValue()"),
+                "the FK is the target's integer key, so it rides the Writer's existing integer coercion: " + writer);
+        assertTrue(writer.contains("repository.updateProperties(((Number) key).intValue(), values)"),
+                "the picked relation is persisted by the same targeted multi-column write as any other editable");
+
+        // The task form's own runtime: the picker is registered so the options are loaded from that
+        // variable, and its FK is left holding the id rather than being overwritten with the record's
+        // name (which is what a read-only relation gets, and would make the write-back submit a name).
+        generateFromModel("template-form-builder-harmonia/template/template.js", "IdentifyDriver.form");
+        String page = contentOf("gen/IdentifyDriver/forms/IdentifyDriver/index.html");
+        assertTrue(page.contains("urlVar: '__DriverEntityUrl'"), "the picker must be registered with its locator: " + page);
+        assertTrue(page.contains("x-h-select"), "the picker renders through the Harmonia select contract");
     }
 
     /**
