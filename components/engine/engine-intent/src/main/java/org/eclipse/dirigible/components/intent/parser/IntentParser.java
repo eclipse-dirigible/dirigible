@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
@@ -4932,6 +4933,7 @@ public final class IntentParser {
             }
         }
         Set<String> formNames = new HashSet<>();
+        Map<String, Set<String>> taskFormTriggers = taskFormTriggers(model);
         for (FormIntent form : model.getForms()) {
             if (form.getName() == null || form.getName()
                                               .isBlank()) {
@@ -4951,8 +4953,35 @@ public final class IntentParser {
                 }
             }
             validateFormRelationFields(form, bound, byName, issues);
-            validateFormEditable(form, bound, issues);
+            validateFormEditable(form, bound, taskFormTriggers, issues);
         }
+    }
+
+    /**
+     * For every form referenced by a {@code userTask}, the trigger entities of the processes that
+     * reference it. A form nobody uses as a task form is absent; a form used by two processes maps to
+     * both their trigger entities (only a single, agreeing one lets a relation be editable - see
+     * {@link #validateFormEditable}).
+     *
+     * @param model the parsed model
+     * @return form name to the trigger entities of its task usages
+     */
+    private static Map<String, Set<String>> taskFormTriggers(IntentModel model) {
+        Map<String, Set<String>> triggers = new HashMap<>();
+        for (ProcessIntent process : model.getProcesses()) {
+            String triggerEntity = triggerEntityName(process);
+            for (StepIntent step : process.getSteps()) {
+                if (!"userTask".equals(step.getKind())) {
+                    continue;
+                }
+                String form = stepArg(step, "form");
+                if (form != null && !form.isBlank()) {
+                    triggers.computeIfAbsent(form, key -> new HashSet<>())
+                            .add(triggerEntity == null ? "" : triggerEntity);
+                }
+            }
+        }
+        return triggers;
     }
 
     /**
@@ -5921,12 +5950,21 @@ public final class IntentParser {
 
     /**
      * An {@code editable} field (the per-field opt-out of a BPM task form's read-only default) must be
-     * a plain, displayed field of the bound entity. Any field type is allowed: the generated Writer
-     * coerces the form's process variable to the field's Java type ({@code date}/{@code timestamp}/
-     * {@code number}/{@code boolean}/{@code string}). A {@code relation.field} can never be editable
-     * (editing it would not write back).
+     * a plain, displayed field of the bound entity, or a displayed <b>to-one relation</b> of it. Any
+     * field type is allowed: the generated Writer coerces the form's process variable to the field's
+     * Java type ({@code date}/{@code timestamp}/{@code number}/{@code boolean}/{@code string}); a
+     * relation is written as the target's integer key, which is that same coercion. A
+     * {@code relation.field} can never be editable (editing it would not write back to the related
+     * record).
+     * <p>
+     * A relation carries one further requirement the plain fields do not: the picker's option list is
+     * loaded at runtime from the {@code __<Fk>EntityUrl} process variable the trigger seeds for every
+     * to-one relation of its TRIGGER entity. So the form must be a task form of a process whose trigger
+     * entity is the form's own {@code forEntity} - which is also the entity the generated Writer writes
+     * back to. Both facts come from the same place, so a form that satisfies one satisfies the other.
      */
-    private static void validateFormEditable(FormIntent form, EntityIntent bound, List<String> issues) {
+    private static void validateFormEditable(FormIntent form, EntityIntent bound, Map<String, Set<String>> taskFormTriggers,
+            List<String> issues) {
         Set<String> displayed = new HashSet<>(form.getFields());
         for (String field : form.getEditable()) {
             if (field == null || field.isBlank()) {
@@ -5945,13 +5983,55 @@ public final class IntentParser {
                 continue; // the unknown-forEntity issue is already reported above
             }
             FieldIntent bf = fieldByName(bound, field);
-            if (bf == null) {
-                issues.add("form [" + form.getName() + "] editable [" + field + "] is not a field of [" + form.getForEntity() + "]");
+            if (bf != null) {
+                // Any plain entity field type is editable: the generated Writer coerces the form's process
+                // variable to the field's Java type (LocalDate / Instant / Integer / Long / BigDecimal /
+                // Double / Boolean / String).
                 continue;
             }
-            // Any plain entity field type is editable: the generated Writer coerces the form's process
-            // variable to the field's Java type (LocalDate / Instant / Integer / Long / BigDecimal /
-            // Double / Boolean / String). Only a relation.field (handled above) can never be written back.
+            RelationIntent relation = toOneRelationByName(bound, field);
+            if (relation == null) {
+                issues.add("form [" + form.getName() + "] editable [" + field + "] is not a field or to-one relation of ["
+                        + form.getForEntity() + "]");
+                continue;
+            }
+            validateEditableRelation(form, bound, relation, taskFormTriggers, issues);
+        }
+    }
+
+    /**
+     * The extra conditions a to-one relation must meet to be picked on a task form. Each rejects a
+     * shape whose picker could only render empty or write a value the model forbids, and says which.
+     */
+    private static void validateEditableRelation(FormIntent form, EntityIntent bound, RelationIntent relation,
+            Map<String, Set<String>> taskFormTriggers, List<String> issues) {
+        String subject = "form [" + form.getName() + "] editable [" + relation.getName() + "]";
+        if (relation.isEntityStatus()) {
+            issues.add(subject + " is the function: EntityStatus relation - a status is moved along the lifecycle by a"
+                    + " setRelationField step or a transitions: button, never picked from a list");
+            return;
+        }
+        if (relation.isComposition()) {
+            issues.add(subject + " is the composition parent - it is the record's filing, set by the context the record was"
+                    + " created in, and re-pointing it mid-flow would move the record to another master");
+            return;
+        }
+        if (relation.isCrossModel()) {
+            issues.add(subject + " targets [" + relation.getTo() + "] in model [" + relation.getModel()
+                    + "] - a cross-model target's key is only known to its owner model, so the picker cannot say what value to"
+                    + " submit; keep it read-only and set it with a delegate");
+            return;
+        }
+        Set<String> triggers = taskFormTriggers.get(form.getName());
+        if (triggers == null) {
+            issues.add(subject + " is a relation, which can only be picked on a TASK form - no userTask references this form,"
+                    + " so there is no process context to load the options from");
+            return;
+        }
+        if (!triggers.equals(Set.of(bound.getName()))) {
+            issues.add(subject + " is a relation, but this form's forEntity [" + bound.getName()
+                    + "] is not the trigger entity of every process that uses it as a task form " + new TreeSet<>(triggers)
+                    + " - the option list rides the trigger's own relations, and the write-back targets the trigger entity");
         }
     }
 

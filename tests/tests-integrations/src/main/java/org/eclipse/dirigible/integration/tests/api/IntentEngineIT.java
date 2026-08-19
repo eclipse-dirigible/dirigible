@@ -2631,6 +2631,70 @@ class IntentEngineIT extends IntegrationTest {
                 "the writer must NOT full-row merge (updateWithoutEvent) - that reverts concurrent writes to unedited columns");
     }
 
+    @Test
+    void an_editable_relation_renders_a_record_picker_and_writes_the_chosen_foreign_key() {
+        // The "a person picks the related record" fallback, INSIDE the process: `editable` accepts a
+        // to-one relation, so the officer chooses the driver on the task form instead of the flow
+        // needing a second user action on a separate entity form. The two generated halves are the
+        // picker (whose option list is located by the process variables the trigger seeds - this layer
+        // never spells a controller path) and the write-back of the chosen id into the FK column.
+        writeIntent("""
+                name: fines
+                entities:
+                  - name: Driver
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Fine
+                    fields:
+                      - { name: id,      type: integer, primaryKey: true, generated: true }
+                      - { name: vehicle, type: string }
+                    relations:
+                      - { name: driver, kind: manyToOne, to: Driver }
+                processes:
+                  - name: Identify
+                    trigger: { onCreate: Fine }
+                    steps:
+                      - { name: identify, kind: userTask, args: { assignee: officer, form: IdentifyDriver } }
+                      - { name: done,     kind: end }
+                forms:
+                  - name: IdentifyDriver
+                    forEntity: Fine
+                    fields: [vehicle, driver]
+                    editable: [driver]
+                    actions: [identify]
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        String form = contentOf("IdentifyDriver.form");
+        assertTrue(form.contains("\"controlId\": \"input-select\""), "an editable relation should render as a picker, not a text input");
+        assertTrue(form.contains("\"model\": \"Driver\""), "the picker binds the FK property, which is what the Writer persists");
+        assertTrue(form.contains("\"options\": \"__DriverEntityUrl\""),
+                "the option list is located by the trigger-seeded process variable, never by a path baked in here");
+        assertTrue(form.contains("\"optionLabel\": \"__DriverEntityLabel\"") && form.contains("\"optionValue\": \"Id\""), form);
+        assertFalse(form.contains("/services/java/"), "an intent generator must not emit a template-engine path: " + form);
+
+        generateFromModel("template-application-events-java/template/template.js", "fines.glue");
+        String writer = contentOf("gen/events/fines/IdentifyIdentifyWrite.java");
+        assertTrue(writer.contains("Object DriverValue = execution.getVariable(\"Driver\");"),
+                "the chosen id arrives as the FK's own process variable");
+        assertTrue(writer.contains("values.put(\"Driver\", DriverValue instanceof Number ? ((Number) DriverValue).intValue()"),
+                "the FK is the target's integer key, so it rides the Writer's existing integer coercion: " + writer);
+        assertTrue(writer.contains("repository.updateProperties(((Number) key).intValue(), values)"),
+                "the picked relation is persisted by the same targeted multi-column write as any other editable");
+
+        // The task form's own runtime: the picker is registered so the options are loaded from that
+        // variable, and its FK is left holding the id rather than being overwritten with the record's
+        // name (which is what a read-only relation gets, and would make the write-back submit a name).
+        generateFromModel("template-form-builder-harmonia/template/template.js", "IdentifyDriver.form");
+        String page = contentOf("gen/IdentifyDriver/forms/IdentifyDriver/index.html");
+        assertTrue(page.contains("urlVar: '__DriverEntityUrl'"), "the picker must be registered with its locator: " + page);
+        assertTrue(page.contains("x-h-select"), "the picker renders through the Harmonia select contract");
+    }
+
     /**
      * Lifecycle-aware aggregates (#6645): a status nomenclature classified with {@code stage:} makes an
      * aggregating report count the LIVE rows only - so a draft or voided document stops inflating every

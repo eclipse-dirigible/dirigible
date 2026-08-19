@@ -1247,13 +1247,40 @@ paths / relations.
   snapshot). To see a related record's name, list `relation.field` (e.g. `customer.name`), not the bare
   FK.
 - **`editable: [Field, ...]`** opts fields back to editable; the reviewer's edits are written back to the
-  entity on completion. `editable` may list ONLY **plain entity fields** of `forEntity` (string, text,
-  number, date, timestamp, boolean - the generated Writer coerces the value to the field's Java type)
-  that are **also listed in `fields`** - a field that is not displayed cannot be edited, so add it to
-  `fields` first. Neither a **relation** (a dropdown FK like `Category` or `Status` - even though
-  relations are legal in `fields`) nor a **`relation.field`** path can EVER be editable; to change a
-  related value during the flow, use `setRelationField` on a step instead (a `serviceTask` on the
-  decision branch, or the `userTask` itself for a single-action task).
+  entity on completion. Every entry must **also be listed in `fields`** - a field that is not displayed
+  cannot be edited, so add it to `fields` first. Two shapes are allowed:
+  - a **plain entity field** of `forEntity` (string, text, number, date, timestamp, boolean - the
+    generated Writer coerces the value to the field's Java type);
+  - a **to-one relation** of `forEntity`, which renders as a **picker over the related records** - this
+    is how a person CHOOSES a related record inside the flow (pick the driver, pick the account, pick
+    the approver), the case `setRelationField` cannot serve because its `value:` is a literal id fixed
+    at authoring time. The picker's options are loaded at runtime from the process context, so it
+    works only on a **task form whose `forEntity` IS the process's trigger entity**. Four relations are
+    refused, each because the picker would be wrong rather than merely unsupported: the
+    `function: EntityStatus` relation (a status moves along the `lifecycle:` graph - use a
+    `setRelationField` step or a `transitions:` button), the **composition parent** (that is the
+    record's filing, set by the context it was created in), and a **cross-model** relation (its key
+    belongs to the owner model, so this model cannot say what to submit - keep it read-only and set it
+    with a `delegate`).
+
+  A **`relation.field`** path can never be editable - editing it would not write back to the related
+  record. To set a related value to a KNOWN record during the flow, keep using `setRelationField` on a
+  step (a `serviceTask` on the decision branch, or the `userTask` itself for a single-action task).
+
+  ```yaml
+  forms:
+    - name: IdentifyDriver
+      forEntity: Fine            # == the trigger entity of the process below
+      fields: [vehicle, violationAt, driver]
+      editable: [driver]         # the officer picks the driver from the list of Drivers
+      actions: [identify]
+  processes:
+    - name: Identify
+      trigger: { onCreate: Fine }
+      steps:
+        - { name: identify, kind: userTask, args: { assignee: officer, form: IdentifyDriver } }
+        - { name: done, kind: end }
+  ```
 - **`actions` are the task's choices.** A **`close`** button (just closes the form, does not complete the
   task) is always added automatically - never list it yourself.
 - **Multiple completing actions REQUIRE a decision right after the task** (this is enforced at parse
