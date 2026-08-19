@@ -352,10 +352,14 @@ public final class IntentParser {
                             + "] (valid: DocumentTitle)");
                 }
             }
+            List<String> statusRelations = new ArrayList<>();
             for (RelationIntent relation : entity.getRelations()) {
                 if (relation.isLegacyDocumentStatus()) {
                     issues.add("entity [" + name + "] relation [" + relation.getName()
                             + "] uses documentStatus: true - the status role was renamed; use function: EntityStatus");
+                }
+                if (relation.isEntityStatus()) {
+                    statusRelations.add(relation.getName());
                 }
                 String rf = relation.getFunction();
                 if (rf == null || rf.isBlank()) {
@@ -376,6 +380,18 @@ public final class IntentParser {
                     issues.add("entity [" + name + "] relation [" + relation.getName()
                             + "] function: EntityStatus must be a manyToOne/oneToOne relation");
                 }
+            }
+            if (statusRelations.size() > 1) {
+                // The status role is singular, and every consumer of it resolves the FIRST such relation -
+                // the lifecycle graph, a transitions: button, immutableWhen, abortOn:, a checks: rejection,
+                // a report's scope:, a resolves: outcome. So a second one is not a second status axis: it is
+                // invisible to all of that while still rendering as a status badge, which is the worst of
+                // both readings. Name every one of them, since which is "the" status is exactly what the
+                // author has to decide.
+                issues.add("entity [" + name + "] declares more than one function: EntityStatus relation ["
+                        + String.join(", ", statusRelations)
+                        + "] - the status role is singular; every lifecycle, transition, check and report scope resolves the FIRST one,"
+                        + " so the others would be silently ignored");
             }
         }
     }
