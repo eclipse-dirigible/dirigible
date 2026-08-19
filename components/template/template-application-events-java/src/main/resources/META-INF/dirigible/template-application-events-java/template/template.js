@@ -174,9 +174,9 @@ export function getTemplate(parameters) {
             {
                 location: "/template-application-events-java/events/SettlementOnPayment.java.template",
                 action: "generate",
-                rename: "gen/events/{{javaGenFolderName}}/{{name}}OnPayment.java",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}.java",
                 engine: "velocity",
-                collection: "settlements"
+                collection: "settlementListeners"
             },
             {
                 location: "/template-application-events-java/events/SettlementOnInvoice.java.template",

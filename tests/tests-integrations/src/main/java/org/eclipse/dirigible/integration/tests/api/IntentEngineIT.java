@@ -1814,8 +1814,9 @@ class IntentEngineIT extends IntegrationTest {
     @Test
     void settlement_generates_on_payment_listener_and_on_invoice_delegate() {
         // A settlement auto-allocates a Payment across a Customer's open Invoices (oldest first) via the
-        // InvoicePayment junction: an onPayment MessageHandler (payment create) + an onInvoice
-        // JavaDelegate (wired as a delegate: service task once the invoice is payable).
+        // InvoicePayment junction: an onPayment MessageHandler per bound payment event (create and
+        // correction) + an onInvoice JavaDelegate (wired as a delegate: service task once the invoice is
+        // payable).
         String yaml = """
                 name: settle
                 entities:
@@ -1872,6 +1873,20 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(onPayment.contains("s == 3 || s == 4 || s == 6"), "it should only allocate to invoices in a payable status");
         assertTrue(onPayment.contains("new InvoicePaymentRepository().save(row)"),
                 "it should create allocation rows through the junction repository (never the generic Store)");
+        assertTrue(onPayment.contains("return \"" + PROJECT + "-Payment-Payment\";"),
+                "the create listener should bind the bare payment topic");
+
+        // A payment corrected after it was booked - or created incomplete and completed later - must be
+        // re-allocated, so the same recompute is bound to the payment's update event too (#6818).
+        String onPaymentUpdated = contentOf("gen/events/settle/AutoSettleOnPaymentUpdated.java");
+        assertTrue(onPaymentUpdated.contains("class AutoSettleOnPaymentUpdated implements MessageHandler"),
+                "a second settlement listener should be generated for the payment's correction event");
+        assertTrue(onPaymentUpdated.contains("return \"" + PROJECT + "-Payment-Payment-updated\";"),
+                "it should bind the payment's update topic");
+        assertTrue(onPaymentUpdated.contains("release(payment.Id, pot.negate())"),
+                "a payment corrected below what it already covers should release the excess allocation");
+        assertTrue(onPaymentUpdated.contains(".orderByDesc(\"Id\")") && onPaymentUpdated.contains("rows.delete(row)"),
+                "the release should give back the newest allocations first, through the junction repository");
 
         String onInvoice = contentOf("gen/events/settle/AutoSettleOnInvoice.java");
         assertTrue(onInvoice.contains("class AutoSettleOnInvoice implements JavaDelegate"),

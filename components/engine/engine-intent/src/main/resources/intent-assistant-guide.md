@@ -2489,8 +2489,12 @@ settlements:
 
 Generates two client-Java glue classes (bind them with a `rollups` sum entry that keeps `paid` +
 `balance` + status — see rollups above):
-- **`<Name>OnPayment`** - a `MessageHandler` on the payment's create event: spreads the new payment
-  across the payer's open invoices (oldest first), creating junction rows until the pot is used up.
+- **`<Name>OnPayment`** / **`<Name>OnPaymentUpdated`** - a `MessageHandler` on the payment's create
+  event and one on its update event: spreads the payment across the payer's open invoices (oldest
+  first), creating junction rows until the pot is used up. It allocates the payment's *unallocated*
+  balance, so it is a recompute, not an append: a payment corrected after it was booked, or created
+  incomplete and completed later, is re-allocated for the amount it actually carries, and an amount
+  corrected below what it already covers releases the excess allocation (newest first).
 - **`<Name>OnInvoice`** - a `JavaDelegate` that pulls the customer's unallocated payment balance onto an
   invoice; wire it as a **`delegate:` service task** on the process step where the invoice becomes
   payable (e.g. right after Issue), e.g. `args: { delegate: gen.events.AutoAllocateOnInvoice, next: … }`

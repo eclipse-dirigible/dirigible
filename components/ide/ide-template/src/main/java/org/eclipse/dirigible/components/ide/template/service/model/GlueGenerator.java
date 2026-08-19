@@ -43,10 +43,11 @@ import static org.eclipse.dirigible.components.ide.template.service.model.ModelV
 class GlueGenerator {
 
     /** The names of the collections this generator handles. */
-    private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
-            "aborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles",
-            "outbound", "stepEvents", "rollups", "expansions", "expansionCleanups", "settlements", "generates", "generateEvents",
-            "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
+    private static final List<String> COLLECTIONS =
+            List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits", "aborts", "setters", "writers",
+                    "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles", "outbound", "stepEvents",
+                    "rollups", "expansions", "expansionCleanups", "settlements", "settlementListeners", "generates", "generateEvents",
+                    "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -104,6 +105,7 @@ class GlueGenerator {
             case "expansions" -> each(collection, source, content, model, parameters, GlueGenerator::bindExpansion);
             case "expansionCleanups" -> each(collection, source, content, model, parameters, GlueGenerator::bindExpansionCleanup);
             case "settlements" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlement);
+            case "settlementListeners" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlementListener);
             // Both collections carry the SAME create-from descriptors (generateEvents is the
             // event-driven subset), so they share one binding - the listener and the create-from it
             // calls cannot be rendered from divergent data.
@@ -580,12 +582,25 @@ class GlueGenerator {
      */
     private static void bindSettlement(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "match", "order", "invoiceEntity", "invoicePk", "invoiceTotal", "invoicePaid", "invoiceStatus",
-                "payableCondition", "junctionEntity", "junctionFkInvoice", "junctionFkPayment", "junctionAmount", "paymentEntity",
-                "paymentPk", "paymentPot", "paymentTopic");
+                "payableCondition", "junctionEntity", "junctionPk", "junctionFkInvoice", "junctionFkPayment", "junctionAmount",
+                "paymentEntity", "paymentPk", "paymentPot", "paymentTopic");
         context.put("invoiceJavaPerspective", sanitize(item, "invoicePerspective"));
         context.put("junctionJavaPerspective", sanitize(item, "junctionPerspective"));
         context.put("paymentGenFolder", truthy(item, "crossModel") ? sanitize(item, "paymentModel") : str(parameters, "javaGenFolderName"));
         context.put("paymentJavaPerspective", sanitize(item, "paymentPerspective"));
+    }
+
+    /**
+     * Binds one payment listener of an auto-settlement - the same descriptor as the settlement itself,
+     * rendered once per bound payment event (create, correction).
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindSettlementListener(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        bindSettlement(item, context, parameters);
+        copy(context, item, "className", "topicSuffix");
     }
 
     /**

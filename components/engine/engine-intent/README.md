@@ -518,7 +518,11 @@ settlements:
 ```
 
 Generates the on-payment spread handler and an on-invoice pull delegate; pair with a `rollups` sum
-entry that maintains `paid`/`balance`/status.
+entry that maintains `paid`/`balance`/status. The spread handler is bound to the payment's create
+AND its update event, and is a recompute of the payment's unallocated balance rather than an append:
+a payment corrected after it was booked - or created incomplete and completed later - is re-allocated
+for the amount it actually carries, and an amount corrected downwards releases the excess allocation
+(newest first).
 
 ## reports - read-only aggregations
 
