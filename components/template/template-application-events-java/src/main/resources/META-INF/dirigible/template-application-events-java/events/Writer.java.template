@@ -3,9 +3,13 @@ package gen.events.${javaGenFolderName};
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.eclipse.dirigible.sdk.bpm.Process;
+import org.eclipse.dirigible.sdk.messaging.Producer;
+import org.eclipse.dirigible.sdk.utils.Json;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
 
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
 
 /**
@@ -16,8 +20,15 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * collects each present variable, coerced to the entity's Java type, and persists them all in ONE
  * TARGETED multi-column write (updateProperties): only the edited columns are in the UPDATE statement,
  * so a concurrent write to any other column of the row (a recalculated total, a workflow status, the
- * trigger's ProcessId) cannot be reverted - unlike the load-then-full-row-merge shape this replaces. A
- * workflow-driven system write that must not re-fire onUpdate reactions, so no event is published.
+ * trigger's ProcessId) cannot be reverted - unlike the load-then-full-row-merge shape this replaces.
+ *
+ * These are a PERSON's edits, not a system write, so "-updated" IS published. notifications:,
+ * integrations:, outbound: and every other onUpdate consumer exist precisely to react to what a
+ * reviewer changed, and while this write was silent none of them could observe it - the edits were
+ * only ever visible by accident, when an unrelated setter on the same task happened to sweep them into
+ * its own reload. The publish is deferred to after the BPMN chain commits, like the setter's: a
+ * consumer re-loads the record on receive, so deferring is what makes it observe the rest of the
+ * chain's writes instead of racing them.
  * Each editable field is coerced from its process variable to the entity's
  * Java type (LocalDate/Instant/Integer/Long/BigDecimal/Double/Boolean/String); the form-builder sends
  * date/timestamp values ISO-shaped so LocalDate.parse / Instant.parse accept them.
@@ -55,8 +66,19 @@ public class ${className} implements JavaDelegate {
 #end
         }
 #end
-        if (!values.isEmpty()) {
-            repository.updateProperties(((Number) key).${keyAccessor}(), values);
+        if (values.isEmpty()) {
+            return;
+        }
+        Object id = ((Number) key).${keyAccessor}();
+        if (repository.updateProperties(id, values) == 0) {
+            return;
+        }
+        // Re-load AFTER the targeted write so the published payload is the committed row - the edited
+        // columns plus whatever else the row already carried - rather than a pre-write snapshot.
+        ${entity}Entity entity = repository.findById(id);
+        if (entity != null) {
+            String payload = Json.stringify(entity);
+            Process.executeAfterCommit(() -> Producer.sendToTopic("${projectName}-${perspective}-${entity}-updated", payload));
         }
     }
 }

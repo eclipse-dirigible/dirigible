@@ -2629,6 +2629,50 @@ class IntentEngineIT extends IntegrationTest {
                 "the writer must persist the edited columns in one targeted multi-column write");
         assertFalse(writer.contains("updateWithoutEvent"),
                 "the writer must NOT full-row merge (updateWithoutEvent) - that reverts concurrent writes to unedited columns");
+
+        // What a reviewer edits in the task form is a PERSON's change, so it must be observable: while
+        // the write was silent, no notifications:/integrations:/outbound: consumer could see it, and the
+        // edits only reached anything by accident - when an unrelated setter on the same task happened
+        // to sweep them into its own reload. Deferred, because a consumer re-loads on receive and would
+        // otherwise race the rest of the BPMN chain.
+        assertTrue(writer.contains("Producer.sendToTopic(\"" + PROJECT + "-SalesOrder-SalesOrder-updated\", payload)"),
+                "the writer must publish the entity's -updated topic, got: " + writer);
+        assertTrue(writer.contains("Process.executeAfterCommit("), "the publish must be deferred to after the BPMN chain commits");
+        int write = writer.indexOf("repository.updateProperties(id, values)");
+        int reload = writer.indexOf("repository.findById(id)");
+        assertTrue(write > 0 && write < reload, "the payload must be re-loaded AFTER the write, not from a pre-write snapshot");
+    }
+
+    @Test
+    void numbering_stamp_publishes_the_stamped_document_number() {
+        // number: { stampOn: issue } replaces the create-time UUID placeholder at the issue step. The
+        // number is the document's identity to everything outside the system, so an integration or a
+        // notification quoting it needs the write to be observable - it was not.
+        // The descriptor comes from the FIELD alone (NumberingSupport keys on stampOn: issue), so no
+        // process is needed here - the author wires the delegate at whichever step issues the document.
+        writeIntent("""
+                name: orders
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                      - { name: number, type: string, length: 100, number: { series: Sales Invoice, stampOn: issue } }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "orders.glue");
+
+        String stamp = contentOf("gen/events/orders/SalesInvoiceNumberStamp.java");
+        assertTrue(stamp.contains("DocumentNumbers.next(\"Sales Invoice\")"), "the stamp must allocate from the declared series");
+        assertTrue(stamp.contains("Producer.sendToTopic(\"" + PROJECT + "-SalesInvoice-SalesInvoice-updated\", payload)"),
+                "the stamp must publish the entity's -updated topic - the raw perspective, not the sanitized Java one, got: " + stamp);
+        assertTrue(stamp.contains("Process.executeAfterCommit("), "the publish must be deferred to after the BPMN chain commits");
+        int write = stamp.indexOf("repository.updateProperty(id, \"Number\", number)");
+        int reload = stamp.indexOf("repository.findById(id)");
+        assertTrue(write > 0 && write < reload, "the payload must carry the stamped number, so it is re-loaded AFTER the write");
     }
 
     /**

@@ -731,7 +731,9 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindNumbering(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "entity", "masterPk", "field", "series", "per");
+        // The RAW perspective too, not only the sanitized Java one: the stamp publishes "-updated", and
+        // an event topic is built from the raw perspective (the sanitized form is the Java package).
+        copy(context, item, "entity", "masterPk", "field", "series", "per", "perspective");
         context.put("javaPerspective", sanitize(item, "perspective"));
     }
 
