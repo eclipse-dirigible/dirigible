@@ -1,9 +1,17 @@
 package gen.events.${javaGenFolderName};
 
+#if($lookups.size() > 0)
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+#end
 import org.eclipse.dirigible.sdk.http.Body;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Post;
+import org.eclipse.dirigible.sdk.http.Response;
+#if($hasEnvelope)
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+#end
 import org.eclipse.dirigible.sdk.utils.Json;
 
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
@@ -14,17 +22,93 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  *
  * Generated from the intent inbound block - do not edit; it is re-generated with the application.
  * The endpoint is served under /services/java/<project>/gen/events/${javaGenFolderName}/${className}Webhook${path}.
+ * The body is bound by the platform, which reads it straight into the declared parameter type - so the
+ * parameter IS the payload's shape, and a body that does not fit it is answered 400 before this runs.
+#if($hasAccept)
+ *
+ * The declared accept gate (${acceptSummary}) is checked first. A payload that does not match is
+ * answered 202 ACCEPTED and ignored - the sender did nothing wrong, this receiver simply does not
+ * understand the message, so there is nothing for it to retry.
+#end
+#if($hasMap)
+ *
+ * The payload is an envelope, so it is read as one and projected onto the record by the declared
+ * map - a key the map does not name is not the record's business. A business-key lookup that
+ * resolves to no single row is answered 400 rather than stored as a null relation.
+#end
  */
 @Controller
 @Component("${javaGenFolderName}_${className}Webhook")
 public class ${className}Webhook {
+#if($hasEnvelope)
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Webhook");
+#end
 
     @Post("${path}")
-    public String ingest(@Body String body) {
-        ${entity}Entity entity = Json.parse(body, ${entity}Entity.class);
+#if($hasEnvelope)
+    public String ingest(@Body java.util.Map<String, Object> envelope) {
+#{else}
+    public String ingest(@Body ${entity}Entity entity) {
+#end
+        // Every answer below is JSON, so the endpoint says so - a caller must not have to guess.
+        Response.setContentType("application/json");
+#if($hasEnvelope)
+        if (envelope == null) {
+            Response.setStatus(400);
+            return "{\"error\": \"empty or invalid payload\"}";
+        }
+#end
+#if($hasAccept)
+        if (!(${acceptExpression})) {
+            LOG.warn("Inbound ${name}: a posted payload does not match accept [{}] - accepted and ignored", ${acceptSummaryLiteral});
+            Response.setStatus(202);
+            return "{\"ignored\": \"the payload does not match the declared accept gate\"}";
+        }
+#end
+#if($hasMap)
+        ${entity}Entity entity = new ${entity}Entity();
+#foreach($field in $mapFields)
+        {
+            Object raw = envelope.get(${field.fromLiteral});
+            if (raw != null) {
+                entity.${field.property} = ${field.expression};
+            }
+        }
+#end
+#foreach($lookup in $lookups)
+        Object ${lookup.local}Key = envelope.get(${lookup.fromLiteral});
+        if (${lookup.local}Key == null) {
+            LOG.error("Inbound ${name}: a posted payload carries no [{}] to resolve ${lookup.property} by - NOT ingested",
+                    ${lookup.fromLiteral});
+            Response.setStatus(400);
+            return "{\"error\": \"no ${lookup.byProperty} to resolve ${lookup.property} by\"}";
+        }
+        java.util.List<gen.${javaGenFolderName}.data.${lookup.javaTargetPerspective}.${lookup.targetEntity}Entity> ${lookup.local}Matches =
+                new gen.${javaGenFolderName}.data.${lookup.javaTargetPerspective}.${lookup.targetEntity}Repository()
+                        .findAll(Criteria.create()
+                                         .eq("${lookup.byProperty}", ${lookup.byValueExpression}));
+        if (${lookup.local}Matches.size() != 1) {
+            LOG.error("Inbound ${name}: no unique ${lookup.targetEntity} matches ${lookup.byProperty} [{}] from [{}] - NOT ingested",
+                    ${lookup.local}Key, ${lookup.fromLiteral});
+            Response.setStatus(400);
+            return "{\"error\": \"no unique ${lookup.targetEntity} matches the ${lookup.byProperty} in the payload\"}";
+        }
+        entity.${lookup.property} = ${lookup.local}Matches.get(0).${lookup.targetKeyProperty};
+#end
+#elseif($hasEnvelope)
+        // A gate without a map: what arrived IS the record, so it is read back out of the envelope the
+        // gate needed. Only this shape pays for the round trip.
+        ${entity}Entity entity = Json.parse(Json.stringify(envelope), ${entity}Entity.class);
+        if (entity == null) {
+            Response.setStatus(400);
+            return "{\"error\": \"empty or invalid payload\"}";
+        }
+#{else}
         if (entity == null) {
             return "{\"error\": \"empty or invalid payload\"}";
         }
+#end
         ${entity}Entity saved = new ${entity}Repository().save(entity);
         return Json.stringify(saved);
     }

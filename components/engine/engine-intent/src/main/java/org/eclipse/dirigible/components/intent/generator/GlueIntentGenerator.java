@@ -101,9 +101,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> schedules = buildSchedules(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings, context);
-        List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
-        List<Map<String, Object>> inboundMessages = buildInboundMessages(model, byName, compositionParents, settings);
-        List<Map<String, Object>> inboundFiles = buildInboundFiles(model, byName, compositionParents, settings);
+        List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> inboundMessages = buildInboundMessages(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> inboundFiles = buildInboundFiles(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> outbound = buildOutbound(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> stepEvents = buildStepEvents(model, compositionParents, settings);
         List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings, context);
@@ -1220,12 +1220,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /** Test hook: build the {@code inboundMessages} glue collection without a repository. */
     static List<Map<String, Object>> buildInboundMessagesForTest(IntentModel model) {
         return buildInboundMessages(model, IntentEntities.byName(model), IntentEntities.compositionParents(model),
-                IntentSettings.parse("{}"));
+                IntentSettings.parse("{}"), null);
     }
 
     /** Test hook: build the {@code inboundFiles} glue collection without a repository. */
     static List<Map<String, Object>> buildInboundFilesForTest(IntentModel model) {
-        return buildInboundFiles(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
+        return buildInboundFiles(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                null);
     }
 
     /** Test hook: build the {@code outbound} glue collection without a repository. */
@@ -1236,7 +1237,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /** Test hook: build the {@code inbound} (HTTP webhook) glue collection without a repository. */
     static List<Map<String, Object>> buildInboundForTest(IntentModel model) {
-        return buildInbound(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
+        return buildInbound(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                null);
     }
 
     /**
@@ -2657,13 +2659,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     private static List<Map<String, Object>> buildInbound(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> inbound = new ArrayList<>();
         for (InboundIntent webhook : model.getInbound()) {
             if (webhook.getSource() != null) {
                 continue; // a non-HTTP source is its own collection (its own generated handler shape)
             }
-            Map<String, Object> entry = inboundEntry(webhook, model, byName, compositionParents, settings, "controller");
+            Map<String, Object> entry = inboundEntry(webhook, model, byName, compositionParents, settings, "controller", context);
             if (entry == null) {
                 continue;
             }
@@ -2678,7 +2680,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * record off the declared destination and saving it exactly as the webhook does with a posted body.
      */
     private static List<Map<String, Object>> buildInboundMessages(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> messages = new ArrayList<>();
         for (InboundIntent ingest : model.getInbound()) {
             InboundSourceIntent source = ingest.getSource();
@@ -2689,7 +2691,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (!queue && !topic) {
                 continue;
             }
-            Map<String, Object> entry = inboundEntry(ingest, model, byName, compositionParents, settings, "consumer");
+            Map<String, Object> entry = inboundEntry(ingest, model, byName, compositionParents, settings, "consumer", context);
             if (entry == null) {
                 continue;
             }
@@ -2705,7 +2707,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * saving every record of every file that arrived.
      */
     private static List<Map<String, Object>> buildInboundFiles(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> files = new ArrayList<>();
         for (InboundIntent ingest : model.getInbound()) {
             InboundSourceIntent source = ingest.getSource();
@@ -2713,7 +2715,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                                       .isBlank()) {
                 continue;
             }
-            Map<String, Object> entry = inboundEntry(ingest, model, byName, compositionParents, settings, "job");
+            Map<String, Object> entry = inboundEntry(ingest, model, byName, compositionParents, settings, "job", context);
             if (entry == null) {
                 continue;
             }
@@ -2727,9 +2729,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /**
      * The facts every inbound ingest shares, whatever it arrives on - or {@code null} when the entry is
      * unusable (no name, an unknown entity) or the developer opted out of generating it.
+     *
+     * <p>
+     * The declared {@code accept:} gate and {@code map:} projection are shared too: what an arrival's
+     * payload looks like has nothing to do with what it travelled on, so all three handler shapes read
+     * it from the same plan. A mapping that cannot be resolved drops the whole arrival with the reason
+     * - ingesting the raw payload instead would silently store something else.
      */
     private static Map<String, Object> inboundEntry(InboundIntent ingest, IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings, String handlerNoun) {
+            Map<String, String> compositionParents, IntentSettings settings, String handlerNoun, IntentGenerationContext context) {
         if (ingest.getName() == null || ingest.getName()
                                               .isBlank()) {
             return null;
@@ -2742,11 +2750,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             LOGGER.info("Settings opt-out: keeping existing {} for inbound [{}] (not generated)", handlerNoun, ingest.getName());
             return null;
         }
+        ArrivalSupport.Plan arrival;
+        try {
+            arrival = ArrivalSupport.plan(ingest, byName.get(entity), byName, compositionParents, model);
+        } catch (IllegalArgumentException ex) {
+            reportDroppedGlue(context, "Inbound [" + ingest.getName() + "]: " + ex.getMessage() + " - the arrival was NOT generated");
+            return null;
+        }
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("name", ingest.getName());
         entry.put("className", IntentNaming.pascalCase(ingest.getName()));
         entry.put("entity", entity);
         entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
+        entry.putAll(ArrivalSupport.arrivalFields(arrival));
         return entry;
     }
 
