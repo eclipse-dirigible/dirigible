@@ -64,11 +64,26 @@ through it, which is exactly the resolution a settings-unaware one would get wro
    `{"ignored": ...}`; nothing is stored, and the log carries the warning.
 6. Post one naming a tenant that does not exist (`"tenantId":"nope"`) and it answers **400**; again
    nothing is stored, rather than a record with a hole in it.
-7. The queue arrival behaves identically for a message published to
-   `codbex.user-assignment-requests` - a non-matching message is acknowledged and ignored, and an
-   unresolvable lookup is logged as an error without saving. Mark the destination `global:` when the
-   queue is a contract with another deployment (the platform's external-contract marker; the name is
-   passed to the broker verbatim).
+7. The queue arrival behaves identically, and `custom/AssignmentRequestSender.java` is here so it can
+   be tried by hand. The platform's broker listens on `vm://localhost` only - there is no TCP
+   transport - so a message cannot be published from outside the running instance; that controller
+   publishes from within it:
+
+   ```bash
+   curl -u admin:admin -H 'Content-Type: application/json' \
+     -d '{"messageId":"q-1","type":"user.assignment.requested","version":1,
+          "tenantId":"globex","email":"queue.user@example.com","role":"Administrator","seatCount":7}' \
+     http://localhost:8080/services/java/sample-intent-inbound-mapping/custom/AssignmentRequestSender/send
+   ```
+
+   Consuming is asynchronous, so read the records back a moment later: the new row carries
+   `Tenant: 2` and `Role: 2` - resolved from `globex` and `Administrator`. Sending the same envelope
+   with `"version":2` stores nothing and logs the ignore, and one naming a role that does not exist
+   stores nothing and logs the rejection; both under the logger
+   `gen.events.assignments.AssignmentRequestsConsumer`, visible in the Logs view or the console.
+
+   Mark the destination `global:` when the queue is a contract with another deployment (the platform's
+   external-contract marker; the name is passed to the broker verbatim).
 
 Read the records back at:
 
