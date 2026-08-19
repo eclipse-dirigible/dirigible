@@ -443,7 +443,7 @@ class GlueGenerator {
     private static void bindInbound(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "path");
         context.put("javaPerspective", sanitize(item, "perspective"));
-        bindArrival(item, context, parameters);
+        bindArrival(item, context);
     }
 
     /**
@@ -457,7 +457,7 @@ class GlueGenerator {
     private static void bindInboundMessage(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "destination", "listenerKind");
         context.put("javaPerspective", sanitize(item, "perspective"));
-        bindArrival(item, context, parameters);
+        bindArrival(item, context);
     }
 
     /**
@@ -471,7 +471,7 @@ class GlueGenerator {
     private static void bindInboundFile(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "folder", "cron");
         context.put("javaPerspective", sanitize(item, "perspective"));
-        bindArrival(item, context, parameters);
+        bindArrival(item, context);
     }
 
     /**
@@ -480,11 +480,15 @@ class GlueGenerator {
      * lookup imports the looked-up entity's repository, so its package segment is resolved the way
      * every other cross-entity import is.
      *
+     * <p>
+     * Unlike {@link #relationLoads(Object, Map)} this needs no generation parameters: a lookup reads an
+     * entity of the SAME model, so there is no owner generation folder to resolve against. Widening it
+     * to a cross-model target is what would bring them back.
+     *
      * @param item the descriptor
      * @param context the template context
-     * @param parameters the generation parameters
      */
-    private static void bindArrival(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+    private static void bindArrival(Map<String, Object> item, Map<String, Object> context) {
         copy(context, item, "hasEnvelope", "hasAccept", "acceptExpression", "acceptSummary", "acceptSummaryLiteral", "hasMap", "mapFields");
         List<Object> lookups = new ArrayList<>();
         for (Map<String, Object> lookup : asMaps(item.get("lookups"))) {
