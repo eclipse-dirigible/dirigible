@@ -30,11 +30,20 @@ import org.eclipse.dirigible.sdk.http.Response;
  * single caller.
 #end
 #if($hasEvent)
+#if($appendMode)
+ *
+ * Appends (intent `mode: append`): it is triggered by a ${fromEntity} event and keeps NO existing-target
+ * lookup, so every delivery creates another ${toEntity} - the "a row per event" shape (a log, a
+ * protocol). The ${backRefProperty} back-reference is still written on each row: it is that row's
+ * provenance, not a dedup key. This is the ABSENCE of a guard, so an event redelivery appends a
+ * duplicate; use `mode: once` for anything that must exist at most once.
+#{else}
  *
  * At-most-once: it is triggered by a ${fromEntity} event, so it first looks for a ${toEntity} that
  * already back-references the source through ${backRefProperty} and returns that one instead of
  * creating a second document. A create-from with no event trigger deliberately keeps NO such guard -
  * minting several targets from one source is a legitimate manual act.
+#end
 #end
  */
 #if(!$eventOnly)
@@ -88,7 +97,7 @@ public class ${className}Generate {
         if (source == null) {
             return null;
         }
-#if($hasEvent)
+#if($hasEvent && !$appendMode)
         // Already generated for this source (an event redelivery, or a click after the event) - hand back
         // the existing document rather than minting a duplicate. Best-effort against two concurrent
         // deliveries until a UNIQUE key on the back-reference lands, exactly as postings' guard is.

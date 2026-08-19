@@ -45,8 +45,8 @@ class GlueGenerator {
     /** The names of the collections this generator handles. */
     private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
             "aborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles",
-            "outbound", "stepEvents", "rollups", "expansions", "settlements", "generates", "generateEvents", "transitions", "sends",
-            "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
+            "outbound", "stepEvents", "rollups", "expansions", "expansionCleanups", "settlements", "generates", "generateEvents",
+            "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -102,6 +102,7 @@ class GlueGenerator {
             case "outbound" -> each(collection, source, content, model, parameters, GlueGenerator::bindOutbound);
             case "stepEvents" -> each(collection, source, content, model, parameters, GlueGenerator::bindStepEvent);
             case "expansions" -> each(collection, source, content, model, parameters, GlueGenerator::bindExpansion);
+            case "expansionCleanups" -> each(collection, source, content, model, parameters, GlueGenerator::bindExpansionCleanup);
             case "settlements" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlement);
             // Both collections carry the SAME create-from descriptors (generateEvents is the
             // event-driven subset), so they share one binding - the listener and the create-from it
@@ -443,6 +444,7 @@ class GlueGenerator {
     private static void bindInbound(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "path");
         context.put("javaPerspective", sanitize(item, "perspective"));
+        bindArrival(item, context);
     }
 
     /**
@@ -456,6 +458,7 @@ class GlueGenerator {
     private static void bindInboundMessage(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "destination", "listenerKind");
         context.put("javaPerspective", sanitize(item, "perspective"));
+        bindArrival(item, context);
     }
 
     /**
@@ -469,6 +472,32 @@ class GlueGenerator {
     private static void bindInboundFile(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "folder", "cron");
         context.put("javaPerspective", sanitize(item, "perspective"));
+        bindArrival(item, context);
+    }
+
+    /**
+     * Binds the declared arrival mapping every inbound shape shares: the {@code accept:} gate and the
+     * {@code map:} projection, including the business-key lookups that fill the record's relations. A
+     * lookup imports the looked-up entity's repository, so its package segment is resolved the way
+     * every other cross-entity import is.
+     *
+     * <p>
+     * Unlike {@link #relationLoads(Object, Map)} this needs no generation parameters: a lookup reads an
+     * entity of the SAME model, so there is no owner generation folder to resolve against. Widening it
+     * to a cross-model target is what would bring them back.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     */
+    private static void bindArrival(Map<String, Object> item, Map<String, Object> context) {
+        copy(context, item, "hasEnvelope", "hasAccept", "acceptExpression", "acceptSummary", "acceptSummaryLiteral", "hasMap", "mapFields");
+        List<Object> lookups = new ArrayList<>();
+        for (Map<String, Object> lookup : asMaps(item.get("lookups"))) {
+            Map<String, Object> resolved = ModelValues.copy(lookup);
+            resolved.put("javaTargetPerspective", sanitize(lookup, "targetPerspective"));
+            lookups.add(resolved);
+        }
+        context.put("lookups", lookups);
     }
 
     /**
@@ -526,6 +555,22 @@ class GlueGenerator {
     }
 
     /**
+     * Binds an expansion cleanup - the handler that removes an expansion's generated rows when their
+     * master is deleted. It needs only the master's identity and the child set's criteria, so the span,
+     * unit, defaults and spread the regeneration binds are deliberately absent.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindExpansionCleanup(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "className", "masterEntity", "masterPerspective", "masterPk", "childEntity", "criteriaExpression");
+        context.put("javaMasterPerspective", sanitize(item, "masterPerspective"));
+        context.put("javaChildPerspective", sanitize(item, "childPerspective"));
+        context.put("topicSuffix", strOr(item, "topicSuffix", "-deleted"));
+    }
+
+    /**
      * Binds an auto-settlement - the listener and delegate pair that applies a payment to an invoice
      * through their junction.
      *
@@ -555,11 +600,19 @@ class GlueGenerator {
                 "itemLines", "fromItemEntity", "toItemEntity", "srcFkProperty", "toFkProperty", "itemFieldAssignments", "fromPerspective",
                 "sourceStatusProperty", "sourceStatusValue",
                 // The event half (issue #6711): the trigger kind, the status guard and the back-reference
-                // the at-most-once check reads, plus whether a button is contributed at all.
-                "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "backRefProperty",
+                // the at-most-once check reads, plus whether a button is contributed at all. The axis and
+                // the cardinality (issue #6800): the topic suffix the listener binds - a lifecycle one or
+                // a step-scoped one - and whether the create-from keeps its at-most-once lookup at all.
+                "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "backRefProperty", "isStep", "stepProcess",
+                "stepName", "appendMode",
                 // The declared input form (issue #6685): the prompted target properties with their
                 // pre-rendered value conversions - the template renders one block per entry.
                 "hasPrompt", "promptFields");
+        // The topic the listener binds is the glue's to state and the template's to emit verbatim - but
+        // a .glue written before the step axis (issue #6800) carries no suffix at all, and a bare
+        // reference renders as its own literal into a destination nothing ever publishes on. An absent
+        // one is the lifecycle suffix that shape implied: none for a create, -transitioned otherwise.
+        context.put("topicSuffix", strOr(item, "topicSuffix", truthy(item, "isCreate") ? "" : "-transitioned"));
         context.put("fromJavaPerspective", sanitize(item, "fromPerspective"));
         // The SOURCE's gen folder / owning project: this project unless the source belongs to another
         // model (intent `fromUses:`). That is what lets a create-from be authored on the module owning

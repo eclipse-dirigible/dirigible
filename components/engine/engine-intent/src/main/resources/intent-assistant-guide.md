@@ -205,7 +205,12 @@ field may declare:
   must be hand-set simply does not mark the relation. Typical pairing on a document: the number field
   is `DocumentTitle`, the workflow-managed status FK is `EntityStatus`. (`DocumentStatus` /
   `documentStatus: true` are the pre-rename spellings and are rejected with a migration message -
-  always author `EntityStatus`.)
+  always author `EntityStatus`.) **An entity has at most ONE `EntityStatus` relation** - it is the
+  single axis every status construct resolves (`lifecycle:`, `transitions:`, `immutableWhen`,
+  `abortOn:`, a `checks:` rejection, a report's `scope:`, a `resolves:` outcome), and a second one is
+  rejected at parse time rather than silently ignored by all of them. To track a second aspect
+  (an identification status beside the overall one), model it as a PLAIN to-one relation without
+  `function:`.
 - `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
 - `size` (on a field OR a to-one relation) - the form-control width as a 12-column grid span
   (3 = quarter, 4 = third, 6 = half, 12 = full). The generated form maps it to `grid-column: span N`;
@@ -1254,13 +1259,40 @@ paths / relations.
   snapshot). To see a related record's name, list `relation.field` (e.g. `customer.name`), not the bare
   FK.
 - **`editable: [Field, ...]`** opts fields back to editable; the reviewer's edits are written back to the
-  entity on completion. `editable` may list ONLY **plain entity fields** of `forEntity` (string, text,
-  number, date, timestamp, boolean - the generated Writer coerces the value to the field's Java type)
-  that are **also listed in `fields`** - a field that is not displayed cannot be edited, so add it to
-  `fields` first. Neither a **relation** (a dropdown FK like `Category` or `Status` - even though
-  relations are legal in `fields`) nor a **`relation.field`** path can EVER be editable; to change a
-  related value during the flow, use `setRelationField` on a step instead (a `serviceTask` on the
-  decision branch, or the `userTask` itself for a single-action task).
+  entity on completion. Every entry must **also be listed in `fields`** - a field that is not displayed
+  cannot be edited, so add it to `fields` first. Two shapes are allowed:
+  - a **plain entity field** of `forEntity` (string, text, number, date, timestamp, boolean - the
+    generated Writer coerces the value to the field's Java type);
+  - a **to-one relation** of `forEntity`, which renders as a **picker over the related records** - this
+    is how a person CHOOSES a related record inside the flow (pick the driver, pick the account, pick
+    the approver), the case `setRelationField` cannot serve because its `value:` is a literal id fixed
+    at authoring time. The picker's options are loaded at runtime from the process context, so it
+    works only on a **task form whose `forEntity` IS the process's trigger entity**. Four relations are
+    refused, each because the picker would be wrong rather than merely unsupported: the
+    `function: EntityStatus` relation (a status moves along the `lifecycle:` graph - use a
+    `setRelationField` step or a `transitions:` button), the **composition parent** (that is the
+    record's filing, set by the context it was created in), and a **cross-model** relation (its key
+    belongs to the owner model, so this model cannot say what to submit - keep it read-only and set it
+    with a `delegate`).
+
+  A **`relation.field`** path can never be editable - editing it would not write back to the related
+  record. To set a related value to a KNOWN record during the flow, keep using `setRelationField` on a
+  step (a `serviceTask` on the decision branch, or the `userTask` itself for a single-action task).
+
+  ```yaml
+  forms:
+    - name: IdentifyDriver
+      forEntity: Fine            # == the trigger entity of the process below
+      fields: [vehicle, violationAt, driver]
+      editable: [driver]         # the officer picks the driver from the list of Drivers
+      actions: [identify]
+  processes:
+    - name: Identify
+      trigger: { onCreate: Fine }
+      steps:
+        - { name: identify, kind: userTask, args: { assignee: officer, form: IdentifyDriver } }
+        - { name: done, kind: end }
+  ```
 - **`actions` are the task's choices.** A **`close`** button (just closes the form, does not complete the
   task) is always added automatically - never list it yourself.
 - **Multiple completing actions REQUIRE a decision right after the task** (this is enforced at parse
@@ -1490,16 +1522,58 @@ generates:
         amount: Amount
 ```
 
-- Exactly one of `onTransition` (a status write - a `when: "<StatusRelation> == <status>"` guard is
-  **mandatory**, status by seeded NAME or id) or `onCreate` (the source's insert - the guard is optional,
-  for a source with no status lifecycle). The entity named there must be the SAME one `from:` declares:
-  the event says WHEN, `from:`/`fromUses:` say what and where. Never repeat the model as `model:`.
-- **`map:` must copy the source's `id` onto the target's to-one back to the source.** That
-  back-reference is the at-most-once guard: before creating anything the create-from looks for a target
-  that already back-references this source and returns it instead, so an event redelivery - or a click
-  afterwards - is a no-op rather than a duplicate document. Authoring an event without it is rejected.
+- Exactly one trigger, from either axis:
+  - the source's **lifecycle** - `onTransition` (a status write - a `when: "<StatusRelation> == <status>"`
+    guard is **mandatory**, status by seeded NAME or id) or `onCreate` (the source's insert - the guard is
+    optional, for a source with no status lifecycle). The entity named there must be the SAME one `from:`
+    declares: the event says WHEN, `from:`/`fromUses:` say what and where. Never repeat the model as
+    `model:`.
+  - a **process step** - `onStepReached` / `onStepCompleted: { process: <Process>, step: <step> }`, the
+    same event axis notifications / integrations / departures bind to (see "the event axis"). The process
+    must run ON the source (its `trigger:` entity is the `from:` entity - that record is what the step
+    event is about), the step must be a `userTask` or a `serviceTask`, and the source must be local (a
+    process and its steps belong to the model that declares them). `when:` stays optional here: the step
+    IS the moment. Use it when the follow-up document belongs to a point in a flow rather than to a
+    status - and as the route around a source whose write does not publish a transition.
+- **`map:` must copy the source's `id` onto the target's to-one back to the source** - in BOTH
+  cardinalities. Under the default `mode: once` it is the at-most-once guard: before creating anything the
+  create-from looks for a target that already back-references this source and returns it instead, so an
+  event redelivery - or a click afterwards - is a no-op rather than a duplicate document. Under
+  `mode: append` it is the appended row's provenance. Authoring an event without it is rejected.
+- **`mode:` - the cardinality.** `once` (default, today's behaviour) creates at most one target per
+  source. `append` creates one **per delivered event**: the "a row per step, a row per transition" shape -
+  a log entry, a protocol line, an activity record.
+
+```yaml
+processes:
+  - name: ClaimApproval
+    trigger: { onCreate: Claim }
+    steps:
+      - { name: review,   kind: userTask,    args: { assignee: approver, form: ReviewClaim } }
+      - { name: activate, kind: serviceTask, args: { setRelationField: Status, value: ACTIVE } }
+
+generates:
+  # one LogEntry appended every time the activate step completes - several per Claim, by design
+  - name: log-activation
+    from: Claim
+    to: LogEntry
+    event: { onStepCompleted: { process: ClaimApproval, step: activate }, mode: append }
+    map:
+      Claim: id                # back-reference: REQUIRED in both modes (the row's provenance here)
+      amount: amount
+    defaults:
+      step: "activate"         # which moment this row records - a literal per generates block
+      date: now
+```
+
+- **`append` is the ABSENCE of a guard, not a state-aware one.** Every qualifying event appends a row,
+  including a redelivery (the step topic is published after commit and is not transactional with the
+  step - the same at-least-once contract the event axis states for `outbound`). It is therefore the wrong
+  answer to "I voided the document and cannot regenerate it": that needs a state-aware guard on
+  `mode: once`, not a cardinality that would also mint a document on every later event. Anything that
+  must exist at most once keeps `mode: once`.
 - **The button is dropped by default** (declaring an event is how you say nobody has to click). Add
-  `button: true` to keep both triggers; the button then shares the same at-most-once guard.
+  `button: true` to keep both triggers; the button then shares the cardinality of the event.
 - `sourceStatus:` composes normally (the flip happens after the target exists, and cannot re-trigger the
   create-from because the guard has already claimed the source).
 - Use this over `posts` when the result is a **document with line items**: `posts` writes flat mapped
@@ -2151,9 +2225,10 @@ order.
 If a contract needs more than this it is an algorithm, not a payload - say so and hand off to a
 hand-written handler rather than stretching the block.
 
-### the event axis - what a notification / integration / departure binds to
+### the event axis - what a notification / integration / departure / create-from binds to
 
-`notifications`, `integrations` and `outbound` departures each declare **exactly one** `event:`, either
+`notifications`, `integrations`, `outbound` departures and event-driven `generates` create-froms each
+declare **exactly one** `event:`, either
 
 - an **entity lifecycle** event - `{ onCreate: <Entity> }` / `{ onUpdate: ... }` / `{ onDelete: ... }`;
 - an **entity status** event - `{ onTransition: <Entity> }`;
@@ -2216,6 +2291,15 @@ event is about); the step must exist and be a `userTask` or a `serviceTask` (a d
 an end has no moment to observe). Any number of consumers may bind to the same step moment - the
 record is published once.
 
+An event-driven **`generates`** create-from binds to the same axis, with one narrowing of its own: the
+process must run on the create-from's `from:` entity (a create-from reads one source record, and the
+step event is about the process's trigger record). It also adds its own `onTransition` lifecycle event -
+see the `generates` section, together with `mode: once|append`.
+
+The step record is published **after commit** and is not transactional with the step, so every consumer
+of the axis is at-least-once: a redelivery re-notifies, re-forwards, or (under `mode: append`) appends a
+second row.
+
 Every axis binding also takes an optional **`when:` guard** inside the `event:` map - a single
 comparison against a direct field of the record (`when: "channel != internal"`), which decides per
 record whether the reaction runs at all.
@@ -2241,6 +2325,43 @@ inbound:
 **Rules:** unique name, `create` must be a declared entity, and **exactly one arrival**: either a
 `path` or a `source` naming exactly one of `queue` / `topic` / `folder`. A `folder` source needs a
 `cron` (there is no file-system watch - the folder is polled); the other sources take none.
+
+#### accept + map - when the payload is an envelope, not the record
+
+The shape above only works when the sender's JSON already **is** the entity, field for field. A real
+arrival contract is an envelope, and the two keys below read it. Both are optional, both work on all
+three arrivals (what the payload looks like has nothing to do with what it travelled on), and omitting
+them keeps today's behaviour exactly.
+
+```yaml
+inbound:
+  - name: userAssignments
+    source: { queue: "global:codbex.user-assignment-requests" }
+    accept: { type: user.assignment.requested, version: 1 }   # anything else: warn and ignore
+    create: TenantUserAssignment
+    map:
+      messageId: messageId                                     # entity field <- envelope key
+      email:     email
+      tenant:      { lookup: Tenant,         by: tenantId, from: tenantId }   # business key -> FK
+      role:        { lookup: AssignmentRole, by: name,     from: role }
+```
+
+- **`accept:`** gates on the envelope keys you declare (a type, a version). A message that does not
+  match is **acknowledged and ignored with a warning** - never failed, since failing it would only have
+  it redelivered, and a sender rolling out v2 must not fill this receiver's error queue. On a webhook
+  the answer is 202; in a drop file that record is skipped and the file still counts as processed.
+- **`map:`** projects envelope keys onto the entity's own fields and relations. A key the map does not
+  name is not the record's business. Each value is either an envelope key or a **lookup**.
+- **`lookup:`** resolves a **business key to a relation** - the envelope says `tenantId: "acme"` and the
+  record stores the `Tenant` foreign key. `by:` must be a **unique** field of the target (or its primary
+  key): a lookup that could match several rows would silently pick one, so a non-unique `by:` fails at
+  Generate. A lookup that matches nothing **rejects the arrival** with a clear log - never a null
+  relation. v1 is same-model: the looked-up entity must be declared in this model.
+
+Everything still saves through the entity's own repository, so validations, translations and the create
+event fire exactly as for any other write. Do not map the primary key - it is generated on insert; give
+the arrival's own identifier a `unique: true` field of its own instead (which is also what makes a
+redelivery refuse itself).
 
 ### outbound - the app raises an event for another system
 
@@ -2483,7 +2604,9 @@ name.
 - "on a schedule / every month, create a Y for each X / recurring invoices / auto-generate timesheets" -> **schedules** (`generate`)
 - "call an external API when X changes" -> **integrations**
 - "notify / call out when a task becomes available, or when a step is done" -> **notifications / integrations** with `event: { onStepReached | onStepCompleted: { process, step } }`
+- "append a log / protocol / activity row every time a step completes (or a status is set)" -> **generates** with `event: { onStepCompleted: { process, step }, mode: append }`
 - "let an external system create X" -> **inbound** (`path` for HTTP, `source: { queue | topic }` for a message, `source: { folder, cron }` for dropped files)
+- "the arriving payload is an envelope, not the record" -> **inbound `map:`** (+ `lookup:` to turn a business key into a relation, and `accept:` to ignore the message types this app does not understand)
 - "keep a running count of children on the parent" -> **rollups**
 - "expand a from-to span into day/week/month child rows / loan installments / vacation day items" -> **expansions**
 - "compute days between two dates on the form (working days / months)" -> **calculated field with a date function**

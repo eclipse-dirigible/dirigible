@@ -373,10 +373,16 @@ window.IntentDiagrams = (() => {
     // Where an inbound ingest arrives from: its HTTP path, or its message/file source.
     const inboundDetail = (ingest) => {
         const source = ingest.source || {};
-        if (source.queue) return 'queue ' + source.queue;
-        if (source.topic) return 'topic ' + source.topic;
-        if (source.folder) return 'folder ' + source.folder;
-        return 'POST ' + (ingest.path || '');
+        // A gated, mapped arrival ingests something quite different from the raw payload, so the card
+        // says which - the alternative (the payload IS the record) is a different promise entirely.
+        const lookups = Object.keys(ingest.map || {}).filter(k => ingest.map[k] && ingest.map[k].lookup).length;
+        const mapping = (Object.keys(ingest.accept || {}).length ? ' • accept' : '')
+            + (Object.keys(ingest.map || {}).length ? ' • map' : '')
+            + (lookups ? ' • ' + lookups + ' lookup' + (lookups > 1 ? 's' : '') : '');
+        if (source.queue) return 'queue ' + source.queue + mapping;
+        if (source.topic) return 'topic ' + source.topic + mapping;
+        if (source.folder) return 'folder ' + source.folder + mapping;
+        return 'POST ' + (ingest.path || '') + mapping;
     };
 
     // Where an outbound departure leaves on, and whether it carries a declared contract.

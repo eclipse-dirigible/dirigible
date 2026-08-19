@@ -144,6 +144,13 @@ export function getTemplate(parameters) {
                 collection: "expansions"
             },
             {
+                location: "/template-application-events-java/events/ExpansionCleanup.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}.java",
+                engine: "velocity",
+                collection: "expansionCleanups"
+            },
+            {
                 location: "/template-application-events-java/events/PrintFeeder.java.template",
                 action: "generate",
                 rename: "gen/events/{{javaGenFolderName}}/{{className}}PrintFeeder.java",
