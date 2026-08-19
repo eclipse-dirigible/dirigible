@@ -3035,7 +3035,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * it twice and round-trip it as a duplicate.
      */
     private static final Set<String> STRUCTURED_ATTRIBUTES =
-            Set.of("rollupGuard", "checks", "labelParts", "aggregateKeys", "relatedEntities", "lookupColumns");
+            Set.of("rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys", "relatedEntities", "lookupColumns");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

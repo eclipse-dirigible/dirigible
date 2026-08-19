@@ -38,14 +38,23 @@ const PROPERTY_HANDLED = new Set(['name', 'description', 'tooltip', 'dataName', 
 // Serialize every field not covered by the explicit block as a flat attribute, JSON-encoding structured
 // values (objects/arrays). A structured value loaded from the .edm arrives here as its JSON string (mxCodec
 // decodes attributes as strings) and is written back verbatim; an object gets JSON.stringify. transform-edm
-// parses the known structured keys back into objects (#6826).
+// (editor-entity/template/transform-edm.js, ENTITY_STRUCTURED/PROPERTY_STRUCTURED) parses the known
+// structured keys back into objects (#6826).
 function extraAttributes(obj, handled) {
 	let out = '';
 	for (let key in obj) {
+		// OWN properties only: the value objects are Entity/Property prototype instances (model.js), and
+		// the intent-era attributes are decoded onto them as own fields. Own-only iteration writes back
+		// exactly what was loaded and avoids coupling to model.js's enumerable prototype defaults.
+		if (!Object.prototype.hasOwnProperty.call(obj, key)) {
+			continue;
+		}
 		if (handled.has(key) || typeof obj[key] === 'function') {
 			continue;
 		}
 		let val = obj[key];
+		// An empty string is treated as absent (nothing to preserve). The explicit block above still emits
+		// its own empty attributes (e.g. dataQuery="") where the schema expects them.
 		if (val === null || val === undefined || val === '') {
 			continue;
 		}

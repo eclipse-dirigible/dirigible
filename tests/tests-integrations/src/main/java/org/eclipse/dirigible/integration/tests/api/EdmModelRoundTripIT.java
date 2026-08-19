@@ -11,7 +11,6 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -46,8 +45,11 @@ import com.google.gson.JsonParser;
  * structured values, capture the intent's {@code .model} (the oracle), then save the {@code .edm}
  * back through the workspace API (which fires the same {@code ide-workspace-on-save} transform the
  * editor's save does) and assert the regenerated {@code .model} carries every structured value
- * intact. A completeness walk fails on any attribute that reached the {@code .model} as an unparsed
- * JSON string, so a future structured attribute cannot ship without {@code transform-edm} handling.
+ * intact. A structural diff of every entity/property key against the oracle then makes the
+ * guarantee complete: a future structured attribute forgotten in the generator's set is dropped
+ * from the {@code .edm} and caught here as a missing key, and one written but not parsed back is
+ * caught as a value mismatch - so a structured attribute cannot ship without {@code .edm}
+ * serialization support.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class EdmModelRoundTripIT extends IntegrationTest {
@@ -174,10 +176,14 @@ class EdmModelRoundTripIT extends IntegrationTest {
                                                             .size() > 0,
                 "rollupGuard must be a populated object, not an empty or stringified value");
 
-        // 4. Future-proofing: no entity/property attribute in the rebuilt .model may be an unparsed
-        // JSON string. A new structured attribute added to the generator but not taught to
-        // transform-edm would surface here as a "{...}"/"[...]" string instead of an object.
-        assertNoUnparsedStructuredValues(modelFromEdm);
+        // 4. The real "future attributes cannot ship without .edm serialization" guard: every
+        // entity/property key the intent's .model carries must survive intact in the one rebuilt from the
+        // .edm. A new structured attribute forgotten in the generator's set is dropped from the .edm and
+        // caught here as a MISSING key; one written but not parsed back is caught as a VALUE mismatch
+        // (object vs JSON string). Comparing parsed structure - not pattern-matching for {/[ - means a
+        // scalar that legitimately IS a JSON string (e.g. widgetDependsOnValueCases) is compared
+        // value-to-value and never falsely flagged.
+        assertEveryKeySurvives(modelFromIntent, modelFromEdm);
     }
 
     private void assertEntityStructuredEquals(JsonObject fromIntent, JsonObject fromEdm, String entityName, String key) {
@@ -199,49 +205,59 @@ class EdmModelRoundTripIT extends IntegrationTest {
     }
 
     /**
-     * A structured value that reached the .model as a JSON string is an attribute transform-edm did not
-     * parse.
+     * Keys another mechanism owns and round-trips differently, so they are compared by their own tests
+     * rather than here: {@code uniqueConstraints} is emitted and rebuilt by the composite-unique-key
+     * feature's {@code <constraints>} section (a shape without {@code properties}), and this fix
+     * deliberately does not touch it (see {@code EdmIntentGenerator.STRUCTURED_ATTRIBUTES} and
+     * {@code transform-edm.js} {@code ENTITY_STRUCTURED}). Its non-duplication is asserted separately
+     * above.
      */
-    private void assertNoUnparsedStructuredValues(JsonObject model) {
-        JsonArray entities = model.getAsJsonObject("model")
-                                  .getAsJsonArray("entities");
-        for (JsonElement e : entities) {
-            JsonObject entity = e.getAsJsonObject();
-            assertNoJsonStringMembers(entity, entity.get("name")
-                                                    .getAsString());
-            JsonElement properties = entity.get("properties");
-            if (properties != null && properties.isJsonArray()) {
-                for (JsonElement p : properties.getAsJsonArray()) {
-                    assertNoJsonStringMembers(p.getAsJsonObject(), entity.get("name")
-                                                                         .getAsString()
-                            + " property");
+    private static final java.util.Set<String> ROUND_TRIP_EXCEPTIONS = java.util.Set.of("uniqueConstraints");
+
+    /**
+     * Every entity/property key in the intent's .model must survive intact in the one rebuilt from the
+     * .edm.
+     */
+    private void assertEveryKeySurvives(JsonObject fromIntent, JsonObject fromEdm) {
+        for (JsonElement e : fromIntent.getAsJsonObject("model")
+                                       .getAsJsonArray("entities")) {
+            JsonObject oracle = e.getAsJsonObject();
+            String name = oracle.get("name")
+                                .getAsString();
+            JsonObject actual = entity(fromEdm, name);
+            for (Map.Entry<String, JsonElement> member : oracle.entrySet()) {
+                String key = member.getKey();
+                if (ROUND_TRIP_EXCEPTIONS.contains(key)) {
+                    continue;
                 }
+                if ("properties".equals(key)) {
+                    assertPropertiesSurvive(member.getValue()
+                                                  .getAsJsonArray(),
+                            actual, name);
+                    continue;
+                }
+                assertTrue(actual.has(key), "[" + name + "] lost attribute [" + key + "] in the .edm -> .model round-trip");
+                assertEquals(member.getValue(), actual.get(key), "[" + name + "]." + key + " changed across the .edm -> .model round-trip");
             }
         }
     }
 
-    private void assertNoJsonStringMembers(JsonObject object, String owner) {
-        for (Map.Entry<String, JsonElement> member : object.entrySet()) {
-            JsonElement value = member.getValue();
-            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive()
-                                                  .isString()) {
-                continue;
+    private void assertPropertiesSurvive(JsonArray oracleProperties, JsonObject actualEntity, String entityName) {
+        for (JsonElement pe : oracleProperties) {
+            JsonObject oracleProperty = pe.getAsJsonObject();
+            String propertyName = oracleProperty.get("name")
+                                                .getAsString();
+            JsonObject actualProperty = property(actualEntity, propertyName);
+            for (Map.Entry<String, JsonElement> member : oracleProperty.entrySet()) {
+                String key = member.getKey();
+                if (ROUND_TRIP_EXCEPTIONS.contains(key)) {
+                    continue;
+                }
+                assertTrue(actualProperty.has(key),
+                        "[" + entityName + "." + propertyName + "] lost attribute [" + key + "] in the round-trip");
+                assertEquals(member.getValue(), actualProperty.get(key),
+                        "[" + entityName + "." + propertyName + "]." + key + " changed across the round-trip");
             }
-            String text = value.getAsString()
-                               .trim();
-            if (text.startsWith("{") || text.startsWith("[")) {
-                assertFalse(looksLikeJson(text), "[" + owner + "] attribute [" + member.getKey()
-                        + "] is an unparsed structured value (a JSON string), so transform-edm did not parse it: " + text);
-            }
-        }
-    }
-
-    private boolean looksLikeJson(String text) {
-        try {
-            JsonElement parsed = JsonParser.parseString(text);
-            return parsed.isJsonObject() || parsed.isJsonArray();
-        } catch (RuntimeException notJson) {
-            return false;
         }
     }
 
