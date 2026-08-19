@@ -9,6 +9,8 @@ import java.util.Map;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.core.Configurations;
 import org.eclipse.dirigible.sdk.http.HttpClient;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -40,6 +42,8 @@ import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targe
  */
 @Component("${javaGenFolderName}_${className}Integration")
 public class ${className}Integration implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Integration");
 
     @Override
     public String destination() {
@@ -92,5 +96,10 @@ public class ${className}Integration implements MessageHandler {
         } catch (Exception ex) {
             throw new RuntimeException("Integration ${name} failed", ex);
         }
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Integration ${name}: the listener on [{}] failed - [{}]", destination(), error);
     }
 }

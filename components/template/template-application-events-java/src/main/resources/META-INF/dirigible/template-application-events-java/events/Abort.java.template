@@ -2,6 +2,8 @@ package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.sdk.bpm.Process;
 import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -24,6 +26,8 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
  */
 @Component("${javaGenFolderName}_${process}Abort")
 public class ${process}Abort implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${process}Abort");
 
     @Override
     public String destination() {
@@ -50,5 +54,10 @@ public class ${process}Abort implements MessageHandler {
             // The instance is not in the abort scope (already ended or never reached it) - a no-op by
             // the fail-soft glue convention, never an error.
         }
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Abort ${process}: the listener on [{}] failed - [{}]", destination(), error);
     }
 }

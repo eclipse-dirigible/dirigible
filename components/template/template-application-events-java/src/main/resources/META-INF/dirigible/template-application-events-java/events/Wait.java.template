@@ -2,6 +2,8 @@ package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.sdk.bpm.Process;
 import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -29,6 +31,8 @@ import gen.${javaGenFolderName}.data.${javaEventPerspective}.${eventEntity}Repos
  */
 @Component("${javaGenFolderName}_${className}Wait")
 public class ${className}Wait implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Wait");
 
     @Override
     public String destination() {
@@ -70,5 +74,10 @@ public class ${className}Wait implements MessageHandler {
             // The instance is not waiting on this message (already resumed, on another step, or
             // ended) - a no-op by the fail-soft glue convention, never an error.
         }
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Wait ${className}: the listener on [{}] failed - [{}]", destination(), error);
     }
 }
