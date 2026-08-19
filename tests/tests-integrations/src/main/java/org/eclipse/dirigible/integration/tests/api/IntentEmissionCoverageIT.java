@@ -11,6 +11,7 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
@@ -29,6 +30,7 @@ import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -745,6 +747,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Shipment, kind: manyToOne, to: Shipment }
 
+              # expansions: the stay's from-to span generates one night row per day and spreads the
+              # total across them. Asserted at RUNTIME because what the reconciliation promises is a
+              # property of the rows, not of the source: an edited span keeps the rows whose day
+              # survives it (dirigible #6817).
+              - name: Stay
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: fromDate, type: date }
+                  - { name: toDate,   type: date }
+                  - { name: total,    type: decimal }
+                  - { name: nights,   type: integer, readOnly: true }
+              - name: StayNight
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: day,    type: date }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Stay, kind: manyToOne, to: Stay, composition: true, required: true }
+
             aggregates:
               - name: ledgerTotal
                 of: Ledger
@@ -777,6 +798,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 map: { dueDate: period }
                 spread: { total: fee, into: amount, round: 2 }
                 count: periods
+              - name: nights
+                from: Stay
+                into: StayNight
+                between: { start: fromDate, end: toDate }
+                map: { day: period }
+                spread: { total: total, into: amount, round: 2 }
+                count: nights
 
             # collection-driven generation: the monthly job creates one Claim per Person and,
             # under each, one ClaimLine per working day of the month (amount defaulted).
@@ -3812,6 +3840,98 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("$", hasSize(1))
                                                  .body("[0].Tag", equalTo(tagId.get())));
+
+        assertExpansionReconcilesTheChildSet();
+    }
+
+    /**
+     * The expansion RECONCILES its child set instead of rebuilding it (dirigible #6817). A client-Java
+     * handler has no transaction boundary - every delete and every insert commits on its own - so
+     * wiping the whole set before recreating it meant a failure partway through the recreation had
+     * already committed the deletes: rows lost for good, with a stale count and roll-ups that consumed
+     * a shrink which never happened.
+     *
+     * <p>
+     * The observable promise of the diff is a property of the ROWS, which is why it is asserted here
+     * and not only on the generated source: a day that survives an edited span keeps its identity, so
+     * whatever referenced that night row still references the same row. The dropped day goes, the new
+     * days arrive, and every kept row's share is re-spread for the new row count.
+     */
+    private void assertExpansionReconcilesTheChildSet() {
+        AtomicInteger stayId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> stayId.set(given().contentType("application/json")
+                                                            .body("{\"FromDate\":\"2026-03-10\",\"ToDate\":\"2026-03-12\",\"Total\":300}")
+                                                            .when()
+                                                            .post(API + "/stay/StayController")
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .extract()
+                                                            .path("Id")));
+        // The expansion runs off the master's create event, so the rows arrive asynchronously.
+        AtomicReference<Map<String, Integer>> before = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> {
+            Map<String, Integer> nights = stayNights(stayId.get());
+            assertEquals(3, nights.size(), "a three-day span expands into one night row per day, got: " + nights);
+            before.set(nights);
+        }, 60);
+
+        // The span moves one day forward and two days out: 10 falls out, 11 and 12 survive, 13 and 14
+        // are new.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + stayId.get()
+                                                         + ",\"FromDate\":\"2026-03-11\",\"ToDate\":\"2026-03-14\",\"Total\":300}")
+                                                 .when()
+                                                 .put(API + "/stay/StayController/" + stayId.get())
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> {
+            Map<String, Integer> after = stayNights(stayId.get());
+            assertEquals(4, after.size(), "the edited span expands into four night rows, got: " + after);
+            // The surviving days KEPT their rows - the whole point of the diff. Two of the three
+            // original days are still in the span, and both must answer with the identifier they had.
+            int survivors = 0;
+            for (Map.Entry<String, Integer> night : before.get()
+                                                          .entrySet()) {
+                if (after.containsKey(night.getKey())) {
+                    survivors++;
+                    assertEquals(night.getValue(), after.get(night.getKey()),
+                            "a day the edited span still covers must keep its row, day " + night.getKey());
+                }
+            }
+            assertEquals(2, survivors, "two of the three original days stay in the span, got before " + before.get() + " after " + after);
+        }, 60);
+
+        // A kept row's share is DERIVED from the total and the row count, so it is re-spread rather
+        // than left at the value the old count produced (300 over four nights, not three).
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/stay/StayNightController?Stay=" + stayId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Amount", everyItem(equalTo(75.0F))),
+                60);
+        // ... and the count write-back followed the new row count.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/stay/StayController/" + stayId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Nights", equalTo(4)),
+                60);
+    }
+
+    /** The stay's night rows as day (as serialized) to row identifier. */
+    private Map<String, Integer> stayNights(int stayId) {
+        List<Map<String, Object>> rows = given().when()
+                                                .get(API + "/stay/StayNightController?Stay=" + stayId)
+                                                .then()
+                                                .statusCode(200)
+                                                .extract()
+                                                .jsonPath()
+                                                .getList("$");
+        Map<String, Integer> nights = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            nights.put(String.valueOf(row.get("Day")), (Integer) row.get("Id"));
+        }
+        return nights;
     }
 
     /**

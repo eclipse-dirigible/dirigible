@@ -482,7 +482,9 @@ expansions:
     count: periods
 ```
 
-A span change replaces the generated child set; never mix hand-entered rows into an expanded child.
+A span change is reconciled as a diff - the missing periods are inserted, the ones that fell out of
+the span are deleted, every other row is left alone; never mix hand-entered rows into an expanded
+child.
 
 ## rollups - denormalised parent totals
 
