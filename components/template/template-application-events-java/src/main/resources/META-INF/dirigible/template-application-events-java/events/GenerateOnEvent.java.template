@@ -36,7 +36,8 @@ import org.eclipse.dirigible.sdk.utils.Json;
  *   the cardinality for anything that must exist at most once.
 #{else}
  * - at-most-once through the ${backRefProperty} back-reference (the guard lives in that create-from):
- *   a redelivery returns the document that already exists instead of minting a second one.
+ *   a redelivery returns the document that already exists instead of minting a second one#if($hasRetiredStatus), unless that
+ *   document was retired - a ${toEntity} in a `cancelled` or `void` stage is superseded by a fresh one#end.
 #end
  */
 @Component("${javaGenFolderName}_${className}GenerateOnEvent")

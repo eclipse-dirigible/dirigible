@@ -31,6 +31,7 @@ import org.eclipse.dirigible.components.intent.model.InboundSourceIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.OutboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
@@ -719,6 +720,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // always did (a regeneration from an older glue file must not silently drop the button).
             e.put("eventOnly", !g.hasButton());
             putGeneratesEvent(g, e, fromPk);
+            putSupersededTarget(g, e, model, crossModel ? null : byName.get(g.getTo()), context);
             // Cross-model source: the gen folder and the project that owns the source's topics/views.
             e.put("crossModelSource", crossModelSource);
             e.put("fromModel", crossModelSource ? g.getFromUses() : "");
@@ -930,6 +932,87 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     + "] as its value) - it is the at-most-once guard against an event redelivery"));
         }
         e.put("backRefProperty", backReference);
+    }
+
+    /**
+     * The state half of the at-most-once guard (issue #6814): which of the target's statuses mean the
+     * document that already back-references the source no longer counts, so a replacement may be
+     * minted.
+     *
+     * <p>
+     * The guard as first shipped asked existence only - "is there a target for this source?" - and a
+     * voided or cancelled target answers yes forever: it keeps existing and keeps back-referencing the
+     * source, so the source's one-shot slot was consumed at the first creation and nothing that later
+     * happened to the target released it. "Void and reissue" - an ordinary business flow - was
+     * inexpressible for an event-driven create-from.
+     *
+     * <p>
+     * What a status MEANS is already declared once, where the nomenclature is seeded: the
+     * {@code stage:} classification (see {@link LifecycleStages}) the report scope resolves through. A
+     * target whose status is classified {@code cancelled} or {@code void} is retired, and the guard
+     * steps over it; {@code draft} and {@code live} ones still block, so a redelivered event keeps
+     * finding the document it created. Reusing the classification rather than adding a second way to
+     * say it is deliberate - two vocabularies for "this row no longer counts" could only drift.
+     *
+     * <p>
+     * Nothing is emitted when the create-from appends (there is no guard to make state-aware), when the
+     * target carries no lifecycle at all (there is no state to read), or for a cross-model target,
+     * whose seeds live in its owner model so no classification is resolvable here. A target that DOES
+     * carry a lifecycle whose nomenclature nobody classified gets the warning - that combination is the
+     * silent one, where the guard looks state-aware and is not.
+     *
+     * @param g the create-from
+     * @param e the glue entry being built
+     * @param model the model being generated
+     * @param target the local target entity, {@code null} for a cross-model target
+     * @param context the generation context collecting the warnings, may be {@code null}
+     */
+    private static void putSupersededTarget(GeneratesIntent g, Map<String, Object> e, IntentModel model, EntityIntent target,
+            IntentGenerationContext context) {
+        e.put("hasRetiredStatus", false);
+        e.put("retiredStatusProperty", "");
+        e.put("retiredStatusCondition", "");
+        // An appending create-from (issue #6800) keeps no guard at all, so there is nothing for a
+        // retired target to release - and warning about an unclassified nomenclature there would be
+        // noise about a guard that does not exist.
+        if (!g.isEventDriven() || g.isAppendMode()) {
+            return;
+        }
+        RelationIntent status = LifecycleStages.statusRelation(target);
+        if (status == null || status.getTo() == null) {
+            return;
+        }
+        Map<String, List<Integer>> stages = status.isCrossModel() ? Map.of() : LifecycleStages.stagesOf(model, status.getTo());
+        List<Integer> retired = new ArrayList<>(stages.getOrDefault(LifecycleStages.CANCELLED, List.of()));
+        retired.addAll(stages.getOrDefault(LifecycleStages.VOID, List.of()));
+        if (retired.isEmpty()) {
+            String warning = "generates [" + g.getName() + "] is event-driven and its target [" + g.getTo()
+                    + "] carries a lifecycle status [" + status.getName() + "], but no seed row of [" + status.getTo()
+                    + "] is classified with `stage:` - the at-most-once guard can only ask whether a [" + g.getTo()
+                    + "] exists, so a cancelled or voided one blocks its replacement forever. Classify the seed rows of [" + status.getTo()
+                    + "] with `stage:` (draft/live/cancelled/void) so a retired target can be superseded.";
+            LOGGER.warn(warning);
+            if (context != null) {
+                context.addIssue(warning);
+            }
+            return;
+        }
+        String property = IntentNaming.pascalCase(status.getName());
+        e.put("hasRetiredStatus", true);
+        e.put("retiredStatusProperty", property);
+        // Rendered against the template's loop variable: a retired candidate is stepped over, the first
+        // one that is not is this source's document.
+        StringBuilder condition = new StringBuilder();
+        for (Integer id : retired) {
+            if (condition.length() > 0) {
+                condition.append(" || ");
+            }
+            condition.append("candidate.")
+                     .append(property)
+                     .append(" == ")
+                     .append(id);
+        }
+        e.put("retiredStatusCondition", condition.toString());
     }
 
     /**
@@ -1643,8 +1726,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * mapping shape.
      */
     static List<Map<String, Object>> buildGeneratesForTest(IntentModel model) {
+        return buildGeneratesForTest(model, null);
+    }
+
+    /**
+     * Test hook: build the {@code generates} glue collection against a context, so the warnings a
+     * create-from collects (an event-driven one whose target lifecycle nobody classified) are readable.
+     */
+    static List<Map<String, Object>> buildGeneratesForTest(IntentModel model, IntentGenerationContext context) {
         return buildGenerates(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
-                null);
+                context);
     }
 
     /**
