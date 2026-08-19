@@ -13,8 +13,11 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * with the application.
  *
  * Contract:
- * - binds the #if($isCreate)source's create topic (the platform publishes creates unsuffixed)#{else}source's -transitioned topic - the channel every status write publishes,
- *   which -updated reactions never see, so there are no loops#end;
+ * - binds the #if($isCreate)source's create topic (the platform publishes creates unsuffixed)#{else}source's -transitioned topic - the channel a status write ROUTED BY THE
+ *   WORKFLOW publishes (a transition button, a setField step, a create-from completion hook, a
+ *   register lookup that sets a status), which -updated reactions never see, so there are no loops.
+ *   It is NOT every status write: a plain REST update() publishes only -updated, and a targeted
+ *   updateProperty/updateProperties write publishes nothing unless its own template publishes#end;
  * - RE-LOADS the source by id before the guard, because the event payload is as-of the event and lacks
  *   later-step data such as a stamped document number;
  * - delegates to ${className}Generate, the SAME create-from a button would call, so the mapping, the

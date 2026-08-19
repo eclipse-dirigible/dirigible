@@ -695,6 +695,51 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 100 }
 
+              # resolves: (#6712) the effective-dated register lookup and, crucially, what happens
+              # AFTER it succeeds. Zone is the match key, Inspector is what gets resolved, Duty is the
+              # register whose validity period decides which Inspector was on duty on the patrol's date.
+              - name: Zone
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+              - name: Inspector
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+              # The register: exactly ONE to-one to Inspector (what `set:` resolves), the match key,
+              # and the period. Two rows for one Zone with non-overlapping windows, so only the row
+              # covering the patrol's date can match - a lookup that ignored the period would pick the
+              # wrong Inspector rather than none, which is the failure worth catching.
+              - name: Duty
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: validFrom, type: date }
+                  - { name: validTo,   type: date }
+                relations:
+                  - { name: Zone,      kind: manyToOne, to: Zone }
+                  - { name: Inspector, kind: manyToOne, to: Inspector }
+              # The record the lookup fills in. Its status is routed by the outcome, and that status
+              # write is the transition the generates below is bound to.
+              - name: Patrol
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: visitedAt, type: date }
+                  - { name: outcome,   type: string, length: 20 }
+                relations:
+                  - { name: Zone,      kind: manyToOne, to: Zone }
+                  - { name: Inspector, kind: manyToOne, to: Inspector }
+                  - { name: Status,    kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+              # The downstream proof: this exists only if the automatic resolution published
+              # "-transitioned". The back-reference to Patrol is also the at-most-once guard.
+              - name: PatrolReport
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 100 }
+                relations:
+                  - { name: Patrol, kind: manyToOne, to: Patrol }
+
             aggregates:
               - name: ledgerTotal
                 of: Ledger
@@ -1002,6 +1047,33 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 prompt:
                   - { field: note }
                   - { field: amount, required: true }
+              # The automatic half of the same axis: the create-from below is triggered by a status
+              # the REGISTER LOOKUP wrote, not by a button and not by a workflow step. The lookup
+              # persists that status with a targeted write, which publishes no event of its own, so
+              # this entry only ever fires if the lookup announces the transition itself.
+              - name: report-from-patrol
+                from: Patrol
+                to: PatrolReport
+                event: { onTransition: Patrol, when: "Status == POSTED" }
+                map:
+                  Patrol: id
+                defaults:
+                  note: "AUTO"
+
+            # resolves: (#6712) fill Patrol.Inspector from the Duty row whose validity period covers
+            # the patrol's date, stamp the outcome, and route the record by status. The status write is
+            # the point of the coverage: it is a transition like any other, and the generates entry
+            # above is bound to it - so this asserts the AUTOMATIC path reaches the same consumers the
+            # manual one does, which is exactly what silently did not happen.
+            resolves:
+              - name: assign-inspector
+                event: { onCreate: Patrol }
+                set: Inspector
+                from: Duty
+                match: { Zone: Zone }
+                between: { start: validFrom, end: validTo, value: visitedAt }
+                outcome: outcome
+                found: { setStatus: POSTED }
 
             # The roles the model issues - and the ones a `visibleTo:` field may name.
             permissions:
@@ -1045,6 +1117,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { id: 1, name: DRAFT }
                   - { id: 2, name: POSTED }
                   - { id: 3, name: CANCELLED }
+              - name: zones
+                entity: Zone
+                rows:
+                  - { id: 1, name: North }
+              - name: inspectors
+                entity: Inspector
+                rows:
+                  - { id: 1, name: Early }
+                  - { id: 2, name: Late }
+              # Two duties for one zone, windows that do not overlap: the visit's date falls inside
+              # the SECOND, so resolving to inspector 2 can only mean the period was honoured - a
+              # lookup that matched on the zone alone would answer 1 (or refuse as ambiguous).
+              - name: duties
+                entity: Duty
+                rows:
+                  - { id: 1, Zone: 1, Inspector: 1, validFrom: "2020-01-01", validTo: "2020-12-31" }
+                  - { id: 2, Zone: 1, Inspector: 2, validFrom: "2021-01-01", validTo: "2021-12-31" }
               - name: units
                 entity: Unit
                 rows:
@@ -2185,6 +2274,26 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(generate.contains(".eq(\"Slip\", sourceId)") && generate.contains("return existing.get(0);"),
                 "an event-driven create-from must return the document already back-referencing the source");
 
+        // resolves (#6712): the lookup persists its outcome with a TARGETED write, which publishes no
+        // event at all - so when that write routes the record by status it has to announce the
+        // transition itself. Without this the automatic path wrote the status and told nobody, while a
+        // transitions: button on the same entity worked: the primary path silently dead, the fallback
+        // fine. The consumers are bound to "-transitioned" (see the create-from above), so that is the
+        // channel it must publish on.
+        String resolve = contentOf("gen/events/emission/AssignInspectorResolve.java");
+        assertTrue(resolve.contains("updateProperties("), "the lookup must persist its outcome as one targeted write");
+        assertTrue(resolve.contains("-Patrol-transitioned"),
+                "a resolve that routes the record by status must publish the record's -transitioned topic, "
+                        + "or nothing bound to onTransition can ever observe an automatic resolution");
+        assertTrue(resolve.contains("Producer.sendToTopic"), "the resolve must publish through the messaging producer");
+        // Guarded on a status having been written: a lookup that only filled the relation (or found
+        // nothing) transitioned nothing, and must not announce one.
+        assertTrue(resolve.indexOf("if (status != null)") < resolve.indexOf("Producer.sendToTopic"),
+                "the publish must sit under the status guard, so a lookup that wrote no status announces no transition");
+        String reportOnEvent = contentOf("gen/events/emission/ReportFromPatrolGenerateOnEvent.java");
+        assertTrue(reportOnEvent.contains("-Patrol-transitioned"),
+                "the create-from driven by the lookup must listen on the very topic the lookup publishes");
+
         // generates prompt (#6685): the prompted controller takes a values map, enforces the
         // required input with a 400, and converts each posted value to the target field's Java type
         // (decimal -> BigDecimal). The action descriptor carries the prompt so the customActions
@@ -3323,6 +3432,56 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertInboundSourcesRuntime();
         assertOutboundDepartureRuntime();
         assertBpmEventsRuntime();
+        assertResolveTransitionRuntime();
+    }
+
+    /**
+     * The register lookup end to end (#6712), and specifically what happens once it succeeds: the
+     * resolved relation and the routing status are written, and the create-from bound to that
+     * transition mints its document - with nobody clicking anything.
+     *
+     * <p>
+     * The last step is the one worth having. The lookup persists through a targeted write, which
+     * publishes no event, so an automatic resolution used to reach no consumer at all while a manual
+     * transition on the same entity reached every one of them - the automation's primary path silently
+     * doing nothing, its fallback working, and no log line either way. Asserting only that the
+     * Inspector was filled in would still pass in that world.
+     */
+    private void assertResolveTransitionRuntime() {
+        String patrolApi = API + "/patrol/PatrolController";
+        AtomicInteger patrol = new AtomicInteger();
+        // Zone 1 has two duties; this date falls inside the SECOND window only.
+        restAssuredExecutor.execute(() -> patrol.set(given().contentType("application/json")
+                                                            .body("{\"Zone\":1,\"VisitedAt\":\"2021-06-15\"}")
+                                                            .when()
+                                                            .post(patrolApi)
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .extract()
+                                                            .path("Id")));
+        // The lookup runs off the create event, so it lands after the POST returns.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(patrolApi + "/" + patrol.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 // Inspector 2, not 1: the covering period decided it, not the zone alone.
+                                                 .body("Inspector", equalTo(2))
+                                                 .body("Outcome", equalTo("found"))
+                                                 .body("Status", equalTo(2)),
+                90);
+        // The transition the lookup wrote must have reached the create-from bound to it.
+        restAssuredExecutor.execute(() -> {
+            io.restassured.path.json.JsonPath reports = given().when()
+                                                               .get(API + "/patrolreport/PatrolReportController")
+                                                               .then()
+                                                               .statusCode(200)
+                                                               .extract()
+                                                               .jsonPath();
+            assertEquals(1, reports.getList("findAll { it.Patrol == " + patrol.get() + " }")
+                                   .size(),
+                    "the create-from bound to onTransition must mint its document from an AUTOMATIC resolution, "
+                            + "not only from a transition button");
+        }, 90);
     }
 
     /**
