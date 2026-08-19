@@ -268,5 +268,67 @@
             "guardValue": "3",
             "backRefProperty": "SalesOrder"
         }
+    ],
+    "resolves": [
+        {
+            "name": "salesRep",
+            "className": "SalesRep",
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "keyProperty": "Id",
+            "topicSuffix": "",
+            "guardExpression": "",
+            "setProperty": "SalesRep",
+            "registerEntity": "TerritoryAssignment",
+            "registerPerspective": "Settings",
+            "registerValueProperty": "SalesRep",
+            "matches": [
+                {
+                    "registerProperty": "Territory",
+                    "recordProperty": "Territory"
+                }
+            ],
+            "matchSummary": "Territory",
+            "startProperty": "ValidFrom",
+            "endProperty": "ValidTo",
+            "valueProperty": "OrderedOn",
+            "outcomeProperty": "SalesRepOutcome",
+            "statusProperty": "Status",
+            "foundStatus": "2",
+            "notFoundStatus": "3",
+            "ambiguousStatus": "4",
+            "writesStatus": "true"
+        }
+    ],
+    "writers": [
+        {
+            "process": "OrderApproval",
+            "userTask": "review",
+            "className": "OrderApprovalReviewWrite",
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "keyProperty": "Id",
+            "keyAccessor": "intValue",
+            "fields": [
+                {
+                    "property": "ShippedOn",
+                    "coercion": "date"
+                },
+                {
+                    "property": "Quantity",
+                    "coercion": "integer"
+                }
+            ]
+        }
+    ],
+    "numbering": [
+        {
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "masterPk": "Id",
+            "field": "Number",
+            "series": "Sales Order",
+            "per": ""
+        }
     ]
 }
