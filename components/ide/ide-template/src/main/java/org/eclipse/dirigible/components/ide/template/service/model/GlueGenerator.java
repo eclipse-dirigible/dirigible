@@ -605,6 +605,10 @@ class GlueGenerator {
                 // a step-scoped one - and whether the create-from keeps its at-most-once lookup at all.
                 "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "backRefProperty", "isStep", "stepProcess",
                 "stepName", "appendMode",
+                // The state half of that guard (issue #6814): which of the target's statuses retire it, so
+                // a cancelled or voided document stops blocking its replacement. Gated on the boolean - a
+                // .glue written before this key existed keeps the existence-only guard it always had.
+                "hasRetiredStatus", "retiredStatusProperty", "retiredStatusCondition",
                 // The declared input form (issue #6685): the prompted target properties with their
                 // pre-rendered value conversions - the template renders one block per entry.
                 "hasPrompt", "promptFields");

@@ -18,6 +18,7 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -1000,6 +1001,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 setStatus: POSTED
                 label: Post
                 icon: check
+              # Voiding the GENERATED document is what releases the slip's one-shot slot (#6814): the
+              # create-from's at-most-once guard steps over a voucher whose status stage is `cancelled`,
+              # so the slip can be generated from again. Nothing about the create-from declares this -
+              # the seeds' `stage:` classification is what says the voided voucher no longer counts.
+              - name: VoidVoucher
+                forEntity: Voucher
+                from: [DRAFT]
+                setStatus: CANCELLED
+                label: Void
+                icon: ban
               # send-document: the transition mails AFTER the flip commits, with the bill's own print
               # rendered to PDF and attached. The recipient is a LITERAL so the runtime always gets past
               # the recipient check and actually attempts the attachment - which cannot succeed on this
@@ -1153,12 +1164,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 entity: Party
                 rows:
                   - { id: 1, name: Acme }
+              # stage: what each status MEANS to the lifecycle (#6645) - metadata, never a column of
+              # the seeded table. Consumed by a report's `scope:` and by the event-driven create-from's
+              # at-most-once guard, which steps over a target retired into `cancelled`/`void` (#6814).
               - name: entry-statuses
                 entity: EntryStatus
                 rows:
-                  - { id: 1, name: DRAFT }
-                  - { id: 2, name: POSTED }
-                  - { id: 3, name: CANCELLED }
+                  - { id: 1, name: DRAFT,     stage: draft }
+                  - { id: 2, name: POSTED,    stage: live }
+                  - { id: 3, name: CANCELLED, stage: cancelled }
               - name: units
                 entity: Unit
                 rows:
@@ -2356,9 +2370,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the listener must delegate to the create-from rather than re-implement the mapping");
         assertFalse(generateOnEvent.contains("VoucherLineEntity"), "the listener must carry no mapping of its own");
         assertTrue(generate.contains("@Post(\"/run\")"), "button: true must keep the endpoint alongside the event trigger");
-        // The at-most-once guard lives in the create-from, so BOTH triggers get it.
-        assertTrue(generate.contains(".eq(\"Slip\", sourceId)") && generate.contains("return existing.get(0);"),
+        // The at-most-once guard lives in the create-from, so BOTH triggers get it - and it is
+        // state-aware (#6814): a voucher retired into a stage the seeds classify `cancelled`/`void` is
+        // stepped over, so voiding it releases the slip's slot instead of consuming it forever.
+        assertTrue(generate.contains(".eq(\"Slip\", sourceId)") && generate.contains("VoucherEntity candidate : existing"),
                 "an event-driven create-from must return the document already back-referencing the source");
+        assertTrue(generate.contains("if (candidate.Status == null || !(candidate.Status == 3)) {"),
+                "the guard must step over a target whose status stage is cancelled/void, and only over those");
 
         // generates on the step axis + mode: append (#6800): the listener binds the step-scoped topic
         // the generated emitter publishes the trigger entity on (NOT a lifecycle topic), and the
@@ -2705,6 +2723,42 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             assertEquals(autoVoucherId.get(), io.restassured.path.json.JsonPath.from(voucher)
                                                                                .getInt("Id"),
                     "a click after the event must return the existing voucher, not a second one");
+        });
+
+        // ...and the other half of that guard's semantics (#6814): VOIDING the voucher releases the
+        // slip. The guard is not "has this slip ever produced a voucher" but "does it have one that
+        // still counts", so once the voided one is classified `cancelled` by the seeds, generating from
+        // the same slip mints a SECOND voucher instead of handing back the retired one. Void and
+        // reissue - an ordinary business flow - was inexpressible while the guard asked existence only.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + autoVoucherId.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/VoidVoucherTransition/run")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(3)));
+        restAssuredExecutor.execute(() -> {
+            String reissuedVoucher = given().contentType("application/json")
+                                            .body("{\"id\":" + postedSlip.get() + "}")
+                                            .when()
+                                            .post("/services/java/" + PROJECT + "/gen/events/emission/VoucherFromSlipGenerate/run")
+                                            .then()
+                                            .statusCode(200)
+                                            .extract()
+                                            .asString();
+            int reissued = io.restassured.path.json.JsonPath.from(reissuedVoucher)
+                                                            .getInt("Id");
+            assertNotEquals(autoVoucherId.get(), reissued, "a voided voucher must not go on blocking its replacement");
+            String matching = "findAll { it.Slip == " + postedSlip.get() + " }";
+            assertEquals(2, given().when()
+                                   .get(API + "/voucher/VoucherController")
+                                   .then()
+                                   .statusCode(200)
+                                   .extract()
+                                   .jsonPath()
+                                   .getList(matching)
+                                   .size(),
+                    "the voided voucher must be kept, not replaced in place - both documents stay on the audit trail");
         });
 
         // generates prompt (#6685) at the outermost layer: the prompted values reach the created
