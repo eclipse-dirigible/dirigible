@@ -126,6 +126,27 @@ mixes them. There is **no** reflective by-name fallback.
 | Listener | `@Component implements MessageHandler` → `String destination()`, default `ListenerKind kind()`, `onMessage(String)`, default `onError` (like `jakarta.jms.MessageListener`) | `@Listener(name=…, kind=…)` on a `@Component` `void m(String)` method |
 | WebSocket | `@Component implements WebsocketHandler` → `String endpoint()` + default lifecycle callbacks (like `TextWebSocketHandler`) | `@Websocket(endpoint=…)` class + `@OnOpen`/`@OnMessage`/`@OnError`/`@OnClose` methods (like Jakarta `@ServerEndpoint`; the endpoint has no method-level home) |
 
+**Throwing means different things in a job and in a listener — the idiom is identical, the outcome is
+not.** A `JobHandler` that throws is caught by `JobExecutionService`, recorded as a **FAILED job-log
+row** and rethrown to Quartz, so the failure is a first-class operational record: it shows up in the
+Jobs perspective and in the Monitoring shell's failed-jobs tile, and the run can be triggered again.
+A `MessageHandler` that throws is **logged with its stack trace** by `ListenerClassConsumer.dispatch`
+— and that is all: the JMS session is `AUTO_ACKNOWLEDGE` and the exception never reaches the broker,
+so **the message is acknowledged and gone**. No retry, no dead letter, no operational record, nothing
+to re-run. (Before that log line existed, a throwing listener produced no output at all — the
+handler's own `onError` defaults to a no-op — which made every failure inside generated intent glue
+invisible.)
+
+Two consequences worth internalizing before writing either kind of handler:
+
+- **Do not read a listener throw as recoverable.** The generated templates use the same
+  `throw new RuntimeException(…)` idiom in `Job.java.template` and in
+  `Notification`/`Integration.java.template`; in the job it escalates, in the listener it only
+  narrates. A developer copying the job pattern into a listener loses the work, not just the alert.
+- **Work that must not be lost needs its own arrangement** — an idempotent re-run path keyed on
+  something durable, or a reconciliation job that finds records left in a pre-handler state. This is
+  why an event-sourced write in generated glue is written to be replayable rather than transactional.
+
 ## `JavaHandler` (low-level REST)
 
 `JavaEndpoint` (`/services/java/{project}/{*classPath}` + `/public/...`) tries `ControllerRouter` first,
