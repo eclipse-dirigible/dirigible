@@ -55,6 +55,22 @@ public final class Process {
         BpmFacade.updateBusinessStatus(processInstanceId, businessStatus);
     }
 
+    /**
+     * Cancels a running process instance, recording {@code reason} in Flowable's history (visible in
+     * the BPM perspective). Use it to undo a start whose follow-up work failed: an instance no business
+     * record points at is invisible to the application, yet its user tasks still reach someone's inbox.
+     * <p>
+     * Throws {@link IllegalArgumentException} when no <em>running</em> instance with that id exists in
+     * the current tenant - a process without a wait state runs to its end inside
+     * {@link #start(String, String, String)}, and a completed instance has nothing left to cancel.
+     *
+     * @param processInstanceId the instance to cancel
+     * @param reason the cancellation reason, kept in the process history
+     */
+    public static void cancel(String processInstanceId, String reason) {
+        BpmFacade.deleteProcess(processInstanceId, reason);
+    }
+
     public static Object getVariable(String processInstanceId, String variableName) {
         return BpmFacade.getVariable(processInstanceId, variableName);
     }

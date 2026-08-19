@@ -126,6 +126,27 @@ mixes them. There is **no** reflective by-name fallback.
 | Listener | `@Component implements MessageHandler` → `String destination()`, default `ListenerKind kind()`, `onMessage(String)`, default `onError` (like `jakarta.jms.MessageListener`) | `@Listener(name=…, kind=…)` on a `@Component` `void m(String)` method |
 | WebSocket | `@Component implements WebsocketHandler` → `String endpoint()` + default lifecycle callbacks (like `TextWebSocketHandler`) | `@Websocket(endpoint=…)` class + `@OnOpen`/`@OnMessage`/`@OnError`/`@OnClose` methods (like Jakarta `@ServerEndpoint`; the endpoint has no method-level home) |
 
+**Throwing means different things in a job and in a listener — the idiom is identical, the outcome is
+not.** A `JobHandler` that throws is caught by `JobExecutionService`, recorded as a **FAILED job-log
+row** and rethrown to Quartz, so the failure is a first-class operational record: it shows up in the
+Jobs perspective and in the Monitoring shell's failed-jobs tile, and the run can be triggered again.
+A `MessageHandler` that throws is **logged with its stack trace** by `ListenerClassConsumer.dispatch`
+— and that is all: the JMS session is `AUTO_ACKNOWLEDGE` and the exception never reaches the broker,
+so **the message is acknowledged and gone**. No retry, no dead letter, no operational record, nothing
+to re-run. (Before that log line existed, a throwing listener produced no output at all — the
+handler's own `onError` defaults to a no-op — which made every failure inside generated intent glue
+invisible.)
+
+Two consequences worth internalizing before writing either kind of handler:
+
+- **Do not read a listener throw as recoverable.** The generated templates use the same
+  `throw new RuntimeException(…)` idiom in `Job.java.template` and in
+  `Notification`/`Integration.java.template`; in the job it escalates, in the listener it only
+  narrates. A developer copying the job pattern into a listener loses the work, not just the alert.
+- **Work that must not be lost needs its own arrangement** — an idempotent re-run path keyed on
+  something durable, or a reconciliation job that finds records left in a pre-handler state. This is
+  why an event-sourced write in generated glue is written to be replayable rather than transactional.
+
 ## `JavaHandler` (low-level REST)
 
 `JavaEndpoint` (`/services/java/{project}/{*classPath}` + `/public/...`) tries `ControllerRouter` first,
@@ -164,7 +185,7 @@ the default user-data datasource, not SystemDB.
 
 **A large-text column needs `@Lob` — the mapping resizes the column to whatever it claims.** Entity registration runs Hibernate's `hbm2ddl.auto = update`, which does not only create missing tables: it ALTERS an existing column to match the mapping. A plain `String` property claims `@Column(length = ...)`, whose default is **255**, so a `CLOB` / `TEXT` column declared by the project's `.table` silently became a `VARCHAR(255)` on every deploy (issue #6346's recurring "Incompatible change ... VARCHAR to be changed to CLOB" was the schema layer noticing). Annotate the property `@Lob` and it is mapped past the dialect's maximum `VARCHAR`, which resolves to the database's own large-text type (`CLOB` on H2, `TEXT` on PostgreSQL) and leaves the column alone. Do NOT try to pin the type with `@Column(columnDefinition = ...)` — the mapper ignores it, and a raw SQL type name is not portable across dialects anyway. Generated entities don't need `@Lob`: an intent `type: text` field is a `VARCHAR(4000)` whose length the generated `@Column` declares. `JavaEntityLobColumnIT` covers the contract end-to-end.
 
-**Manage entities ONLY through their generated `<Entity>Repository` — NEVER the generic `Store`/`Database` for entity CRUD.** The generated repository (`@Repository extends JavaRepository<T>`) is the *only* sanctioned way to load/save/update/delete a managed entity, because it carries validations, **event publishing** (`Producer.sendToTopic` on the create/`-updated`/`-deleted` topics that intent triggers/reactions/rollups/notifications listen on), the multilingual read-overlay (a `multilingual: true` entity's finds translate string properties from its `<TABLE>_LANG` table for the caller's `Accept-Language` via `org.eclipse.dirigible.sdk.db.Translator`), and other per-entity behaviour. The generic `org.eclipse.dirigible.sdk.db.Store` (name-keyed dynamic map) and raw `Database` SQL **bypass all of that silently** and MUST NOT be used to read or mutate a managed entity. (`updateWithoutEvent` is fine — it's a deliberate repository method that keeps `super.update`'s validations/i18n and only omits the event, for workflow-driven system writes: intent SetField/Writer/trigger delegates.) Consequence for a *reusable* delegate/service: it can't statically import a foreign `<Entity>Entity`, so the code that touches a specific entity must live **in that entity's project** (where it imports that project's repository); keep only entity-agnostic helpers (e.g. a number generator over its own `NumberRepository`) in a shared project. Don't make code "general" by reaching into arbitrary entities through `Store`.
+**Manage entities ONLY through their generated `<Entity>Repository` — NEVER the generic `Store`/`Database` for entity CRUD.** The generated repository (`@Repository extends JavaRepository<T>`) is the *only* sanctioned way to load/save/update/delete a managed entity, because it carries validations, **event publishing** (`Producer.sendToTopic` on the create/`-updated`/`-deleted` topics that intent triggers/reactions/rollups/notifications listen on), the multilingual read-overlay (a `multilingual: true` entity's finds translate string properties from its `<TABLE>_LANG` table for the caller's `Accept-Language` via `org.eclipse.dirigible.sdk.db.Translator`), and other per-entity behaviour. The generic `org.eclipse.dirigible.sdk.db.Store` (name-keyed dynamic map) and raw `Database` SQL **bypass all of that silently** and MUST NOT be used to read or mutate a managed entity. (`updateWithoutEvent` is fine — it's a deliberate repository method that keeps `super.update`'s validations/i18n and only omits the event, for workflow-driven system writes: intent SetField/Writer/trigger delegates.) The **targeted** writes are the write-back primitives a workflow should reach for instead of a full-row merge: `updateProperty`/`updateProperties` persist only the named columns (still gated by the entity's `checks:`, still refreshing a `label:`), `updateDerived` adds back the `-updated` event for recomputed totals. A generated repository routes those through its own bookkeeping (the `history:` trail as SYSTEM, the stored `label:` Name) and its declarative gates — except that `checks:` is skipped for a write touching only platform-owned columns (`ProcessId`), because recording WHICH process handles a record must not be refusable by a business gate. Consequence for a *reusable* delegate/service: it can't statically import a foreign `<Entity>Entity`, so the code that touches a specific entity must live **in that entity's project** (where it imports that project's repository); keep only entity-agnostic helpers (e.g. a number generator over its own `NumberRepository`) in a shared project. Don't make code "general" by reaching into arbitrary entities through `Store`.
 
 ## Errors are surfaced to developers
 

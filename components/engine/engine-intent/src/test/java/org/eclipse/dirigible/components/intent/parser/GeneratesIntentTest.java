@@ -53,6 +53,44 @@ class GeneratesIntentTest {
                 forEntity: Fine
             """;
 
+    /**
+     * The step-axis shape of issue #6800: a process that runs ON the create-from's source, and a log
+     * entity to append rows to. Ends at the {@code generates} entry's own keys, as the head above does.
+     */
+    private static final String GENERATES_STEP_HEAD = """
+            name: claims
+            entities:
+              - name: Claim
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: note,   type: string }
+                  - { name: amount, type: decimal }
+              - name: LogEntry
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: step,   type: string }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Claim, kind: manyToOne, to: Claim }
+            processes:
+              - name: ClaimApproval
+                trigger: { onCreate: Claim }
+                steps:
+                  - { name: review,   kind: userTask,    args: { assignee: approver, next: activate } }
+                  - { name: activate, kind: serviceTask, args: { setField: note, value: activated, next: done } }
+                  - { name: done,     kind: end }
+              - name: LogReview
+                trigger: { onCreate: LogEntry }
+                steps:
+                  - { name: check, kind: userTask, args: { assignee: approver, next: over } }
+                  - { name: over,  kind: end }
+            generates:
+              - name: log-activation
+                from: Claim
+                to: LogEntry
+                forEntity: Claim
+            """;
+
     private static final String SAME_MODEL = """
             name: sales
             entities:
@@ -797,4 +835,190 @@ class GeneratesIntentTest {
                      .anyMatch(i -> i.contains("prompt field [allocatedAt] has type timestamp")),
                 "got: " + ex.getIssues());
     }
+
+    /**
+     * The canonical append shape (issue #6800): a log row per completed step. The step IS the moment,
+     * so no {@code when} guard is needed, and the button is still dropped - nobody clicks a log.
+     */
+    @Test
+    void aStepBoundAppendingCreateFromParses() {
+        IntentModel model = IntentParser.parse(GENERATES_STEP_HEAD + """
+                    event: { onStepCompleted: { process: ClaimApproval, step: activate }, mode: append }
+                    map: { Claim: id, Amount: amount }
+                    defaults: { Step: "activate" }
+                """);
+        GeneratesIntent g = model.getGenerates()
+                                 .get(0);
+        assertTrue(g.isEventDriven());
+        assertTrue(g.isAppendMode());
+        assertEquals(GeneratesIntent.MODE_APPEND, g.getEventMode());
+        assertFalse(g.hasButton());
+    }
+
+    /** Absent {@code mode:} is the at-most-once cardinality every existing intent already has. */
+    @Test
+    void theDefaultCardinalityIsOnce() {
+        IntentModel model = IntentParser.parse(GENERATES_STEP_HEAD + """
+                    event: { onStepReached: { process: ClaimApproval, step: review } }
+                    map: { Claim: id }
+                """);
+        GeneratesIntent g = model.getGenerates()
+                                 .get(0);
+        assertEquals(GeneratesIntent.MODE_ONCE, g.getEventMode());
+        assertFalse(g.isAppendMode());
+    }
+
+    /** A misspelled cardinality must not be read as the default - that would be a silent guard. */
+    @Test
+    void rejectsAnUnknownEventMode() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_STEP_HEAD + """
+                    event: { onStepCompleted: { process: ClaimApproval, step: activate }, mode: always }
+                    map: { Claim: id }
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("invalid mode [always]")),
+                "an unknown mode should be rejected, got: " + ex.getIssues());
+    }
+
+    /** A cardinality with nothing to apply it to: there is no guard on a button. */
+    @Test
+    void rejectsAModeWithoutATrigger() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_STEP_HEAD + """
+                    event: { mode: append }
+                    map: { Claim: id }
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("event requires")),
+                "a mode with no trigger should be rejected, got: " + ex.getIssues());
+    }
+
+    /** The back-reference is the row's provenance under append - still required. */
+    @Test
+    void appendModeStillRequiresTheBackReference() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_STEP_HEAD + """
+                    event: { onStepCompleted: { process: ClaimApproval, step: activate }, mode: append }
+                    map: { Amount: amount }
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("provenance under mode: append")),
+                "a missing back-reference should be rejected in append mode too, got: " + ex.getIssues());
+    }
+
+    @Test
+    void rejectsAnUnknownProcessOrStep() {
+        IntentValidationException unknownProcess =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_STEP_HEAD + """
+                            event: { onStepCompleted: { process: Nope, step: activate } }
+                            map: { Claim: id }
+                        """));
+        assertTrue(unknownProcess.getIssues()
+                                 .stream()
+                                 .anyMatch(i -> i.contains("unknown process [Nope]")),
+                "got: " + unknownProcess.getIssues());
+
+        IntentValidationException unknownStep =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_STEP_HEAD + """
+                            event: { onStepCompleted: { process: ClaimApproval, step: nope } }
+                            map: { Claim: id }
+                        """));
+        assertTrue(unknownStep.getIssues()
+                              .stream()
+                              .anyMatch(i -> i.contains("unknown step [nope]")),
+                "got: " + unknownStep.getIssues());
+    }
+
+    /** An end (or a decision, or a wait) occupies no moment, so it has no boundary to emit at. */
+    @Test
+    void rejectsAStepKindWithNoMomentToObserve() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_STEP_HEAD + """
+                    event: { onStepCompleted: { process: ClaimApproval, step: done } }
+                    map: { Claim: id }
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("only a userTask or a serviceTask has a moment to observe")),
+                "got: " + ex.getIssues());
+    }
+
+    /**
+     * The step event is about the record its process runs on - if that is not the create-from's source,
+     * the listener would read a record of the wrong entity by an id that means nothing to it.
+     */
+    @Test
+    void rejectsAStepEventWhoseProcessRunsOnAnotherEntity() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_STEP_HEAD + """
+                    event: { onStepReached: { process: LogReview, step: check } }
+                    map: { Claim: id }
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("runs on [LogEntry], not on the from entity [Claim]")),
+                "got: " + ex.getIssues());
+    }
+
+    @Test
+    void rejectsAStepEventNextToALifecycleTrigger() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_STEP_HEAD + """
+                    event: { onCreate: Claim, onStepCompleted: { process: ClaimApproval, step: activate } }
+                    map: { Claim: id }
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("exactly one trigger is allowed")),
+                "got: " + ex.getIssues());
+    }
+
+    /** A process and its steps belong to the model that declares them - a foreign source has none. */
+    @Test
+    void rejectsAStepEventOnACrossModelSource() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse("""
+                name: claim-logs
+                uses:
+                  - { model: claims }
+                entities:
+                  - name: LogEntry
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: step, type: string }
+                    relations:
+                      - { name: Claim, kind: manyToOne, to: Claim, model: claims }
+                processes:
+                  - name: LogReview
+                    trigger: { onCreate: LogEntry }
+                    steps:
+                      - { name: check, kind: userTask, args: { assignee: approver, next: over } }
+                      - { name: over,  kind: end }
+                generates:
+                  - name: log-activation
+                    from: Claim
+                    fromUses: claims
+                    to: LogEntry
+                    forEntity: Claim
+                    event: { onStepReached: { process: LogReview, step: check }, mode: append }
+                    map: { Claim: id }
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("cross-model source") && i.contains("local to the model that declares them")),
+                "got: " + ex.getIssues());
+    }
+
+    /** An appending create-from is still event-driven, so there is nobody to answer a prompt. */
+    @Test
+    void rejectsAPromptOnAnAppendingCreateFrom() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_STEP_HEAD + """
+                    event: { onStepCompleted: { process: ClaimApproval, step: activate }, mode: append }
+                    map: { Claim: id }
+                    prompt:
+                      - { field: Step, required: true }
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("prompt")),
+                "got: " + ex.getIssues());
+    }
+
 }

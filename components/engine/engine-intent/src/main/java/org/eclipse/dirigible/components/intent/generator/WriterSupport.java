@@ -21,6 +21,7 @@ import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
+import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,11 +40,13 @@ import org.slf4j.LoggerFactory;
  * concurrent write to any other column cannot be reverted, and no {@code onUpdate} reaction
  * re-fires (a workflow-driven system write, the same rule the trigger and setters follow).
  * <p>
- * Editable fields may be any plain field of the trigger entity; each carries a
- * {@link WriteField#coercion() coercion} category so the generated Writer converts the form's
- * process variable to the entity's Java type ({@code LocalDate} / {@code Instant} / {@code Integer}
- * / {@code Long} / {@code BigDecimal} / {@code Double} / {@code Boolean} / {@code String}). The
- * form-builder sends date/timestamp values ISO-shaped; a relation.field is never editable.
+ * Editable fields may be any plain field of the trigger entity, or one of its to-one relations;
+ * each carries a {@link WriteField#coercion() coercion} category so the generated Writer converts
+ * the form's process variable to the entity's Java type ({@code LocalDate} / {@code Instant} /
+ * {@code Integer} / {@code Long} / {@code BigDecimal} / {@code Double} / {@code Boolean} /
+ * {@code String}). A relation needs no coercion of its own: its FK column holds the target's
+ * integer key, so it rides the existing {@code integer}/{@code long} branch. The form-builder sends
+ * date/timestamp values ISO-shaped; a relation.field is never editable.
  */
 public final class WriterSupport {
 
@@ -107,7 +110,7 @@ public final class WriterSupport {
                                         .isEmpty()) {
                     continue;
                 }
-                List<WriteField> fields = editableFields(owner, form, process, step);
+                List<WriteField> fields = editableFields(owner, form, process, step, byName);
                 if (fields.isEmpty()) {
                     continue;
                 }
@@ -119,21 +122,44 @@ public final class WriterSupport {
         return writers;
     }
 
-    private static List<WriteField> editableFields(EntityIntent owner, FormIntent form, ProcessIntent process, StepIntent step) {
+    private static List<WriteField> editableFields(EntityIntent owner, FormIntent form, ProcessIntent process, StepIntent step,
+            Map<String, EntityIntent> byName) {
         Set<WriteField> fields = new LinkedHashSet<>();
         for (String fieldName : form.getEditable()) {
             if (fieldName == null || fieldName.isBlank()) {
                 continue;
             }
             FieldIntent field = fieldOf(owner, fieldName);
-            if (field == null) {
-                LOGGER.warn("Editable field [{}] on form [{}] (task [{}] of process [{}]) is not a field of [{}] - skipping write-back",
+            if (field != null) {
+                fields.add(new WriteField(IntentNaming.pascalCase(fieldName), coercion(field)));
+                continue;
+            }
+            // A to-one relation is written as its target's key, so its coercion is that key's own - the
+            // FK property is an ordinary column of the owner and goes into the same updateProperties.
+            RelationIntent relation = toOneRelation(owner, fieldName);
+            if (relation == null) {
+                LOGGER.warn(
+                        "Editable [{}] on form [{}] (task [{}] of process [{}]) is not a field or to-one relation of [{}] - skipping write-back",
                         fieldName, form.getName(), step.getName(), process.getName(), owner.getName());
                 continue;
             }
-            fields.add(new WriteField(IntentNaming.pascalCase(fieldName), coercion(field)));
+            FieldIntent targetKey = IntentEntities.primaryKeyOf(byName.get(relation.getTo()));
+            // A primary key is integer-typed by construction (the parser refuses any other), so the FK is
+            // an int unless the target declares a long one.
+            fields.add(new WriteField(IntentNaming.pascalCase(fieldName), targetKey == null ? "integer" : coercion(targetKey)));
         }
         return new ArrayList<>(fields);
+    }
+
+    /** The named {@code manyToOne}/{@code oneToOne} relation of the entity, or {@code null}. */
+    private static RelationIntent toOneRelation(EntityIntent owner, String name) {
+        for (RelationIntent relation : owner.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && name.equals(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     /**

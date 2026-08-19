@@ -2,6 +2,8 @@ package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -23,12 +25,19 @@ import gen.${parentGenFolder}.data.${javaParentPerspective}.${parentEntity}Repos
  * recomputed from the store on each event (self-healing); the write + the "-updated" event fire only when
  * a value actually changes, which bounds the transitive cascade so it terminates at rest.
  *
+ * The parent recomputed is always the one the INCOMING payload names, which is what lets the same handler
+ * repair a re-parented child: the create/update/delete events carry the parent the child belongs to now,
+ * while "-rekeyed" carries the row whose group moved - the previous row for the parent it left, and (on
+ * the targeted writes, which publish no "-updated") the written row for the one it moved into.
+ *
  * The write itself is TARGETED (updateDerived persists only the recomputed columns), so a concurrent user
  * write to any other column of the parent cannot be reverted by this recompute - the same lost-update
  * shape fixed for the trigger write-back in #6226 and the workflow setters/writers in #6306.
  */
 @Component("${javaGenFolderName}_${className}")
 public class ${className} implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}");
 
     @Override
     public String destination() {
@@ -58,5 +67,10 @@ ${aggregateBlock}
         if (changed) {
             parents.updateDerived(entity.${fkProperty}, derived);
         }
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Rollup ${className}: the listener on [{}] failed - [{}]", destination(), error);
     }
 }

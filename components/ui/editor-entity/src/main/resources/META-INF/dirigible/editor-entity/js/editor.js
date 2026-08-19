@@ -374,6 +374,18 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 		});
 
 		dialogHub.addMessageListener({
+			topic: "edmEditor.unique.keys",
+			handler: (data) => {
+				$scope.graph.model.uniqueKeys = data.uniqueKeys;
+				layoutHub.setEditorDirty({
+					path: $scope.dataParameters.filePath,
+					dirty: true,
+				});
+				dialogHub.closeWindow();
+			}
+		});
+
+		dialogHub.addMessageListener({
 			topic: "edmEditor.navigation.details",
 			handler: (data) => {
 				$scope.graph.model.perspectives = data.perspectives;
@@ -1187,6 +1199,18 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 				$scope.properties = function () {
 					editor.execute('properties');
 				};
+				$scope.uniqueKeys = () => {
+					dialogHub.showWindow({
+						id: 'edmUniqueKeys',
+						hasHeader: false,
+						params: {
+							uniqueKeys: $scope.graph.model.uniqueKeys ? $scope.graph.model.uniqueKeys : [],
+							entities: collectEntitiesWithProperties($scope.graph),
+						},
+						maxWidth: '1200px',
+						closeButton: false
+					});
+				};
 				$scope.navigation = () => {
 					dialogHub.showWindow({
 						id: 'edmNavDetails',
@@ -1262,6 +1286,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 			codec.decode(doc.documentElement.getElementsByTagName('mxGraphModel')[0], $scope.graph.getModel());
 
 			deserializeFilter($scope.graph);
+			loadUniqueKeys(doc, $scope.graph);
 			loadPerspectives(doc, $scope.graph);
 			loadNavigations(doc, $scope.graph);
 			$scope.graph.model.addListener(mxEvent.START_EDIT, function (_sender, _evt) {
@@ -1350,6 +1375,64 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 
 			if (restyled) {
 				graph.refresh();
+			}
+		}
+
+		/**
+		 * The entities and their property names, for the unique-key dialog to pick from. The dialog is a
+		 * separate window, so it cannot walk the graph itself - it gets a plain snapshot.
+		 */
+		function collectEntitiesWithProperties(graph) {
+			const entities = [];
+			const parent = graph.getDefaultParent();
+			const childCount = graph.model.getChildCount(parent);
+			for (let i = 0; i < childCount; i++) {
+				const child = graph.model.getChildAt(parent, i);
+				if (graph.model.isEdge(child) || !child.value || !child.value.name) continue;
+				const properties = [];
+				const propertyCount = graph.model.getChildCount(child);
+				for (let j = 0; j < propertyCount; j++) {
+					const property = graph.model.getChildAt(child, j).value;
+					if (property && property.name) properties.push(property.name);
+				}
+				entities.push({ name: child.value.name, properties: properties });
+			}
+			return entities;
+		}
+
+		function loadUniqueKeys(doc, graph) {
+			if (!graph.getModel().uniqueKeys) {
+				graph.getModel().uniqueKeys = [];
+			}
+			for (let i = 0; i < doc.children.length; i++) {
+				let element = doc.children[i];
+				if (element.localName === "model") {
+					for (let j = 0; j < element.children.length; j++) {
+						let keys = element.children[j];
+						if (keys.localName === "constraints") {
+							for (let k = 0; k < keys.children.length; k++) {
+								let item = keys.children[k];
+								if (item.localName !== "uniqueKey") continue;
+								let copy = { properties: [] };
+								for (let m = 0; m < item.children.length; m++) {
+									let attribute = item.children[m];
+									if (attribute.localName === "entity") {
+										copy.entity = attribute.textContent;
+									} else if (attribute.localName === "name") {
+										copy.name = attribute.textContent;
+									} else if (attribute.localName === "properties") {
+										copy.properties = attribute.textContent.split(',').map((p) => p.trim()).filter((p) => p.length > 0);
+									} else if (attribute.localName === "message") {
+										copy.message = attribute.textContent;
+									}
+								}
+								graph.getModel().uniqueKeys.push(copy);
+							}
+							break;
+						}
+					}
+					break;
+				}
 			}
 		}
 

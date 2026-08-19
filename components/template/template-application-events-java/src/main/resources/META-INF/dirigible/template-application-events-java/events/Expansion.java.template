@@ -2,6 +2,8 @@ package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -16,14 +18,17 @@ import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Repos
  * rows - one per ${unit}.
  *
  * Generated from the intent expansions block - do not edit; it is re-generated with the application.
- * The expansion OWNS the child set: a span change replaces every ${childEntity} pointing at the
- * master. Rows are written through the child repository, so their create/delete events fire and any
- * roll-ups or capacity guards run exactly as for hand-entered rows. An unchanged span is detected
- * and skipped, which both makes re-delivery idempotent and bounds the event cascade (a roll-up's
- * write-back to the master re-triggers this handler once; the skip terminates it).
+ * The expansion OWNS the child set, and reconciles it as a DIFF: a span change inserts the periods
+ * that are missing and deletes the ones that fell out of the span, leaving every other
+ * ${childEntity} untouched. Rows are written through the child repository, so their create/delete
+ * events fire and any roll-ups or capacity guards run exactly as for hand-entered rows. An unchanged
+ * span is detected and skipped, which both makes re-delivery idempotent and bounds the event cascade
+ * (a roll-up's write-back to the master re-triggers this handler once; the skip terminates it).
  */
 @Component("${javaGenFolderName}_${className}")
 public class ${className} implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}");
 
     @Override
     public String destination() {
@@ -82,26 +87,66 @@ public class ${className} implements MessageHandler {
             }
         }
 
+        // Diff, do not rebuild: the rows whose period survives the span change are KEPT. Deleting the
+        // whole set first and recreating it opened a destructive window - a client-Java handler has no
+        // transaction boundary, so every delete and every insert commits on its own and a failure
+        // partway through the recreation left the deletes committed with only some of the inserts
+        // applied: rows gone for good, a stale count, and roll-ups that consumed a shrink which never
+        // really happened. A diff touches only what changed, so a failure can leave the set incomplete
+        // - repaired on the next delivery - but can no longer destroy a row the span still wants.
+        java.util.Set<java.time.LocalDate> wanted = new java.util.HashSet<>(periods);
+        java.util.Map<java.time.LocalDate, ${childEntity}Entity> kept = new java.util.HashMap<>();
+        int deleted = 0;
         for (${childEntity}Entity row : existing) {
-            children.delete(row);
+            // Out of the new span, undated, or a second row on a period already kept - the last case is
+            // the repair path for a set an earlier partial run left inconsistent.
+            if (row.${mapProperty} == null || !wanted.contains(row.${mapProperty})
+                    || kept.putIfAbsent(row.${mapProperty}, row) != null) {
+                children.delete(row);
+                deleted++;
+            }
         }
 #if($spreadTotalProperty != "")
         java.math.BigDecimal total = master.${spreadTotalProperty} == null ? java.math.BigDecimal.ZERO : master.${spreadTotalProperty};
         java.math.BigDecimal share = periods.isEmpty() ? java.math.BigDecimal.ZERO
                 : total.divide(java.math.BigDecimal.valueOf(periods.size()), ${spreadRound}, java.math.RoundingMode.HALF_UP);
+        int reshared = 0;
 #end
+        int created = 0;
         for (int i = 0; i < periods.size(); i++) {
-            ${childEntity}Entity child = new ${childEntity}Entity();
-            child.${fkProperty} = master.${masterPk};
-            child.${mapProperty} = periods.get(i);
-${defaultsBlock}#if($spreadTotalProperty != "")
+#if($spreadTotalProperty != "")
             // The last row absorbs the rounding remainder so the shares always add up to the total.
-            child.${spreadIntoProperty} = i == periods.size() - 1
+            java.math.BigDecimal periodShare = i == periods.size() - 1
                     ? total.subtract(share.multiply(java.math.BigDecimal.valueOf(periods.size() - 1)))
                     : share;
 #end
+            ${childEntity}Entity child = kept.get(periods.get(i));
+            if (child != null) {
+#if($spreadTotalProperty != "")
+                // A kept row keeps its identity and whatever was edited on it, but the share is DERIVED
+                // from the master's total and the row count - re-spread it when it no longer matches, as
+                // a targeted single-column write that still publishes "-updated" so a roll-up over these
+                // rows recomputes exactly as it did when the row was deleted and recreated.
+                if (child.${spreadIntoProperty} == null || child.${spreadIntoProperty}.compareTo(periodShare) != 0) {
+                    java.util.Map<String, Object> reshare = new java.util.LinkedHashMap<>();
+                    reshare.put("${spreadIntoProperty}", periodShare);
+                    children.updateDerived(child.${childPk}, reshare);
+                    reshared++;
+                }
+#end
+                continue;
+            }
+            child = new ${childEntity}Entity();
+            child.${fkProperty} = master.${masterPk};
+            child.${mapProperty} = periods.get(i);
+${defaultsBlock}#if($spreadTotalProperty != "")
+            child.${spreadIntoProperty} = periodShare;
+#end
             children.save(child);
+            created++;
         }
+        LOG.debug("Expansion ${className}: ${masterEntity} [{}] spans [{}] ${unit}(s) - created [{}], deleted [{}]#if($spreadTotalProperty != ""), re-spread [{}]#end",
+                master.${masterPk}, periods.size(), created, deleted#if($spreadTotalProperty != ""), reshared#end);
 #if($countProperty != "")
 
         // Write the generated row count back to the master as a TARGETED single-column write - only
@@ -111,5 +156,10 @@ ${defaultsBlock}#if($spreadTotalProperty != "")
         // for a system write.
         new ${masterEntity}Repository().updateProperty(master.${masterPk}, "${countProperty}", ${countValue});
 #end
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Expansion ${className}: the listener on [{}] failed - [{}]", destination(), error);
     }
 }

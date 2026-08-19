@@ -34,10 +34,11 @@ import java.util.Map;
  * </pre>
  *
  * The generator emits client-Java {@code MessageHandler}s on the master's create and update events
- * that (re)generate the child set through the child's repository - so the per-row create/delete
- * events fire and any roll-ups or capacity guards on the child run as for hand-entered rows. The
- * expansion OWNS the child set: a regeneration replaces every row pointing at the master. It is
- * idempotent (an unchanged span is detected and skipped), which also bounds the event cascade.
+ * that reconcile the child set through the child's repository - so the per-row create/delete events
+ * fire and any roll-ups or capacity guards on the child run as for hand-entered rows. The expansion
+ * OWNS the child set, and reconciles it as a DIFF: the missing periods are inserted, the rows that
+ * fell out of the span are deleted, and the rest are left untouched. It is idempotent (an unchanged
+ * span is detected and skipped), which also bounds the event cascade.
  */
 public class ExpansionIntent {
 

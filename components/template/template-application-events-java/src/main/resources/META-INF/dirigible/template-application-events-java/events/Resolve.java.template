@@ -85,6 +85,11 @@ public class ${className}Resolve implements MessageHandler {
         }
     }
 
+    @Override
+    public void onError(String error) {
+        LOG.error("${name}: the listener on [{}] failed - [{}]", destination(), error);
+    }
+
     /**
      * Whether a register row's validity period covers the record's date. An absent bound is open-ended
      * (a row with no end is still valid), and the end is inclusive - a date-only end covers its whole day.
