@@ -112,6 +112,15 @@ class ModelGenerationIT extends IntegrationTest {
     private static final Pattern INDENTED_TOP_LEVEL_DECLARATION = Pattern.compile("^([ \\t]+)(package|import)[ \\t]", Pattern.MULTILINE);
 
     /**
+     * Two or more consecutive blank lines, which Java never has. It is what a collapsed
+     * {@code #if}/{@code #end} block leaves behind: Velocity gobbles the newline of a line holding only
+     * a directive but keeps the literal blank lines around it, so a block that emits nothing when its
+     * condition is false yet is surrounded by blank-line separators leaves both separators back to back
+     * (#6823).
+     */
+    private static final Pattern CONSECUTIVE_BLANK_LINES = Pattern.compile("\\n[ \\t]*\\n[ \\t]*\\n");
+
+    /**
      * A member access whose member is missing - {@code parent. == null}, {@code target. = row.X} or
      * {@code derived.put("X", parent.)} - which is what an emitted-code helper produces when the field
      * name it interpolates is empty. Deliberately same-line only: generated code breaks a chained call
@@ -359,6 +368,9 @@ class ModelGenerationIT extends IntegrationTest {
      * <li>an indented {@code package} or {@code import} - template whitespace that leaked into the
      * output. It still compiles, but {@code gen/} is committed so that template changes are diffable,
      * and a leak puts a run of spaces into every generated file of every module.</li>
+     * <li>two consecutive blank lines - what a collapsed {@code #if}/{@code #end} block whose
+     * surrounding separators both survive leaves behind. Harmless to javac, but it modifies every
+     * generated file that omits the block, obscuring real changes in review (#6823).</li>
      * </ul>
      *
      * @param label the case label
@@ -386,6 +398,11 @@ class ModelGenerationIT extends IntegrationTest {
             problems.add("[" + label + "] " + path + " preceded its " + indented.group(2) + " with " + indented.group(1)
                                                                                                                .length()
                     + " characters of whitespace, so a template leaked its indentation into the output");
+        }
+        Matcher blankLines = CONSECUTIVE_BLANK_LINES.matcher(content);
+        while (blankLines.find()) {
+            problems.add("[" + label + "] " + path + " has two consecutive blank lines, so a collapsed template block left both"
+                    + " of its surrounding separators in the output");
         }
         return problems;
     }

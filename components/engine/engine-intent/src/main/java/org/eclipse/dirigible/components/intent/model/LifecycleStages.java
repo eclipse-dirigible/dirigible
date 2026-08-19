@@ -35,11 +35,13 @@ import java.util.Set;
  * ask "which rows of this entity are economically live?" without every author hand-writing the same
  * predicate over positional seed ids: a {@code reports:} entry's {@code scope} resolves through it
  * (see {@code ReportIntentGenerator}), which is what keeps a draft or voided document out of a
- * revenue total by construction instead of by convention.
+ * revenue total by construction instead of by convention, and an event-driven {@code generates:}
+ * at-most-once guard steps over a target classified {@code cancelled} or {@code void} (see
+ * {@code GlueIntentGenerator}), which is what makes "void and reissue" expressible.
  *
  * <p>
- * Read by both the parser (validating {@code scope} and the vocabulary) and the report generator
- * (emitting the status {@code IN (...)} predicate), so the two cannot drift.
+ * Read by the parser (validating {@code scope} and the vocabulary) and by both generators, so none
+ * of them can drift on what a status means.
  */
 public final class LifecycleStages {
 

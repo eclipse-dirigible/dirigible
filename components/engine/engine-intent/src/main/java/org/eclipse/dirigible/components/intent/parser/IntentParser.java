@@ -18,7 +18,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
+import org.eclipse.dirigible.components.intent.generator.ArrivalSupport;
 import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
@@ -26,6 +28,7 @@ import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
+import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
 import org.eclipse.dirigible.components.intent.generator.ScheduleSupport;
 import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
@@ -132,14 +135,13 @@ public final class IntentParser {
      * the service task's actions - {@code ServiceTaskHandlerGenerator} scaffolds both from the same
      * keys.
      */
-    private static final Map<String, Set<String>> STEP_ARGS_BY_KIND =
-            Map.of("userTask", Set.of("assignee", "form", "timeout", "expire", "setRelationField", "value", "next"), "serviceTask",
-                    Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next", "retry",
-                            "onError", "produces", "uses"),
-                    "script",
-                    Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next"),
-                    "decision", Set.of("if", "then", "else", "next"), "wait", Set.of("onCreate", "onUpdate", "via", "when", "next"),
-                    "parallel", Set.of("branches", "next"), "end", Set.of("next"));
+    private static final Map<String, Set<String>> STEP_ARGS_BY_KIND = Map.of("userTask",
+            Set.of("assignee", "form", "timeout", "expire", "setRelationField", "value", "next"), "serviceTask",
+            Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next", "retry",
+                    "onError", "produces", "uses"),
+            "script", Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next"),
+            "decision", Set.of("if", "then", "else", "next"), "wait", Set.of("onCreate", "onUpdate", "onTransition", "via", "when", "next"),
+            "parallel", Set.of("branches", "next"), "end", Set.of("next"));
     /** Every arg the DSL knows, on any kind - anything else is a typo, not a misplacement. */
     private static final Set<String> KNOWN_STEP_ARGS = STEP_ARGS_BY_KIND.values()
                                                                         .stream()
@@ -152,8 +154,14 @@ public final class IntentParser {
      */
     private static final Set<String> STEP_ARGS_CHECKED_BY_KIND_ELSEWHERE =
             Set.of("setField", "setRelationField", "delegate", "notify", "timeout", "expire");
-    /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
-    private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
+    /**
+     * Entity events a declarative-glue item (notification, integration, departure, process trigger) can
+     * bind to. {@code onTransition} is the STATUS axis - a workflow setter, a {@code transitions:}
+     * button and a {@code generates} completion hook publish {@code -transitioned} and never
+     * {@code -updated}, so without it the whole update half of the DSL was deaf to every status the
+     * system itself writes.
+     */
+    private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete", "onTransition");
     /**
      * The process-step half of the glue event axis - each names a <code>{ process, step }</code> pair
      * rather than an entity.
@@ -230,6 +238,7 @@ public final class IntentParser {
         // together with the structural issues below.
         List<String> issues = new ArrayList<>();
         UnknownKeyValidator.collect(tree, issues);
+        collectEmptyArrivalValues(tree, issues);
         // Statuses may be referenced by their seeded NAME; resolve them to ids on the raw tree so the
         // typed mapping, every validator and every generator keep seeing the integers they always saw.
         StatusSymbolResolver.resolve(tree);
@@ -352,10 +361,14 @@ public final class IntentParser {
                             + "] (valid: DocumentTitle)");
                 }
             }
+            List<String> statusRelations = new ArrayList<>();
             for (RelationIntent relation : entity.getRelations()) {
                 if (relation.isLegacyDocumentStatus()) {
                     issues.add("entity [" + name + "] relation [" + relation.getName()
                             + "] uses documentStatus: true - the status role was renamed; use function: EntityStatus");
+                }
+                if (relation.isEntityStatus()) {
+                    statusRelations.add(relation.getName());
                 }
                 String rf = relation.getFunction();
                 if (rf == null || rf.isBlank()) {
@@ -376,6 +389,18 @@ public final class IntentParser {
                     issues.add("entity [" + name + "] relation [" + relation.getName()
                             + "] function: EntityStatus must be a manyToOne/oneToOne relation");
                 }
+            }
+            if (statusRelations.size() > 1) {
+                // The status role is singular, and every consumer of it resolves the FIRST such relation -
+                // the lifecycle graph, a transitions: button, immutableWhen, abortOn:, a checks: rejection,
+                // a report's scope:, a resolves: outcome. So a second one is not a second status axis: it is
+                // invisible to all of that while still rendering as a status badge, which is the worst of
+                // both readings. Name every one of them, since which is "the" status is exactly what the
+                // author has to decide.
+                issues.add("entity [" + name + "] declares more than one function: EntityStatus relation ["
+                        + String.join(", ", statusRelations)
+                        + "] - the status role is singular; every lifecycle, transition, check and report scope resolves the FIRST one,"
+                        + " so the others would be silently ignored");
             }
         }
     }
@@ -1395,9 +1420,16 @@ public final class IntentParser {
      * exactly one arrival: an HTTP {@code path} or a {@code source} naming exactly one of a queue, a
      * topic or a polled folder. Declaring both (or neither) is ambiguous about what gets generated, so
      * it fails at parse rather than silently generating one of them.
+     *
+     * <p>
+     * An entry may additionally declare how the arrival is READ - an {@code accept:} gate and a
+     * {@code map:} projection onto the entity, including the business-key lookups that fill its
+     * relations. {@link ArrivalSupport} owns those rules; they apply to all three arrivals, since what
+     * the payload looks like has nothing to do with what it travelled on.
      */
     private static void validateInbound(IntentModel model, Set<String> entityNames, List<String> issues) {
         Set<String> names = new HashSet<>();
+        Map<String, EntityIntent> byName = IntentEntities.byName(model);
         for (InboundIntent inbound : model.getInbound()) {
             String name = inbound.getName();
             if (name == null || name.isBlank()) {
@@ -1421,6 +1453,7 @@ public final class IntentParser {
             if (inbound.getCreate() == null || !entityNames.contains(inbound.getCreate())) {
                 issues.add(subject + " creates unknown entity [" + inbound.getCreate() + "]");
             }
+            ArrivalSupport.validate(inbound, byName.get(inbound.getCreate()), byName, subject, issues);
         }
     }
 
@@ -1941,7 +1974,7 @@ public final class IntentParser {
             }
         }
         if (declared != 1) {
-            issues.add(subject + " must declare exactly one of onCreate/onUpdate/onDelete/onStepReached/onStepCompleted");
+            issues.add(subject + " must declare exactly one of onCreate/onUpdate/onDelete/onTransition/onStepReached/onStepCompleted");
         }
         return entity;
     }
@@ -3510,6 +3543,39 @@ public final class IntentParser {
     }
 
     /**
+     * A valueless key inside an arrival's {@code accept:} or {@code map:} is reported from the raw
+     * tree, because the typed mapping drops it: Gson omits a null value, so {@code accept: { type: }}
+     * arrives as an EMPTY gate - every message accepted - and {@code map: { email: }} as a field nobody
+     * fills. Both are the exact "authored, then silently dropped" outcome this parser refuses
+     * everywhere else, and neither is visible once the key is gone.
+     *
+     * @param tree the raw YAML tree
+     * @param issues the collecting issue list
+     */
+    private static void collectEmptyArrivalValues(Object tree, List<String> issues) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("inbound") instanceof List<?> arrivals)) {
+            return;
+        }
+        for (Object arrivalNode : arrivals) {
+            if (!(arrivalNode instanceof Map<?, ?> arrival)) {
+                continue;
+            }
+            String subject = "inbound [" + arrival.get("name") + "]";
+            for (String block : List.of("accept", "map")) {
+                if (!(arrival.get(block) instanceof Map<?, ?> declared)) {
+                    continue;
+                }
+                for (Map.Entry<?, ?> entry : declared.entrySet()) {
+                    if (entry.getValue() == null) {
+                        issues.add(subject + " " + block + " [" + entry.getKey() + "] has no value"
+                                + ("accept".equals(block) ? " to gate on" : " - name the envelope key it is filled from"));
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * An empty {@code visibleTo: []} is refused on the raw tree: the typed mapping cannot tell it from
      * an absent key, so it would parse into "no restriction at all" - the opposite of what an author
      * who wrote the key meant, and silent. Either list the roles or drop the key.
@@ -3885,7 +3951,8 @@ public final class IntentParser {
                 }
             }
             if (triggerEvents > 1) {
-                issues.add("process [" + process.getName() + "] trigger must declare at most one of onCreate/onUpdate/onDelete");
+                issues.add(
+                        "process [" + process.getName() + "] trigger must declare at most one of onCreate/onUpdate/onDelete/onTransition");
             }
             // An optional businessKey flags which trigger-entity field becomes the started process
             // instance's BPM business key; it must be a field of the triggered entity.
@@ -3895,7 +3962,7 @@ public final class IntentParser {
             if (businessKey != null) {
                 if (triggerEntity == null) {
                     issues.add("process [" + process.getName()
-                            + "] trigger declares businessKey but no onCreate/onUpdate/onDelete event to start on");
+                            + "] trigger declares businessKey but no onCreate/onUpdate/onDelete/onTransition event to start on");
                 } else {
                     EntityIntent triggered = byName.get(triggerEntity);
                     businessKeyField = triggered == null ? null : fieldByName(triggered, businessKey.toString());
@@ -4450,11 +4517,12 @@ public final class IntentParser {
     }
 
     /**
-     * A {@code wait} step parks the process on an entity lifecycle event: exactly one of
-     * {@code onCreate}/{@code onUpdate} naming a declared entity; when that entity is not the trigger
-     * entity itself, {@code via:} must name the to-one relation of the <b>event</b> entity that walks
-     * to the trigger entity (the record carrying the parked instance's {@code ProcessId}). Without
-     * these checks a typo would leave the process parked forever instead of failing at parse time.
+     * A {@code wait} step parks the process on an entity event: exactly one of
+     * {@code onCreate}/{@code onUpdate}/{@code onTransition} naming a declared entity; when that entity
+     * is not the trigger entity itself, {@code via:} must name the to-one relation of the <b>event</b>
+     * entity that walks to the trigger entity (the record carrying the parked instance's
+     * {@code ProcessId}). Without these checks a typo would leave the process parked forever instead of
+     * failing at parse time.
      */
     private static void validateWaitSteps(ProcessIntent process, String triggerEntity, Map<String, EntityIntent> byName,
             List<String> issues) {
@@ -4464,11 +4532,13 @@ public final class IntentParser {
             }
             if (stepArg(step, "onDelete") != null) {
                 issues.add("process [" + process.getName() + "] wait [" + step.getName()
-                        + "] cannot bind onDelete - a deleted record cannot resume a wait (use onCreate/onUpdate)");
+                        + "] cannot bind onDelete - a deleted record cannot resume a wait (use onCreate/onUpdate/onTransition)");
             }
             int events = 0;
             String eventEntity = null;
-            for (String kind : List.of("onCreate", "onUpdate")) {
+            // The generator's own list, so the vocabulary a wait accepts and the topic it subscribes
+            // to cannot drift apart.
+            for (String kind : ProcessWaitSupport.EVENT_KINDS) {
                 String target = stepArg(step, kind);
                 if (target != null) {
                     events++;
@@ -4477,7 +4547,7 @@ public final class IntentParser {
             }
             if (events != 1) {
                 issues.add("process [" + process.getName() + "] wait [" + step.getName()
-                        + "] must declare exactly one of onCreate/onUpdate naming the resuming entity event");
+                        + "] must declare exactly one of onCreate/onUpdate/onTransition naming the resuming entity event");
                 continue;
             }
             if (!byName.containsKey(eventEntity)) {
@@ -4932,6 +5002,7 @@ public final class IntentParser {
             }
         }
         Set<String> formNames = new HashSet<>();
+        Map<String, Set<String>> taskFormTriggers = taskFormTriggers(model);
         for (FormIntent form : model.getForms()) {
             if (form.getName() == null || form.getName()
                                               .isBlank()) {
@@ -4951,8 +5022,35 @@ public final class IntentParser {
                 }
             }
             validateFormRelationFields(form, bound, byName, issues);
-            validateFormEditable(form, bound, issues);
+            validateFormEditable(form, bound, taskFormTriggers, issues);
         }
+    }
+
+    /**
+     * For every form referenced by a {@code userTask}, the trigger entities of the processes that
+     * reference it. A form nobody uses as a task form is absent; a form used by two processes maps to
+     * both their trigger entities (only a single, agreeing one lets a relation be editable - see
+     * {@link #validateFormEditable}).
+     *
+     * @param model the parsed model
+     * @return form name to the trigger entities of its task usages
+     */
+    private static Map<String, Set<String>> taskFormTriggers(IntentModel model) {
+        Map<String, Set<String>> triggers = new HashMap<>();
+        for (ProcessIntent process : model.getProcesses()) {
+            String triggerEntity = triggerEntityName(process);
+            for (StepIntent step : process.getSteps()) {
+                if (!"userTask".equals(step.getKind())) {
+                    continue;
+                }
+                String form = stepArg(step, "form");
+                if (form != null && !form.isBlank()) {
+                    triggers.computeIfAbsent(form, key -> new HashSet<>())
+                            .add(triggerEntity == null ? "" : triggerEntity);
+                }
+            }
+        }
+        return triggers;
     }
 
     /**
@@ -5338,7 +5436,7 @@ public final class IntentParser {
             if (!"entity".equals(scope) && !"page".equals(scope)) {
                 issues.add("generates [" + name + "] has invalid scope [" + scope + "] (expected 'entity' or 'page')");
             }
-            validateGeneratesEvent(g, name, source, crossModelSource, issues);
+            validateGeneratesEvent(g, name, source, crossModelSource, model, issues);
             validateMapSource(source, g.getMap(), "generates [" + name + "]", "map", issues);
             if (g.getItems() != null) {
                 GeneratesItemsIntent items = g.getItems();
@@ -5441,16 +5539,21 @@ public final class IntentParser {
     }
 
     /**
-     * Validate the optional {@code event} trigger of a create-from (issue #6711): exactly one of
-     * {@code onTransition} (a status write - the {@code when} status guard is mandatory) or
-     * {@code onCreate} (the source's insert - the guard is optional), naming the SAME entity
-     * {@code from} declares; the owning model is never repeated here, {@code fromUses} declares it. An
-     * event-driven create-from is at-most-once, and the guard is the target's back-reference to the
-     * source - so the {@code map} must copy the source's primary key onto it. Without an event,
-     * {@code button: false} is rejected: a create-from with neither trigger generates nothing at all.
+     * Validate the optional {@code event} trigger of a create-from (issues #6711, #6800): exactly one
+     * of the source's lifecycle ({@code onTransition} - a status write, the {@code when} status guard
+     * is mandatory - or {@code onCreate} - the source's insert, the guard optional), naming the SAME
+     * entity {@code from} declares, or a process step ({@code onStepReached}/{@code onStepCompleted}:
+     * <code>{ process, step }</code>) whose process runs ON that entity. The owning model is never
+     * repeated here, {@code fromUses} declares it.
+     *
+     * <p>
+     * The {@code map} must copy the source's primary key onto the target's back-reference in BOTH
+     * cardinalities: it is the at-most-once guard of the default {@code mode: once}, and the row's
+     * provenance under {@code mode: append}. Without an event, {@code button: false} is rejected: a
+     * create-from with neither trigger generates nothing at all.
      */
     private static void validateGeneratesEvent(GeneratesIntent g, String name, EntityIntent source, boolean crossModelSource,
-            List<String> issues) {
+            IntentModel model, List<String> issues) {
         String subject = "generates [" + name + "]";
         if (!g.isEventDriven()) {
             if (Boolean.FALSE.equals(g.getButton())) {
@@ -5463,11 +5566,21 @@ public final class IntentParser {
         if (event.get("model") != null) {
             issues.add(subject + " event must not declare model: - the source and its owning model are declared by from:/fromUses:");
         }
+        validateGeneratesEventMode(g, subject, issues);
         Object onTransition = event.get("onTransition");
         Object onCreate = event.get("onCreate");
-        if (onTransition == null && onCreate == null) {
-            issues.add(subject + " event requires `onTransition: " + g.getFrom() + "` (a status write) or `onCreate: " + g.getFrom()
-                    + "` (the source's insert)");
+        String stepKind = null;
+        for (String kind : STEP_EVENT_KINDS) {
+            if (event.get(kind) != null) {
+                stepKind = kind;
+            }
+        }
+        if (stepKind != null) {
+            validateGeneratesStepEvent(g, subject, stepKind, onTransition != null || onCreate != null, crossModelSource, model, issues);
+        } else if (onTransition == null && onCreate == null) {
+            issues.add(subject + " event requires `onTransition: " + g.getFrom() + "` (a status write), `onCreate: " + g.getFrom()
+                    + "` (the source's insert) or `onStepReached`/`onStepCompleted: { process: <Process>, step: <step> }`"
+                    + " (a moment in a process that runs on it)");
         } else if (onTransition != null && onCreate != null) {
             issues.add(subject + " event declares both onTransition and onCreate - exactly one trigger is allowed");
         } else {
@@ -5488,14 +5601,73 @@ public final class IntentParser {
                 issues.add(subject + " event when [" + when + "] must be `<Property> == <status seed id or name>`");
             }
         }
-        // The at-most-once guard: the target's own to-one back to the source, written from the source's
-        // primary key. A cross-model source's key field is read from the owner .model at generation
-        // time, so only the local case is checkable here - the glue generator fails loudly for the rest.
+        // The back-reference: the target's own to-one back to the source, written from the source's
+        // primary key. Required in BOTH cardinalities - the at-most-once guard under `once`, the row's
+        // provenance under `append` (a log row nothing points back at cannot be read). A cross-model
+        // source's key field is read from the owner .model at generation time, so only the local case
+        // is checkable here - the glue generator fails loudly for the rest.
         if (!crossModelSource && source != null && !g.getMap()
                                                      .containsValue(seedIdField(source))) {
             issues.add(subject + " is event-driven, so its map must copy the source's [" + seedIdField(source)
                     + "] onto the target's back-reference to it (e.g. `map: { " + g.getFrom() + ": " + seedIdField(source)
-                    + " }`) - that back-reference is the at-most-once guard against an event redelivery");
+                    + " }`) - that back-reference is the at-most-once guard against an event redelivery under mode: once,"
+                    + " and the created row's provenance under mode: append");
+        }
+    }
+
+    /**
+     * The {@code mode} of an event trigger (issue #6800): {@code once} (the default - at most one
+     * target row per source) or {@code append} (a row per delivered event). Anything else is refused
+     * rather than silently read as the default, which would turn a typo into a cardinality nobody
+     * authored.
+     */
+    private static void validateGeneratesEventMode(GeneratesIntent g, String subject, List<String> issues) {
+        Object mode = g.getEvent()
+                       .get("mode");
+        if (mode == null) {
+            return;
+        }
+        String declared = String.valueOf(mode)
+                                .trim();
+        if (!GeneratesIntent.MODE_ONCE.equals(declared) && !GeneratesIntent.MODE_APPEND.equals(declared)) {
+            issues.add(subject + " event has invalid mode [" + declared + "] (expected '" + GeneratesIntent.MODE_ONCE + "' - at most one "
+                    + g.getTo() + " per " + g.getFrom() + " - or '" + GeneratesIntent.MODE_APPEND + "' - one per delivered event)");
+        }
+    }
+
+    /**
+     * A create-from bound to a process step: the step must be an observable moment of a process that
+     * runs ON the source (the step event is delivered as a message about the process's trigger entity,
+     * which is what the create-from then reads by id), and the source must be local - a process and its
+     * steps belong to the model that declares them, so a cross-model source has none to bind to here.
+     * The {@code when} guard stays optional: the step already IS the moment.
+     */
+    private static void validateGeneratesStepEvent(GeneratesIntent g, String subject, String kind, boolean lifecycleToo,
+            boolean crossModelSource, IntentModel model, List<String> issues) {
+        if (lifecycleToo) {
+            issues.add(subject + " event declares " + kind + " next to onTransition/onCreate - exactly one trigger is allowed");
+            return;
+        }
+        if (crossModelSource) {
+            issues.add(subject + " event binds " + kind + " on a cross-model source (fromUses [" + g.getFromUses()
+                    + "]) - a process and its steps are local to the model that declares them; bind to onTransition/onCreate instead");
+            return;
+        }
+        String triggerEntity = validateStepEventBinding(g.getEvent(), kind, subject, model, issues);
+        if (triggerEntity == null) {
+            return; // already reported
+        }
+        if (g.getFrom() != null && !g.getFrom()
+                                     .isBlank()
+                && !triggerEntity.equals(g.getFrom())) {
+            issues.add(subject + " event " + kind + " names a process that runs on [" + triggerEntity + "], not on the from entity ["
+                    + g.getFrom() + "] - a step event is about the record its process runs on, which is the record the create-from reads");
+        }
+        Object when = g.getEvent()
+                       .get("when");
+        if (when != null && !String.valueOf(when)
+                                   .matches("\\s*\\w+\\s*==\\s*\\d+\\s*")) {
+            issues.add(subject + " event when [" + when + "] must be `<Property> == <status seed id or name>`");
         }
     }
 
@@ -5981,12 +6153,21 @@ public final class IntentParser {
 
     /**
      * An {@code editable} field (the per-field opt-out of a BPM task form's read-only default) must be
-     * a plain, displayed field of the bound entity. Any field type is allowed: the generated Writer
-     * coerces the form's process variable to the field's Java type ({@code date}/{@code timestamp}/
-     * {@code number}/{@code boolean}/{@code string}). A {@code relation.field} can never be editable
-     * (editing it would not write back).
+     * a plain, displayed field of the bound entity, or a displayed <b>to-one relation</b> of it. Any
+     * field type is allowed: the generated Writer coerces the form's process variable to the field's
+     * Java type ({@code date}/{@code timestamp}/{@code number}/{@code boolean}/{@code string}); a
+     * relation is written as the target's integer key, which is that same coercion. A
+     * {@code relation.field} can never be editable (editing it would not write back to the related
+     * record).
+     * <p>
+     * A relation carries one further requirement the plain fields do not: the picker's option list is
+     * loaded at runtime from the {@code __<Fk>EntityUrl} process variable the trigger seeds for every
+     * to-one relation of its TRIGGER entity. So the form must be a task form of a process whose trigger
+     * entity is the form's own {@code forEntity} - which is also the entity the generated Writer writes
+     * back to. Both facts come from the same place, so a form that satisfies one satisfies the other.
      */
-    private static void validateFormEditable(FormIntent form, EntityIntent bound, List<String> issues) {
+    private static void validateFormEditable(FormIntent form, EntityIntent bound, Map<String, Set<String>> taskFormTriggers,
+            List<String> issues) {
         Set<String> displayed = new HashSet<>(form.getFields());
         for (String field : form.getEditable()) {
             if (field == null || field.isBlank()) {
@@ -6005,13 +6186,55 @@ public final class IntentParser {
                 continue; // the unknown-forEntity issue is already reported above
             }
             FieldIntent bf = fieldByName(bound, field);
-            if (bf == null) {
-                issues.add("form [" + form.getName() + "] editable [" + field + "] is not a field of [" + form.getForEntity() + "]");
+            if (bf != null) {
+                // Any plain entity field type is editable: the generated Writer coerces the form's process
+                // variable to the field's Java type (LocalDate / Instant / Integer / Long / BigDecimal /
+                // Double / Boolean / String).
                 continue;
             }
-            // Any plain entity field type is editable: the generated Writer coerces the form's process
-            // variable to the field's Java type (LocalDate / Instant / Integer / Long / BigDecimal /
-            // Double / Boolean / String). Only a relation.field (handled above) can never be written back.
+            RelationIntent relation = toOneRelationByName(bound, field);
+            if (relation == null) {
+                issues.add("form [" + form.getName() + "] editable [" + field + "] is not a field or to-one relation of ["
+                        + form.getForEntity() + "]");
+                continue;
+            }
+            validateEditableRelation(form, bound, relation, taskFormTriggers, issues);
+        }
+    }
+
+    /**
+     * The extra conditions a to-one relation must meet to be picked on a task form. Each rejects a
+     * shape whose picker could only render empty or write a value the model forbids, and says which.
+     */
+    private static void validateEditableRelation(FormIntent form, EntityIntent bound, RelationIntent relation,
+            Map<String, Set<String>> taskFormTriggers, List<String> issues) {
+        String subject = "form [" + form.getName() + "] editable [" + relation.getName() + "]";
+        if (relation.isEntityStatus()) {
+            issues.add(subject + " is the function: EntityStatus relation - a status is moved along the lifecycle by a"
+                    + " setRelationField step or a transitions: button, never picked from a list");
+            return;
+        }
+        if (relation.isComposition()) {
+            issues.add(subject + " is the composition parent - it is the record's filing, set by the context the record was"
+                    + " created in, and re-pointing it mid-flow would move the record to another master");
+            return;
+        }
+        if (relation.isCrossModel()) {
+            issues.add(subject + " targets [" + relation.getTo() + "] in model [" + relation.getModel()
+                    + "] - a cross-model target's key is only known to its owner model, so the picker cannot say what value to"
+                    + " submit; keep it read-only and set it with a delegate");
+            return;
+        }
+        Set<String> triggers = taskFormTriggers.get(form.getName());
+        if (triggers == null) {
+            issues.add(subject + " is a relation, which can only be picked on a TASK form - no userTask references this form,"
+                    + " so there is no process context to load the options from");
+            return;
+        }
+        if (!triggers.equals(Set.of(bound.getName()))) {
+            issues.add(subject + " is a relation, but this form's forEntity [" + bound.getName()
+                    + "] is not the trigger entity of every process that uses it as a task form " + new TreeSet<>(triggers)
+                    + " - the option list rides the trigger's own relations, and the write-back targets the trigger entity");
         }
     }
 

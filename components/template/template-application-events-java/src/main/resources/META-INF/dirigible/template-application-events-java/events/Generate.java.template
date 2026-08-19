@@ -30,11 +30,27 @@ import org.eclipse.dirigible.sdk.http.Response;
  * single caller.
 #end
 #if($hasEvent)
+#if($appendMode)
+ *
+ * Appends (intent `mode: append`): it is triggered by a ${fromEntity} event and keeps NO existing-target
+ * lookup, so every delivery creates another ${toEntity} - the "a row per event" shape (a log, a
+ * protocol). The ${backRefProperty} back-reference is still written on each row: it is that row's
+ * provenance, not a dedup key. This is the ABSENCE of a guard, so an event redelivery appends a
+ * duplicate; use `mode: once` for anything that must exist at most once.
+#{else}
  *
  * At-most-once: it is triggered by a ${fromEntity} event, so it first looks for a ${toEntity} that
  * already back-references the source through ${backRefProperty} and returns that one instead of
- * creating a second document. A create-from with no event trigger deliberately keeps NO such guard -
- * minting several targets from one source is a legitimate manual act.
+ * creating a second document. That holds for the LIFETIME of that document, not merely for a
+ * redelivery of the same event.
+#if($hasRetiredStatus)
+ * The exception is a RETIRED one: a ${toEntity} whose ${retiredStatusProperty} reached a stage classified
+ * `cancelled` or `void` no longer counts, so the guard steps over it and the ${fromEntity} can be
+ * generated from again - void and reissue. A draft or live ${toEntity} still blocks.
+#end
+ * A create-from with no event trigger deliberately keeps NO such guard - minting several targets from
+ * one source is a legitimate manual act.
+#end
 #end
  */
 #if(!$eventOnly)
@@ -88,7 +104,7 @@ public class ${className}Generate {
         if (source == null) {
             return null;
         }
-#if($hasEvent)
+#if($hasEvent && !$appendMode)
         // Already generated for this source (an event redelivery, or a click after the event) - hand back
         // the existing document rather than minting a duplicate. Best-effort against two concurrent
         // deliveries until a UNIQUE key on the back-reference lands, exactly as postings' guard is.
@@ -96,9 +112,20 @@ public class ${className}Generate {
                 new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().findAll(
                         Criteria.create()
                                 .eq("${backRefProperty}", sourceId));
+#if(!$hasRetiredStatus)
         if (!existing.isEmpty()) {
             return existing.get(0);
         }
+#else
+        // ...unless that document was retired: a ${retiredStatusProperty} classified `cancelled` or `void`
+        // (the seeded `stage:` classification) means the ${toEntity} no longer counts, so the ${fromEntity}
+        // may be generated from again - void and reissue. A draft or live one still blocks (dirigible #6814).
+        for (gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity candidate : existing) {
+            if (candidate.${retiredStatusProperty} == null || !(${retiredStatusCondition})) {
+                return candidate;
+            }
+        }
+#end
 #end
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity target =
                 new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity();
