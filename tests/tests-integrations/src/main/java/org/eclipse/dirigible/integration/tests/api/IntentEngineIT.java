@@ -2360,7 +2360,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
 
         // The glue carries the per-event expansion handlers with the pre-rendered Java pieces - the
-        // (re)generation pair plus the cleanup that takes the generated rows down with their master.
+        // reconciliation pair plus the cleanup that takes the generated rows down with their master.
         String glue = contentOf("loans.glue");
         assertTrue(glue.contains("\"expansions\""), "the .glue should carry the expansions collection");
         assertTrue(glue.contains("InstallmentsExpansionOnCreate"), "an OnCreate handler entry is expected");
@@ -2381,6 +2381,17 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(onCreate.contains("intent-test-Loan-Loan\""), "the OnCreate handler binds the master's create topic");
         assertTrue(onCreate.contains("d.plusMonths(1)"), "unit month steps by month");
         assertTrue(onCreate.contains("total.subtract(share.multiply("), "the last row absorbs the rounding remainder");
+
+        // The child set is RECONCILED, not rebuilt (#6817): a handler has no transaction boundary, so
+        // wiping every row before recreating the set meant a failure partway through committed the
+        // deletes and only some of the inserts - rows destroyed for good. Only the rows that fell out
+        // of the span may be deleted, the rows whose period survives are kept and re-spread in place.
+        assertTrue(onCreate.contains("kept.putIfAbsent(row.DueDate, row)"), "a row whose period survives the span change must be kept");
+        assertTrue(onCreate.contains("!wanted.contains(row.DueDate)"), "only a row outside the new span may be deleted");
+        assertTrue(onCreate.contains("children.updateDerived(child.Id, reshare)"),
+                "a kept row's share is re-spread in place, as a targeted write that still publishes -updated for the roll-ups");
+        assertFalse(onCreate.matches("(?s).*for \\(LoanInstallmentEntity row : existing\\) \\{\\s*children\\.delete\\(row\\);.*"),
+                "the unconditional wipe of the whole child set must be gone");
         assertTrue(onCreate.contains("new LoanRepository().updateProperty(master.Id, \"Periods\", Integer.valueOf(periods.size()))"),
                 "the count write-back must be a targeted single-column updateProperty");
         assertFalse(onCreate.contains("updateWithoutEvent"),

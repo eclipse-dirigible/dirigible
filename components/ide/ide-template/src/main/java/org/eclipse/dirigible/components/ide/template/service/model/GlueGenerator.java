@@ -530,7 +530,7 @@ class GlueGenerator {
     }
 
     /**
-     * Binds a period expansion - the handler that regenerates a master's child rows across a date span.
+     * Binds a period expansion - the handler that reconciles a master's child rows across a date span.
      * Only the period step is derived here; the type-dependent pieces arrive pre-rendered.
      *
      * @param item the descriptor
@@ -538,8 +538,8 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindExpansion(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "className", "masterEntity", "masterPerspective", "masterPk", "childEntity", "fkProperty", "startProperty",
-                "endProperty", "mapProperty", "unit", "criteriaExpression");
+        copy(context, item, "className", "masterEntity", "masterPerspective", "masterPk", "childEntity", "childPk", "fkProperty",
+                "startProperty", "endProperty", "mapProperty", "unit", "criteriaExpression");
         context.put("javaMasterPerspective", sanitize(item, "masterPerspective"));
         context.put("javaChildPerspective", sanitize(item, "childPerspective"));
         String unit = str(item, "unit");

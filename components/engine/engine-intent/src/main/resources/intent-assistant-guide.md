@@ -2643,11 +2643,14 @@ expansions:
     defaults: { days: 1 }                         # literal child field defaults
 ```
 
-Semantics: two generated handlers ((re)generate on the master's create AND update events) own the
-child set - a span change REPLACES every child row pointing at the master, so never mix hand-entered
-rows into an expanded child. Rows are written through the child repository (create/delete events
+Semantics: two generated handlers (reconcile on the master's create AND update events) own the
+child set - a span change is applied as a DIFF: the periods that are missing are inserted, the rows
+that fell out of the span are deleted, and every row whose period survives is kept (with whatever was
+edited on it). Never mix hand-entered rows into an expanded child - a row on a period the span does
+not cover is deleted as stale. Rows are written through the child repository (create/delete events
 fire; roll-ups and capacity guards run as for hand-entered rows). With `spread`, the last row absorbs
-the rounding remainder so the shares always sum to the total. The `count` write-back and the
+the rounding remainder so the shares always sum to the total, and a kept row's share is re-spread
+when the row count changes. The `count` write-back and the
 regeneration are idempotent and event-safe (no cascades). All span/map fields must be `date` typed;
 `spread`/`count` fields numeric.
 
