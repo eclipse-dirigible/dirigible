@@ -107,7 +107,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> outbound = buildOutbound(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> stepEvents = buildStepEvents(model, compositionParents, settings);
         List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings, context);
-        List<Map<String, Object>> expansions = buildExpansions(model, byName, compositionParents, settings);
+        ExpansionHandlers expansionHandlers = buildExpansions(model, byName, compositionParents, settings);
+        List<Map<String, Object>> expansions = expansionHandlers.regenerations();
+        List<Map<String, Object>> expansionCleanups = expansionHandlers.cleanups();
         List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> generates = buildGenerates(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> transitions = buildTransitions(model, byName, compositionParents, settings, context);
@@ -154,6 +156,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("stepEvents", stepEvents);
         glue.put("rollups", rollups);
         glue.put("expansions", expansions);
+        glue.put("expansionCleanups", expansionCleanups);
         glue.put("settlements", settlements);
         glue.put("generates", generates);
         // The event-driven subset (issue #6711) - the SAME descriptors, filtered, so the listener and
@@ -2475,15 +2478,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Period expansions: per expansion, two handlers - on the master's create and update events - that
-     * (re)generate the child rows for the span. Everything type-dependent (the defaults literals, the
-     * count write-back) is pre-rendered here as Java lines so the template stays shape-only; the child
-     * rows go through the child repository, so their create/delete events fire and downstream
-     * roll-ups/guards run exactly as for hand-entered rows.
+     * Period expansions: per expansion, three handlers - on the master's create and update events, that
+     * (re)generate the child rows for the span, and on its delete event, that removes them again.
+     * Everything type-dependent (the defaults literals, the count write-back) is pre-rendered here as
+     * Java lines so the template stays shape-only; the child rows go through the child repository, so
+     * their create/delete events fire and downstream roll-ups/guards run exactly as for hand-entered
+     * rows.
      */
-    private static List<Map<String, Object>> buildExpansions(IntentModel model, Map<String, EntityIntent> byName,
+    private static ExpansionHandlers buildExpansions(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentSettings settings) {
         List<Map<String, Object>> expansions = new ArrayList<>();
+        List<Map<String, Object>> cleanups = new ArrayList<>();
         for (ExpansionIntent expansion : model.getExpansions()) {
             if (expansion.getName() == null || expansion.getName()
                                                         .isBlank()) {
@@ -2558,8 +2563,21 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             String className = IntentNaming.pascalIdentifier(expansion.getName()) + "Expansion";
             expansions.add(rollupEntry(base, className + "OnCreate", ""));
             expansions.add(rollupEntry(base, className + "OnUpdate", "-updated"));
+            cleanups.add(rollupEntry(base, className + "OnDelete", "-deleted"));
         }
-        return expansions;
+        return new ExpansionHandlers(expansions, cleanups);
+    }
+
+    /**
+     * The handlers an intent's expansions contribute, split by the template that renders them: the
+     * (re)generation pair per expansion, and the cleanup that removes the generated rows when their
+     * master is deleted. They are two collections rather than one because a template source renders
+     * once per collection entry, and the cleanup's body shares nothing with the regeneration's.
+     *
+     * @param regenerations the create/update handlers
+     * @param cleanups the master-delete handlers
+     */
+    private record ExpansionHandlers(List<Map<String, Object>> regenerations, List<Map<String, Object>> cleanups) {
     }
 
     /** Pre-rendered Java assignment lines for the expansion's literal child defaults. */

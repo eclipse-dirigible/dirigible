@@ -45,8 +45,8 @@ class GlueGenerator {
     /** The names of the collections this generator handles. */
     private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
             "aborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles",
-            "outbound", "stepEvents", "rollups", "expansions", "settlements", "generates", "generateEvents", "transitions", "sends",
-            "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
+            "outbound", "stepEvents", "rollups", "expansions", "expansionCleanups", "settlements", "generates", "generateEvents",
+            "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -102,6 +102,7 @@ class GlueGenerator {
             case "outbound" -> each(collection, source, content, model, parameters, GlueGenerator::bindOutbound);
             case "stepEvents" -> each(collection, source, content, model, parameters, GlueGenerator::bindStepEvent);
             case "expansions" -> each(collection, source, content, model, parameters, GlueGenerator::bindExpansion);
+            case "expansionCleanups" -> each(collection, source, content, model, parameters, GlueGenerator::bindExpansionCleanup);
             case "settlements" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlement);
             // Both collections carry the SAME create-from descriptors (generateEvents is the
             // event-driven subset), so they share one binding - the listener and the create-from it
@@ -523,6 +524,22 @@ class GlueGenerator {
         context.put("countProperty", strOr(item, "countProperty", ""));
         context.put("countValue", strOr(item, "countValue", ""));
         context.put("topicSuffix", strOr(item, "topicSuffix", ""));
+    }
+
+    /**
+     * Binds an expansion cleanup - the handler that removes an expansion's generated rows when their
+     * master is deleted. It needs only the master's identity and the child set's criteria, so the span,
+     * unit, defaults and spread the regeneration binds are deliberately absent.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindExpansionCleanup(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "className", "masterEntity", "masterPerspective", "masterPk", "childEntity", "criteriaExpression");
+        context.put("javaMasterPerspective", sanitize(item, "masterPerspective"));
+        context.put("javaChildPerspective", sanitize(item, "childPerspective"));
+        context.put("topicSuffix", strOr(item, "topicSuffix", "-deleted"));
     }
 
     /**
