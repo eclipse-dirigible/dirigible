@@ -851,10 +851,92 @@ class IntentEngineIT extends IntegrationTest {
                 lookup.contains("stamp(entity.Id, \"found\", resolved)") && lookup.contains("\"notFound\"")
                         && lookup.contains("\"ambiguous\""),
                 "all three outcomes should be generated - an ambiguous register is never resolved by picking one");
+        // The RESULT - the relation and the trace - is one targeted update. The routing status is a
+        // second one; this lookup declares none, so resolve_writes_the_result_before_the_routing_status
+        // covers that half.
         assertTrue(
                 lookup.contains("values.put(\"SalesRep\", resolved)") && lookup.contains("values.put(\"RepResolution\", outcome)")
-                        && lookup.contains("new OrderRepository().updateProperties(id, values)"),
+                        && lookup.contains("repository.updateProperties(id, values)"),
                 "the resolved relation and the outcome trace should be written in ONE targeted update");
+    }
+
+    @Test
+    void resolve_writes_the_result_before_the_routing_status() {
+        // A lookup that also ROUTES by status. The three values it decides are semantically independent,
+        // and the DAO runs the lifecycle and checks gates against the post-write row BEFORE persisting -
+        // so batching them meant a rejected status move discarded the resolved relation and the outcome
+        // trace with it: the work was done, the answer was right, and all of it was thrown away.
+        String yaml = """
+                name: fines
+                entities:
+                  - name: FineStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Vehicle
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: plate, type: string }
+                  - name: Driver
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: VehicleAssignment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: validFrom, type: date }
+                    relations:
+                      - { name: vehicle, kind: manyToOne, to: Vehicle }
+                      - { name: driver, kind: manyToOne, to: Driver }
+                  - name: Fine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: violationAt, type: timestamp }
+                      - { name: resolution, type: string, readOnly: true }
+                    relations:
+                      - { name: vehicle, kind: manyToOne, to: Vehicle }
+                      - { name: driver, kind: manyToOne, to: Driver }
+                      - { name: status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+                seeds:
+                  - name: fineStatuses
+                    entity: FineStatus
+                    rows:
+                      - { id: 1, name: NEW }
+                      - { id: 2, name: IDENTIFIED }
+                resolves:
+                  - name: identifyDriver
+                    event: { onCreate: Fine }
+                    set: driver
+                    from: VehicleAssignment
+                    match: { vehicle: vehicle }
+                    between: { start: validFrom, value: violationAt }
+                    outcome: resolution
+                    found: { setStatus: IDENTIFIED }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "fines.glue");
+        String lookup = contentOf("gen/events/fines/IdentifyDriverResolve.java");
+
+        // The result goes out on its own, and the status is NOT in that batch.
+        int result = lookup.indexOf("repository.updateProperties(id, values)");
+        int routing = lookup.indexOf("repository.updateProperty(id, \"Status\", status)");
+        assertTrue(result > 0 && routing > 0, "both writes should be generated, got result@" + result + " routing@" + routing);
+        assertTrue(result < routing, "the resolved relation and the trace must be persisted BEFORE the routing status is attempted");
+        assertFalse(lookup.contains("values.put(\"Status\", status)"),
+                "the status must NOT ride in the same map - a rejected move would take the relation and the trace with it");
+
+        // A status the record cannot take is recorded, not thrown: retrying cannot help, and the record
+        // itself must carry the evidence or a routed-but-rejected record reads as fully processed.
+        assertTrue(lookup.contains("catch (org.eclipse.dirigible.sdk.db.ValidationException rejected)"),
+                "the routing write should catch the lifecycle/checks rejection the DAO raises");
+        assertTrue(lookup.contains("repository.updateProperty(id, \"Resolution\", outcome + \"-notRouted\")"),
+                "a rejected route should amend the trace so the record shows what happened");
+        assertTrue(lookup.contains("could not be routed to status"), "a rejected route should also be logged");
     }
 
     @Test

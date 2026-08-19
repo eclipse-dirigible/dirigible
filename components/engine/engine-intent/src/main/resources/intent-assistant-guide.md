@@ -2384,14 +2384,21 @@ are a filterable worklist a human can finish, and so a process `decision` can br
 - `between.start` / `between.end` are register date fields, `between.value` the record's date. Either
   bound may be omitted (open-ended = still valid); the end is **inclusive**, and a date-only bound
   covers its whole day.
-- Only the resolved relation, the outcome and the status are written - nothing else of the record.
+- Only the resolved relation, the outcome and the status are written - nothing else of the record,
+  and the RESULT (relation + outcome) is written FIRST, separately from the routing status. A
+  status the record cannot take where it stands - an unmodeled `lifecycle:` move, a `checks:`
+  gate - is rejected by the repository, and batching the three meant that rejection discarded the
+  identification and the trace along with it. Split, the routing can fail without taking the work
+  with it: the outcome is amended to `<outcome>-notRouted` (e.g. `found-notRouted`) and logged,
+  so the record itself shows a routed-but-rejected attempt.
 
 **Rules:** `event` binds `onCreate` or `onUpdate` of a declared entity (never `onDelete`); `set` is a
 to-one of that entity; `from` is an entity declared in **this** model; `match` needs at least one pair
 (left = register property, right = record property); `between.value` is required and every period
-field must be a `date` or `timestamp`; `outcome` must be a `string` field of the record; a `setStatus`
-needs the record to declare a `function: EntityStatus` relation, and may be a seed id or a seeded
-name.
+field must be a `date` or `timestamp`; `outcome` must be a `string` field of the record, long enough for
+the values written (9, or 19 once any outcome routes by `setStatus` - the amended trace); a
+`setStatus` needs the record to declare a `function: EntityStatus` relation, and may be a seed id
+or a seeded name.
 
 ## Allowed values
 
@@ -2429,7 +2436,7 @@ name.
 | transition `when` op | `==`, `!=` |
 | resolve `event` | `onCreate`, `onUpdate` (never `onDelete`); `when` is `<Field> ==\|!= <value>` |
 | resolve `between` field type | `date`, `timestamp` |
-| resolve `outcome` values | `found`, `notFound`, `ambiguous` (stamped into a `string` field) |
+| resolve `outcome` values | `found`, `notFound`, `ambiguous`, plus `<outcome>-notRouted` when a `setStatus` route is rejected (stamped into a `string` field) |
 
 ## Mapping requests to capabilities (quick reference)
 
