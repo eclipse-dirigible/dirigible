@@ -531,8 +531,8 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         }
         return count;
     }
-
 #if($lifecycleEdges)
+
     /**
      * The declarative state machine (intent {@code lifecycle:}): the WHOLE set of legal status edges,
      * as {@code 1&gt;2} source-to-target id pairs.
@@ -618,6 +618,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #end
 #if($documentChecks && $documentChecks.size() > 0)
+
     /**
      * Declarative document checks (intent {@code checks:}): each runs when the document is persisted
      * carrying its gate status. Throws {@code ValidationException} with the authored message - mapped to
