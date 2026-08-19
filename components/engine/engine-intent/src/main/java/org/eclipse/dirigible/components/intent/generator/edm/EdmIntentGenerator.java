@@ -2979,21 +2979,19 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if ("DEPENDENT".equals(entityType) || "SETTING".equals(entityType) || "PROJECTION".equals(entityType)) {
             appendAttribute(sb, "entityType", entityType);
         }
-        for (String key : new String[] {"dataName", "dataCount", "dataQuery", "title", "caption", "description", "tooltip", "menuKey",
-                "menuLabel", "layoutType", "perspectiveName", "importsCode", "generateDefaultRoles", "roleRead", "roleWrite",
-                "projectionReferencedModel", "projectionReferencedEntity"}) {
-            if (entity.get(key) != null) {
-                appendAttribute(sb, key, entity.get(key));
+        // Every remaining entity attribute rides the cell value, so a live EDM-editor open->save preserves
+        // it: serializer.js re-serializes the DECODED cell, not the <entities> block, and would otherwise
+        // drop any attribute the cell did not carry (the intent-era attributes "wholesale" of #6826) -
+        // scalars verbatim, the structured values (rollupGuard, checks, ...) as JSON attributes (a flat
+        // attribute survives mxGraph's codec, a nested element would not). 'name' is already emitted above;
+        // 'type' is the mxObjectCodec class marker emitted below (the entity's own type rides as
+        // 'entityType'); 'properties' are child cells, not attributes.
+        for (Map.Entry<String, Object> attr : entity.entrySet()) {
+            String key = attr.getKey();
+            if ("name".equals(key) || "type".equals(key) || "properties".equals(key)) {
+                continue;
             }
-        }
-        // The intent-era structured values (rollupGuard, checks, ...) ride the cell value as JSON
-        // attributes
-        // so a live EDM-editor open->save round-trips them (a flat attribute survives mxGraph's codec, a
-        // nested element would not) - #6826.
-        for (String key : STRUCTURED_ATTRIBUTES) {
-            if (entity.get(key) != null) {
-                appendStructuredAttribute(sb, key, entity.get(key));
-            }
+            appendModelAttribute(sb, key, attr.getValue());
         }
         appendAttribute(sb, "type", "Entity");
         sb.append(" as=\"value\"/>\n");
