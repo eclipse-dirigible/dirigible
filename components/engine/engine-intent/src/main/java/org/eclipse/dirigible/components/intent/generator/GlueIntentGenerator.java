@@ -576,11 +576,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // this one class.
             String className = rollup.getEntity() + fkProperty;
             rollups.add(rollupEntry(base, className + "RollupOnCreate", ""));
-            if (sum || latest) {
-                // A line edit changes the sum (or which row is latest / its value), so sum AND latest
-                // roll-ups must also recompute on update.
-                rollups.add(rollupEntry(base, className + "RollupOnUpdate", "-updated"));
-            }
+            // EVERY op recomputes on update, not just sum / latest: a line edit changes the sum (or which
+            // row is latest, or its value), and an edit that RE-PARENTS a child - the ordinary way a child
+            // moves between parents - changes the count of the parent it moved TO. The recompute is the
+            // same query for every op and reads the child rows back from the store, so the update handler
+            // is idempotent and never op-specific. (The parent the child moved AWAY from is still stale
+            // until roll-ups also consume the "-rekeyed" event - tracked separately.)
+            rollups.add(rollupEntry(base, className + "RollupOnUpdate", "-updated"));
             rollups.add(rollupEntry(base, className + "RollupOnDelete", "-deleted"));
         }
         return rollups;

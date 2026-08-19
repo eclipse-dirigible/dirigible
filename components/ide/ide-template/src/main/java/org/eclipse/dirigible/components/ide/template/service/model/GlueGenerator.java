@@ -757,9 +757,10 @@ class GlueGenerator {
      *
      * <p>
      * The coalescing is what keeps the totals correct: separate handlers would each persist the whole
-     * parent row and clobber each other's fields. Grouping by the event as well as the relation is what
-     * makes each event's aggregate set right - a count roll-up contributes no update entry, so the
-     * update handler ends up sum-only.
+     * parent row and clobber each other's fields. The event is part of the grouping key because a
+     * handler binds exactly one topic, so each of the child's create / update / delete events yields
+     * its own handler carrying the aggregate blocks of every roll-up that shares that child and
+     * relation.
      *
      * @param source the template source
      * @param content the template content
