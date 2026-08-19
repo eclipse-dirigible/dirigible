@@ -568,6 +568,28 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
 
+              # expansions: the generated child set is OWNED by the expansion, so the master's DELETE
+              # has to take it with it (#6821). Nothing else would - a foreign key never becomes a
+              # database constraint on this platform - so the rows would otherwise outlive the record
+              # and keep counting. Asserted at runtime, both halves: the rows appear on create and are
+              # gone once the master is deleted.
+              - name: Retainer
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: note,      type: string, length: 200 }
+                  - { name: startDate, type: date, required: true }
+                  - { name: endDate,   type: date, required: true }
+                  - { name: fee,       type: decimal, required: true }
+                  - { name: periods,   type: integer, readOnly: true }
+
+              - name: RetainerPeriod
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: dueDate, type: date }
+                  - { name: amount,  type: decimal }
+                relations:
+                  - { name: Retainer, kind: manyToOne, to: Retainer, composition: true, required: true }
+
               # BPM events wave 2 (abortOn): an approval whose confirm task is cancelled the moment
               # the record is voided via the CancelApproval transition (reusing the EntryStatus seeds:
               # DRAFT 1 / CANCELLED 3). Closes the orphaned-Inbox-task hole.
@@ -717,6 +739,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             # totalCost is NOT authored sensitive on purpose.
             rollups:
               - { name: claimCost, entity: ClaimLine, via: Claim, field: totalCost, op: sum, of: cost }
+
+            expansions:
+              - name: retainer-periods
+                from: Retainer
+                into: RetainerPeriod
+                unit: month
+                between: { start: startDate, end: endDate }
+                map: { dueDate: period }
+                spread: { total: fee, into: amount, round: 2 }
+                count: periods
 
             # collection-driven generation: the monthly job creates one Claim per Person and,
             # under each, one ClaimLine per working day of the month (amount defaulted).
@@ -3322,7 +3354,48 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertManyToManyRuntime();
         assertInboundSourcesRuntime();
         assertOutboundDepartureRuntime();
+        assertExpansionLifecycleRuntime();
         assertBpmEventsRuntime();
+    }
+
+    /**
+     * An expansion's generated rows, over their whole life (#6821): they appear when the master is
+     * created and they are gone once it is deleted. The delete half is the one that was missing - the
+     * construct bound create and update only, and because a foreign key never becomes a database
+     * constraint here, the rows simply survived as orphans still counted by every roll-up and report.
+     * Only the runtime shows it: the emitted handler can be present and still be subscribed to a topic
+     * nothing publishes to.
+     */
+    private void assertExpansionLifecycleRuntime() {
+        String retainerApi = API + "/retainer/RetainerController";
+        String periodApi = API + "/retainer/RetainerPeriodController";
+        AtomicInteger retainerId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> retainerId.set(given().contentType("application/json")
+                                                                .body("{\"Note\":\"expanded\",\"StartDate\":\"2026-01-15\",\"EndDate\":\"2026-03-15\",\"Fee\":300}")
+                                                                .when()
+                                                                .post(retainerApi)
+                                                                .then()
+                                                                .statusCode(200)
+                                                                .extract()
+                                                                .path("Id")));
+        // A month span over three months yields a row per month, each carrying its share of the fee.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(periodApi + "?Retainer=" + retainerId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(3)),
+                30);
+
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(retainerApi + "/" + retainerId.get())
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(periodApi + "?Retainer=" + retainerId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(0)),
+                30);
     }
 
     /**
