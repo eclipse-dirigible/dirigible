@@ -1443,6 +1443,26 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String billLineRepository = contentOf("gen/emission/data/bill/BillLineRepository.java");
         assertTrue(billLineRepository.contains("new BillRepository().recalculate("),
                 "a line change must trigger the master's document-totals recompute");
+        // ...and a line written by a TARGETED primitive is still a line change (#6822). A workflow
+        // setField and any glue updateProperty / updateProperties / updateDerived land in
+        // updateProperties, which used to write the column and leave the header summing to something
+        // else than its lines. The guard is on the written columns, so only a write that actually
+        // touches an aggregated column - or the FK, which MOVES the line to another document - pays
+        // for the resum.
+        assertTrue(billLineRepository.contains("values.containsKey(\"Amount\")"),
+                "a targeted write of an aggregated column must resum the master: " + billLineRepository);
+        assertTrue(billLineRepository.contains("Object documentBefore = entity == null ? null : entity.Bill;"),
+                "the targeted write must capture the document the line belonged to before it: " + billLineRepository);
+        assertTrue(
+                billLineRepository.contains("new BillRepository().recalculate(documentAfter)")
+                        && billLineRepository.contains("new BillRepository().recalculate(documentBefore)"),
+                "a line moved between documents must resum both: " + billLineRepository);
+        // The event-suppressed system write is the third targeted-ish path: it suppresses the event,
+        // not the arithmetic.
+        String updateWithoutEvent = billLineRepository.substring(billLineRepository.indexOf("public BillLineEntity updateWithoutEvent"));
+        assertTrue(updateWithoutEvent.substring(0, updateWithoutEvent.indexOf("\n    }"))
+                                     .contains("new BillRepository().recalculate("),
+                "updateWithoutEvent must keep the master's totals in step: " + billLineRepository);
 
         // The roll-up handler records every column it recomputes and persists them through the targeted
         // derived write. The derived.put assertion is load-bearing in the other direction too: an EMPTY
