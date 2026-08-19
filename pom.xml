@@ -168,7 +168,7 @@
         <jaxws-rt.version>4.0.5</jaxws-rt.version>
 
         <!-- Lucene -->
-        <lucene.version>10.5.0</lucene.version>
+        <lucene.version>10.5.1</lucene.version>
 
         <!-- Chemistry -->
         <chemistry.version>1.1.0</chemistry.version>
@@ -184,7 +184,7 @@
         <!-- Maven Artifact Resolver (embedded for dynamic dependency resolution);
              maven-resolver-maven.version is the Maven line the resolver release pairs with -->
         <maven-resolver.version>1.9.27</maven-resolver.version>
-        <maven-resolver-maven.version>3.9.12</maven-resolver-maven.version>
+        <maven-resolver-maven.version>3.9.16</maven-resolver-maven.version>
 
         <!-- Camel -->
         <camel.version>4.22.0</camel.version>
@@ -220,7 +220,7 @@
         <c3p0.version>0.14.1</c3p0.version>
         <guava.version>33.6.0-jre</guava.version>
         <icu4j.version>78.3</icu4j.version>
-        <classgraph.version>4.8.189</classgraph.version>
+        <classgraph.version>4.8.192</classgraph.version>
         <logcaptor.version>2.12.6</logcaptor.version>
 
         <!-- UI -->
@@ -992,7 +992,7 @@
             <dependency>
                 <groupId>org.apache.groovy</groupId>
                 <artifactId>groovy-bom</artifactId>
-                <version>5.0.8</version>
+                <version>5.1.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

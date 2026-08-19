@@ -1,0 +1,50 @@
+package gen.events.${javaGenFolderName};
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${javaMasterPerspective}.${masterEntity}Entity;
+import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Entity;
+import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Repository;
+
+/**
+ * Removes the generated ${childEntity} rows of a deleted ${masterEntity}.
+ *
+ * Generated from the intent expansions block - do not edit; it is re-generated with the application.
+ * The expansion OWNS the child set, so the master's delete has to take that set with it. A foreign
+ * key never becomes a database constraint on this platform - referential integrity is a
+ * business-layer check - so nothing else would stop the rows from outliving their master: they would
+ * survive as orphans pointing at an id that no longer exists and keep feeding the roll-ups, reports
+ * and balances the live rows fed. Rows are removed through the child repository, so each one's
+ * delete event fires and downstream roll-ups and guards run exactly as for a hand-deleted row.
+ */
+@Component("${javaGenFolderName}_${className}")
+public class ${className} implements MessageHandler {
+
+    @Override
+    public String destination() {
+        return "${projectName}-${masterPerspective}-${masterEntity}${topicSuffix}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        ${masterEntity}Entity master = Json.parse(message, ${masterEntity}Entity.class);
+        if (master == null || master.${masterPk} == null) {
+            return;
+        }
+        // The delete event is published after the master row is gone, so re-delivery finds an empty
+        // child set and is a no-op - the handler is idempotent without a guard of its own.
+        ${childEntity}Repository children = new ${childEntity}Repository();
+        for (${childEntity}Entity row : children.findAll(${criteriaExpression})) {
+            children.delete(row);
+        }
+    }
+}
