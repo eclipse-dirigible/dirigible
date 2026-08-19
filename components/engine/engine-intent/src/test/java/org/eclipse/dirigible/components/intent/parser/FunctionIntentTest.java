@@ -146,6 +146,36 @@ class FunctionIntentTest {
                 "the flipped relation resolves the same role");
     }
 
+    /**
+     * A second status relation parses clean and is then invisible to the whole status machinery - every
+     * consumer takes the first match - while still rendering as a status badge, so it LOOKS configured.
+     * The message has to name both, because which one is "the" status is the author's decision, not
+     * something the parser can guess.
+     */
+    @Test
+    void rejectsASecondEntityStatusRelation() {
+        String yaml = """
+                name: fines
+                entities:
+                  - name: Fine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+                      - { name: IdentificationStatus, kind: manyToOne, to: FineStatus, function: EntityStatus }
+                  - name: FineStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                """;
+        assertIssue(yaml, "entity [Fine] declares more than one function: EntityStatus relation [Status, IdentificationStatus]");
+        assertIssue(yaml, "resolves the FIRST one");
+        // The single-status model it is derived from stays valid - the check counts, it does not forbid.
+        IntentParser.parse(
+                yaml.replace("      - { name: IdentificationStatus, kind: manyToOne, to: FineStatus, function: EntityStatus }\n", ""));
+    }
+
     @Test
     void rejectsUnknownEntityFunction() {
         String yaml = base("    function: Bogus\n");
