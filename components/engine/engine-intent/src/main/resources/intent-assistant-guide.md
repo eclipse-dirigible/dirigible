@@ -930,7 +930,10 @@ processes:
 `parallel` / `end`. A `decision` must have `if` + `then`; `else` is optional. `then` / `else` must name
 a declared step or the literal `end` (or, inside a parallel branch, `join` - see below). The `trigger` fires on exactly one lifecycle event of a declared
 entity - `onCreate`, `onUpdate` or `onDelete` - and may carry a `when` guard so the process starts only
-when the guard holds, e.g. `trigger: { onUpdate: Loan, when: "status == 'OVERDUE'" }`.
+when the guard holds, e.g. `trigger: { onUpdate: Loan, when: "status == 'OVERDUE'" }`. A trigger may
+also start on a status change - `trigger: { onTransition: Invoice }` - which is what to use when the
+starting condition is a workflow status rather than a person's edit; the stamped `ProcessId` still
+makes it start at most once.
 
 **Parallel branches (`kind: parallel`).** When two steps should run **concurrently** and rejoin before
 the next step - e.g. a technical and a commercial review of the same order - use a `parallel` step. It
@@ -1154,8 +1157,12 @@ processes:
       - { name: work,        kind: userTask, args: { assignee: agent, form: WorkCase } }
 ```
 
-- `onCreate` / `onUpdate: <Entity>` (exactly one) - the entity event that resumes the wait; the
-  entity must be declared in this model. `onDelete` is not allowed.
+- `onCreate` / `onUpdate` / `onTransition: <Entity>` (exactly one) - the entity event that resumes
+  the wait; the entity must be declared in this model. `onDelete` is not allowed - there is no record
+  left to correlate through. Use **`onTransition`** to resume on a STATUS change: a workflow setter or
+  a `transitions:` button publishes only `-transitioned`, so a wait bound to `onUpdate` never wakes for
+  one and the instance parks forever (`abortOn:` binds that same channel, so before this a transition
+  could kill a parked instance but never resume one).
 - `via: <relation>` - when the event entity is NOT the trigger entity: the to-one relation of the
   **event** entity that walks to the trigger entity (here `CaseMessage.case`). Omit it when the event
   entity IS the trigger entity itself; required otherwise. Same-model relations only.
@@ -2149,8 +2156,29 @@ hand-written handler rather than stretching the block.
 `notifications`, `integrations` and `outbound` departures each declare **exactly one** `event:`, either
 
 - an **entity lifecycle** event - `{ onCreate: <Entity> }` / `{ onUpdate: ... }` / `{ onDelete: ... }`;
+- an **entity status** event - `{ onTransition: <Entity> }`;
 - a **process step** event - `{ onStepReached: { process: <Process>, step: <step> } }` or
   `{ onStepCompleted: { process: <Process>, step: <step> } }`.
+
+**`onUpdate` does NOT see a status the system wrote - use `onTransition` for that.** They are separate
+channels on purpose: a person's edit publishes `-updated`, while every status the platform itself
+writes - a workflow `setRelationField` / `setField` step, a `transitions:` button, a `generates`
+completion hook - publishes `-transitioned` instead, so a system write cannot re-fire the onUpdate
+reactions meant for a human edit. So "email the driver when the workflow attributes the fine" is
+`onTransition`; bound to `onUpdate` it would simply never fire, with nothing anywhere to say so.
+
+```yaml
+notifications:
+  - name: fineAttributed
+    event: { onTransition: Fine, when: "Status == 2" }   # the guard is optional here
+    to: driver.email
+    subject: "Fine {number} attributed"
+    body: "Your fine has been attributed to you."
+```
+
+The guard is **optional** on these three (and on a `trigger:` / `wait`) - "on any status change" is a
+legitimate thing to ask for. It is **mandatory** on `postings:` and on a `generates` `event:`, because
+those two CREATE a document per transition and an unguarded one is nearly always a mistake.
 
 A step event fires when the running process arrives at that step (`onStepReached` - e.g. a user task
 has just become available in the inbox) or when it has just finished it (`onStepCompleted` - after
@@ -2401,14 +2429,14 @@ name.
 | primary-key `type` | `integer`, `int`, `long` (integer only) |
 | relation `kind` | `oneToMany`, `manyToOne`, `oneToOne`, `manyToMany` |
 | step `kind` | `userTask`, `serviceTask`, `decision`, `script`, `wait`, `end` |
-| wait event | `onCreate`, `onUpdate` (never `onDelete`) |
+| wait event | `onCreate`, `onUpdate`, `onTransition` (never `onDelete`) |
 | userTask timers | `timeout: { after: <ISO-8601 duration>, then: <step> }`, `expire: { until: <date/timestamp field>, then: <step> }` |
 | serviceTask `retry` | `{ count: <integer >= 1>, every: <ISO-8601 duration> }` - `delegate:` steps only |
 | serviceTask `onError` | a declared step or `end` - `delegate:` steps only; `{error}` (a whole-value `setField` value) is readable on the route |
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | trigger `businessKeyStrategy` | `timestamp` |
-| lifecycle event | `onCreate`, `onUpdate`, `onDelete` |
+| entity event | `onCreate`, `onUpdate`, `onDelete`, `onTransition` (the STATUS channel - a workflow setter / `transitions:` button / `generates` completion hook publishes it, and `onUpdate` never sees those) |
 | notification `channel` | `email` |
 | notify `attach` | `print` (the record the block is about - inside a fan-out, the ROW), `recordPrint` (a fan-out's anchor record, rendered once); whichever is rendered must be a document |
 | notify `forEach` | a declared entity with exactly ONE to-one relation back to the record (one message per row; every bare path resolves against the row, `{record.<field>}` against the anchor record) - on `transitions[].notify` and `serviceTask` `args.notify` only |

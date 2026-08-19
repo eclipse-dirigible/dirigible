@@ -1113,6 +1113,72 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void the_status_channel_is_bindable_by_notifications_and_waits() {
+        // -transitioned and -updated are disjoint channels: a workflow setRelationField, a transitions:
+        // button and a generates completion hook publish the former and never the latter, so the whole
+        // -updated half of the DSL was deaf to every status the system itself wrote. A notification on
+        // onUpdate simply never fired, and a wait on onUpdate parked forever - while abortOn: bound
+        // that same channel, so a transition could KILL an instance but never resume one.
+        writeIntent("""
+                name: fines
+                entities:
+                  - name: FineStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Driver
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: email, type: string }
+                  - name: Fine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                    relations:
+                      - { name: driver, kind: manyToOne, to: Driver }
+                      - { name: Status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+                seeds:
+                  - name: fineStatuses
+                    entity: FineStatus
+                    rows:
+                      - { id: 1, name: NEW }
+                      - { id: 2, name: IDENTIFIED }
+                processes:
+                  - name: Identify
+                    trigger: { onCreate: Fine }
+                    steps:
+                      - { name: attribute, kind: serviceTask, args: { setRelationField: Status, value: IDENTIFIED } }
+                      - { name: awaitAttribution, kind: wait, args: { onTransition: Fine, next: done } }
+                      - { name: done, kind: end }
+                notifications:
+                  - name: fineAttributed
+                    event: { onTransition: Fine }
+                    to: driver.email
+                    subject: "Fine {number} attributed"
+                    body: "Your fine has been attributed to you."
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "fines.glue");
+
+        // The notification subscribes to the channel the setter actually publishes on...
+        String notification = contentOf("gen/events/fines/FineAttributedNotification.java");
+        assertTrue(notification.contains("return \"" + PROJECT + "-Fine-Fine-transitioned\";"),
+                "an onTransition notification must bind the -transitioned topic, got: " + notification);
+        // ...and so does the wait, which is what lets a transition RESUME a parked instance.
+        String wait = contentOf("gen/events/fines/IdentifyAwaitAttributionWait.java");
+        assertTrue(wait.contains("return \"" + PROJECT + "-Fine-Fine-transitioned\";"),
+                "an onTransition wait must bind the -transitioned topic, got: " + wait);
+        // The setter on the same entity is the publisher the two now hear.
+        String setter = contentOf("gen/events/fines/IdentifyAttribute.java");
+        assertTrue(setter.contains("Producer.sendToTopic(\"" + PROJECT + "-Fine-Fine-transitioned\", transitioned)"),
+                "the setter must publish the very topic the notification and the wait subscribe to");
+    }
+
+    @Test
     void step_resilience_emits_retry_cycle_error_boundary_clear_listener_and_error_glue() {
         // Declarative step resilience (#6762): a delegate serviceTask's `retry: { count, every }`
         // becomes a Flowable failed-job retry cycle (R<count+1> - the R number counts TOTAL attempts),

@@ -73,6 +73,10 @@ class NotificationSupportTest {
         assertEquals("", NotificationSupport.topicSuffix("onCreate"));
         assertEquals("-updated", NotificationSupport.topicSuffix("onUpdate"));
         assertEquals("-deleted", NotificationSupport.topicSuffix("onDelete"));
+        // The status axis. A workflow setter, a transitions: button and a generates completion hook
+        // publish "-transitioned" and never "-updated", so a notification bound to onUpdate could not
+        // see a status the system itself wrote - there was no vocabulary to switch to.
+        assertEquals("-transitioned", NotificationSupport.topicSuffix("onTransition"));
     }
 
     @Test
