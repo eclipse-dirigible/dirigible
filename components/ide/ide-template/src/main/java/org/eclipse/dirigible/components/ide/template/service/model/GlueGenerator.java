@@ -860,10 +860,11 @@ class GlueGenerator {
      * total from the store, which makes them idempotent and self-healing.
      *
      * <p>
-     * The fourth, re-keyed, variant is the same handler fed the previous row: the repository publishes
-     * that event only when a grouping key actually moved, and recomputing the former tuple - which no
-     * longer contains the row - drops the total it left behind. Without it, editing a grouping key
-     * leaves a stale aggregate on the tuple the row moved out of.
+     * The fourth, re-keyed, variant is the same handler fed a row whose grouping moved: the repository
+     * publishes that event only when a grouping key actually changed - the previous row, so recomputing
+     * the former tuple, which no longer contains it, drops the total it left behind, and on the
+     * targeted write path the written row as well, since that path publishes no "-updated" for the
+     * tuple the row moved into. Without it, editing a grouping key leaves a stale aggregate behind.
      *
      * @param source the template source
      * @param content the template content

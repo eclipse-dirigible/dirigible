@@ -1626,18 +1626,44 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // recomputes that former tuple - otherwise it keeps the moved row's contribution forever.
         String ledgerRepository = contentOf("gen/emission/data/ledger/LedgerRepository.java");
         assertTrue(
-                ledgerRepository.contains("aggregatePrevious = findById(entity.Id)")
-                        && ledgerRepository.contains("java.util.Objects.equals(aggregatePrevious.Person, entity.Person)")
-                        && ledgerRepository.contains("java.util.Objects.equals(aggregatePrevious.Unit, entity.Unit)"),
+                ledgerRepository.contains("groupingPrevious = findById(entity.Id)")
+                        && ledgerRepository.contains("java.util.Objects.equals(groupingPrevious.Person, entity.Person)")
+                        && ledgerRepository.contains("java.util.Objects.equals(groupingPrevious.Unit, entity.Unit)"),
                 "an aggregate source must compare EVERY grouping key against the previous row on update");
         assertTrue(
-                ledgerRepository.contains("if (aggregateRekeyed)")
-                        && ledgerRepository.contains("-rekeyed\", Json.stringify(aggregatePrevious)"),
+                ledgerRepository.contains("if (groupingMoved)")
+                        && ledgerRepository.contains("-rekeyed\", Json.stringify(groupingPrevious)"),
                 "a moved grouping key must publish the PREVIOUS row on the -rekeyed topic");
         String ledgerRekey = contentOf("gen/events/emission/LedgerTotalAggregateOnRekey.java");
         assertTrue(ledgerRekey.contains("-Ledger-rekeyed"), "the rekey handler must bind the source's -rekeyed topic");
         assertTrue(ledgerRekey.contains("targets.updateDerived("),
                 "the rekey handler must repair the former tuple through the targeted derived write");
+
+        // The TARGETED writers (a workflow setter, a resolver, a task-form writer) move a grouping column
+        // exactly as a user edit does but publish no "-updated" at all - so both sides of the move are
+        // signalled here, on the topic only the aggregate / roll-up handlers subscribe to (#6819).
+        assertTrue(
+                ledgerRepository.contains("Object groupingPreviousPerson = entity.Person")
+                        && ledgerRepository.contains("Object groupingPreviousUnit = entity.Unit")
+                        && ledgerRepository.contains("groupingMoved = false")
+                        && ledgerRepository.contains("!java.util.Objects.equals(groupingPreviousPerson, entity.Person)"),
+                "the targeted write must compare every grouping key before and after the write: " + ledgerRepository);
+        assertTrue(
+                ledgerRepository.contains("if (updatedCount > 0 && groupingMoved)")
+                        && ledgerRepository.contains("-rekeyed\", groupingPrevious)")
+                        && ledgerRepository.contains("-rekeyed\", Json.stringify(entity))"),
+                "a targeted write that moved a grouping key must publish BOTH the previous and the written row");
+
+        // Fix 2: the same move on a ROLL-UP child. Its parent FK is a grouping column too, so the child's
+        // DAO tracks it and a roll-up handler binds "-rekeyed" - without it the parent a child was moved
+        // AWAY from kept the child's contribution forever (no create/update/delete event names it).
+        String claimLineRepository = contentOf("gen/emission/data/claim/ClaimLineRepository.java");
+        assertTrue(claimLineRepository.contains("java.util.Objects.equals(groupingPrevious.Claim, entity.Claim)"),
+                "a roll-up child must compare its parent FK against the previous row: " + claimLineRepository);
+        String claimRekey = contentOf("gen/events/emission/ClaimLineClaimRollupOnRekey.java");
+        assertTrue(claimRekey.contains("-ClaimLine-rekeyed"), "the roll-up rekey handler must bind the child's -rekeyed topic");
+        assertTrue(claimRekey.contains("Criteria.create().eq(\"Claim\", entity.Claim)") && claimRekey.contains("parents.updateDerived("),
+                "the roll-up rekey handler must recompute the parent the PAYLOAD names, through the targeted derived write");
 
         // checks: kind: guard - the aggregate precondition, one assertion per outcome. The guard
         // recomputes the keyed sum from the GUARDED entity's own store (race-free, not the async

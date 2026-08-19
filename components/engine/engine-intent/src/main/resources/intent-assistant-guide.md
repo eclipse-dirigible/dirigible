@@ -2419,6 +2419,10 @@ rollups:
 `entity` is the child being counted, `via` is the child's to-one relation pointing at the parent, and
 `field` is the integer field on the **parent** that holds the count.
 
+**Re-parenting is handled.** Moving a child to another parent - an edit of its `via` relation, by a user
+or by a process step - leaves BOTH parents' totals right: the one that received the child and the one it
+left. Nothing to declare.
+
 **Sum + balance + status (payment settlement).** With `op: sum` the roll-up keeps `field` equal to the
 sum of the children's `of` field. Add `capacity` (a numeric parent field the sum is measured against)
 to also maintain a `balance` field (= `capacity − sum`) and set a `status` relation to `statusWhenFull`
