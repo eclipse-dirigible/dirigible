@@ -382,16 +382,21 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #if($history == "true")
         ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
-        ${name}Entity historyAfter = super.update(entity);
+        ${name}Entity updated = super.update(entity);
         // A system write (no user event), recorded as such so the trail separates what the application
         // did from what a person did.
-        History.recordUpdate(HISTORY_TABLE, historyAfter.${pkPropertyName}, History.SYSTEM, historyBefore, historyAfter, HISTORY_PROPERTIES);
-        return historyAfter;
+        History.recordUpdate(HISTORY_TABLE, updated.${pkPropertyName}, History.SYSTEM, historyBefore, updated, HISTORY_PROPERTIES);
 #else
-        return super.update(entity);
+        ${name}Entity updated = super.update(entity);
 #end
+#if($documentItem)
+        // A system write is still a line change: the event is suppressed here, the arithmetic is not.
+        // Keep the document consistent exactly as update() does (no async roll-up).
+        new ${documentItem.parentEntity}Repository().recalculate(updated.${documentItem.fkProperty});
+#end
+        return updated;
     }
-#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || $history == "true")
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || $history == "true" || $documentItem)
 
     /**
      * Targeted single-column write with this entity's semantics preserved: routed through
@@ -410,15 +415,24 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * applied to a FRESH copy of the row first, so the declarative gate checks (and the stored label
      * Name) see the row as it will be after the write - then only the named columns (plus a changed
      * Name) are persisted in one statement. The workflow setters/writers come through here; a plain
-     * pass-through to the base targeted write would silently skip the posting gate.
+     * pass-through to the base targeted write would silently skip the posting gate - and, on a document
+     * line, leave the master summing to something other than its lines.
      */
     @Override
     public int updateProperties(Object id, java.util.Map<String, Object> values) {
         if (values == null || values.isEmpty()) {
             return 0;
         }
-#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges)
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || $documentItem)
         ${name}Entity entity = findOne(id).orElse(null);
+#if($documentItem)
+        // The document this line belongs to as it stands BEFORE the write - a targeted write may also
+        // MOVE the line to another document, and the one it leaves behind has no write of its own to
+        // resum it.
+        Object documentBefore = entity == null ? null : entity.${documentItem.fkProperty};
+#end
+#end
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges)
         if (entity != null) {
 #if($lifecycleEdges)
             // The status as it stands BEFORE the targeted write - a transition button, a workflow
@@ -458,14 +472,35 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // workflow write-back, a stamped number), so the trail attributes it to SYSTEM - a person
         // reading the record must be able to tell those apart from an edit somebody made.
         ${name}Entity historyBefore = super.findById(id);
-        int historyUpdated = super.updateProperties(id, values);
-        if (historyUpdated > 0) {
+        int updatedCount = super.updateProperties(id, values);
+        if (updatedCount > 0) {
             History.recordUpdate(HISTORY_TABLE, id, History.SYSTEM, historyBefore, super.findById(id), HISTORY_PROPERTIES);
         }
-        return historyUpdated;
 #else
-        return super.updateProperties(id, values);
+        int updatedCount = super.updateProperties(id, values);
 #end
+#if($documentItem)
+        if (updatedCount > 0 && (values.containsKey("${documentItem.fkProperty}")#foreach($f in $documentItem.fields) || values.containsKey("${f.field}")#end)) {
+            // A line written by a TARGETED primitive - a workflow setField, a glue updateProperty /
+            // updateProperties / updateDerived - moves the document's totals exactly as a full save or
+            // update does, so it resums the master here too. Without this the header displayed, printed
+            // and posted a total that did not equal the sum of its lines. Guarded on the columns
+            // actually written, so a targeted write that touches nothing aggregated (a status hop, a
+            // process write-back) costs no extra query. The master's recalculate persists through its
+            // own targeted write, so this cannot turn into a full-row write of the header.
+            Object documentAfter = values.containsKey("${documentItem.fkProperty}")
+                    ? values.get("${documentItem.fkProperty}")
+                    : documentBefore;
+            if (documentAfter != null) {
+                new ${documentItem.parentEntity}Repository().recalculate(documentAfter);
+            }
+            if (documentBefore != null && !documentBefore.equals(documentAfter)) {
+                // The line MOVED: resum the document it left, which nothing else is going to touch.
+                new ${documentItem.parentEntity}Repository().recalculate(documentBefore);
+            }
+        }
+#end
+        return updatedCount;
     }
 #end
 
@@ -480,7 +515,8 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * #6306). The {@code "-updated"} event still fires so downstream reactions - notably a transitive
      * roll-up whose own parent sits above this row - keep cascading exactly as they did when the handler
      * persisted the full row. Routed through {@link #updateProperties} so an entity that declares
-     * {@code checks:} still runs its gate and a labelled entity still refreshes its stored display Name.
+     * {@code checks:} still runs its gate, a labelled entity still refreshes its stored display Name,
+     * and a document line still resums the master it belongs to.
      */
     public int updateDerived(Object id, java.util.Map<String, Object> values) {
         if (values == null || values.isEmpty()) {
