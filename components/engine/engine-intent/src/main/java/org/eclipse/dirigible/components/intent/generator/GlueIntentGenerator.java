@@ -112,6 +112,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> expansions = expansionHandlers.regenerations();
         List<Map<String, Object>> expansionCleanups = expansionHandlers.cleanups();
         List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> settlementListeners = buildSettlementListeners(settlements);
         List<Map<String, Object>> generates = buildGenerates(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> transitions = buildTransitions(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> sends = buildSends(model, byName, compositionParents, settings, context);
@@ -159,6 +160,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("expansions", expansions);
         glue.put("expansionCleanups", expansionCleanups);
         glue.put("settlements", settlements);
+        glue.put("settlementListeners", settlementListeners);
         glue.put("generates", generates);
         // The event-driven subset (issue #6711) - the SAME descriptors, filtered, so the listener and
         // the create-from it calls can never be built from divergent data. A create-from with no event
@@ -648,6 +650,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // junction (this project)
             e.put("junctionEntity", s.getJunction());
             e.put("junctionPerspective", IntentEntities.resolvePerspective(s.getJunction(), compositionParents, model));
+            e.put("junctionPk", IntentEntities.keyFieldName(junction));
             e.put("junctionFkInvoice", IntentNaming.pascalCase(fkInvoice.getName()));
             e.put("junctionFkPayment", IntentNaming.pascalCase(fkPayment.getName()));
             e.put("junctionAmount", IntentNaming.pascalCase(s.getAmount()));
@@ -663,6 +666,28 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * One payment-listener entry per settlement per event moment of the payment: its create AND its
+     * update. The allocation is written as a recompute of the payment's unallocated balance, so binding
+     * the correction event too is safe by construction - a re-delivery with nothing left to allocate
+     * does nothing. Bound to create alone (#6818), a payment booked for the wrong amount and corrected
+     * afterwards, or created in a draft state and completed later, was never (re-)allocated and the
+     * invoice silently kept the original settled figure.
+     *
+     * @param settlements the settlement descriptors
+     * @return one entry per settlement per bound event
+     */
+    private static List<Map<String, Object>> buildSettlementListeners(List<Map<String, Object>> settlements) {
+        List<Map<String, Object>> listeners = new ArrayList<>();
+        for (Map<String, Object> settlement : settlements) {
+            String name = String.valueOf(settlement.get("name"));
+            // The create handler keeps its established class name; the correction one is suffixed.
+            listeners.add(rollupEntry(settlement, name + "OnPayment", ""));
+            listeners.add(rollupEntry(settlement, name + "OnPaymentUpdated", "-updated"));
+        }
+        return listeners;
     }
 
     /**
@@ -2584,6 +2609,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return sb.toString();
     }
 
+    /**
+     * Copies a descriptor into one per-event handler entry - the shape shared by every recompute-style
+     * listener (roll-ups, expansions, settlements): the same descriptor rendered once per bound event,
+     * distinguished only by its class name and the topic suffix it binds.
+     *
+     * @param base the descriptor
+     * @param className the generated handler class name
+     * @param topicSuffix the bound event's topic suffix
+     * @return the entry
+     */
     private static Map<String, Object> rollupEntry(Map<String, Object> base, String className, String topicSuffix) {
         Map<String, Object> entry = new LinkedHashMap<>(base);
         entry.put("className", className);
