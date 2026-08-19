@@ -2887,7 +2887,9 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(writer.contains("((Number) QuantityValue).intValue()"), "an integer editable should be coerced to int");
         assertTrue(writer.contains("Boolean.valueOf(ApprovedValue.toString().trim())"),
                 "a boolean editable should be coerced with Boolean.valueOf");
-        assertTrue(writer.contains("repository.updateProperties(((Number) key).intValue(), values)"),
+        // The coerced key is hoisted into a local rather than inlined into the call, because the reload
+        // that builds the published payload needs the same id - so both halves are asserted.
+        assertTrue(writer.contains("Object id = ((Number) key).intValue();") && writer.contains("repository.updateProperties(id, values)"),
                 "the writer must persist the edited columns in one targeted multi-column write");
         assertFalse(writer.contains("updateWithoutEvent"),
                 "the writer must NOT full-row merge (updateWithoutEvent) - that reverts concurrent writes to unedited columns");
@@ -2933,7 +2935,9 @@ class IntentEngineIT extends IntegrationTest {
                 "the stamp must publish the entity's -updated topic - the raw perspective, not the sanitized Java one, got: " + stamp);
         assertTrue(stamp.contains("Process.executeAfterCommit("), "the publish must be deferred to after the BPMN chain commits");
         int write = stamp.indexOf("repository.updateProperty(id, \"Number\", number)");
-        int reload = stamp.indexOf("repository.findById(id)");
+        // Anchored on the assignment: the delegate ALSO reads the row before the write, to skip an
+        // already-stamped document, and a bare findById(id) would find that guard read instead.
+        int reload = stamp.indexOf("stamped = repository.findById(id)");
         assertTrue(write > 0 && write < reload, "the payload must carry the stamped number, so it is re-loaded AFTER the write");
     }
 
@@ -2989,7 +2993,7 @@ class IntentEngineIT extends IntegrationTest {
                 "the chosen id arrives as the FK's own process variable");
         assertTrue(writer.contains("values.put(\"Driver\", DriverValue instanceof Number ? ((Number) DriverValue).intValue()"),
                 "the FK is the target's integer key, so it rides the Writer's existing integer coercion: " + writer);
-        assertTrue(writer.contains("repository.updateProperties(((Number) key).intValue(), values)"),
+        assertTrue(writer.contains("Object id = ((Number) key).intValue();") && writer.contains("repository.updateProperties(id, values)"),
                 "the picked relation is persisted by the same targeted multi-column write as any other editable");
 
         // The task form's own runtime: the picker is registered so the options are loaded from that
