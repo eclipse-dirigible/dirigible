@@ -358,6 +358,11 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
             });
         } catch (Exception e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
+            // This log IS the failure report: the handler's own onError defaults to a no-op, so without
+            // this line a throwing handler leaves no explanation anywhere. Redelivery (below) re-runs
+            // the work; it does not say why the work failed. Pass the throwable, not just its message,
+            // or the stack trace dies here.
+            LOGGER.error("@Listener [{}] failed handling a message: {}", label, cause.getMessage(), cause);
             dispatcher.onError(cause.getMessage(), label);
             // Let the failure reach the broker. Swallowing it here acknowledged the message and lost
             // the event permanently: no retry, no dead letter, and handlers whose correctness depends

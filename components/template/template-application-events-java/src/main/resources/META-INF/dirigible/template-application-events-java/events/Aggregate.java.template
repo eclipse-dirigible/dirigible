@@ -2,6 +2,8 @@ package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -30,6 +32,8 @@ import gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Rep
  */
 @Component("${javaGenFolderName}_${className}")
 public class ${className} implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}");
 
     @Override
     public String destination() {
@@ -67,5 +71,10 @@ ${keyAssigns}
             derived.put("${targetField}", agg);
             targets.updateDerived(target.${targetPk}, derived);
         }
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Aggregate ${className}: the listener on [{}] failed - [{}]", destination(), error);
     }
 }

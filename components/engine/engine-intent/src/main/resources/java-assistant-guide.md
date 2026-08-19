@@ -114,6 +114,21 @@ Throw `org.eclipse.dirigible.sdk.db.ValidationException` to reject a business-in
 controller dispatcher maps it to HTTP 400 with your message, and on a BPMN path it rolls the task
 completion back. Do not swallow exceptions; do not catch what you cannot handle.
 
+**Where a throw actually lands depends on what you are writing, and the difference is not cosmetic:**
+
+- In a **`@Controller`** it becomes an HTTP status the caller sees.
+- In a **`JobHandler`** it is recorded as a FAILED job-log row and surfaces in the Jobs perspective
+  and the Monitoring shell - a real operational record.
+- In a **`MessageHandler`** it is logged with its stack trace and then rethrown to the broker, so the
+  delivery is **retried** - three further attempts with a backoff - and dead-lettered if they all
+  fail. There is no job-log row and nothing to re-trigger by hand: the log and the dead-letter queue
+  are the whole record.
+
+So in a listener a throw buys you a retry, not an escalation - and a retry only helps if the handler
+is safe to run twice. Make the work replayable: key it on something durable so a redelivery after a
+partial write completes it instead of duplicating it. And always log before you throw, so the failure
+carries a message of your own wording and not just a stack trace.
+
 ## The shapes you will actually be asked for
 
 ### A calculated-field action

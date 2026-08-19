@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.engine.java.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -34,10 +35,16 @@ import org.eclipse.dirigible.components.listeners.service.TenantPropertyManager;
 import org.eclipse.dirigible.engine.java.component.ComponentContainer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.LoggerFactory;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import jakarta.jms.Connection;
 import jakarta.jms.MessageConsumer;
 import jakarta.jms.MessageListener;
@@ -86,6 +93,8 @@ class ListenerClassConsumerTest {
     private ActiveMQConnectionArtifactsFactory connectionFactory;
     private Connection connection;
     private Queue queue;
+    private ListAppender<ILoggingEvent> appender;
+    private Logger consumerLogger;
 
     @BeforeEach
     @SuppressWarnings("rawtypes")
@@ -134,6 +143,18 @@ class ListenerClassConsumerTest {
         ArgumentCaptor<MessageListener> captor = ArgumentCaptor.forClass(MessageListener.class);
         verify(messageConsumer).setMessageListener(captor.capture());
         capturedListener = captor.getValue();
+
+        appender = new ListAppender<>();
+        appender.start();
+        consumerLogger = (Logger) LoggerFactory.getLogger(ListenerClassConsumer.class);
+        consumerLogger.addAppender(appender);
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (consumerLogger != null) {
+            consumerLogger.detachAppender(appender);
+        }
     }
 
     @Test
@@ -167,10 +188,41 @@ class ListenerClassConsumerTest {
     }
 
     /**
-     * The failure must leave the listener, because that is the only thing the broker can observe. A
-     * swallowed exception is indistinguishable from success: the message is acknowledged and the event
-     * is gone for good, which also strands every handler whose correctness depends on a second delivery
-     * - the generated posting glue repairs a half-written post on redelivery.
+     * A handler that throws must leave a trace, and carry the throwable itself - logging only its
+     * message loses the stack trace, which is the whole diagnostic value. The failure is now also
+     * handed back to the broker (below), but that is a separate guarantee: redelivery re-runs the work,
+     * it does not explain it. Without this line a failing trigger, rollup, posting or register lookup
+     * is indistinguishable from one that never fired.
+     */
+    @Test
+    void aThrowingHandlerIsReportedInsteadOfSilentlyDiscarded() throws Exception {
+        when(tenantConfigurationService.resolveInjectableForCurrentTenant()).thenReturn(Map.of());
+        handler.failWith = new IllegalStateException("cannot move from ISSUED to DRAFT");
+
+        TextMessage message = mock(TextMessage.class);
+        when(message.getText()).thenReturn("{}");
+
+        // The failure escapes the listener now, so the report is asserted around the throw.
+        assertThrows(Exception.class, () -> capturedListener.onMessage(message));
+
+        List<ILoggingEvent> errors = appender.list.stream()
+                                                  .filter(event -> event.getLevel() == Level.ERROR)
+                                                  .toList();
+        assertEquals(1, errors.size(), "a throwing handler must be reported exactly once");
+
+        ILoggingEvent error = errors.get(0);
+        assertTrue(error.getFormattedMessage()
+                        .contains("cannot move from ISSUED to DRAFT"),
+                "the report must carry the failure's message, got: " + error.getFormattedMessage());
+        assertNotNull(error.getThrowableProxy(), "the throwable itself must be logged - passing only getMessage() loses the stack trace, "
+                + "which is the whole diagnostic value");
+    }
+
+    /**
+     * The failure must also LEAVE the listener, because that is the only thing the broker can observe.
+     * A swallowed exception is indistinguishable from success: the message is acknowledged and the
+     * event is gone for good, which also strands every handler whose correctness depends on a second
+     * delivery - the generated posting glue repairs a half-written post on redelivery.
      */
     @Test
     void aThrowingHandlerIsHandedBackToTheBrokerRatherThanAcknowledged() throws Exception {
