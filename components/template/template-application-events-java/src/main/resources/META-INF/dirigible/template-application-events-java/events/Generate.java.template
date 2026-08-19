@@ -120,6 +120,23 @@ public class ${className}Generate {
         }
 #end
 #end
+#if($sourceStatusValue != "")
+        // Completion hook (intent `sourceStatus:`): the source document reaches its post-generation status
+        // (e.g. a proforma flips to INVOICED). It runs BEFORE the target is saved, and that ordering is the
+        // whole point: the flip is a lifecycle move the source's repository enforces, so a move its graph
+        // does not declare throws here - with nothing yet created. Flipping AFTER the save left a committed
+        // document behind whose source never transitioned and never published "-transitioned", so every
+        // posting and integration keyed on the new status silently never ran; and because the guard above
+        // returns on the existing document, a redelivery could not repair it either. This way a redelivery
+        // re-runs the flip as a no-op (previous == next) and goes on to create what is missing.
+        // Flip ONLY the status column through the targeted single-column primitive. A full-row
+        // updateWithoutEvent(source) would merge the snapshot loaded at the top of create() and silently
+        // revert any concurrent write to the source row (recalculated totals, a workflow status). Same
+        // reason the process trigger writes ProcessId via updateProperty rather than update().
+        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
+                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository();
+        sourceRepository.updateProperty(sourceId, "${sourceStatusProperty}", ${sourceStatusValue});
+#end
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved =
                 new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().save(target);
 #if($hasItems)
@@ -157,20 +174,11 @@ public class ${className}Generate {
 #end
 #end
 #if($sourceStatusValue != "")
-        // Completion hook (intent `sourceStatus:`): the source document reaches its post-generation
-        // status now that the target exists (e.g. a proforma flips to INVOICED). A workflow-style
-        // system write - no "-updated" re-fire (no onUpdate reactions), but the dedicated
-        // "-transitioned" topic IS published so posting glue / integrations observe the transition.
-        // Flip ONLY the status column through the targeted single-column primitive. A full-row
-        // updateWithoutEvent(source) would merge the snapshot loaded at the top of create() - taken
-        // BEFORE the target and its items were created - and silently revert any concurrent write to the
-        // source row in that window (recalculated totals, a workflow status). Same reason the process
-        // trigger writes ProcessId via updateProperty rather than update().
-        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
-                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository();
-        sourceRepository.updateProperty(sourceId, "${sourceStatusProperty}", ${sourceStatusValue});
-        // Reload so the "-transitioned" payload carries the committed row (the flipped status plus any
-        // write the target creation performed on the source), not the stale pre-generation snapshot.
+        // The transition is only COMPLETE now that the document it was about exists, so this is where it
+        // is announced: a workflow-style system write - no "-updated" re-fire (no onUpdate reactions), but
+        // the dedicated "-transitioned" topic IS published so posting glue / integrations observe it.
+        // Reload so the payload carries the committed row (the flipped status plus any write the target
+        // creation performed on the source), not the stale pre-generation snapshot.
         source = sourceRepository.findById(sourceId);
         org.eclipse.dirigible.sdk.messaging.Producer.sendToTopic(
                 "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned", Json.stringify(source));

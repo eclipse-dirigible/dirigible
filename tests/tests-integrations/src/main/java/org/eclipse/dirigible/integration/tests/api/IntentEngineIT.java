@@ -2413,6 +2413,16 @@ class IntentEngineIT extends IntegrationTest {
         // call pattern; an explanatory code comment naming it is expected and must not trip this).
         assertFalse(generate.contains("Repository().updateWithoutEvent(source)"),
                 "the source flip must NOT go through a full-row updateWithoutEvent (stale-snapshot clobber)");
+        // The flip runs BEFORE the target is saved. It is a lifecycle move the source's repository
+        // enforces, so a move the graph does not declare must throw with nothing yet created - flipping
+        // afterwards left a committed document behind whose source never transitioned, and the guard on
+        // the back-reference then made a redelivery return that document instead of repairing the flip.
+        // The publish stays last: the transition is complete only once the document it was about exists.
+        int flip = generate.indexOf("updateProperty(sourceId, \"Status\", 3)");
+        int save = generate.indexOf("Repository().save(target)");
+        int publish = generate.indexOf("-transitioned");
+        assertTrue(flip < save, "the source flip must precede the target save, got flip@" + flip + " save@" + save);
+        assertTrue(save < publish, "the -transitioned publish must follow the target save, got save@" + save + " publish@" + publish);
 
         // The custom-action BUTTON localizes like every other label: the descriptor carries the
         // model-catalog translation key (the renderer shows T(translation.key, label)), and the
