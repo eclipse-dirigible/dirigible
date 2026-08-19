@@ -1,33 +1,53 @@
 package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
 
 /**
- * Event-driven create-from ${name}: when a ${fromEntity}#if($isCreate) is created#{else} transitions into status ${guardValue}#end, the
+ * Event-driven create-from ${name}: when a ${fromEntity}#if($isStep) reaches the ${stepName} step of the ${stepProcess} process#elseif($isCreate) is created#{else} transitions into status ${guardValue}#end, the
  * ${toEntity} is created from it - with no one clicking anything.
  *
- * Generated from the intent generates block's `event:` (issue #6711) - do not edit; it is re-generated
- * with the application.
+ * Generated from the intent generates block's `event:` (issues #6711, #6800) - do not edit; it is
+ * re-generated with the application.
  *
  * Contract:
- * - binds the #if($isCreate)source's create topic (the platform publishes creates unsuffixed)#{else}source's -transitioned topic - the channel every status write publishes,
- *   which -updated reactions never see, so there are no loops#end;
+#if($isStep)
+ * - binds the step-scoped topic the generated step emitter publishes the ${fromEntity} on at that
+ *   step's boundary - published after commit and NOT transactional with the step, so a redelivery
+ *   is possible;
+#elseif($isCreate)
+ * - binds the source's create topic (the platform publishes creates unsuffixed);
+#{else}
+ * - binds the source's -transitioned topic - the channel every status write publishes,
+ *   which -updated reactions never see, so there are no loops;
+#end
  * - RE-LOADS the source by id before the guard, because the event payload is as-of the event and lacks
  *   later-step data such as a stamped document number;
  * - delegates to ${className}Generate, the SAME create-from a button would call, so the mapping, the
  *   items and the sourceStatus completion hook cannot diverge between the two triggers;
+#if($appendMode)
+ * - APPENDS (intent `mode: append`): the create-from carries no existing-target lookup, so every
+ *   delivery of this event creates another ${toEntity}, each back-referencing its source through
+ *   ${backRefProperty}. A redelivery therefore appends a duplicate row - by design; `mode: once` is
+ *   the cardinality for anything that must exist at most once.
+#{else}
  * - at-most-once through the ${backRefProperty} back-reference (the guard lives in that create-from):
- *   a redelivery returns the document that already exists instead of minting a second one.
+ *   a redelivery returns the document that already exists instead of minting a second one#if($hasRetiredStatus), unless that
+ *   document was retired - a ${toEntity} in a `cancelled` or `void` stage is superseded by a fresh one#end.
+#end
  */
 @Component("${javaGenFolderName}_${className}GenerateOnEvent")
 public class ${className}GenerateOnEvent implements MessageHandler {
 
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}GenerateOnEvent");
+
     @Override
     public String destination() {
-        return "${fromProjectName}-${fromPerspective}-${fromEntity}#if(!$isCreate)-transitioned#end";
+        return "${fromProjectName}-${fromPerspective}-${fromEntity}${topicSuffix}";
     }
 
     @Override
@@ -50,5 +70,10 @@ public class ${className}GenerateOnEvent implements MessageHandler {
         }
 #end
         new ${className}Generate().create(payload.${fromPk});
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Generate ${name}: the listener on [{}] failed - [{}]", destination(), error);
     }
 }

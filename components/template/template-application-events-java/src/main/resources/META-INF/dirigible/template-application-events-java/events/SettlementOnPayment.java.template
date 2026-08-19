@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -15,19 +17,27 @@ import gen.${javaGenFolderName}.data.${junctionJavaPerspective}.${junctionEntity
 import gen.${paymentGenFolder}.data.${paymentJavaPerspective}.${paymentEntity}Entity;
 
 /**
- * Auto-settlement (on ${paymentEntity} create): allocates the new payment across the payer's open
+ * Auto-settlement (on ${paymentEntity} #if($topicSuffix == "")create#{else}correction#end): allocates the payment across the payer's open
  * ${invoiceEntity}s - oldest first, matching ${match} - creating ${junctionEntity} rows until the
  * payment is used up. The paid roll-up then updates each invoice's paid / balance / status.
+ *
+ * This is a RECOMPUTE of the payment's unallocated balance, not an append: it allocates only what is
+ * still unallocated, and releases the excess - newest allocation first - when the payment is corrected
+ * to less than what it already covers. That is what makes it safe to bind to the payment's correction
+ * event as well as to its create one, so a payment booked for the wrong amount, or completed after it
+ * was created, is settled for the amount it actually carries.
  *
  * Generated from the intent settlements block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories (validations / events / i18n).
  */
-@Component("${javaGenFolderName}_${name}OnPayment")
-public class ${name}OnPayment implements MessageHandler {
+@Component("${javaGenFolderName}_${className}")
+public class ${className} implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}");
 
     @Override
     public String destination() {
-        return "${paymentTopic}";
+        return "${paymentTopic}${topicSuffix}";
     }
 
     @Override
@@ -41,9 +51,12 @@ public class ${name}OnPayment implements MessageHandler {
         if (payment == null || payment.${paymentPk} == null || payment.${paymentPot} == null) {
             return;
         }
-        BigDecimal pot = payment.${paymentPot}.subtract(allocated(payment.${paymentPk}))
-                                              .max(BigDecimal.ZERO);
-        if (pot.signum() <= 0) {
+        BigDecimal pot = payment.${paymentPot}.subtract(allocated(payment.${paymentPk}));
+        if (pot.signum() < 0) {
+            release(payment.${paymentPk}, pot.negate());
+            return;
+        }
+        if (pot.signum() == 0) {
             return;
         }
         Criteria criteria = Criteria.create()#foreach($m in $match)
@@ -69,6 +82,11 @@ public class ${name}OnPayment implements MessageHandler {
         }
     }
 
+    @Override
+    public void onError(String error) {
+        LOG.error("Settlement ${name}: the listener on [{}] failed - [{}]", destination(), error);
+    }
+
     private static BigDecimal open(${invoiceEntity}Entity invoice) {
         BigDecimal total = invoice.${invoiceTotal} == null ? BigDecimal.ZERO : invoice.${invoiceTotal};
         BigDecimal paid = invoice.${invoicePaid} == null ? BigDecimal.ZERO : invoice.${invoicePaid};
@@ -85,6 +103,31 @@ public class ${name}OnPayment implements MessageHandler {
             }
         }
         return sum;
+    }
+
+    /**
+     * Gives back the amount by which the ${junctionEntity} rows of this payment now exceed it - newest
+     * allocation first, so the oldest ${invoiceEntity}s stay settled. Reached only when the payment was
+     * corrected downwards after it had already been allocated.
+     */
+    private static void release(Integer paymentId, BigDecimal excess) {
+        ${junctionEntity}Repository rows = new ${junctionEntity}Repository();
+        for (${junctionEntity}Entity row : rows.findAll(Criteria.create()
+                                                                .eq("${junctionFkPayment}", paymentId)
+                                                                .orderByDesc("${junctionPk}"))) {
+            if (excess.signum() <= 0) {
+                break;
+            }
+            BigDecimal amount = row.${junctionAmount} == null ? BigDecimal.ZERO : row.${junctionAmount};
+            if (amount.compareTo(excess) <= 0) {
+                rows.delete(row);
+                excess = excess.subtract(amount);
+            } else {
+                row.${junctionAmount} = amount.subtract(excess);
+                rows.update(row);
+                excess = BigDecimal.ZERO;
+            }
+        }
     }
 
     private static void create(Integer invoiceId, Integer paymentId, BigDecimal amount) {

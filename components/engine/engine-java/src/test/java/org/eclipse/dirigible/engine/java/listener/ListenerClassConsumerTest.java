@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.engine.java.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -32,10 +33,16 @@ import org.eclipse.dirigible.components.listeners.service.TenantPropertyManager;
 import org.eclipse.dirigible.engine.java.component.ComponentContainer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.LoggerFactory;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import jakarta.jms.Connection;
 import jakarta.jms.MessageConsumer;
 import jakarta.jms.MessageListener;
@@ -56,6 +63,7 @@ class ListenerClassConsumerTest {
     static class RecordingHandler implements MessageHandler {
 
         Map<String, String> observedDuringDispatch;
+        RuntimeException failWith;
 
         @Override
         public String destination() {
@@ -65,12 +73,17 @@ class ListenerClassConsumerTest {
         @Override
         public void onMessage(String message) {
             observedDuringDispatch = Configuration.getThreadConfiguration();
+            if (failWith != null) {
+                throw failWith;
+            }
         }
     }
 
     private TenantConfigurationService tenantConfigurationService;
     private RecordingHandler handler;
     private MessageListener capturedListener;
+    private ListAppender<ILoggingEvent> appender;
+    private Logger consumerLogger;
 
     @BeforeEach
     @SuppressWarnings("rawtypes")
@@ -119,6 +132,18 @@ class ListenerClassConsumerTest {
         ArgumentCaptor<MessageListener> captor = ArgumentCaptor.forClass(MessageListener.class);
         verify(messageConsumer).setMessageListener(captor.capture());
         capturedListener = captor.getValue();
+
+        appender = new ListAppender<>();
+        appender.start();
+        consumerLogger = (Logger) LoggerFactory.getLogger(ListenerClassConsumer.class);
+        consumerLogger.addAppender(appender);
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (consumerLogger != null) {
+            consumerLogger.detachAppender(appender);
+        }
     }
 
     @Test
@@ -149,5 +174,34 @@ class ListenerClassConsumerTest {
         assertTrue(Configuration.getThreadConfiguration()
                                 .isEmpty(),
                 "the broker thread must not keep the previous message's tenant configuration");
+    }
+
+    /**
+     * A handler that throws must leave a trace. The message is acknowledged and discarded either way
+     * (AUTO_ACKNOWLEDGE, and the handler's own onError defaults to a no-op), so this log line is the
+     * only evidence the failure ever happened - without it a failing trigger, rollup, posting or
+     * register lookup is indistinguishable from one that never fired.
+     */
+    @Test
+    void aThrowingHandlerIsReportedInsteadOfSilentlyDiscarded() throws Exception {
+        when(tenantConfigurationService.resolveInjectableForCurrentTenant()).thenReturn(Map.of());
+        handler.failWith = new IllegalStateException("cannot move from ISSUED to DRAFT");
+
+        TextMessage message = mock(TextMessage.class);
+        when(message.getText()).thenReturn("{}");
+
+        capturedListener.onMessage(message);
+
+        List<ILoggingEvent> errors = appender.list.stream()
+                                                  .filter(event -> event.getLevel() == Level.ERROR)
+                                                  .toList();
+        assertEquals(1, errors.size(), "a throwing handler must be reported exactly once");
+
+        ILoggingEvent error = errors.get(0);
+        assertTrue(error.getFormattedMessage()
+                        .contains("cannot move from ISSUED to DRAFT"),
+                "the report must carry the failure's message, got: " + error.getFormattedMessage());
+        assertNotNull(error.getThrowableProxy(), "the throwable itself must be logged - passing only getMessage() loses the stack trace, "
+                + "which is the whole diagnostic value");
     }
 }

@@ -605,12 +605,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 entityMap.put("labelExpression", entity.getLabel());
                 entityMap.put("labelParts", buildLabelParts(entity, byName));
             }
-            // An entity that is the SOURCE of an aggregate carries its grouping keys (the union across
-            // every aggregate over it) plus its pk, so the DAO can notice on update that a key MOVED and
-            // let the aggregate repair the tuple the row left behind. Recomputing the tuple it moved
-            // INTO is already event-driven; the tuple it left has no event of its own.
-            List<Map<String, String>> aggregateKeys = new ArrayList<>();
-            Set<String> seenAggregateKeys = new LinkedHashSet<>();
+            // An entity whose rows are GROUPED by something maintained asynchronously - the keys of every
+            // aggregate over it, and the parent FK of every roll-up it feeds - carries those columns plus
+            // its pk, so the DAO can notice that a write MOVED the row between groups. A move has two
+            // sides and only one of them has an event of its own, so the DAO publishes the row on the
+            // dedicated "-rekeyed" topic for the aggregate / roll-up handlers to repair the other.
+            List<Map<String, String>> groupingKeys = new ArrayList<>();
+            Set<String> seenGroupingKeys = new LinkedHashSet<>();
             if (model.getAggregates() != null) {
                 for (AggregateIntent a : model.getAggregates()) {
                     if (a.getOf() == null || !a.getOf()
@@ -618,19 +619,23 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         continue;
                     }
                     for (String key : a.getBy()) {
-                        String fk = IntentNaming.pascalCase(key);
-                        if (seenAggregateKeys.add(fk)) {
-                            Map<String, String> pair = new LinkedHashMap<>();
-                            pair.put("key", fk);
-                            aggregateKeys.add(pair);
-                        }
+                        addGroupingKey(groupingKeys, seenGroupingKeys, key);
                     }
                 }
             }
-            if (!aggregateKeys.isEmpty()) {
-                entityMap.put("aggregateKeys", aggregateKeys);
-                FieldIntent aggregatePk = primaryKeyOf(entity);
-                entityMap.put("aggregateSourcePk", aggregatePk == null ? "Id" : IntentNaming.pascalCase(aggregatePk.getName()));
+            // A roll-up groups its child rows by ONE column - the `via` relation's FK - and re-parenting a
+            // child is the ordinary way that column moves. Without it here, only aggregate sources were
+            // tracked and a re-parented roll-up child left its former parent's total stale forever (#6819).
+            for (RollupIntent rollup : model.getRollups()) {
+                if (rollup.getVia() != null && entity.getName()
+                                                     .equals(rollup.getEntity())) {
+                    addGroupingKey(groupingKeys, seenGroupingKeys, rollup.getVia());
+                }
+            }
+            if (!groupingKeys.isEmpty()) {
+                entityMap.put("groupingKeys", groupingKeys);
+                FieldIntent groupingPk = primaryKeyOf(entity);
+                entityMap.put("groupingSourcePk", groupingPk == null ? "Id" : IntentNaming.pascalCase(groupingPk.getName()));
             }
             List<Map<String, Object>> checkMaps = buildChecks(entity, byName, model.getAggregates());
             if (!checkMaps.isEmpty()) {
@@ -1692,6 +1697,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             Map<String, Object> constraint = new LinkedHashMap<>();
             constraint.put("name", constraintName.toString());
             constraint.put("columns", columns);
+            // The PROPERTY names, for the .edm twin: the modeler declares a key over properties (so a
+            // later dataName change follows it), and resolves them to columns when it rebuilds the
+            // .model. The columns above are what the schema template emits.
+            constraint.put("properties", names.stream()
+                                              .map(IntentNaming::pascalCase)
+                                              .collect(Collectors.joining(",")));
             constraint.put("columnsCsv", columns.stream()
                                                 .map(column -> String.valueOf(column.get("name")))
                                                 .collect(Collectors.joining(",")));
@@ -2334,6 +2345,23 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return link;
     }
 
+    /**
+     * Records one grouping column of an entity, de-duplicated: an aggregate key and a roll-up's
+     * {@code via} FK can name the same relation, and the DAO must compare it once.
+     *
+     * @param keys the collected grouping columns
+     * @param seen the property names already collected
+     * @param name the authored relation / field name
+     */
+    private static void addGroupingKey(List<Map<String, String>> keys, Set<String> seen, String name) {
+        String property = IntentNaming.pascalCase(name);
+        if (seen.add(property)) {
+            Map<String, String> pair = new LinkedHashMap<>();
+            pair.put("key", property);
+            keys.add(pair);
+        }
+    }
+
     /** The target entity's primary-key field, or null when the target is unknown or has no PK. */
     private static FieldIntent primaryKeyOf(EntityIntent entity) {
         if (entity == null) {
@@ -2611,6 +2639,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
         }
         sb.append(" </entities>\n");
+        appendUniqueKeys(sb, entities);
         sb.append(" <perspectives>\n");
         for (Map<String, Object> perspective : perspectives) {
             sb.append("  <perspective><name>")
@@ -2629,6 +2658,63 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         appendMxGraphModel(sb, document, entities);
         sb.append("</model>\n");
         return sb.toString();
+    }
+
+    /**
+     * The composite business keys, as {@code <uniqueKey>} entries of the top-level
+     * {@code <constraints>} section.
+     *
+     * <p>
+     * The section is named for constraints rather than for keys so that a later constraint kind is a
+     * new entry beside {@code <uniqueKey>}, not a second section. Top-level, beside
+     * {@code <perspectives>} and {@code <navigations>}, rather than nested in the entity - which is
+     * what lets the EDM modeler carry them at all. The modeler renders the canvas by decoding
+     * {@code <mxGraphModel>} and never reads the {@code <entities>} section, so a key nested there
+     * would have to live on an entity CELL, where it would be the first non-scalar value on a path
+     * whose generic codec has only ever seen attributes. The perspectives take the other route - an
+     * array on the graph model, loaded from the raw XML - and so does this.
+     *
+     * <p>
+     * Without this section a model authored from an intent, opened in the modeler and saved for any
+     * unrelated reason, would come back with its keys gone: the save regenerates the {@code .model}
+     * from the {@code .edm}, and what the {@code .edm} cannot say is simply lost.
+     *
+     * @param sb the buffer
+     * @param entities the built entities
+     */
+    private static void appendUniqueKeys(StringBuilder sb, List<Map<String, Object>> entities) {
+        List<Map<String, Object>> keys = new ArrayList<>();
+        for (Map<String, Object> entity : entities) {
+            Object declared = entity.get("uniqueConstraints");
+            if (declared instanceof List<?> list) {
+                for (Object element : list) {
+                    if (element instanceof Map<?, ?> constraint) {
+                        Map<String, Object> key = new LinkedHashMap<>();
+                        key.put("entity", entity.get("name"));
+                        key.put("name", constraint.get("name"));
+                        key.put("properties", constraint.get("properties"));
+                        key.put("message", constraint.get("message"));
+                        keys.add(key);
+                    }
+                }
+            }
+        }
+        if (keys.isEmpty()) {
+            return; // an .edm without keys stays byte-identical to one generated before they existed
+        }
+        sb.append(" <constraints>\n");
+        for (Map<String, Object> key : keys) {
+            sb.append("  <uniqueKey><entity>")
+              .append(escapeXmlText(key.get("entity")))
+              .append("</entity><name>")
+              .append(escapeXmlText(key.get("name")))
+              .append("</name><properties>")
+              .append(escapeXmlText(key.get("properties")))
+              .append("</properties><message>")
+              .append(escapeXmlText(key.get("message")))
+              .append("</message></uniqueKey>\n");
+        }
+        sb.append(" </constraints>\n");
     }
 
     /** Entity box width and row heights for the deterministic grid layout. */

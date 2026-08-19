@@ -87,4 +87,9 @@ public class ${className}Publisher implements MessageHandler {
             LOG.error("Outbound ${name}: publishing to [${destination}] failed - the ${entity} write stands", ex);
         }
     }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Outbound ${name}: the listener on [{}] failed - [{}]", destination(), error);
+    }
 }
