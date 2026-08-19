@@ -123,6 +123,45 @@ class GlueGeneratesTest {
                   - { id: 2, name: POSTED }
             """;
 
+    /**
+     * The step-axis + append shape of issue #6800: a log row appended every time the activate step of a
+     * process that runs on the source completes.
+     */
+    private static final String STEP_APPEND_YAML = """
+            name: claims
+            entities:
+              - name: Claim
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: note,   type: string }
+                  - { name: amount, type: decimal }
+              - name: LogEntry
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: step,   type: string }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Claim, kind: manyToOne, to: Claim }
+            processes:
+              - name: ClaimApproval
+                trigger: { onCreate: Claim }
+                steps:
+                  - { name: review,   kind: userTask,    args: { assignee: approver, next: activate } }
+                  - { name: activate, kind: serviceTask, args: { setField: note, value: activated, next: done } }
+                  - { name: done,     kind: end }
+            generates:
+              - name: log-activation
+                from: Claim
+                to: LogEntry
+                forEntity: Claim
+                event: { onStepCompleted: { process: ClaimApproval, step: activate }, mode: append }
+                map:
+                  Claim: id
+                  Amount: amount
+                defaults:
+                  Step: "activate"
+            """;
+
     @SuppressWarnings("unchecked")
     @Test
     void rendersHeaderAssignmentsItemsAndKeys() {
@@ -738,4 +777,70 @@ class GlueGeneratesTest {
         assertEquals(false, g.get("hasPrompt"));
         assertTrue(((List<?>) g.get("promptFields")).isEmpty());
     }
+
+    /**
+     * A step-bound create-from (issue #6800) binds the step-scoped topic the generated emitter
+     * publishes the trigger entity on, and carries the append cardinality that drops the
+     * existing-target lookup. The payload shape is unchanged - the emitter publishes the same entity
+     * JSON a lifecycle event does.
+     */
+    @Test
+    void aStepBoundAppendingGenerateCarriesTheStepTopicAndDropsTheLookup() {
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(STEP_APPEND_YAML))
+                                                   .get(0);
+
+        assertEquals(true, g.get("hasEvent"));
+        assertEquals(true, g.get("isStep"));
+        assertEquals(false, g.get("isCreate"));
+        assertEquals("ClaimApproval", g.get("stepProcess"));
+        assertEquals("activate", g.get("stepName"));
+        assertEquals("-step-ClaimApproval-activate-completed", g.get("topicSuffix"));
+        // The cardinality: the create-from renders without its existing-target lookup.
+        assertEquals(true, g.get("appendMode"));
+        // The back-reference is still derived and emitted - the appended row's provenance.
+        assertEquals("Claim", g.get("backRefProperty"));
+        // The step IS the moment, so no per-record guard is required.
+        assertEquals("", g.get("guardProperty"));
+    }
+
+    /**
+     * The step moment gets its emitter even when a create-from is its ONLY consumer - otherwise the
+     * listener would bind a topic nothing ever publishes to.
+     */
+    @Test
+    void aGeneratesOnlyStepMomentStillGetsItsEmitter() {
+        List<Map<String, Object>> stepEvents = GlueIntentGenerator.buildStepEventsForTest(IntentParser.parse(STEP_APPEND_YAML));
+
+        assertEquals(1, stepEvents.size());
+        Map<String, Object> emitter = stepEvents.get(0);
+        assertEquals("ClaimApprovalActivateCompleted", emitter.get("className"));
+        assertEquals("Claim", emitter.get("entity"), "a step event is about the process's trigger entity");
+        assertEquals("-step-ClaimApproval-activate-completed", emitter.get("topicSuffix"));
+    }
+
+    /**
+     * The default cardinality and both lifecycle axes are unchanged: the same topics the create-from
+     * bound before {@code mode:}/the step axis existed, and the at-most-once lookup still rendered.
+     */
+    @Test
+    void theLifecycleAxesAndTheDefaultCardinalityAreUnchanged() {
+        Map<String, Object> transitioned = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(EVENT_YAML))
+                                                              .get(0);
+        assertEquals("-transitioned", transitioned.get("topicSuffix"));
+        assertEquals(false, transitioned.get("isStep"));
+        assertEquals(false, transitioned.get("appendMode"));
+
+        Map<String, Object> created = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(
+                EVENT_YAML.replace("event: { onTransition: Fine, when: \"Status == POSTED\" }", "event: { onCreate: Fine }")))
+                                                         .get(0);
+        assertEquals("", created.get("topicSuffix"), "the platform publishes creates unsuffixed");
+        assertEquals(false, created.get("appendMode"));
+
+        Map<String, Object> clickOnly = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(YAML))
+                                                           .get(0);
+        assertEquals("", clickOnly.get("topicSuffix"));
+        assertEquals(false, clickOnly.get("isStep"));
+        assertEquals(false, clickOnly.get("appendMode"));
+    }
+
 }

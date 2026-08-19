@@ -859,18 +859,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The event half of a create-from (issue #6711), pre-rendered onto its glue entry: the trigger kind
-     * (an {@code onCreate} binds the source's bare create topic, an {@code onTransition} its
-     * {@code -transitioned} topic), the status guard as a property/value pair evaluated against the
-     * RE-LOADED source, and the back-reference the at-most-once guard reads.
+     * The event half of a create-from (issues #6711, #6800), pre-rendered onto its glue entry: the
+     * topic suffix the listener binds to (an {@code onCreate} the source's bare create topic, an
+     * {@code onTransition} its {@code -transitioned} topic, a step binding the step-scoped topic the
+     * generated emitter publishes to), the optional status guard as a property/value pair evaluated
+     * against the RE-LOADED source, the cardinality, and the back-reference.
      *
      * <p>
      * The back-reference is DERIVED from the {@code map} entry that copies the source's primary key
      * rather than declared a second time: the mapping already says which target property points back at
      * the source, and two ways to say it could only drift. A missing one fails loudly here because
-     * without it the create-from has no way to recognize its own output, so an event redelivery would
-     * mint a duplicate document (the parser catches the local case earlier, with the fix in the
-     * message).
+     * without it the create-from has no way to recognize its own output (under {@code mode: once} an
+     * event redelivery would mint a duplicate document; under {@code mode: append} the appended row
+     * would not say what it is about) - the parser catches the local case earlier, with the fix in the
+     * message.
      *
      * @param g the create-from
      * @param e the glue entry being built
@@ -880,6 +882,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         e.put("hasEvent", g.isEventDriven());
         if (!g.isEventDriven()) {
             e.put("isCreate", false);
+            e.put("isStep", false);
+            e.put("topicSuffix", "");
+            e.put("appendMode", false);
             e.put("guardProperty", "");
             e.put("guardValue", "");
             e.put("backRefProperty", "");
@@ -888,6 +893,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         boolean isCreate = g.getEvent()
                             .get("onCreate") != null;
         e.put("isCreate", isCreate);
+        StepEventSupport.Binding step = StepEventSupport.binding(g.getEvent());
+        e.put("isStep", step != null);
+        e.put("stepProcess", step == null ? "" : step.process());
+        e.put("stepName", step == null ? "" : step.step());
+        e.put("topicSuffix",
+                step != null ? StepEventSupport.topicSuffix(step.process(), step.step(), step.kind()) : isCreate ? "" : "-transitioned");
+        // The cardinality (#6800): `append` drops the existing-target lookup in the create-from, so
+        // every delivery of the event creates a row. It is the absence of a guard, not another guard.
+        e.put("appendMode", g.isAppendMode());
         String guardProperty = "";
         String guardValue = "";
         Object whenValue = g.getEvent()

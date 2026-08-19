@@ -600,11 +600,19 @@ class GlueGenerator {
                 "itemLines", "fromItemEntity", "toItemEntity", "srcFkProperty", "toFkProperty", "itemFieldAssignments", "fromPerspective",
                 "sourceStatusProperty", "sourceStatusValue",
                 // The event half (issue #6711): the trigger kind, the status guard and the back-reference
-                // the at-most-once check reads, plus whether a button is contributed at all.
-                "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "backRefProperty",
+                // the at-most-once check reads, plus whether a button is contributed at all. The axis and
+                // the cardinality (issue #6800): the topic suffix the listener binds - a lifecycle one or
+                // a step-scoped one - and whether the create-from keeps its at-most-once lookup at all.
+                "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "backRefProperty", "isStep", "stepProcess",
+                "stepName", "appendMode",
                 // The declared input form (issue #6685): the prompted target properties with their
                 // pre-rendered value conversions - the template renders one block per entry.
                 "hasPrompt", "promptFields");
+        // The topic the listener binds is the glue's to state and the template's to emit verbatim - but
+        // a .glue written before the step axis (issue #6800) carries no suffix at all, and a bare
+        // reference renders as its own literal into a destination nothing ever publishes on. An absent
+        // one is the lifecycle suffix that shape implied: none for a create, -transitioned otherwise.
+        context.put("topicSuffix", strOr(item, "topicSuffix", truthy(item, "isCreate") ? "" : "-transitioned"));
         context.put("fromJavaPerspective", sanitize(item, "fromPerspective"));
         // The SOURCE's gen folder / owning project: this project unless the source belongs to another
         // model (intent `fromUses:`). That is what lets a create-from be authored on the module owning
