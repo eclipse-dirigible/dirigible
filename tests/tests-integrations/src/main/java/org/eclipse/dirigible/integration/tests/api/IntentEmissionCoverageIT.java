@@ -1475,6 +1475,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // silent-degradation class this IT exists to catch).
         assertTrue(entryRepository.contains("public int updateProperties(") && entryRepository.contains("enforceChecks(entity)"),
                 "a checks-bearing entity must enforce its document checks on the targeted updateProperties write path");
+        // The mirror image, and the reason the gate is CONDITIONAL: a write that touches only
+        // platform-owned columns has nothing for a document check to refuse. The trigger's ProcessId
+        // write-back arrives on this very path, after its process instance has already started, so a gate
+        // that refused it left the instance running with nothing pointing at it (#6815).
+        assertTrue(
+                entryRepository.contains("SYSTEM_PROPERTIES = java.util.List.of(\"ProcessId\")")
+                        && entryRepository.contains("boolean authoredWrite = touchesAuthoredColumn(values)")
+                        && entryRepository.contains("if (authoredWrite) {"),
+                "the document gate must run only for a write that touches an authored column, got: " + entryRepository);
 
         String lineController = contentOf("gen/emission/api/entry/EntryLineController.java");
         assertTrue(lineController.contains("Exactly one of debit/credit"),
@@ -1771,8 +1780,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(bpmn.contains("flowable:assignee=\"${__personalUser}\""),
                 "assignee: personal must emit a per-user flowable:assignee, not a candidate group");
         String claimTrigger = contentOf("gen/events/emission/ClaimConfirmTrigger.java");
-        assertTrue(claimTrigger.contains("__personalUser"),
+        assertTrue(claimTrigger.contains("variables.put(\"__personalUser\""),
                 "the trigger listener must seed the __personalUser variable from the identity mapping");
+        // The assignee expression is evaluated when the task is created, INSIDE Process.start, so the
+        // variable has to ride the start payload - a setVariable afterwards is too late (and, for a
+        // process without a wait state, runs against an instance that already finished).
+        assertTrue(claimTrigger.contains("Json.stringify(variables))") && !claimTrigger.contains("Process.setVariable("),
+                "every process variable must ride the start payload, not a post-start setVariable");
+        // The write-back is the only post-start step, and an instance nothing points at is cancelled
+        // rather than left running untracked (#6815).
+        assertTrue(
+                claimTrigger.contains("repository.updateProperty(entity.Id, \"ProcessId\", processId)")
+                        && claimTrigger.contains("Process.cancel(processId,"),
+                "the ProcessId write-back must be the targeted write, with the instance cancelled when it does not land");
 
         // wait + boundary timers (BPM events wave 1): the catch event, the two boundary timers and
         // the loader/correlating glue must all be present - a missing piece degrades silently into a
@@ -3297,6 +3317,20 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body(org.hamcrest.Matchers.containsString("Confirm")),
+                30);
+
+        // ...and the record knows about the instance that task belongs to: the trigger stamped the
+        // started instance's id back onto it. That stamp is the at-most-once guard, so an unstamped
+        // ProcessId is not a cosmetic gap - the instance is untracked and the next qualifying event
+        // starts a second one (#6815). It also pins the ordering the listener depends on: the write-back
+        // must survive whatever the entity layers onto a targeted write (this entity carries a `label:`,
+        // so its repository overrides that path).
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/claim/ClaimController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.Note == 'spoofed' && it.ProcessId != null && it.ProcessId != '' }.size()",
+                                                         equalTo(1)),
                 30);
 
         // The composition child guards through its parent: the foreign claim's lines are a 404,

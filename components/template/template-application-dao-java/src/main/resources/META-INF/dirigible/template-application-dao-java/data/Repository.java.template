@@ -434,6 +434,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges)
         if (entity != null) {
+#if($documentChecks && $documentChecks.size() > 0)
+            // What this write is ABOUT, read before the label recompute below may add a column of its
+            // own: the gate applies to what a person or a workflow authored, not to the platform's own
+            // bookkeeping.
+            boolean authoredWrite = touchesAuthoredColumn(values);
+#end
 #if($lifecycleEdges)
             // The status as it stands BEFORE the targeted write - a transition button, a workflow
             // setter and a glue action all arrive here, and all of them are moves in the state machine.
@@ -462,8 +468,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #if($documentChecks && $documentChecks.size() > 0)
             // The workflow transition (the setter flipping the status to POSTED) comes through here -
-            // the gate check makes an unbalanced document fail the transition, not silently post.
-            enforceChecks(entity);
+            // the gate check makes an unbalanced document fail the transition, not silently post. It
+            // does NOT apply to a write that touches only platform-owned columns: the process id a
+            // trigger stamps back says which process handles this document, which no document check has
+            // an opinion about, and refusing it left a started instance with nothing pointing at it
+            // (#6815) - strictly worse than an unbalanced document that records its process.
+            if (authoredWrite) {
+                enforceChecks(entity);
+            }
 #end
         }
 #end
@@ -618,6 +630,31 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #end
 #if($documentChecks && $documentChecks.size() > 0)
+
+    /**
+     * Platform-owned columns: the system writes them on the record's behalf and nothing a person or a
+     * workflow authors ever lands in them. The process trigger's {@code ProcessId} is the one that
+     * matters here - it records WHICH process handles the record, and it is written after the instance
+     * has already started.
+     */
+    private static final java.util.List<String> SYSTEM_PROPERTIES = java.util.List.of("ProcessId");
+
+    /**
+     * Whether a targeted write is about a column somebody authored, as opposed to only the platform's own
+     * bookkeeping. A write of the second kind cannot move this document into a gated status, nor break
+     * what the gate checks, so the gate has nothing to say about it.
+     *
+     * @param values the properties the write carries
+     * @return true when at least one of them is authored
+     */
+    private static boolean touchesAuthoredColumn(java.util.Map<String, Object> values) {
+        for (String property : values.keySet()) {
+            if (!SYSTEM_PROPERTIES.contains(property)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /**
      * Declarative document checks (intent {@code checks:}): each runs when the document is persisted

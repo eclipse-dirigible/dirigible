@@ -1883,10 +1883,12 @@ class IntentEngineIT extends IntegrationTest {
                 "the business key must be the minted number field");
         // Targeted single-column writes, never a full-row update: a stale snapshot merge would revert
         // concurrent writes (the ProcessId write-back race). No event either - a system write.
-        assertTrue(trigger.contains("repository.updateProperty(entity.Id, \"ProcessId\", processId)"),
-                "ProcessId must be persisted via a targeted single-column update, not a full-row merge");
-        assertTrue(trigger.contains("repository.updateProperty(entity.Id, \"Number\", minted)"),
+        assertTrue(trigger.contains("repository.updateProperty(entity.Id, \"Number\", entity.Number)"),
                 "the minted number must be persisted via its own targeted single-column update");
+        // The instance is started WITH the minted key, so storing it must PRECEDE the start: a failure
+        // afterwards would leave a running instance correlated on a key the record does not carry.
+        assertTrue(trigger.indexOf("repository.updateProperty(entity.Id, \"Number\"") < trigger.indexOf("Process.start("),
+                "the minted business key must be persisted before the process is started");
         assertFalse(trigger.contains("updateWithoutEvent"),
                 "the trigger must not merge its stale full-row snapshot back (the ProcessId write-back race)");
     }
@@ -1938,6 +1940,63 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         assertTrue(contentOf("custom/OrderNumberAction.java").contains("MY IMPLEMENTATION"),
                 "the developer's calculated action must be preserved across regeneration");
+    }
+
+    @Test
+    void process_trigger_records_the_process_id_first_and_cancels_the_instance_when_it_cannot() {
+        // The guard against starting a second instance IS the stamped ProcessId, so the write-back is the
+        // only step allowed to follow the start - and if it does not land, the instance is cancelled
+        // rather than left running with nothing pointing at it (issue #6815).
+        String yaml = """
+                name: orders
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesOrder
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: total,    type: decimal }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                processes:
+                  - name: Approve
+                    trigger: { onCreate: SalesOrder }
+                    steps:
+                      - { name: review, kind: serviceTask }
+                      - { name: done,   kind: end }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "orders.glue");
+
+        String trigger = contentOf("gen/events/orders/ApproveTrigger.java");
+        // Every process variable rides the START payload - all of them are known beforehand, so there is
+        // no post-start setVariable that could fail (or, for a process without a wait state, run against
+        // an instance that already finished inside Process.start).
+        assertTrue(trigger.contains("variables.put(\"__entityUrl\",") && trigger.contains("variables.put(\"__entityId\", entity.Id)"),
+                "the entity locators must be seeded as start-payload variables");
+        assertTrue(
+                trigger.contains("variables.put(\"__CustomerEntityUrl\",") && trigger.contains("variables.put(\"__CustomerEntityLabel\","),
+                "the FK locators must be seeded as start-payload variables too");
+        assertTrue(trigger.contains("Process.start(\"Approve\", businessKey, Json.stringify(variables))"),
+                "the start must carry the whole variable map");
+        assertFalse(trigger.contains("Process.setVariable("), "no process variable may be set after the start");
+        // The write-back is a TARGETED single-column write, so it keeps the entity's bookkeeping (the
+        // change trail, the stored label) while touching nothing else on the row. It is the generated
+        // repository that must not be able to REFUSE it - asserted where those gates are emitted.
+        assertTrue(trigger.contains("repository.updateProperty(entity.Id, \"ProcessId\", processId)"),
+                "ProcessId must be persisted through the targeted single-column write");
+        // A swallowed start (the platform logs and returns null) must not be recorded as a ProcessId.
+        assertTrue(trigger.contains("if (processId == null)"), "a failed start must be reported, not written back as a null ProcessId");
+        // Nothing points at the instance in either failure mode - the row is gone, or the write threw.
+        assertTrue(trigger.contains("Process.cancel(processId,"), "an unrecorded instance must be cancelled");
+        assertTrue(trigger.contains("cancelStarted(processId);") && trigger.contains("throw e;"),
+                "the write-back failure must cancel the instance and re-throw");
     }
 
     @Test
