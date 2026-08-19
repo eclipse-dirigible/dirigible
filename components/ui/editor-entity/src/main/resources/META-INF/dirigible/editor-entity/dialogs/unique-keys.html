@@ -1,0 +1,126 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="edmUniqueKeys" ng-controller="UniqueKeysController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/editor-entity/configs/unique-keys-window.js"></script>
+        <meta name="platform-links" category="ng-view,ng-editor">
+        <script type="text/javascript" src="/services/web/editor-entity/dialogs/js/unique-keys.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">{{state.busyText}}</bk-busy-indicator-extended>
+
+        <div class="bk-vbox bk-fill-parent" ng-show="!state.error && !state.isBusy && !showInnerDialog">
+            <div class="bk-hbox bk-padding--tiny bk-border--bottom bk-flex-end bk-box--gap">
+                <bk-button compact="true" label="Add" ng-click="add()"></bk-button>
+            </div>
+            <bk-scrollbar class="bk-full-height">
+                <table bk-table outer-borders="bottom">
+                    <thead bk-table-header sticky="true">
+                        <tr bk-table-row>
+                            <th bk-table-header-cell>Entity</th>
+                            <th bk-table-header-cell>Properties</th>
+                            <th bk-table-header-cell>Constraint</th>
+                            <th bk-table-header-cell>Message</th>
+                            <th bk-table-header-cell></th>
+                        </tr>
+                    </thead>
+                    <tbody bk-table-body>
+                        <tr ng-if="!dataParameters.uniqueKeys || dataParameters.uniqueKeys.length === 0" bk-table-row>
+                            <td bk-table-cell no-data="true">There are no unique keys</td>
+                        </tr>
+                        <tr bk-table-row hoverable="false" activable="false" ng-repeat="item in dataParameters.uniqueKeys track by $index">
+                            <td bk-table-cell>{{ item.entity }}</td>
+                            <td bk-table-cell>{{ item.properties.join(', ') }}</td>
+                            <td bk-table-cell>{{ item.name }}</td>
+                            <td bk-table-cell>{{ item.message }}</td>
+                            <td bk-table-cell fit-content="true">
+                                <bk-button compact="true" glyph="sap-icon--edit" state="transparent" aria-label="Edit" ng-click="edit($index)"></bk-button>
+                                <bk-button compact="true" glyph="sap-icon--delete" state="transparent" aria-label="Delete" ng-click="delete($index)"></bk-button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </bk-scrollbar>
+        </div>
+
+        <bk-scrollbar class="bk-full-height" ng-show="!state.error && !state.isBusy && showInnerDialog">
+            <bk-fieldset class="bk-padding--tiny">
+                <bk-form-group>
+                    <bk-form-item>
+                        <bk-form-label for="keyEntity" required="true" colon="true">Entity</bk-form-label>
+                        <bk-select placeholder="Select an entity" label-id="keyEntity" ng-model="editElement.entity" ng-change="entityChanged()" dropdown-fixed="true">
+                            <bk-option text="{{ entity.name }}" value="entity.name" ng-repeat="entity in dataParameters.entities track by entity.name"></bk-option>
+                        </bk-select>
+                    </bk-form-item>
+
+                    <bk-form-item ng-if="editElement.entity">
+                        <bk-form-label colon="true">Properties</bk-form-label>
+                        <div class="bk-vbox">
+                            <div ng-if="propertiesOf(editElement.entity).length === 0">This entity has no properties yet.</div>
+                            <bk-form-item ng-repeat="property in propertiesOf(editElement.entity) track by property">
+                                <bk-checkbox id="prop-{{ property }}" ng-model="editElement.selected[property]"></bk-checkbox>
+                                <bk-checkbox-label for="prop-{{ property }}">{{ property }}</bk-checkbox-label>
+                            </bk-form-item>
+                        </div>
+                    </bk-form-item>
+
+                    <bk-form-item ng-if="editElement.entity">
+                        <bk-form-label colon="true">Constraint name</bk-form-label>
+                        <div class="bk-padding--tiny">{{ derivedName() || '-' }}</div>
+                    </bk-form-item>
+
+                    <bk-form-item ng-if="editElement.entity">
+                        <bk-form-label for="keyMessage" colon="true">Message</bk-form-label>
+                        <bk-input id="keyMessage" type="text" ng-model="editElement.message" placeholder="{{ derivedMessage() }}"></bk-input>
+                    </bk-form-item>
+
+                    <bk-form-item ng-if="validationMessage()">
+                        <div class="bk-padding--tiny">{{ validationMessage() }}</div>
+                    </bk-form-item>
+                </bk-form-group>
+            </bk-fieldset>
+        </bk-scrollbar>
+
+        <bk-bar compact="true" bar-design="footer" in-page="true" ng-show="!state.error && !state.isBusy">
+            <bk-bar-right>
+                <bk-bar-element ng-show="showInnerDialog">
+                    <bk-button label="{{ editElement.editType }}" ng-disabled="!isValid()" state="emphasized" ng-click="innerAction()"></bk-button>
+                </bk-bar-element>
+                <bk-bar-element ng-hide="showInnerDialog">
+                    <bk-button label="Save" state="emphasized" ng-click="save()"></bk-button>
+                </bk-bar-element>
+                <bk-bar-element>
+                    <bk-button label="Cancel" state="transparent" ng-click="cancel()"></bk-button>
+                </bk-bar-element>
+            </bk-bar-right>
+        </bk-bar>
+
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Dialog encountered an error!</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+            <bk-message-page-actions>
+                <bk-button compact="true" label="Close" ng-click="cancel()"></bk-button>
+            </bk-message-page-actions>
+        </bk-message-page>
+        <theme></theme>
+    </body>
+
+</html>
