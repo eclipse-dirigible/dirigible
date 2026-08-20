@@ -143,22 +143,27 @@ mixes them. There is **no** reflective by-name fallback.
 not.** A `JobHandler` that throws is caught by `JobExecutionService`, recorded as a **FAILED job-log
 row** and rethrown to Quartz, so the failure is a first-class operational record: it shows up in the
 Jobs perspective and in the Monitoring shell's failed-jobs tile, and the run can be triggered again.
-A `MessageHandler` that throws is **logged with its stack trace** by `ListenerClassConsumer.dispatch`
-— and that is all: the JMS session is `AUTO_ACKNOWLEDGE` and the exception never reaches the broker,
-so **the message is acknowledged and gone**. No retry, no dead letter, no operational record, nothing
-to re-run. (Before that log line existed, a throwing listener produced no output at all — the
-handler's own `onError` defaults to a no-op — which made every failure inside generated intent glue
-invisible.)
+A `MessageHandler` that throws is **logged with its stack trace** by `ListenerClassConsumer.dispatch`,
+which then **rethrows so the failure reaches the broker**: the delivery is not acknowledged, and the
+bounded redelivery policy the subscription configures (1s initial, 5s, exponential, 3 attempts — the
+same budget the JavaScript listener path uses) retries it before the broker dead-letters it. So the
+work is retried, but there is still **no job-log row and nothing to trigger by hand** — the log and
+the dead-letter queue are the whole operational record. (Before that log line existed, a throwing
+listener produced no output at all — the handler's own `onError` defaults to a no-op — and before the
+rethrow, the message was acknowledged and the event lost for good.)
 
 Two consequences worth internalizing before writing either kind of handler:
 
-- **Do not read a listener throw as recoverable.** The generated templates use the same
+- **A listener throw is retried, not escalated.** The generated templates use the same
   `throw new RuntimeException(…)` idiom in `Job.java.template` and in
-  `Notification`/`Integration.java.template`; in the job it escalates, in the listener it only
-  narrates. A developer copying the job pattern into a listener loses the work, not just the alert.
-- **Work that must not be lost needs its own arrangement** — an idempotent re-run path keyed on
-  something durable, or a reconciliation job that finds records left in a pre-handler state. This is
-  why an event-sourced write in generated glue is written to be replayable rather than transactional.
+  `Notification`/`Integration.java.template`; in the job it becomes a re-runnable failed row, in the
+  listener it becomes up to three more attempts and then a dead letter nobody is paged about. Neither
+  one is a substitute for noticing.
+- **A handler must therefore be safe to run twice.** Redelivery means the same message can arrive
+  again after a partial write, so an event-sourced write in generated glue is written to be
+  replayable — keyed on something durable, like the posting glue's back-reference — rather than
+  transactional. Work that must not be lost still wants a reconciliation job that finds records left
+  in a pre-handler state, because the dead-letter queue is where a poisonous message stops.
 
 ## `JavaHandler` (low-level REST)
 
