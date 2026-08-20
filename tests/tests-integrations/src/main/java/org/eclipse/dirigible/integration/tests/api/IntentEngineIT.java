@@ -56,6 +56,12 @@ class IntentEngineIT extends IntegrationTest {
     private static final String PARSE_URL = "/services/ide/intent/parse";
     private static final String GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
+    /**
+     * The generated -transitioned publish, matched on its sendToTopic argument. The code comments that
+     * explain the flip mention "-transitioned" as well, and they sit before the target save - matching
+     * the bare word would find a comment and read as a publish in the wrong place.
+     */
+    private static final String TRANSITIONED_PUBLISH = "-transitioned\", Json.stringify(source)";
     private static final String AGENT_URL = "/services/ide/intent/agent";
     private static final String ASSIST_URL = "/services/ide/intent/assist";
 
@@ -2236,9 +2242,12 @@ class IntentEngineIT extends IntegrationTest {
         generateFromModel("template-application-dao-java/template/template.js", "orders.model");
         assertTrue(resource("gen/orders/data/order/OrderRepository.java").exists(),
                 "the DAO template should generate the repository under gen/orders");
-        // The create-event publish must serialize via the java.time-aware SDK helper, not a bare Gson.
-        String repository = codeOf("gen/orders/data/order/OrderRepository.java");
-        assertTrue(repository.contains("Json.stringify(saved)"), "the repository should publish the event with the SDK Json helper");
+        // The create event travels WITH the write: the repository hands its topic to save(), which
+        // records the event in the tenant's outbox inside the insert's own transaction instead of
+        // publishing after the commit (issue #6816). Serialization is still the java.time-aware SDK
+        // helper - applied by the platform now, rather than pasted into every generated repository.
+        String repository = contentOf("gen/orders/data/order/OrderRepository.java");
+        assertTrue(repository.contains("super.save(entity, \""), "the repository should hand its create topic to the write");
         assertFalse(repository.contains("new Gson()"), "the repository must not use a bare Gson (fails on java.time fields)");
         // Generating the glue template must clean only gen/events, not gen/<modelName> - so the
         // full-stack output survives (the reported bug was the events generation wiping gen/orders).
@@ -2758,11 +2767,23 @@ class IntentEngineIT extends IntegrationTest {
                 "the source status must be flipped with the targeted updateProperty write");
         // ...and reloads before publishing so the -transitioned payload is the committed row...
         assertTrue(generate.contains("findById(sourceId)"), "it should reload the source for the -transitioned payload");
-        assertTrue(generate.contains("-transitioned"), "it should publish the source's -transitioned channel");
+        // Anchored on the sendToTopic ARGUMENT, not the bare word: the explanatory comments around the
+        // flip name "-transitioned" too, and a comment must not stand in for the publish.
+        assertTrue(generate.contains(TRANSITIONED_PUBLISH), "it should publish the source's -transitioned channel");
         // ...NOT the full-row merge that would revert a concurrent write to the source row (the actual
         // call pattern; an explanatory code comment naming it is expected and must not trip this).
         assertFalse(generate.contains("Repository().updateWithoutEvent(source)"),
                 "the source flip must NOT go through a full-row updateWithoutEvent (stale-snapshot clobber)");
+        // The flip runs BEFORE the target is saved. It is a lifecycle move the source's repository
+        // enforces, so a move the graph does not declare must throw with nothing yet created - flipping
+        // afterwards left a committed document behind whose source never transitioned, and the guard on
+        // the back-reference then made a redelivery return that document instead of repairing the flip.
+        // The publish stays last: the transition is complete only once the document it was about exists.
+        int flip = generate.indexOf("updateProperty(sourceId, \"Status\", 3)");
+        int save = generate.indexOf("Repository().save(target)");
+        int publish = generate.indexOf(TRANSITIONED_PUBLISH);
+        assertTrue(flip < save, "the source flip must precede the target save, got flip@" + flip + " save@" + save);
+        assertTrue(save < publish, "the -transitioned publish must follow the target save, got save@" + save + " publish@" + publish);
 
         // The custom-action BUTTON localizes like every other label: the descriptor carries the
         // model-catalog translation key (the renderer shows T(translation.key, label)), and the
@@ -2975,10 +2996,58 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(writer.contains("((Number) QuantityValue).intValue()"), "an integer editable should be coerced to int");
         assertTrue(writer.contains("Boolean.valueOf(ApprovedValue.toString().trim())"),
                 "a boolean editable should be coerced with Boolean.valueOf");
-        assertTrue(writer.contains("repository.updateProperties(((Number) key).intValue(), values)"),
+        // The coerced key is hoisted into a local rather than inlined into the call, because the reload
+        // that builds the published payload needs the same id - so both halves are asserted.
+        assertTrue(writer.contains("Object id = ((Number) key).intValue();") && writer.contains("repository.updateProperties(id, values)"),
                 "the writer must persist the edited columns in one targeted multi-column write");
         assertFalse(writer.contains("updateWithoutEvent"),
                 "the writer must NOT full-row merge (updateWithoutEvent) - that reverts concurrent writes to unedited columns");
+
+        // What a reviewer edits in the task form is a PERSON's change, so it must be observable: while
+        // the write was silent, no notifications:/integrations:/outbound: consumer could see it, and the
+        // edits only reached anything by accident - when an unrelated setter on the same task happened
+        // to sweep them into its own reload. Deferred, because a consumer re-loads on receive and would
+        // otherwise race the rest of the BPMN chain.
+        assertTrue(writer.contains("Producer.sendToTopic(\"" + PROJECT + "-SalesOrder-SalesOrder-updated\", payload)"),
+                "the writer must publish the entity's -updated topic, got: " + writer);
+        assertTrue(writer.contains("Process.executeAfterCommit("), "the publish must be deferred to after the BPMN chain commits");
+        int write = writer.indexOf("repository.updateProperties(id, values)");
+        int reload = writer.indexOf("repository.findById(id)");
+        assertTrue(write > 0 && write < reload, "the payload must be re-loaded AFTER the write, not from a pre-write snapshot");
+    }
+
+    @Test
+    void numbering_stamp_publishes_the_stamped_document_number() {
+        // number: { stampOn: issue } replaces the create-time UUID placeholder at the issue step. The
+        // number is the document's identity to everything outside the system, so an integration or a
+        // notification quoting it needs the write to be observable - it was not.
+        // The descriptor comes from the FIELD alone (NumberingSupport keys on stampOn: issue), so no
+        // process is needed here - the author wires the delegate at whichever step issues the document.
+        writeIntent("""
+                name: orders
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                      - { name: number, type: string, length: 100, number: { series: Sales Invoice, stampOn: issue } }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "orders.glue");
+
+        String stamp = contentOf("gen/events/orders/SalesInvoiceNumberStamp.java");
+        assertTrue(stamp.contains("DocumentNumbers.next(\"Sales Invoice\")"), "the stamp must allocate from the declared series");
+        assertTrue(stamp.contains("Producer.sendToTopic(\"" + PROJECT + "-SalesInvoice-SalesInvoice-updated\", payload)"),
+                "the stamp must publish the entity's -updated topic - the raw perspective, not the sanitized Java one, got: " + stamp);
+        assertTrue(stamp.contains("Process.executeAfterCommit("), "the publish must be deferred to after the BPMN chain commits");
+        int write = stamp.indexOf("repository.updateProperty(id, \"Number\", number)");
+        // Anchored on the assignment: the delegate ALSO reads the row before the write, to skip an
+        // already-stamped document, and a bare findById(id) would find that guard read instead.
+        int reload = stamp.indexOf("stamped = repository.findById(id)");
+        assertTrue(write > 0 && write < reload, "the payload must carry the stamped number, so it is re-loaded AFTER the write");
     }
 
     @Test
@@ -3033,7 +3102,7 @@ class IntentEngineIT extends IntegrationTest {
                 "the chosen id arrives as the FK's own process variable");
         assertTrue(writer.contains("values.put(\"Driver\", DriverValue instanceof Number ? ((Number) DriverValue).intValue()"),
                 "the FK is the target's integer key, so it rides the Writer's existing integer coercion: " + writer);
-        assertTrue(writer.contains("repository.updateProperties(((Number) key).intValue(), values)"),
+        assertTrue(writer.contains("Object id = ((Number) key).intValue();") && writer.contains("repository.updateProperties(id, values)"),
                 "the picked relation is persisted by the same targeted multi-column write as any other editable");
 
         // The task form's own runtime: the picker is registered so the options are loaded from that

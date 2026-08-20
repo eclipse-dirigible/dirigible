@@ -1,0 +1,19 @@
+{
+    "name": "EVENT_OUTBOX_THING",
+    "type": "TABLE",
+    "columns": [
+        {
+            "type": "INTEGER",
+            "primaryKey": true,
+            "identity": true,
+            "nullable": false,
+            "name": "THING_ID"
+        },
+        {
+            "type": "VARCHAR",
+            "length": "255",
+            "nullable": true,
+            "name": "THING_NAME"
+        }
+    ]
+}

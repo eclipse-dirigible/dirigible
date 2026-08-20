@@ -2304,6 +2304,30 @@ Every axis binding also takes an optional **`when:` guard** inside the `event:` 
 comparison against a direct field of the record (`when: "channel != internal"`), which decides per
 record whether the reaction runs at all.
 
+### which writes are observable (what a reaction can actually see)
+
+Not every write the system makes raises an event, and the difference is not guessable from the DSL -
+so before binding a reaction, check what the thing you care about publishes.
+
+| The write | Publishes | So it can be bound with |
+|---|---|---|
+| A person creating / editing / deleting a record (app or REST) | create / `-updated` / `-deleted` | `onCreate` / `onUpdate` / `onDelete` |
+| Fields a reviewer edited in a task form (`editable:`) | `-updated` | `onUpdate` |
+| `number: { stampOn: issue }` stamping the document number | `-updated` | `onUpdate` |
+| A maintained roll-up / aggregate / keyed total | `-updated` | `onUpdate` |
+| `setField` / `setRelationField` on a step | `-transitioned` | `postings:`, `generates` `event: { onTransition }`, `abortOn:` |
+| A `transitions:` button (void / cancel / reopen) | `-transitioned` | the same three |
+| `generates` `sourceStatus:` flipping the source | `-transitioned` | the same three |
+| A `userTask` / `serviceTask` being reached or completed | a per-step topic | `onStepReached` / `onStepCompleted` |
+
+**Deliberately silent, and correct** - each of these would re-trigger its own handler if it published:
+the process trigger writing `ProcessId` back, an `expansions:` child-count write, and a `resolves:`
+lookup filling its relation (that one is what `outcome:` is for - stamp the attempt into a string
+field a list filter or a `decision` can read, instead of waiting for an event).
+
+**Silent, and worth knowing:** a document's header totals recomputed from its line items. The line's
+own create / `-updated` / `-deleted` fires, so bind the reaction to the LINE, not to the header.
+
 ### inbound - an external system creates records
 
 **Use when:** something **outside the app hands us a record**: a partner POSTs it, a message arrives
