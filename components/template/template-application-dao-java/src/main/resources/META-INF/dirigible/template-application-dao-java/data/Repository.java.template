@@ -341,6 +341,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
 #end
+#if($documentItem)
+        // The document this line belongs to BEFORE the write: a full-row update may re-point the
+        // line's FK to another document, and the one it leaves has no write of its own to resum it -
+        // the same moved-line hole the targeted path already closes. Read through the BASE find, like
+        // the history before-image below.
+        ${name}Entity documentBeforeRow = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+        Object documentBefore = documentBeforeRow == null ? null : documentBeforeRow.${documentItem.fkProperty};
+#end
 #if($history == "true")
         // Change history: the before-image is read through the BASE find (super), never this class's
         // overridden one - on a multilingual entity the overridden read overlays the caller's language,
@@ -369,6 +377,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($documentItem)
         // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
         new ${documentItem.parentEntity}Repository().recalculate(updated.${documentItem.fkProperty});
+        if (documentBefore != null && !documentBefore.equals(updated.${documentItem.fkProperty})) {
+            // The line MOVED: resum the document it left, which nothing else is going to touch.
+            new ${documentItem.parentEntity}Repository().recalculate(documentBefore);
+        }
 #end
         return updated;
     }
@@ -395,6 +407,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // the gate check makes an unbalanced document fail the transition, not silently post.
         enforceChecks(entity);
 #end
+#if($documentItem)
+        // The document this line belongs to BEFORE the write - a system write can re-point the FK
+        // exactly as a user edit does, and the vacated document has no write of its own to resum it.
+        ${name}Entity documentBeforeRow = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+        Object documentBefore = documentBeforeRow == null ? null : documentBeforeRow.${documentItem.fkProperty};
+#end
 #if($history == "true")
         ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
         ${name}Entity updated = super.update(entity);
@@ -408,6 +426,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // A system write is still a line change: the event is suppressed here, the arithmetic is not.
         // Keep the document consistent exactly as update() does (no async roll-up).
         new ${documentItem.parentEntity}Repository().recalculate(updated.${documentItem.fkProperty});
+        if (documentBefore != null && !documentBefore.equals(updated.${documentItem.fkProperty})) {
+            // The line MOVED: resum the document it left, which nothing else is going to touch.
+            new ${documentItem.parentEntity}Repository().recalculate(documentBefore);
+        }
 #end
         return updated;
     }
