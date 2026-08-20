@@ -56,8 +56,7 @@
              loaded by form.js from the __<Fk>EntityUrl process variable (see loadRelationOptions) - this
              page never knows a controller path. Same x-h-select contract the generated entity forms use:
              x-model holds the option's data-value, which is a STRING (an HTML attribute), so the model is
-             stringified on load or the select matches no option and renders empty. No x-h-select-clear -
-             it pushes the selected value below the field frame. -->
+             stringified on load or the select matches no option and renders empty. -->
         <div x-h-field>
           <label x-h-label for="$el.id"#tlabel($el)>$!el.label</label>
 #if($el.readonly)
@@ -71,9 +70,11 @@
             <input x-h-select-input id="$el.id" x-model="model.$el.model" />
             <div x-h-select-content>
               <div x-h-select-search></div>
-              <template x-for="opt in (relationOptions['$el.model'] || [])" :key="opt.value">
-                <div x-h-select-option="opt.label" :data-value="String(opt.value)"></div>
-              </template>
+              <div x-h-select-list>
+                <template x-for="opt in (relationOptions['$el.model'] || [])" :key="opt.value">
+                  <div x-h-select-option="opt.label" :data-value="String(opt.value)"></div>
+                </template>
+              </div>
             </div>
           </div>
 #end

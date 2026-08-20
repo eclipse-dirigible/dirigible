@@ -99,9 +99,11 @@
                                 <input x-h-select-input :id="'a_' + p.name" x-model="draft[p.name]" :disabled="p.readonly" :placeholder="'Select ' + p.name + '...'" />
                                 <div x-h-select-content>
                                     <div x-h-select-search></div>
-                                    <template x-for="opt in (options[p.name] || [])" :key="opt.value">
-                                        <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
-                                    </template>
+                                    <div x-h-select-list>
+                                        <template x-for="opt in (options[p.name] || [])" :key="opt.value">
+                                            <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+                                        </template>
+                                    </div>
                                 </div>
                             </div>
                         </template>

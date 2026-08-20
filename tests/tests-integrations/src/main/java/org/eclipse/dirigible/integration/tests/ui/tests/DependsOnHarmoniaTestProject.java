@@ -71,14 +71,15 @@ class DependsOnHarmoniaTestProject extends BaseTestProject {
         browser.assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType.SPAN, "${ENTITYLABEL}");
 
         // Pick Country = Bulgaria. The Harmonia x-h-select hides the bound <input id="f_Country">
-        // and renders a visible <span role="combobox"> trigger whose text is the placeholder; click
-        // that trigger, then the option (a div[role="option"] whose text is the label).
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.ROLE, "combobox", "Select Country...");
+        // and renders a visible <button role="combobox"> trigger (a span until Harmonia 2.12) whose
+        // text is the placeholder; click that trigger, then the option (a div[role="option"] whose
+        // text is the label).
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", "Select Country...");
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "option", "Bulgaria");
 
         // The selection now shows on the Country trigger - this is also what fires the depends-on
         // watcher that re-filters the City options.
-        browser.assertElementExistByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.ROLE, "combobox", "Bulgaria");
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", "Bulgaria");
 
         // City depends on Country: opening it now must offer only Bulgaria's cities. The offered
         // options are asserted on the option element itself, not on a <span>: since Harmonia 2.7 an
@@ -86,7 +87,7 @@ class DependsOnHarmoniaTestProject extends BaseTestProject {
         // description can sit under it), so a bare "one span contains Sofia" is two matches - which
         // the ExistsByTypeAndContainsText finder rejects. div[role="option"] is the stable anchor,
         // and it is what the Country selection above already clicks.
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.ROLE, "combobox", "Select City...");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", "Select City...");
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "option", "Sofia");
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "option", "Varna");
         browser.assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType.SPAN, "Milano");

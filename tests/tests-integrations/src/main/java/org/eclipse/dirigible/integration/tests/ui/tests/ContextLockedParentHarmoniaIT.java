@@ -83,7 +83,7 @@ class ContextLockedParentHarmoniaIT extends UserInterfaceIntegrationTest {
 
     /**
      * Classifies the parent control as the page rendered it: {@code locked:<label>} for the read-only
-     * display, {@code free} for the combobox (its trigger is a span the select directive appends next
+     * display, {@code free} for the combobox (its trigger is a button the select directive appends next
      * to the bound input), {@code missing} when neither branch rendered.
      */
     private static final String PARENT_CONTROL_STATE = """
