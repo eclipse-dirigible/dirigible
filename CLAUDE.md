@@ -323,6 +323,19 @@ User projects can declare a `*.nativeapp` JSON file that turns an external web s
 
 **Detailed guide:** [`components/engine/engine-native-apps/CLAUDE.md`](components/engine/engine-native-apps/CLAUDE.md). Read it before changing anything under that module — it covers the synchronizer model, kinds + start modes, port resolution, the stop / teardown contract (three layered guarantees), the dual-DELETE rehydrate requirement, PID + port logging, the proxy filter chain, placeholder expansion, the credentials field naming, the management endpoint's role policy, integration-test patterns including the no-manual-cleanup rule, and the macOS gotchas (Python 3.14 bind regression, wildcard-vs-loopback `ServerSocket` probe, `PollingWatchService` deadlock).
 
+## Tenant resolution strategy (`core-tenants` + `core-base`)
+
+How the current tenant of a request is determined is configurable through `DIRIGIBLE_TENANT_RESOLUTION_STRATEGY` (`TenantResolutionStrategy` in `core-base`, read once per `TenantExtractor` instance, i.e. at context refresh):
+
+- **`SUBDOMAIN`** (default, unchanged behaviour) — the subdomain of the `host` / `x-forwarded-host` header is matched against `DIRIGIBLE_TENANT_SUBDOMAIN_REGEX` and looked up by subdomain. A host naming no registered tenant is answered with the 404 written by `TenantContextInitFilter`. Every tenant needs its own host.
+- **`TOKEN_GROUPS`** — the tenant is the one the user selected, read from the HTTP session attribute `TenantSelectionConstants.SELECTED_TENANT_ID_SESSION_ATTRIBUTE` and required to be `PROVISIONED`. The host is never consulted, so one host serves every tenant. No session, no selection, an unknown selection, or a tenant that is not provisioned yet all fall back to the **default tenant** — machine-to-machine calls and anonymous requests carry no session, and a stale selection must not lock a user out.
+
+`TOKEN_GROUPS` exists for deployments where authorization is carried in identity provider groups named **`<tenantId>.<appId>.<role>`** (e.g. `acme.library.Owner`). `TenantGroupsParser` (`core-base`, `base/tenant/groups/`, free of Spring/servlet/OAuth2 types) turns a user's groups into `UserTenantAssignments`: groups of this deployment's application (`DIRIGIBLE_APP_ID`) become that tenant's roles, groups of other applications are ignored, and non-tenant-bearing groups (plain `DEVELOPER`, `OPERATOR`) stay global roles. The role part may contain dots; tenant and application ids may not. The groups claim is `DIRIGIBLE_TENANT_GROUPS_CLAIM` (`cognito:groups` by default, `groups` on Keycloak realms). **Who writes the session attribute is the identity provider side, which is not in the platform yet** — until it is, `TOKEN_GROUPS` resolves every request to the default tenant.
+
+`TenantResolutionConfigValidator` (`core-tenants`) refuses to start on an unusable combination: with `TOKEN_GROUPS` the app id must be set and dot-free, `DIRIGIBLE_MULTI_TENANT_MODE` must be true, the groups claim non-blank, and `DIRIGIBLE_MULTI_TENANT_MODE_COGNITO_SINGLE_USER_POOL` (the legacy `custom:tenant` model, still read by `CognitoTenantFilter` / `KeycloakTenantFilter`, which keep resolving by subdomain) must be off. It validates **in its constructor** on purpose — a half-usable resolution setup must abort the context refresh rather than serve requests that silently land in the wrong tenant.
+
+Caches: `TenantExtractor.TENANT_CACHE` (by subdomain) and `TENANT_ID_CACHE` (provisioned tenants by id), both 10 min. Use `TenantExtractor.evictFromCaches(tenantId, subdomain)` after changing a tenant's registration or status; `TenantService.save/delete` already do.
+
 ## Tenant-aware configuration (`commons-config` + `core-configurations`)
 
 Each tenant can override selected configuration values; overrides are resolved **per request**, scoped to the current tenant. Added on PR [#6205](https://github.com/eclipse-dirigible/dirigible/pull/6205).

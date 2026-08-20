@@ -129,6 +129,27 @@ public enum DirigibleConfig {
     /** The tenant subdomain regex. */
     TENANT_SUBDOMAIN_REGEX("DIRIGIBLE_TENANT_SUBDOMAIN_REGEX", "^([^\\.]+)\\..+$"),
 
+    /**
+     * How the current tenant is resolved for a request: {@code SUBDOMAIN} (the default - matched from
+     * the host header against {@link #TENANT_SUBDOMAIN_REGEX}) or {@code TOKEN_GROUPS} (the tenant the
+     * user selected, validated against the identity provider groups named
+     * {@code <tenantId>.<appId>.<role>}), which lets one host serve every tenant of the application.
+     */
+    TENANT_RESOLUTION_STRATEGY("DIRIGIBLE_TENANT_RESOLUTION_STRATEGY", "SUBDOMAIN"),
+
+    /**
+     * The id of the application this deployment runs, as it appears in the identity provider group
+     * names {@code <tenantId>.<appId>.<role>}. Groups of other applications are ignored. Mandatory when
+     * {@link #TENANT_RESOLUTION_STRATEGY} is {@code TOKEN_GROUPS}, and it must not contain a dot.
+     */
+    APP_ID("DIRIGIBLE_APP_ID", null),
+
+    /**
+     * The token claim carrying the user groups. AWS Cognito puts them in {@code cognito:groups} (the
+     * default), a Keycloak realm typically in {@code groups}.
+     */
+    TENANT_GROUPS_CLAIM("DIRIGIBLE_TENANT_GROUPS_CLAIM", "cognito:groups"),
+
     SNOWFLAKE_ADMIN_USERNAME("DIRIGIBLE_SNOWFLAKE_ADMIN_USERNAME", null),
 
     /** The basic admin username. */

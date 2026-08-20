@@ -18,6 +18,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
+import org.eclipse.dirigible.components.base.tenant.TenantResolutionStrategy;
+import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +29,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 
 @Service
 public class TenantExtractor {
@@ -45,15 +48,103 @@ public class TenantExtractor {
                                                                                .maximumSize(100)
                                                                                .build();
 
+    /**
+     * The provisioned tenants by id, for the {@link TenantResolutionStrategy#TOKEN_GROUPS} strategy. A
+     * mirror of {@link #TENANT_CACHE}, which is keyed by subdomain. A tenant that is not provisioned is
+     * cached as absent, so activating one has to evict it - see
+     * {@link #evictFromCaches(String, String)}.
+     */
+    public static final Cache<String, Optional<Tenant>> TENANT_ID_CACHE = Caffeine.newBuilder()
+                                                                                  .expireAfterWrite(10, TimeUnit.MINUTES)
+                                                                                  .maximumSize(100)
+                                                                                  .build();
+
     private final TenantService tenantService;
     private final boolean multitenantModeEnabled;
+    private final TenantResolutionStrategy resolutionStrategy;
     private final Gson gson;
 
     public TenantExtractor(TenantService tenantService) {
         this.tenantService = tenantService;
         this.multitenantModeEnabled = DirigibleConfig.MULTI_TENANT_MODE_ENABLED.getBooleanValue();
+        this.resolutionStrategy = TenantResolutionStrategy.fromConfiguration();
         this.gson = new GsonBuilder().serializeNulls()
                                      .create();
+    }
+
+    /**
+     * Determines the tenant of the request according to the configured resolution strategy.
+     *
+     * @param request the request
+     * @return the tenant, empty only when the strategy is {@link TenantResolutionStrategy#SUBDOMAIN}
+     *         and the host names no registered tenant
+     */
+    public Optional<Tenant> determineTenant(HttpServletRequest request) {
+        return switch (resolutionStrategy) {
+            case SUBDOMAIN -> determineTenantSubdomain(request);
+            case TOKEN_GROUPS -> determineSelectedTenant(request);
+        };
+    }
+
+    /**
+     * Determines the tenant the user selected, as stored in the session by the identity provider side.
+     *
+     * <p>
+     * Anything else than a session naming a provisioned tenant falls back to the default tenant: a
+     * machine-to-machine call and an anonymous request carry no session at all, and a selection that no
+     * longer resolves must not lock the user out of the instance. The host is never consulted in this
+     * mode, so one host serves every tenant.
+     *
+     * @param request the request
+     * @return the selected tenant, or the default tenant
+     */
+    private Optional<Tenant> determineSelectedTenant(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        Object selectedTenantId =
+                session == null ? null : session.getAttribute(TenantSelectionConstants.SELECTED_TENANT_ID_SESSION_ATTRIBUTE);
+        if (selectedTenantId == null) {
+            LOGGER.debug("No tenant is selected for the current request. Will return the default tenant.");
+            return Optional.of(TenantImpl.getDefaultTenant());
+        }
+        Optional<Tenant> tenant = provisionedTenantById(selectedTenantId.toString());
+        if (tenant.isEmpty()) {
+            LOGGER.warn("Selected tenant [{}] is not a provisioned tenant of this instance. Will return the default tenant.",
+                    selectedTenantId);
+            return Optional.of(TenantImpl.getDefaultTenant());
+        }
+        LOGGER.debug("Found selected tenant [{}].", tenant.get());
+        return tenant;
+    }
+
+    private Optional<Tenant> provisionedTenantById(String tenantId) {
+        return TENANT_ID_CACHE.get(tenantId, id -> {
+            LOGGER.debug("Searching for tenant with id [{}] from database", id);
+            return tenantService.findById(id)
+                                .filter(tenant -> {
+                                    if (tenant.getStatus() == TenantStatus.PROVISIONED) {
+                                        return true;
+                                    }
+                                    LOGGER.warn("Tenant [{}] is in status [{}] and cannot be entered yet.", id, tenant.getStatus());
+                                    return false;
+                                })
+                                .map(TenantImpl::createFromEntity);
+        });
+    }
+
+    /**
+     * Forgets a tenant in both caches, so a change of its registration or status takes effect at once
+     * instead of after the cache expires.
+     *
+     * @param tenantId the tenant id; may be {@code null}
+     * @param subdomain the tenant subdomain; may be {@code null}
+     */
+    public static void evictFromCaches(String tenantId, String subdomain) {
+        if (tenantId != null) {
+            TENANT_ID_CACHE.invalidate(tenantId);
+        }
+        if (subdomain != null) {
+            TENANT_CACHE.invalidate(subdomain);
+        }
     }
 
     /**
