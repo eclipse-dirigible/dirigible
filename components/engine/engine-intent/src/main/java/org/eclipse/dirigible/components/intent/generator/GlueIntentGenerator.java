@@ -1682,6 +1682,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("registerPerspective", IntentEntities.resolvePerspective(register.getName(), compositionParents, model));
             e.put("registerValueProperty", IntentNaming.pascalCase(value.getName()));
             e.put("matches", matches);
+            // The static register narrowing, pre-rendered as Java literals: the template only chains
+            // them onto the Criteria, so nothing about a value's type has to be decided in Velocity.
+            List<Map<String, String>> filters = new ArrayList<>();
+            for (Map.Entry<String, Object> pair : resolve.getWhere()
+                                                         .entrySet()) {
+                Map<String, String> filter = new LinkedHashMap<>();
+                filter.put("property", IntentNaming.pascalCase(pair.getKey()));
+                filter.put("literal", javaLiteral(pair.getValue()));
+                filters.add(filter);
+            }
+            e.put("filters", filters);
+            e.put("filterSummary", filters.stream()
+                                          .map(filter -> filter.get("property") + " = " + filter.get("literal"))
+                                          .collect(java.util.stream.Collectors.joining(", ")));
             e.put("matchSummary", matches.stream()
                                          .map(match -> match.get("registerProperty") + " = " + match.get("recordProperty"))
                                          .collect(java.util.stream.Collectors.joining(", ")));
@@ -2135,11 +2149,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /** A YAML scalar as a Java literal: numbers bare, everything else a quoted string. */
     private static String javaLiteral(Object value) {
+        // A Boolean written as a String would filter a boolean column with the text "true" and match
+        // nothing; the backslash is escaped before the quote so a value carrying either cannot close the
+        // literal early. Statuses arrive already resolved to ids, so a lifecycle filter takes the bare
+        // integer branch.
+        if (value instanceof Boolean) {
+            return String.valueOf(value);
+        }
         String v = String.valueOf(value);
         if (v.matches("-?\\d+")) {
             return v;
         }
-        return '"' + v.replace("\"", "\\\"") + '"';
+        return '"' + v.replace("\\", "\\\\")
+                      .replace("\"", "\\\"")
+                + '"';
     }
 
     /**

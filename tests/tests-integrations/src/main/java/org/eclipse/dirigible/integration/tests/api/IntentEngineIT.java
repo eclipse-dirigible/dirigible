@@ -918,6 +918,99 @@ class IntentEngineIT extends IntegrationTest {
                 "the resolved relation and the outcome trace should be written in ONE targeted update");
     }
 
+    /**
+     * A register lookup narrows the register with a constant predicate ({@code where:}).
+     *
+     * <p>
+     * Without it a register's own history poisons its lookups: {@code match:} can only bind a register
+     * column to a column of the RECORD, so a superseded row keeps covering its old period and a lookup
+     * with exactly one right answer reports {@code ambiguous} and routes to a human. The fixture is
+     * that register - a CANCELLED assignment beside the ACTIVE one over the same dates - and the two
+     * nomenclatures are numbered differently on purpose, so a symbol resolved against the record's
+     * lifecycle instead of the register's could not pass as the right id.
+     */
+    @Test
+    void a_register_lookup_filters_the_register_with_a_constant_predicate() {
+        writeIntent("""
+                name: fines
+                entities:
+                  - name: FineStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: AssignmentStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Vehicle
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: plate, type: string, length: 20 }
+                  - name: Driver
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, length: 100 }
+                  - name: VehicleAssignment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: validFrom, type: date }
+                      - { name: validTo, type: date }
+                      - { name: kind, type: string, length: 20 }
+                    relations:
+                      - { name: vehicle, kind: manyToOne, to: Vehicle }
+                      - { name: driver, kind: manyToOne, to: Driver }
+                      - { name: status, kind: manyToOne, to: AssignmentStatus, function: EntityStatus, init: 7 }
+                  - name: Fine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: violationAt, type: timestamp }
+                      - { name: resolution, type: string, readOnly: true, length: 40 }
+                    relations:
+                      - { name: vehicle, kind: manyToOne, to: Vehicle }
+                      - { name: driver, kind: manyToOne, to: Driver }
+                      - { name: status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+                seeds:
+                  - name: fineStatuses
+                    entity: FineStatus
+                    rows:
+                      - { id: 1, name: NEW }
+                      - { id: 2, name: ACTIVE }
+                  - name: assignmentStatuses
+                    entity: AssignmentStatus
+                    rows:
+                      - { id: 7, name: ACTIVE }
+                      - { id: 8, name: CANCELLED }
+                resolves:
+                  - name: identifyDriver
+                    event: { onCreate: Fine }
+                    set: driver
+                    from: VehicleAssignment
+                    match: { vehicle: vehicle }
+                    where: { status: ACTIVE, kind: PRIMARY }
+                    between: { start: validFrom, end: validTo, value: violationAt }
+                    outcome: resolution
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "fines.glue");
+
+        String lookup = contentOf("gen/events/fines/IdentifyDriverResolve.java");
+        // The filters are chained onto the SAME Criteria as the match keys, so they narrow the query
+        // rather than being applied after the period comparison.
+        assertTrue(lookup.contains(
+                "new VehicleAssignmentRepository().findAll(Criteria.create().eq(\"Vehicle\", entity.Vehicle).eq(\"Status\", 7).eq(\"Kind\", \"PRIMARY\"))"),
+                "the register filter must be ANDed into the lookup's Criteria, got: " + lookup);
+        // 7 is the REGISTER's ACTIVE; the record's own nomenclature seeds ACTIVE as 2.
+        assertFalse(lookup.contains("eq(\"Status\", 2)"),
+                "a symbolic register filter must resolve on the register's nomenclature, not the record's");
+        assertTrue(lookup.contains("filtered to [Status = 7, Kind = \"PRIMARY\"]"),
+                "the handler should name the filter it applied, so a too-narrow one is diagnosable");
+    }
+
     @Test
     void resolve_writes_the_result_before_the_routing_status() {
         // A lookup that also ROUTES by status. The three values it decides are semantically independent,

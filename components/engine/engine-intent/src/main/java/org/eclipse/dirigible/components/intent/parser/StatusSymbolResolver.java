@@ -282,6 +282,34 @@ final class StatusSymbolResolver {
                     putResolved(block, "setStatus", status, subject + " " + outcome + " setStatus");
                 }
             }
+            rewriteResolveWhere(resolve, subject);
+        }
+    }
+
+    /**
+     * The static register filter of a lookup, whose status pair alone is symbolic.
+     *
+     * <p>
+     * Two things make this narrower than every other site. The filter narrows the REGISTER, so its
+     * nomenclature is the register's - resolving on the record's would take an id from the wrong
+     * lifecycle and quietly filter on it. And only the pair naming the register's
+     * {@code function: EntityStatus} relation is a candidate at all: the other pairs are ordinary
+     * columns whose literals are just literals, and handing a string like {@code Kind: PRIMARY} to the
+     * symbol resolver would report it as an unknown status rather than leaving it alone.
+     */
+    private void rewriteResolveWhere(Map<?, ?> resolve, String subject) {
+        Map<?, ?> where = asMap(resolve.get("where"));
+        String register = text(resolve, "from");
+        String statusRelation = statusRelationName(register);
+        if (where == null || statusRelation == null) {
+            return;
+        }
+        Target registerStatus = statusOf(register);
+        for (Object key : new ArrayList<>(where.keySet())) {
+            String name = String.valueOf(key);
+            if (lower(name).equals(lower(statusRelation))) {
+                putResolved(where, name, registerStatus, subject + " where [" + name + "]");
+            }
         }
     }
 

@@ -66,6 +66,22 @@ public class ResolveIntent {
     private Map<String, String> match = new LinkedHashMap<>();
 
     /**
+     * Optional static register filter: {@code <register property>: <literal>} pairs ANDed into the
+     * lookup's query, for the narrowing {@code match} structurally cannot express. Every {@code match}
+     * pair binds a register column to a column of the RECORD, so "and only rows that are still valid"
+     * has no form there - and a register accumulates cancelled and superseded rows, each of which then
+     * covers its old period forever and turns a lookup with exactly one right answer into a permanent
+     * {@code ambiguous}. Mirrors the relation-level {@code where}, except that MULTIPLE pairs are
+     * allowed: that one is capped at a single pair because it lands in two EDM attributes, whereas
+     * these become chained {@code Criteria.eq} calls where a second condition costs nothing.
+     *
+     * <p>
+     * A pair naming the register's {@code function: EntityStatus} relation may use the symbolic seed
+     * name ({@code Status: ACTIVE}); it resolves against the REGISTER's nomenclature, not the record's.
+     */
+    private Map<String, Object> where = new LinkedHashMap<>();
+
+    /**
      * The validity period: {@code start} / {@code end} name the register's period bounds and
      * {@code value} the record's date the period must cover. An absent bound on a register row is
      * open-ended (still valid); {@code end} is inclusive, and a date-only bound covers its whole day.
@@ -125,6 +141,14 @@ public class ResolveIntent {
 
     public void setMatch(Map<String, String> match) {
         this.match = match == null ? new LinkedHashMap<>() : match;
+    }
+
+    public Map<String, Object> getWhere() {
+        return where;
+    }
+
+    public void setWhere(Map<String, Object> where) {
+        this.where = where == null ? new LinkedHashMap<>() : where;
     }
 
     public Map<String, String> getBetween() {

@@ -1621,6 +1621,7 @@ public final class IntentParser {
             }
             RelationIntent filled = validateResolveSet(resolve, subject, record, register, issues);
             validateResolveMatch(resolve, subject, record, register, issues);
+            validateResolveWhere(resolve, subject, register, issues);
             validateResolveBetween(resolve, subject, record, register, issues);
             validateResolveOutcomes(resolve, subject, record, issues);
             if (record != null && filled != null && filled.getName()
@@ -1754,6 +1755,44 @@ public final class IntentParser {
             if (record != null && !hasPropertyIgnoreCase(record, pair.getValue())) {
                 issues.add(
                         subject + " match value [" + pair.getValue() + "] is not a field or to-one relation of [" + record.getName() + "]");
+            }
+        }
+    }
+
+    /**
+     * The optional static register filter: each {@code <register property>: <literal>} pair must name a
+     * property of the register and carry a scalar.
+     *
+     * <p>
+     * A pair that repeats a {@code match} key is refused rather than ANDed: {@code match} already binds
+     * that column to a column of the record, so a literal on top of it either says the same thing twice
+     * or contradicts it, and a contradiction silently makes the lookup match nothing at all. Which of
+     * the two it is depends on data the parser cannot see, so neither is worth guessing between.
+     *
+     * @param resolve the lookup
+     * @param subject the message prefix
+     * @param register the register entity, or {@code null} when unknown
+     * @param issues the collected issues
+     */
+    private static void validateResolveWhere(ResolveIntent resolve, String subject, EntityIntent register, List<String> issues) {
+        Set<String> matchKeys = new HashSet<>();
+        for (String key : resolve.getMatch()
+                                 .keySet()) {
+            matchKeys.add(key.toLowerCase(Locale.ROOT));
+        }
+        for (Map.Entry<String, Object> pair : resolve.getWhere()
+                                                     .entrySet()) {
+            String key = pair.getKey();
+            if (register != null && !hasPropertyIgnoreCase(register, key)) {
+                issues.add(subject + " where key [" + key + "] is not a field or to-one relation of register [" + register.getName() + "]");
+            }
+            Object value = pair.getValue();
+            if (value == null || value instanceof java.util.Collection || value instanceof Map) {
+                issues.add(subject + " where [" + key + "] value must be a scalar literal");
+            }
+            if (matchKeys.contains(key.toLowerCase(Locale.ROOT))) {
+                issues.add(subject + " where [" + key + "] is already a match key - a literal on a column already bound to the record"
+                        + " either repeats the match or contradicts it into matching nothing");
             }
         }
     }
