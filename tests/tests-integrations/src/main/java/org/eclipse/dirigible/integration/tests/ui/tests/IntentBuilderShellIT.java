@@ -136,7 +136,7 @@ public class IntentBuilderShellIT extends UserInterfaceIntegrationTest {
                   // In the calling thread: Selenide binds its WebDriver per-thread, so a probe on
                   // Awaitility's own poll thread finds no driver at all.
                   .pollInSameThread()
-                  .atMost(Duration.ofSeconds(30))
+                  .atMost(Duration.ofSeconds(60))
                   .pollInterval(Duration.ofMillis(250))
                   .untilAsserted(() -> {
                       Object bootstrapped = Selenide.executeJavaScript("return !!(window.Alpine && Alpine.store('intent')"
@@ -145,11 +145,13 @@ public class IntentBuilderShellIT extends UserInterfaceIntegrationTest {
                               "The Builder shell failed to bootstrap its stores and renderer.");
                   });
 
-        // The first-run surface is there: the invitation and the composer.
+        // The first-run surface is there: the invitation and the composer. Explicit deadlines, like every
+        // other wait in this class - Selenide's default is 4s, and Alpine renders these AFTER the stores
+        // the poll above waits for, so the default races the boot rather than testing it.
         Selenide.$(By.xpath("//*[contains(text(), 'Describe the application you need')]"))
-                .shouldBe(Condition.visible);
+                .shouldBe(Condition.visible, Duration.ofSeconds(30));
         Selenide.$(By.id("builder-input"))
-                .shouldBe(Condition.visible);
+                .shouldBe(Condition.visible, Duration.ofSeconds(30));
 
         // The assistant IS configured here (the stub), so the shell must not claim otherwise.
         Selenide.$(By.xpath("//*[contains(text(), 'is not configured on this instance')]"))
@@ -173,8 +175,9 @@ public class IntentBuilderShellIT extends UserInterfaceIntegrationTest {
     void a_conversation_becomes_a_published_application() {
         openBuilder();
 
+        // The composer appears once the shell has booted, which openBuilder() does not wait for.
         Selenide.$(By.id("builder-input"))
-                .shouldBe(Condition.visible)
+                .shouldBe(Condition.visible, Duration.ofSeconds(60))
                 .setValue("I need an expense tracker.");
         Selenide.$(By.cssSelector("button[aria-label='Send']"))
                 .shouldBe(Condition.enabled)

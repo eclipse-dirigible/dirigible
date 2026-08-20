@@ -39,6 +39,7 @@ import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
 import org.eclipse.dirigible.components.intent.model.CheckIntent;
+import org.eclipse.dirigible.components.intent.model.PostIntent;
 import org.eclipse.dirigible.components.intent.model.PostingIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
@@ -313,6 +314,7 @@ public final class IntentParser {
         validateExpansions(model, issues);
         validateSettlements(model, issues);
         validateResolves(model, entityNames, issues);
+        validateIdempotencyGuardOwnership(model, issues);
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
         }
@@ -5356,6 +5358,113 @@ public final class IntentParser {
                 }
             }
         }
+    }
+
+    /**
+     * One rule per at-most-once guard: no two event-driven {@code generates:} / {@code posts:} rules
+     * may share a target entity AND the back-reference relation their guard queries.
+     *
+     * <p>
+     * The generated guard is {@code findAll(eq(<backReference>, sourceId))} - it asks whether the
+     * source already has a row through that relation, and is indifferent to WHICH rule wrote it. So two
+     * rules sharing both silently divide into a winner and a loser: whichever fires first claims the
+     * source forever, and the other returns that row instead of writing anything - for this source and
+     * for every future one. Nothing shows up at runtime; the loser looks like a rule whose condition
+     * never matched. And disjoint {@code when} guards do not save it, because the collision is decided
+     * by the target's EXISTENCE, not by the condition that led to it.
+     *
+     * <p>
+     * Both are static in the model, so this is an authoring-time message instead. A
+     * {@code mode: append} rule has no guard of its own, so two of them cannot collide - but the rows
+     * it appends still carry the back-reference, which is enough to permanently satisfy a guarded
+     * sibling's lookup, so that pairing is reported too.
+     *
+     * @param model the model
+     * @param issues the collected issues
+     */
+    private static void validateIdempotencyGuardOwnership(IntentModel model, List<String> issues) {
+        Map<String, EntityIntent> byName = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
+        Map<String, List<GuardClaim>> claims = new LinkedHashMap<>();
+        for (GeneratesIntent g : model.getGenerates()) {
+            // A cross-model target or source is resolved from the owner's .model at generation time, so
+            // neither its key nor its back-reference is knowable here.
+            if (!g.isEventDriven() || g.getTo() == null || g.getUses() != null || g.isCrossModelSource()) {
+                continue;
+            }
+            EntityIntent source = g.getFrom() == null ? null : byName.get(g.getFrom());
+            String sourceKey = source == null ? null : IntentEntities.keyFieldName(source);
+            String backReference = sourceKey == null ? null : backReferenceOf(g.getMap(), sourceKey);
+            if (backReference == null) {
+                // An event-driven rule with no back-reference in its map is already refused, with a
+                // message about the missing guard rather than about sharing one.
+                continue;
+            }
+            claim(claims, g.getTo(), backReference, "generates [" + g.getName() + "]", !g.isAppendMode());
+        }
+        for (PostIntent p : model.getPosts()) {
+            if (p.getInto() == null || p.getIdempotentBy() == null || p.getIdempotentBy()
+                                                                       .isBlank()) {
+                continue;
+            }
+            claim(claims, p.getInto(), p.getIdempotentBy(), "posts [" + p.getName() + "]", true);
+        }
+        for (List<GuardClaim> sharing : claims.values()) {
+            reportGuardCollision(sharing, issues);
+        }
+    }
+
+    /** The target's to-one back to the source: the {@code map:} key whose value is the source's key. */
+    private static String backReferenceOf(Map<String, String> map, String sourceKey) {
+        for (Map.Entry<String, String> mapping : map.entrySet()) {
+            if (mapping.getValue() != null && mapping.getValue()
+                                                     .equalsIgnoreCase(sourceKey)) {
+                return mapping.getKey();
+            }
+        }
+        return null;
+    }
+
+    private static void claim(Map<String, List<GuardClaim>> claims, String target, String backReference, String subject, boolean guarded) {
+        String key = target.toLowerCase(Locale.ROOT) + "#" + backReference.toLowerCase(Locale.ROOT);
+        claims.computeIfAbsent(key, k -> new ArrayList<>())
+              .add(new GuardClaim(subject, target, backReference, guarded));
+    }
+
+    /**
+     * Reports one shared guard. Two rules that both append are left alone - neither reads the other's
+     * rows - so a collision needs at least one guarded claimant, and the message names it as the loser
+     * because it is the one that stops writing.
+     */
+    private static void reportGuardCollision(List<GuardClaim> sharing, List<String> issues) {
+        if (sharing.size() < 2) {
+            return;
+        }
+        List<GuardClaim> guarded = sharing.stream()
+                                          .filter(GuardClaim::guarded)
+                                          .toList();
+        if (guarded.isEmpty()) {
+            return;
+        }
+        GuardClaim first = guarded.get(0);
+        String others = sharing.stream()
+                               .filter(claim -> claim != first)
+                               .map(claim -> claim.subject() + (claim.guarded() ? "" : " (mode: append)"))
+                               .collect(java.util.stream.Collectors.joining(", "));
+        issues.add(first.subject() + " shares its at-most-once guard on [" + first.target() + "] through back-reference ["
+                + first.backReference() + "] with " + others
+                + " - that guard asks whether the source already has a row through that relation and cannot tell which rule wrote it,"
+                + " so whichever fires first claims the source permanently and the rest silently never write again."
+                + " Give them separate back-references or separate targets, or declare `mode: append` on every one of them if each"
+                + " event should add a row.");
+    }
+
+    /** One rule's claim on a (target, back-reference) guard. */
+    private record GuardClaim(String subject, String target, String backReference, boolean guarded) {
     }
 
     private static void validateGenerates(IntentModel model, Set<String> entityNames, Set<String> usesAliases, List<String> issues) {

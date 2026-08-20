@@ -1540,6 +1540,17 @@ generates:
   create-from looks for a target that already back-references this source and returns it instead, so an
   event redelivery - or a click afterwards - is a no-op rather than a duplicate document. Under
   `mode: append` it is the appended row's provenance. Authoring an event without it is rejected.
+- **That guard belongs to ONE rule.** It asks whether the source already has a row through the
+  back-reference, and cannot tell which rule wrote it - so two event-driven rules sharing a target AND a
+  back-reference divide into a winner and a loser: whichever fires first claims the source forever, and
+  the other hands back that row instead of writing, for that source and every future one. **Disjoint
+  `when:` guards do not save it** (the collision is decided by the target's EXISTENCE, not the condition
+  that led to it), and nothing shows at runtime - the loser looks like a rule whose condition never
+  matched. This is now refused at parse time. To write two kinds of row about one source, give them
+  separate back-references (two to-one relations to the source) or separate targets; declare
+  `mode: append` on **every** one of them if each event should add a row. The same applies to `posts:`
+  through its `idempotentBy:`, and across the two constructs - a `posts:` row satisfies a `generates:`
+  guard just as well.
 - **`mode:` - the cardinality.** `once` (default, today's behaviour) creates at most one target per
   source. `append` creates one **per delivered event**: the "a row per step, a row per transition" shape -
   a log entry, a protocol line, an activity record.
