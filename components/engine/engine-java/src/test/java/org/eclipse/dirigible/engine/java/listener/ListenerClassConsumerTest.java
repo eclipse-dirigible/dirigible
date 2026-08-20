@@ -113,7 +113,7 @@ class ListenerClassConsumerTest {
         Session session = mock(Session.class);
         queue = mock(Queue.class);
         MessageConsumer messageConsumer = mock(MessageConsumer.class);
-        when(connectionFactory.createConnection(any())).thenReturn(connection);
+        when(connectionFactory.createConnection(any(), any())).thenReturn(connection);
         when(connectionFactory.createSession(connection)).thenReturn(session);
         when(session.createQueue("notifications")).thenReturn(queue);
         when(session.createConsumer(queue)).thenReturn(messageConsumer);

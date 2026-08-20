@@ -5903,9 +5903,16 @@ public final class IntentParser {
 
     /**
      * The status writes with no declared source: a workflow step's {@code setRelationField} on the
-     * status FK, and the status a {@code checks:} rejection forces. The graph cannot say where the
-     * record will be standing when they run, but it can say whether the target is a status anything may
-     * ever move INTO - a target no edge reaches is unreachable by construction.
+     * status FK, the status a {@code checks:} rejection forces, a create-from's {@code sourceStatus}
+     * completion flip, and the status a {@code resolves:} outcome routes the record to. The graph
+     * cannot say where the record will be standing when they run, but it can say whether the target is
+     * a status anything may ever move INTO - a target no edge reaches is unreachable by construction.
+     *
+     * <p>
+     * Every one of these writes the lifecycle FK, so every one of them is enforced by the generated
+     * repository at run time. Checking them here is what turns an unmodeled move from a runtime
+     * {@code ValidationException} into a message the author reads - and for {@code sourceStatus} that
+     * matters twice over, because its flip runs AFTER the target document has already been committed.
      */
     private static void validateStatusWritesAgainstLifecycle(IntentModel model, EntityIntent entity, RelationIntent status,
             Set<Integer> reachable, Map<Integer, String> statuses, List<String> issues) {
@@ -5927,6 +5934,39 @@ public final class IntentParser {
                 }
             }
         }
+        for (GeneratesIntent generates : model.getGenerates()) {
+            // A cross-model source is owned elsewhere, so its lifecycle is declared there too - this graph
+            // has nothing to say about it, exactly as the generates block's own checks skip it.
+            if (generates.isCrossModelSource() || !entity.getName()
+                                                         .equals(generates.getFrom())) {
+                continue;
+            }
+            Integer flipped = generates.getSourceStatus();
+            if (flipped != null && !reachable.contains(flipped)) {
+                issues.add("generates [" + generates.getName() + "] flips the source status to [" + statusLabel(flipped, statuses)
+                        + "], which no edge of the [" + entity.getName()
+                        + "] lifecycle reaches - add the edge or set a status the graph can enter (the flip runs AFTER the target"
+                        + " document is created, so a rejected one leaves the document behind)");
+            }
+        }
+        for (ResolveIntent resolve : model.getResolves()) {
+            if (!entity.getName()
+                       .equals(resolveRecordName(resolve))) {
+                continue;
+            }
+            for (Map.Entry<String, Map<String, Object>> outcome : Map.of("found", resolve.getFound(), "notFound", resolve.getNotFound(),
+                    "ambiguous", resolve.getAmbiguous())
+                                                                     .entrySet()) {
+                Object routed = outcome.getValue()
+                                       .get("setStatus");
+                if (!(routed instanceof Number) || reachable.contains(((Number) routed).intValue())) {
+                    continue; // a non-numeric value is reported by the lookup's own validation
+                }
+                issues.add("resolve [" + resolve.getName() + "] " + outcome.getKey() + " routes the record to ["
+                        + statusLabel(((Number) routed).intValue(), statuses) + "], which no edge of the [" + entity.getName()
+                        + "] lifecycle reaches - add the edge or route to a status the graph can enter");
+            }
+        }
         if (entity.getChecks() == null) {
             return;
         }
@@ -5938,6 +5978,26 @@ public final class IntentParser {
                         + " status the graph can enter");
             }
         }
+    }
+
+    /**
+     * The record entity a lookup fires for, by name only - the lookup's own validation owns every issue
+     * about a malformed or unknown binding, so this reports nothing and simply resolves nothing when
+     * the event is not the single well-formed one.
+     *
+     * @param resolve the lookup
+     * @return the record entity's name, or {@code null}
+     */
+    private static String resolveRecordName(ResolveIntent resolve) {
+        Object onCreate = resolve.getEvent()
+                                 .get("onCreate");
+        Object onUpdate = resolve.getEvent()
+                                 .get("onUpdate");
+        if (onCreate != null && onUpdate != null) {
+            return null;
+        }
+        Object target = onCreate != null ? onCreate : onUpdate;
+        return target == null ? null : target.toString();
     }
 
     /**
