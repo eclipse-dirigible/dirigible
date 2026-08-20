@@ -207,7 +207,7 @@ public class ${className}Generate {
         // Reload so the payload carries the committed row (the flipped status plus any write the target
         // creation performed on the source), not the stale pre-generation snapshot.
         source = sourceRepository.findById(sourceId);
-        org.eclipse.dirigible.sdk.messaging.Producer.sendToTopic(
+        org.eclipse.dirigible.sdk.messaging.Producer.sendToTopicDurable(
                 "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned", Json.stringify(source));
 #end
         return saved;

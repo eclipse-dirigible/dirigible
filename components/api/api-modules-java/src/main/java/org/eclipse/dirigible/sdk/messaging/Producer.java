@@ -9,7 +9,9 @@
  */
 package org.eclipse.dirigible.sdk.messaging;
 
+import org.eclipse.dirigible.components.api.messaging.DurableMessagePublisher;
 import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
+import org.eclipse.dirigible.components.base.spring.BeanProvider;
 
 /**
  * Sends a message into the embedded ActiveMQ broker. {@link #sendToQueue(String, String)} delivers
@@ -33,5 +35,22 @@ public final class Producer {
 
     public static void sendToTopic(String topic, String message) {
         MessagingFacade.sendToTopic(topic, message);
+    }
+
+    /**
+     * Publishes to a topic with at-least-once delivery: the message is recorded durably before the
+     * broker sees it, and whatever the broker refuses is retried until it is taken. Use this for an
+     * announcement whose loss would silently break a downstream reaction — a status transition a
+     * posting or a create-from is keyed on — when the announcement is deliberately decoupled from the
+     * write it is about (deferred past a workflow chain's commit, or ordered after several writes). An
+     * announcement that belongs to ONE write should ride that write instead: hand the topic to the
+     * repository's write methods, which record it in the same transaction.
+     *
+     * @param topic the topic to publish on
+     * @param message the message body
+     */
+    public static void sendToTopicDurable(String topic, String message) {
+        BeanProvider.getBean(DurableMessagePublisher.class)
+                    .publishToTopic(topic, message);
     }
 }

@@ -78,7 +78,7 @@ public class ${className} implements JavaDelegate {
         ${entity}Entity entity = repository.findById(id);
         if (entity != null) {
             String payload = Json.stringify(entity);
-            Process.executeAfterCommit(() -> Producer.sendToTopic("${projectName}-${perspective}-${entity}-updated", payload));
+            Process.executeAfterCommit(() -> Producer.sendToTopicDurable("${projectName}-${perspective}-${entity}-updated", payload));
         }
     }
 }
