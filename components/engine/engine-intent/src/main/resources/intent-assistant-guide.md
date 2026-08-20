@@ -2521,6 +2521,7 @@ resolves:
     set: driver                             # the to-one of Fine this fills
     from: VehicleAssignment                 # the register
     match: { vehicle: vehicle }             # register property <- record property (one or more)
+    where: { status: ACTIVE }               # optional: constant register filter (one or more, ANDed)
     between: { start: validFrom, end: validTo, value: violationAt }
     outcome: resolution                     # optional string field stamped found/notFound/ambiguous
     found:     { setStatus: IDENTIFIED }
@@ -2542,10 +2543,29 @@ are a filterable worklist a human can finish, and so a process `decision` can br
   bound may be omitted (open-ended = still valid); the end is **inclusive**, and a date-only bound
   covers its whole day.
 - Only the resolved relation, the outcome and the status are written - nothing else of the record.
+- **`where:` is how a register keeps its history without poisoning its lookups.** `match` can only
+  bind a register column to a column of the RECORD, so "and only the rows that are still valid" has no
+  form there. A register accumulates corrections - the cancelled row stays beside the active one and
+  keeps covering the same period - so without a filter the lookup finds two covering rows, reports
+  `ambiguous` and routes to a human, for a register with exactly one right answer. Quiet, and worse
+  every year. `where: { status: ACTIVE }` restores the intended single match:
+
+  | id | vehicle | driver | validFrom | validTo | status |
+  |---|---|---|---|---|---|
+  | 1 | CA1234AB | Petrov | 2026-01-01 | 2026-06-30 | CANCELLED |
+  | 2 | CA1234AB | Ivanov | 2026-01-01 | 2026-06-30 | ACTIVE |
+
+  Several pairs are allowed and ANDed (unlike the relation-level `where:`, capped at one pair because
+  it lands in two EDM attributes). A pair naming the register's `function: EntityStatus` relation may
+  use the **seeded name**, resolved on the REGISTER's nomenclature - not the record's, which would be
+  a plausible id from the wrong lifecycle. A pair that repeats a `match` key is refused: on a column
+  already bound to the record a literal either says the same thing twice or contradicts it into
+  matching nothing.
 
 **Rules:** `event` binds `onCreate` or `onUpdate` of a declared entity (never `onDelete`); `set` is a
 to-one of that entity; `from` is an entity declared in **this** model; `match` needs at least one pair
-(left = register property, right = record property); `between.value` is required and every period
+(left = register property, right = record property); each optional `where` key is a register property
+carrying a scalar literal and may not repeat a `match` key; `between.value` is required and every period
 field must be a `date` or `timestamp`; `outcome` must be a `string` field of the record; a `setStatus`
 needs the record to declare a `function: EntityStatus` relation, and may be a seed id or a seeded
 name.

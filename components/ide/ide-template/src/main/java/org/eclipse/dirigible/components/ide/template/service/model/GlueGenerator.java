@@ -817,8 +817,9 @@ class GlueGenerator {
      */
     private static void bindResolve(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "keyProperty", "topicSuffix", "guardExpression", "setProperty",
-                "registerEntity", "registerPerspective", "registerValueProperty", "matches", "matchSummary", "startProperty", "endProperty",
-                "valueProperty", "outcomeProperty", "statusProperty", "foundStatus", "notFoundStatus", "ambiguousStatus", "writesStatus");
+                "registerEntity", "registerPerspective", "registerValueProperty", "matches", "matchSummary", "filters", "filterSummary",
+                "startProperty", "endProperty", "valueProperty", "outcomeProperty", "statusProperty", "foundStatus", "notFoundStatus",
+                "ambiguousStatus", "writesStatus");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("javaRegisterPerspective", sanitize(item, "registerPerspective"));
     }

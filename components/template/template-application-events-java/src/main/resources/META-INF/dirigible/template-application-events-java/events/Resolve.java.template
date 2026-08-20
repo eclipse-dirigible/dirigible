@@ -15,7 +15,8 @@ import gen.${javaGenFolderName}.data.${javaRegisterPerspective}.${registerEntity
 
 /**
  * Effective-dated register lookup ${name}: fills ${entity}.${setProperty} from the ${registerEntity}
- * row whose validity period covers ${entity}.${valueProperty}, matched on [${matchSummary}].
+ * row whose validity period covers ${entity}.${valueProperty}, matched on [${matchSummary}]#if($filterSummary != "")
+ * and filtered to [${filterSummary}]#end.
  *
  * Generated from the intent resolves block - do not edit; it is re-generated with the application.
  *
@@ -58,7 +59,10 @@ public class ${className}Resolve implements MessageHandler {
         Long at = millis(entity.${valueProperty});
         java.util.List<${registerEntity}Entity> covering = new java.util.ArrayList<>();
         if (at != null#foreach($match in $matches) && entity.${match.recordProperty} != null#end) {
-            for (${registerEntity}Entity row : new ${registerEntity}Repository().findAll(Criteria.create()#foreach($match in $matches).eq("${match.registerProperty}", entity.${match.recordProperty})#end)) {
+            // The match keys bind register columns to the record's; the `where:` filters are constants
+            // ANDed on top, which is how a register's cancelled and superseded rows stay out of the
+            // period comparison instead of covering it forever as a false ambiguous.
+            for (${registerEntity}Entity row : new ${registerEntity}Repository().findAll(Criteria.create()#foreach($match in $matches).eq("${match.registerProperty}", entity.${match.recordProperty})#end#foreach($filter in $filters).eq("${filter.property}", ${filter.literal})#end)) {
                 if (covers(row, at)) {
                     covering.add(row);
                 }
@@ -70,8 +74,8 @@ public class ${className}Resolve implements MessageHandler {
                     entity.${valueProperty});
             stamp(entity.${keyProperty}, "found", resolved#if($writesStatus == "true"), #if($foundStatus != "")${foundStatus}#{else}null#end#end);
         } else if (covering.isEmpty()) {
-            LOG.info("${name}: no ${registerEntity} row covers [{}] for ${entity} [{}] - ${setProperty} left unresolved",
-                    entity.${valueProperty}, entity.${keyProperty});
+            LOG.info("${name}: no ${registerEntity} row covers [{}] for ${entity} [{}]#if($filterSummary != "") (filtered to [${filterSummary}])#end"
+                    + " - ${setProperty} left unresolved", entity.${valueProperty}, entity.${keyProperty});
             stamp(entity.${keyProperty}, "notFound", null#if($writesStatus == "true"), #if($notFoundStatus != "")${notFoundStatus}#{else}null#end#end);
         } else {
             LOG.warn("${name}: [{}] ${registerEntity} rows cover [{}] for ${entity} [{}] - ${setProperty} left unresolved for a human",
