@@ -1962,6 +1962,11 @@ class IntentEngineIT extends IntegrationTest {
                 "it should create allocation rows through the junction repository (never the generic Store)");
         assertTrue(onPayment.contains("return \"" + PROJECT + "-Payment-Payment\";"),
                 "the create listener should bind the bare payment topic");
+        // A create event is the FIRST word about a payment - it has nothing to release. A negative pot
+        // on this handler means the event was DELAYED past a correction the updated handler already
+        // allocated, and releasing on that stale payload would undo the correction (#6865).
+        assertFalse(onPayment.contains("release(payment.Id, pot.negate())"),
+                "the create listener must never release - the updated handler owns every shrink");
 
         // A payment corrected after it was booked - or created incomplete and completed later - must be
         // re-allocated, so the same recompute is bound to the payment's update event too (#6818).
@@ -1974,6 +1979,19 @@ class IntentEngineIT extends IntegrationTest {
                 "a payment corrected below what it already covers should release the excess allocation");
         assertTrue(onPaymentUpdated.contains(".orderByDesc(\"Id\")") && onPaymentUpdated.contains("rows.delete(row)"),
                 "the release should give back the newest allocations first, through the junction repository");
+
+        // A corrected MATCH column (the payment re-filed under another Customer) re-targets the whole
+        // allocation: the payment's DAO publishes "-rekeyed" for the move (the match columns are
+        // grouping keys) and this third handler releases everything and re-allocates from the STORE -
+        // both re-key notices run the same store-driven recompute, so delivery order cannot matter
+        // (#6864).
+        String onPaymentRekeyed = contentOf("gen/events/settle/AutoSettleOnPaymentRekeyed.java");
+        assertTrue(onPaymentRekeyed.contains("return \"" + PROJECT + "-Payment-Payment-rekeyed\";"),
+                "the re-key listener should bind the payment's -rekeyed topic");
+        assertTrue(onPaymentRekeyed.contains("new PaymentRepository().findById(payment.Id)"),
+                "the re-key recompute must read the payment from the store, never trust the moved payload");
+        assertTrue(onPaymentRekeyed.contains("release(payment.Id, allocated(payment.Id))"),
+                "the re-key recompute must release the whole allocation before re-allocating");
 
         String onInvoice = codeOf("gen/events/settle/AutoSettleOnInvoice.java");
         assertTrue(onInvoice.contains("class AutoSettleOnInvoice implements JavaDelegate"),

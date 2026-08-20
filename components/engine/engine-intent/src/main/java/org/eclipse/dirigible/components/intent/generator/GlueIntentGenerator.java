@@ -686,6 +686,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // The create handler keeps its established class name; the correction one is suffixed.
             listeners.add(rollupEntry(settlement, name + "OnPayment", ""));
             listeners.add(rollupEntry(settlement, name + "OnPaymentUpdated", "-updated"));
+            if (!Boolean.TRUE.equals(settlement.get("crossModel"))) {
+                // A corrected MATCH column re-targets the allocation wholesale: the payment's DAO
+                // publishes "-rekeyed" for the move (the match columns are grouping keys), and this
+                // handler releases everything and re-allocates from the STORE - which needs the
+                // payment's repository, so it exists only for a local payment. A cross-model payment's
+                // DAO belongs to the owner model, which knows nothing of this settlement.
+                listeners.add(rollupEntry(settlement, name + "OnPaymentRekeyed", "-rekeyed"));
+            }
         }
         return listeners;
     }
@@ -1275,6 +1283,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     static List<Map<String, Object>> buildRollupsForTest(IntentModel model) {
         return buildRollups(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
                 null);
+    }
+
+    /** Test hook: build the {@code settlementListeners} glue collection without a repository. */
+    static List<Map<String, Object>> buildSettlementListenersForTest(IntentModel model) {
+        IntentGenerationContext context =
+                new IntentGenerationContext(model, "/" + model.getName(), model.getName(), "workspace", model.getName(), null);
+        return buildSettlementListeners(buildSettlements(model, IntentEntities.byName(model), IntentEntities.compositionParents(model),
+                IntentSettings.parse("{}"), context));
     }
 
     /** Test hook: build the {@code waits} glue collection without a repository. */

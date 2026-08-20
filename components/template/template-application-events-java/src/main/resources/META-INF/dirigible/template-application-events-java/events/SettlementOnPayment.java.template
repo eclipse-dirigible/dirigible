@@ -15,15 +15,18 @@ import gen.${javaGenFolderName}.data.${invoiceJavaPerspective}.${invoiceEntity}R
 import gen.${javaGenFolderName}.data.${junctionJavaPerspective}.${junctionEntity}Entity;
 import gen.${javaGenFolderName}.data.${junctionJavaPerspective}.${junctionEntity}Repository;
 import gen.${paymentGenFolder}.data.${paymentJavaPerspective}.${paymentEntity}Entity;
+#if($topicSuffix == "-rekeyed")
+import gen.${paymentGenFolder}.data.${paymentJavaPerspective}.${paymentEntity}Repository;
+#end
 
 /**
- * Auto-settlement (on ${paymentEntity} #if($topicSuffix == "")create#{else}correction#end): allocates the payment across the payer's open
+ * Auto-settlement (on ${paymentEntity} #if($topicSuffix == "")create#elseif($topicSuffix == "-rekeyed")re-key#{else}correction#end): allocates the payment across the payer's open
  * ${invoiceEntity}s - oldest first, matching ${match} - creating ${junctionEntity} rows until the
  * payment is used up. The paid roll-up then updates each invoice's paid / balance / status.
  *
  * This is a RECOMPUTE of the payment's unallocated balance, not an append: it allocates only what is
- * still unallocated, and releases the excess - newest allocation first - when the payment is corrected
- * to less than what it already covers. That is what makes it safe to bind to the payment's correction
+ * still unallocated#if($topicSuffix != ""), and releases the excess - newest allocation first - when the payment is corrected
+ * to less than what it already covers#end. That is what makes it safe to bind to the payment's correction
  * event as well as to its create one, so a payment booked for the wrong amount, or completed after it
  * was created, is settled for the amount it actually carries.
  *
@@ -51,10 +54,31 @@ public class ${className} implements MessageHandler {
         if (payment == null || payment.${paymentPk} == null || payment.${paymentPot} == null) {
             return;
         }
+#if($topicSuffix == "-rekeyed")
+        // A grouping column of the payment moved - its match value was corrected - so the allocation
+        // is re-targeted WHOLESALE: release everything, then allocate against the payment as it now
+        // stands IN THE STORE. Both re-key notices (the previous row and the written one) run this
+        // same store-driven recompute, so their delivery order cannot matter, and a redelivery finds
+        // the same converged state. The payload is used only for the key.
+        ${paymentEntity}Entity stored = new ${paymentEntity}Repository().findById(payment.${paymentPk});
+        if (stored == null || stored.${paymentPot} == null) {
+            return;
+        }
+        release(payment.${paymentPk}, allocated(payment.${paymentPk}));
+        payment = stored;
+#end
         BigDecimal pot = payment.${paymentPot}.subtract(allocated(payment.${paymentPk}));
         if (pot.signum() < 0) {
+#if($topicSuffix == "")
+            // A create event is the FIRST word about a payment - it has nothing to release. Reaching a
+            // negative pot here means this event was DELAYED past a correction the updated handler has
+            // already allocated; releasing on this stale payload would undo that correction until the
+            // next payment event happened to repair it. The updated handler owns every shrink.
+            return;
+#else
             release(payment.${paymentPk}, pot.negate());
             return;
+#end
         }
         if (pot.signum() == 0) {
             return;
