@@ -110,6 +110,34 @@ class TaskFormRelationPickerTest {
     }
 
     /**
+     * The picker is a TASK-FORM control: it locates its options through the process variables the
+     * trigger seeds, which exist only there. A non-task form listing a bare to-one relation keeps the
+     * plain text control - the picker branch would render an editable select that stays permanently
+     * empty, where a text control at least shows the raw key.
+     */
+    @Test
+    void aRelationOnANonTaskFormNeverBecomesAPicker() {
+        String yaml = YAML.replace("""
+                processes:
+                  - name: Identify
+                    trigger: { onCreate: Fine }
+                    steps:
+                      - { name: identify, kind: userTask, args: { assignee: officer, form: IdentifyDriver } }
+                      - { name: done, kind: end }
+                """, "")
+                          .replace("editable: [driver]\n    actions: [identify]", "");
+        assertTrue(!yaml.contains("processes:") && !yaml.contains("editable:"),
+                "the fixture surgery must actually detach the form from any process, or this test passes vacuously");
+        Map<String, Object> form = FormIntentGenerator.buildFormsForTest(IntentParser.parse(yaml))
+                                                      .get("IdentifyDriver");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> controls = (List<Map<String, Object>>) form.get("form");
+        assertTrue(controls.stream()
+                           .noneMatch(c -> "input-select".equals(c.get("controlId"))),
+                "a non-task form has no process context to feed a picker: " + controls);
+    }
+
+    /**
      * The FK is the target's integer key, so it rides the Writer's existing integer branch - a relation
      * adds no new coercion category.
      */

@@ -413,7 +413,12 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                 // Task-form fields are read-only unless explicitly opted in via `editable`; other forms
                 // keep the legacy "editable except a generated PK" behavior.
                 boolean readonly = isTaskForm ? !editable.contains(fieldName) : isReadonlyByDefault(fieldsByName.get(fieldName));
-                RelationIntent relation = fieldsByName.containsKey(fieldName) || entity == null ? null : toOneRelation(entity, fieldName);
+                // The picker is a TASK-FORM control: it locates its option list through the
+                // __<Fk>EntityUrl / __<Fk>EntityLabel process variables the trigger seeds, which exist
+                // only there. On a non-task form a to-one relation keeps the plain text control - the
+                // picker branch would render an editable select that stays permanently empty.
+                RelationIntent relation =
+                        !isTaskForm || fieldsByName.containsKey(fieldName) || entity == null ? null : toOneRelation(entity, fieldName);
                 if (relation != null && !readonly) {
                     controls.add(relationPickerControl(relation, entitiesByName));
                 } else {
