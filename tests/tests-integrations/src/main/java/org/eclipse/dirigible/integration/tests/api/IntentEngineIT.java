@@ -56,6 +56,12 @@ class IntentEngineIT extends IntegrationTest {
     private static final String PARSE_URL = "/services/ide/intent/parse";
     private static final String GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
+    /**
+     * The generated -transitioned publish, matched on its sendToTopic argument. The code comments that
+     * explain the flip mention "-transitioned" as well, and they sit before the target save - matching
+     * the bare word would find a comment and read as a publish in the wrong place.
+     */
+    private static final String TRANSITIONED_PUBLISH = "-transitioned\", Json.stringify(source)";
     private static final String AGENT_URL = "/services/ide/intent/agent";
     private static final String ASSIST_URL = "/services/ide/intent/assist";
 
@@ -2670,11 +2676,23 @@ class IntentEngineIT extends IntegrationTest {
                 "the source status must be flipped with the targeted updateProperty write");
         // ...and reloads before publishing so the -transitioned payload is the committed row...
         assertTrue(generate.contains("findById(sourceId)"), "it should reload the source for the -transitioned payload");
-        assertTrue(generate.contains("-transitioned"), "it should publish the source's -transitioned channel");
+        // Anchored on the sendToTopic ARGUMENT, not the bare word: the explanatory comments around the
+        // flip name "-transitioned" too, and a comment must not stand in for the publish.
+        assertTrue(generate.contains(TRANSITIONED_PUBLISH), "it should publish the source's -transitioned channel");
         // ...NOT the full-row merge that would revert a concurrent write to the source row (the actual
         // call pattern; an explanatory code comment naming it is expected and must not trip this).
         assertFalse(generate.contains("Repository().updateWithoutEvent(source)"),
                 "the source flip must NOT go through a full-row updateWithoutEvent (stale-snapshot clobber)");
+        // The flip runs BEFORE the target is saved. It is a lifecycle move the source's repository
+        // enforces, so a move the graph does not declare must throw with nothing yet created - flipping
+        // afterwards left a committed document behind whose source never transitioned, and the guard on
+        // the back-reference then made a redelivery return that document instead of repairing the flip.
+        // The publish stays last: the transition is complete only once the document it was about exists.
+        int flip = generate.indexOf("updateProperty(sourceId, \"Status\", 3)");
+        int save = generate.indexOf("Repository().save(target)");
+        int publish = generate.indexOf(TRANSITIONED_PUBLISH);
+        assertTrue(flip < save, "the source flip must precede the target save, got flip@" + flip + " save@" + save);
+        assertTrue(save < publish, "the -transitioned publish must follow the target save, got save@" + save + " publish@" + publish);
 
         // The custom-action BUTTON localizes like every other label: the descriptor carries the
         // model-catalog translation key (the renderer shows T(translation.key, label)), and the
