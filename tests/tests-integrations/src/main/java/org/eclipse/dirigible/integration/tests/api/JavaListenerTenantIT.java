@@ -38,7 +38,7 @@ import org.springframework.test.annotation.DirtiesContext;
  *
  * <p>
  * This is the symmetry the whole glue layer of a generated intent application rests on: the
- * generated repository publishes through {@code Producer.sendToTopic}, and every process trigger,
+ * generated repository publishes its writes through the event outbox, and every process trigger,
  * notification, roll-up, transition and posting subscribes on the client-Java
  * {@code MessageHandler} / {@code @Listener} path. The producer resolves a tenant-prefixed
  * destination per call while the subscriber used to bind the raw name once for the whole JVM, so

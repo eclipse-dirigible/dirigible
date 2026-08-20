@@ -26,9 +26,16 @@ import gen.${javaGenFolderName}.data.${javaRegisterPerspective}.${registerEntity
  * logged with the keys and the date that were checked.
  *
  * A record that already carries ${setProperty} is skipped, so a manual correction is never overwritten
- * and a re-delivered event is a no-op. The write is TARGETED (updateProperties) - only the resolved
- * column, the outcome and the status are in the UPDATE statement, so a concurrent user write to any
- * other column cannot be reverted, and no "-updated" event re-fires.
+ * and a re-delivered event is a no-op. The writes are TARGETED (updateProperties / updateProperty) -
+ * only the resolved column, the outcome and the status are in the UPDATE statements, so a concurrent
+ * user write to any other column cannot be reverted, and no "-updated" event re-fires. The result and
+ * the routing status go out SEPARATELY, so a rejected status move cannot discard the identification -
+ * see stamp().
+ *
+ * When an outcome routes the record by status, the "-transitioned" topic IS published afterwards, so
+ * that an automatic resolution reaches the same constructs a manual transition does - `generates:` and
+ * `postings:` bound to `event: { onTransition: ... }`. A targeted write raises no event of its own, so
+ * this publish is the only thing that makes the automatic path observable at all.
  */
 @Component("${javaGenFolderName}_${className}Resolve")
 public class ${className}Resolve implements MessageHandler {
@@ -106,10 +113,24 @@ public class ${className}Resolve implements MessageHandler {
     }
 
     /**
-     * One targeted write carrying everything this attempt decided: the resolved relation when there is
-     * one, the outcome trace, and the routing status. Nothing else of the record is touched.
+     * Persists what this attempt decided, in two writes rather than one, and in that order deliberately.
+     *
+     * First the RESULT - the resolved relation and the outcome trace - because that is the work: the
+     * register was read, exactly one row covered the date, and this is the answer. Then, separately, the
+     * ROUTING status.
+     *
+     * They were one updateProperties call, and the DAO runs the lifecycle and checks gates against the
+     * post-write row BEFORE persisting anything, so a rejected status move discarded the relation and the
+     * trace with it: the lookup did the work, got the right answer, and threw all of it away - including
+     * the field whose entire purpose is recording what happened. Split, a rejected transition can no
+     * longer destroy the identification, and the audit trace is the LAST thing a failure can take.
+     *
+     * Nothing else of the record is touched (both writes are targeted), so no "-updated" re-fires and a
+     * concurrent write to any other column cannot be reverted. A targeted write also publishes NO event,
+     * so a status that IS written announces itself - see the "-transitioned" publish below.
      */
     private static void stamp(Object id, String outcome, Integer resolved#if($writesStatus == "true"), Integer status#end) {
+        ${entity}Repository repository = new ${entity}Repository();
         java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
         if (resolved != null) {
             values.put("${setProperty}", resolved);
@@ -117,14 +138,42 @@ public class ${className}Resolve implements MessageHandler {
 #if($outcomeProperty != "")
         values.put("${outcomeProperty}", outcome);
 #end
+        if (!values.isEmpty()) {
+            repository.updateProperties(id, values);
+        }
 #if($writesStatus == "true")
         if (status != null) {
-            values.put("${statusProperty}", status);
+            try {
+                repository.updateProperty(id, "${statusProperty}", status);
+                // The status this lookup just routed the record to IS a transition, and the constructs
+                // that react to one - `generates:` and `postings:` bound to `event: { onTransition: ... }`
+                // - listen on "-transitioned". The targeted write above publishes nothing at all, so
+                // without this the AUTOMATIC path silently did nothing while the manual one (a
+                // `transitions:` button, which does publish) worked: exactly the wrong way round, and with
+                // no log line to show it. Inside the try on purpose - a status the record could not take
+                // is not a transition, so a rejected move must announce nothing. Reload so the payload
+                // carries the committed row rather than the pre-write snapshot, the same shape the
+                // transition controller and the create-from completion hook publish.
+                ${entity}Entity transitioned = repository.findById(id);
+                if (transitioned != null) {
+                    org.eclipse.dirigible.sdk.messaging.Producer.sendToTopic("${projectName}-${perspective}-${entity}-transitioned",
+                            Json.stringify(transitioned));
+                }
+            } catch (org.eclipse.dirigible.sdk.db.ValidationException rejected) {
+                // The record cannot take this status where it currently stands - an unmodeled lifecycle
+                // move, or a gate the status would trip. Retrying cannot help (nothing about the record
+                // changes by re-reading the register), so the failure is recorded rather than thrown: the
+                // relation and the outcome above are already committed and stay that way.
+                LOG.warn("${name}: ${entity} [{}] resolved [{}] but could not be routed to status [{}] - [{}]", id, outcome, status,
+                        rejected.getMessage());
+#if($outcomeProperty != "")
+                // Amend the trace so the record itself carries the evidence - otherwise a
+                // routed-but-rejected record is indistinguishable from a fully processed one.
+                repository.updateProperty(id, "${outcomeProperty}", outcome + "-notRouted");
+#end
+            }
         }
 #end
-        if (!values.isEmpty()) {
-            new ${entity}Repository().updateProperties(id, values);
-        }
     }
 
     /**

@@ -30,11 +30,27 @@ import org.eclipse.dirigible.sdk.http.Response;
  * single caller.
 #end
 #if($hasEvent)
+#if($appendMode)
+ *
+ * Appends (intent `mode: append`): it is triggered by a ${fromEntity} event and keeps NO existing-target
+ * lookup, so every delivery creates another ${toEntity} - the "a row per event" shape (a log, a
+ * protocol). The ${backRefProperty} back-reference is still written on each row: it is that row's
+ * provenance, not a dedup key. This is the ABSENCE of a guard, so an event redelivery appends a
+ * duplicate; use `mode: once` for anything that must exist at most once.
+#{else}
  *
  * At-most-once: it is triggered by a ${fromEntity} event, so it first looks for a ${toEntity} that
  * already back-references the source through ${backRefProperty} and returns that one instead of
- * creating a second document. A create-from with no event trigger deliberately keeps NO such guard -
- * minting several targets from one source is a legitimate manual act.
+ * creating a second document. That holds for the LIFETIME of that document, not merely for a
+ * redelivery of the same event.
+#if($hasRetiredStatus)
+ * The exception is a RETIRED one: a ${toEntity} whose ${retiredStatusProperty} reached a stage classified
+ * `cancelled` or `void` no longer counts, so the guard steps over it and the ${fromEntity} can be
+ * generated from again - void and reissue. A draft or live ${toEntity} still blocks.
+#end
+ * A create-from with no event trigger deliberately keeps NO such guard - minting several targets from
+ * one source is a legitimate manual act.
+#end
 #end
  */
 #if(!$eventOnly)
@@ -88,7 +104,7 @@ public class ${className}Generate {
         if (source == null) {
             return null;
         }
-#if($hasEvent)
+#if($hasEvent && !$appendMode)
         // Already generated for this source (an event redelivery, or a click after the event) - hand back
         // the existing document rather than minting a duplicate. Best-effort against two concurrent
         // deliveries until a UNIQUE key on the back-reference lands, exactly as postings' guard is.
@@ -96,9 +112,20 @@ public class ${className}Generate {
                 new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().findAll(
                         Criteria.create()
                                 .eq("${backRefProperty}", sourceId));
+#if(!$hasRetiredStatus)
         if (!existing.isEmpty()) {
             return existing.get(0);
         }
+#else
+        // ...unless that document was retired: a ${retiredStatusProperty} classified `cancelled` or `void`
+        // (the seeded `stage:` classification) means the ${toEntity} no longer counts, so the ${fromEntity}
+        // may be generated from again - void and reissue. A draft or live one still blocks (dirigible #6814).
+        for (gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity candidate : existing) {
+            if (candidate.${retiredStatusProperty} == null || !(${retiredStatusCondition})) {
+                return candidate;
+            }
+        }
+#end
 #end
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity target =
                 new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity();
@@ -119,6 +146,23 @@ public class ${className}Generate {
             }
         }
 #end
+#end
+#if($sourceStatusValue != "")
+        // Completion hook (intent `sourceStatus:`): the source document reaches its post-generation status
+        // (e.g. a proforma flips to INVOICED). It runs BEFORE the target is saved, and that ordering is the
+        // whole point: the flip is a lifecycle move the source's repository enforces, so a move its graph
+        // does not declare throws here - with nothing yet created. Flipping AFTER the save left a committed
+        // document behind whose source never transitioned and never published "-transitioned", so every
+        // posting and integration keyed on the new status silently never ran; and because the guard above
+        // returns on the existing document, a redelivery could not repair it either. This way a redelivery
+        // re-runs the flip as a no-op (previous == next) and goes on to create what is missing.
+        // Flip ONLY the status column through the targeted single-column primitive. A full-row
+        // updateWithoutEvent(source) would merge the snapshot loaded at the top of create() and silently
+        // revert any concurrent write to the source row (recalculated totals, a workflow status). Same
+        // reason the process trigger writes ProcessId via updateProperty rather than update().
+        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
+                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository();
+        sourceRepository.updateProperty(sourceId, "${sourceStatusProperty}", ${sourceStatusValue});
 #end
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved =
                 new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().save(target);
@@ -157,20 +201,11 @@ public class ${className}Generate {
 #end
 #end
 #if($sourceStatusValue != "")
-        // Completion hook (intent `sourceStatus:`): the source document reaches its post-generation
-        // status now that the target exists (e.g. a proforma flips to INVOICED). A workflow-style
-        // system write - no "-updated" re-fire (no onUpdate reactions), but the dedicated
-        // "-transitioned" topic IS published so posting glue / integrations observe the transition.
-        // Flip ONLY the status column through the targeted single-column primitive. A full-row
-        // updateWithoutEvent(source) would merge the snapshot loaded at the top of create() - taken
-        // BEFORE the target and its items were created - and silently revert any concurrent write to the
-        // source row in that window (recalculated totals, a workflow status). Same reason the process
-        // trigger writes ProcessId via updateProperty rather than update().
-        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
-                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository();
-        sourceRepository.updateProperty(sourceId, "${sourceStatusProperty}", ${sourceStatusValue});
-        // Reload so the "-transitioned" payload carries the committed row (the flipped status plus any
-        // write the target creation performed on the source), not the stale pre-generation snapshot.
+        // The transition is only COMPLETE now that the document it was about exists, so this is where it
+        // is announced: a workflow-style system write - no "-updated" re-fire (no onUpdate reactions), but
+        // the dedicated "-transitioned" topic IS published so posting glue / integrations observe it.
+        // Reload so the payload carries the committed row (the flipped status plus any write the target
+        // creation performed on the source), not the stale pre-generation snapshot.
         source = sourceRepository.findById(sourceId);
         org.eclipse.dirigible.sdk.messaging.Producer.sendToTopic(
                 "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned", Json.stringify(source));

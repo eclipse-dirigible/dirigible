@@ -1,5 +1,8 @@
 package gen.events.${javaGenFolderName};
 
+#if($lookups.size() > 0)
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+#end
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.log.Logger;
 import org.eclipse.dirigible.sdk.log.Logging;
@@ -18,6 +21,18 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * body, so validations, translations and the create event all fire as they do for any other write.
  * Self-describing MessageHandler (strong-interface style): the destination and kind come from the
  * interface, not an annotation.
+#if($hasAccept)
+ *
+ * The declared accept gate (${acceptSummary}) is checked first. A message that does not match is
+ * acknowledged and IGNORED with a warning - never failed, since failing it would only have it
+ * redelivered, and a sender rolling out a new version must not fill this destination's error path.
+#end
+#if($hasMap)
+ *
+ * The payload is an envelope, so it is read as one and projected onto the record by the declared
+ * map - a key the map does not name is not the record's business. A business-key lookup that
+ * resolves to no single row REJECTS the message rather than storing a null relation.
+#end
  */
 @Component("${javaGenFolderName}_${className}Consumer")
 public class ${className}Consumer implements MessageHandler {
@@ -36,11 +51,55 @@ public class ${className}Consumer implements MessageHandler {
 
     @Override
     public void onMessage(String message) {
+#if($hasEnvelope)
+        java.util.Map<?, ?> envelope = Json.parse(message, java.util.Map.class);
+        if (envelope == null) {
+            LOG.warn("Inbound ${name}: an empty or invalid payload arrived on [{}] - nothing ingested", destination());
+            return;
+        }
+#end
+#if($hasAccept)
+        if (!(${acceptExpression})) {
+            LOG.warn("Inbound ${name}: a message on [{}] does not match accept [{}] - acknowledged and ignored", destination(),
+                    ${acceptSummaryLiteral});
+            return;
+        }
+#end
+#if($hasMap)
+        ${entity}Entity entity = new ${entity}Entity();
+#foreach($field in $mapFields)
+        {
+            Object raw = envelope.get(${field.fromLiteral});
+            if (raw != null) {
+                entity.${field.property} = ${field.expression};
+            }
+        }
+#end
+#foreach($lookup in $lookups)
+        Object ${lookup.local}Key = envelope.get(${lookup.fromLiteral});
+        if (${lookup.local}Key == null) {
+            LOG.error("Inbound ${name}: a message on [{}] carries no [{}] to resolve ${lookup.property} by - NOT ingested", destination(),
+                    ${lookup.fromLiteral});
+            return;
+        }
+        java.util.List<gen.${javaGenFolderName}.data.${lookup.javaTargetPerspective}.${lookup.targetEntity}Entity> ${lookup.local}Matches =
+                new gen.${javaGenFolderName}.data.${lookup.javaTargetPerspective}.${lookup.targetEntity}Repository()
+                        .findAll(Criteria.create()
+                                         .eq("${lookup.byProperty}", ${lookup.byValueExpression}));
+        if (${lookup.local}Matches.size() != 1) {
+            LOG.error("Inbound ${name}: no unique ${lookup.targetEntity} matches ${lookup.byProperty} [{}] from [{}] - NOT ingested",
+                    ${lookup.local}Key, ${lookup.fromLiteral});
+            return;
+        }
+        entity.${lookup.property} = ${lookup.local}Matches.get(0).${lookup.targetKeyProperty};
+#end
+#else
         ${entity}Entity entity = Json.parse(message, ${entity}Entity.class);
         if (entity == null) {
             LOG.warn("Inbound ${name}: an empty or invalid payload arrived on [{}] - nothing ingested", destination());
             return;
         }
+#end
         new ${entity}Repository().save(entity);
     }
 

@@ -40,7 +40,6 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import jakarta.jms.Connection;
-import jakarta.jms.Destination;
 import jakarta.jms.JMSException;
 import jakarta.jms.Message;
 import jakarta.jms.MessageConsumer;
@@ -92,6 +91,9 @@ import jakarta.jms.TextMessage;
 public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvisioningStep {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ListenerClassConsumer.class);
+
+    /** Width of the broker's client-id and durable-subscription-name columns. */
+    private static final int MAX_SUBSCRIPTION_ID_LENGTH = 200;
 
     private final ComponentContainer componentContainer;
     private final ActiveMQConnectionArtifactsFactory connectionFactory;
@@ -263,13 +265,22 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
     private Connection subscribe(Subscription subscription, String scope) {
         String label = subscription.label();
         String destinationName = destinationNameManager.toTenantName(subscription.destination());
+        // A queue holds its messages until something consumes them; a topic drops whatever it delivers
+        // to nobody. So only a topic subscription needs to be durable - and a durable one needs the
+        // connection to carry an id, which is how the broker recognises it across a reconnect.
+        boolean topic = subscription.kind() == ListenerKind.TOPIC;
+        String subscriptionId = topic ? durableSubscriptionId(label, destinationName) : null;
         try {
             Connection connection = connectionFactory.createConnection(
-                    ex -> LOGGER.error("[java-listener] JMS error for [{}]: {}", label, ex.getMessage(), ex));
+                    ex -> LOGGER.error("[java-listener] JMS error for [{}]: {}", label, ex.getMessage(), ex), subscriptionId);
             Session session = connectionFactory.createSession(connection);
-            Destination destination =
-                    subscription.kind() == ListenerKind.TOPIC ? session.createTopic(destinationName) : session.createQueue(destinationName);
-            MessageConsumer consumer = session.createConsumer(destination);
+            // Durable, because this subscription goes down on every republish: the handler set is torn
+            // down and re-registered, and a plain subscriber would silently lose every event published
+            // in that window - a record created mid-republish would never start its process, resolve
+            // its register or post its document, and would look exactly like one the automation had
+            // nothing to do for.
+            MessageConsumer consumer = topic ? session.createDurableSubscriber(session.createTopic(destinationName), subscriptionId)
+                    : session.createConsumer(session.createQueue(destinationName));
             consumer.setMessageListener(msg -> dispatch(msg, subscription.dispatcher(), label));
             LOGGER.info("Java @Listener [{}] connected to {} '{}' for {}.", label, subscription.kind(), destinationName, scope);
             return connection;
@@ -277,6 +288,27 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
             LOGGER.error("Failed to start listener for [{}] for {}: {}", label, scope, e.getMessage(), e);
             return null;
         }
+    }
+
+    /**
+     * The identity the broker remembers a durable subscription by. It has to be <b>stable</b> - the
+     * same handler on the same physical destination must derive the same id on every reload, because an
+     * id that varied would start a fresh subscription each time, retaining nothing and stranding the
+     * previous one - and unique per live subscription, which the handler's label and the
+     * tenant-resolved destination name together already are.
+     *
+     * @param label the handler this subscription dispatches to
+     * @param destinationName the physical, tenant-resolved destination
+     * @return the durable subscription id
+     */
+    private static String durableSubscriptionId(String label, String destinationName) {
+        String id = ("dirigible-java-" + label + "-" + destinationName).replaceAll("[^A-Za-z0-9._-]", "_");
+        if (id.length() <= MAX_SUBSCRIPTION_ID_LENGTH) {
+            return id;
+        }
+        // Keep it within the broker's column width without letting two long ids collapse into one.
+        String digest = Integer.toHexString(id.hashCode());
+        return id.substring(0, MAX_SUBSCRIPTION_ID_LENGTH - digest.length() - 1) + "-" + digest;
     }
 
     private synchronized void stopExisting(String fqn) {

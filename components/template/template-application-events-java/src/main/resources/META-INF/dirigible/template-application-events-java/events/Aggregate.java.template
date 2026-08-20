@@ -23,10 +23,13 @@ import gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Rep
  * idempotent - re-delivery or replay converges to the same value). A source row with any grouping key
  * null is ignored (it belongs to no tuple).
  *
- * A key change MOVES a row between tuples, and both sides are repaired: the tuple it moved into is
- * recomputed off the "-updated" event like any other change, while the DAO publishes the PREVIOUS row
- * on "-rekeyed" (only when a grouping key actually moved), which the OnRekey copy of this handler
- * recomputes - the former tuple no longer contains the row, so its total drops instead of going stale.
+ * A key change MOVES a row between tuples, and both sides are repaired. The tuple it moved into is
+ * recomputed off the "-updated" event like any other change; the tuple it LEFT is named by no event of
+ * its own, so the DAO publishes the PREVIOUS row on "-rekeyed" (only when a grouping key actually moved)
+ * and the OnRekey copy of this handler recomputes it - the row is gone from it, so its total drops
+ * instead of going stale. A TARGETED write (a workflow setter, a resolver, a task-form writer) publishes
+ * no "-updated" at all, so it puts BOTH the previous and the written row on "-rekeyed" - the same
+ * handler, fed each side in turn.
  * A tuple whose last contributing row leaves keeps its target row with a zero total; the row is not
  * deleted. v1: same-model source + target, sum/count into a decimal target field.
  */

@@ -204,6 +204,15 @@ public enum DirigibleConfig {
     /** TTL in seconds for the native-app proxy lookup cache. */
     NATIVE_APP_REGISTRY_TTL_SECONDS("DIRIGIBLE_NATIVE_APP_REGISTRY_TTL_SECONDS", "60"),
 
+    /** Interval (seconds) between ticks of the relay that drains the entity event outbox. */
+    EVENT_OUTBOX_RELAY_INTERVAL_SECONDS("DIRIGIBLE_EVENT_OUTBOX_RELAY_INTERVAL_SECONDS", "30"),
+
+    /**
+     * Seconds an outbox entry is left alone after it was written (or last attempted) before the relay
+     * picks it up. Keeps the relay from racing the in-process dispatch that follows every commit.
+     */
+    EVENT_OUTBOX_RELAY_GRACE_SECONDS("DIRIGIBLE_EVENT_OUTBOX_RELAY_GRACE_SECONDS", "60"),
+
     /** Anthropic API key powering the Intent Editor's AI assistant; blank disables the assistant. */
     INTENT_AI_API_KEY("DIRIGIBLE_INTENT_AI_API_KEY", null),
 

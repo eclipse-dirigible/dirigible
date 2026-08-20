@@ -31,6 +31,7 @@ import org.eclipse.dirigible.components.intent.model.InboundSourceIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.OutboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
@@ -101,14 +102,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> schedules = buildSchedules(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings, context);
-        List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
-        List<Map<String, Object>> inboundMessages = buildInboundMessages(model, byName, compositionParents, settings);
-        List<Map<String, Object>> inboundFiles = buildInboundFiles(model, byName, compositionParents, settings);
+        List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> inboundMessages = buildInboundMessages(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> inboundFiles = buildInboundFiles(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> outbound = buildOutbound(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> stepEvents = buildStepEvents(model, compositionParents, settings);
         List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings, context);
-        List<Map<String, Object>> expansions = buildExpansions(model, byName, compositionParents, settings);
+        ExpansionHandlers expansionHandlers = buildExpansions(model, byName, compositionParents, settings);
+        List<Map<String, Object>> expansions = expansionHandlers.reconciliations();
+        List<Map<String, Object>> expansionCleanups = expansionHandlers.cleanups();
         List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> settlementListeners = buildSettlementListeners(settlements);
         List<Map<String, Object>> generates = buildGenerates(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> transitions = buildTransitions(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> sends = buildSends(model, byName, compositionParents, settings, context);
@@ -154,7 +158,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("stepEvents", stepEvents);
         glue.put("rollups", rollups);
         glue.put("expansions", expansions);
+        glue.put("expansionCleanups", expansionCleanups);
         glue.put("settlements", settlements);
+        glue.put("settlementListeners", settlementListeners);
         glue.put("generates", generates);
         // The event-driven subset (issue #6711) - the SAME descriptors, filtered, so the listener and
         // the create-from it calls can never be built from divergent data. A create-from with no event
@@ -580,10 +586,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // row is latest, or its value), and an edit that RE-PARENTS a child - the ordinary way a child
             // moves between parents - changes the count of the parent it moved TO. The recompute is the
             // same query for every op and reads the child rows back from the store, so the update handler
-            // is idempotent and never op-specific. (The parent the child moved AWAY from is still stale
-            // until roll-ups also consume the "-rekeyed" event - tracked separately.)
+            // is idempotent and never op-specific. (The parent the child moved AWAY from is repaired by
+            // the RollupOnRekey handler below, off the "-rekeyed" event the DAO publishes for the move.)
             rollups.add(rollupEntry(base, className + "RollupOnUpdate", "-updated"));
             rollups.add(rollupEntry(base, className + "RollupOnDelete", "-deleted"));
+            // Re-parenting: the child's create/update/delete events all name the parent it belongs to NOW,
+            // so the parent it moved AWAY from is named by no event of theirs and kept the child's
+            // contribution forever (#6819). The DAO publishes the row on "-rekeyed" whenever a grouping
+            // column moves - the previous row from the full-row write, both the previous and the written
+            // one from the targeted writes that publish no "-updated" at all. It is the same recompute
+            // keyed on the payload's FK, so one handler repairs whichever side the payload names.
+            rollups.add(rollupEntry(base, className + "RollupOnRekey", "-rekeyed"));
         }
         return rollups;
     }
@@ -639,6 +652,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // junction (this project)
             e.put("junctionEntity", s.getJunction());
             e.put("junctionPerspective", IntentEntities.resolvePerspective(s.getJunction(), compositionParents, model));
+            e.put("junctionPk", IntentEntities.keyFieldName(junction));
             e.put("junctionFkInvoice", IntentNaming.pascalCase(fkInvoice.getName()));
             e.put("junctionFkPayment", IntentNaming.pascalCase(fkPayment.getName()));
             e.put("junctionAmount", IntentNaming.pascalCase(s.getAmount()));
@@ -654,6 +668,28 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * One payment-listener entry per settlement per event moment of the payment: its create AND its
+     * update. The allocation is written as a recompute of the payment's unallocated balance, so binding
+     * the correction event too is safe by construction - a re-delivery with nothing left to allocate
+     * does nothing. Bound to create alone (#6818), a payment booked for the wrong amount and corrected
+     * afterwards, or created in a draft state and completed later, was never (re-)allocated and the
+     * invoice silently kept the original settled figure.
+     *
+     * @param settlements the settlement descriptors
+     * @return one entry per settlement per bound event
+     */
+    private static List<Map<String, Object>> buildSettlementListeners(List<Map<String, Object>> settlements) {
+        List<Map<String, Object>> listeners = new ArrayList<>();
+        for (Map<String, Object> settlement : settlements) {
+            String name = String.valueOf(settlement.get("name"));
+            // The create handler keeps its established class name; the correction one is suffixed.
+            listeners.add(rollupEntry(settlement, name + "OnPayment", ""));
+            listeners.add(rollupEntry(settlement, name + "OnPaymentUpdated", "-updated"));
+        }
+        return listeners;
     }
 
     /**
@@ -718,6 +754,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // always did (a regeneration from an older glue file must not silently drop the button).
             e.put("eventOnly", !g.hasButton());
             putGeneratesEvent(g, e, fromPk);
+            putSupersededTarget(g, e, model, crossModel ? null : byName.get(g.getTo()), context);
             // Cross-model source: the gen folder and the project that owns the source's topics/views.
             e.put("crossModelSource", crossModelSource);
             e.put("fromModel", crossModelSource ? g.getFromUses() : "");
@@ -858,18 +895,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The event half of a create-from (issue #6711), pre-rendered onto its glue entry: the trigger kind
-     * (an {@code onCreate} binds the source's bare create topic, an {@code onTransition} its
-     * {@code -transitioned} topic), the status guard as a property/value pair evaluated against the
-     * RE-LOADED source, and the back-reference the at-most-once guard reads.
+     * The event half of a create-from (issues #6711, #6800), pre-rendered onto its glue entry: the
+     * topic suffix the listener binds to (an {@code onCreate} the source's bare create topic, an
+     * {@code onTransition} its {@code -transitioned} topic, a step binding the step-scoped topic the
+     * generated emitter publishes to), the optional status guard as a property/value pair evaluated
+     * against the RE-LOADED source, the cardinality, and the back-reference.
      *
      * <p>
      * The back-reference is DERIVED from the {@code map} entry that copies the source's primary key
      * rather than declared a second time: the mapping already says which target property points back at
      * the source, and two ways to say it could only drift. A missing one fails loudly here because
-     * without it the create-from has no way to recognize its own output, so an event redelivery would
-     * mint a duplicate document (the parser catches the local case earlier, with the fix in the
-     * message).
+     * without it the create-from has no way to recognize its own output (under {@code mode: once} an
+     * event redelivery would mint a duplicate document; under {@code mode: append} the appended row
+     * would not say what it is about) - the parser catches the local case earlier, with the fix in the
+     * message.
      *
      * @param g the create-from
      * @param e the glue entry being built
@@ -879,6 +918,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         e.put("hasEvent", g.isEventDriven());
         if (!g.isEventDriven()) {
             e.put("isCreate", false);
+            e.put("isStep", false);
+            e.put("topicSuffix", "");
+            e.put("appendMode", false);
             e.put("guardProperty", "");
             e.put("guardValue", "");
             e.put("backRefProperty", "");
@@ -887,6 +929,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         boolean isCreate = g.getEvent()
                             .get("onCreate") != null;
         e.put("isCreate", isCreate);
+        StepEventSupport.Binding step = StepEventSupport.binding(g.getEvent());
+        e.put("isStep", step != null);
+        e.put("stepProcess", step == null ? "" : step.process());
+        e.put("stepName", step == null ? "" : step.step());
+        e.put("topicSuffix",
+                step != null ? StepEventSupport.topicSuffix(step.process(), step.step(), step.kind()) : isCreate ? "" : "-transitioned");
+        // The cardinality (#6800): `append` drops the existing-target lookup in the create-from, so
+        // every delivery of the event creates a row. It is the absence of a guard, not another guard.
+        e.put("appendMode", g.isAppendMode());
         String guardProperty = "";
         String guardValue = "";
         Object whenValue = g.getEvent()
@@ -915,6 +966,87 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     + "] as its value) - it is the at-most-once guard against an event redelivery"));
         }
         e.put("backRefProperty", backReference);
+    }
+
+    /**
+     * The state half of the at-most-once guard (issue #6814): which of the target's statuses mean the
+     * document that already back-references the source no longer counts, so a replacement may be
+     * minted.
+     *
+     * <p>
+     * The guard as first shipped asked existence only - "is there a target for this source?" - and a
+     * voided or cancelled target answers yes forever: it keeps existing and keeps back-referencing the
+     * source, so the source's one-shot slot was consumed at the first creation and nothing that later
+     * happened to the target released it. "Void and reissue" - an ordinary business flow - was
+     * inexpressible for an event-driven create-from.
+     *
+     * <p>
+     * What a status MEANS is already declared once, where the nomenclature is seeded: the
+     * {@code stage:} classification (see {@link LifecycleStages}) the report scope resolves through. A
+     * target whose status is classified {@code cancelled} or {@code void} is retired, and the guard
+     * steps over it; {@code draft} and {@code live} ones still block, so a redelivered event keeps
+     * finding the document it created. Reusing the classification rather than adding a second way to
+     * say it is deliberate - two vocabularies for "this row no longer counts" could only drift.
+     *
+     * <p>
+     * Nothing is emitted when the create-from appends (there is no guard to make state-aware), when the
+     * target carries no lifecycle at all (there is no state to read), or for a cross-model target,
+     * whose seeds live in its owner model so no classification is resolvable here. A target that DOES
+     * carry a lifecycle whose nomenclature nobody classified gets the warning - that combination is the
+     * silent one, where the guard looks state-aware and is not.
+     *
+     * @param g the create-from
+     * @param e the glue entry being built
+     * @param model the model being generated
+     * @param target the local target entity, {@code null} for a cross-model target
+     * @param context the generation context collecting the warnings, may be {@code null}
+     */
+    private static void putSupersededTarget(GeneratesIntent g, Map<String, Object> e, IntentModel model, EntityIntent target,
+            IntentGenerationContext context) {
+        e.put("hasRetiredStatus", false);
+        e.put("retiredStatusProperty", "");
+        e.put("retiredStatusCondition", "");
+        // An appending create-from (issue #6800) keeps no guard at all, so there is nothing for a
+        // retired target to release - and warning about an unclassified nomenclature there would be
+        // noise about a guard that does not exist.
+        if (!g.isEventDriven() || g.isAppendMode()) {
+            return;
+        }
+        RelationIntent status = LifecycleStages.statusRelation(target);
+        if (status == null || status.getTo() == null) {
+            return;
+        }
+        Map<String, List<Integer>> stages = status.isCrossModel() ? Map.of() : LifecycleStages.stagesOf(model, status.getTo());
+        List<Integer> retired = new ArrayList<>(stages.getOrDefault(LifecycleStages.CANCELLED, List.of()));
+        retired.addAll(stages.getOrDefault(LifecycleStages.VOID, List.of()));
+        if (retired.isEmpty()) {
+            String warning = "generates [" + g.getName() + "] is event-driven and its target [" + g.getTo()
+                    + "] carries a lifecycle status [" + status.getName() + "], but no seed row of [" + status.getTo()
+                    + "] is classified with `stage:` - the at-most-once guard can only ask whether a [" + g.getTo()
+                    + "] exists, so a cancelled or voided one blocks its replacement forever. Classify the seed rows of [" + status.getTo()
+                    + "] with `stage:` (draft/live/cancelled/void) so a retired target can be superseded.";
+            LOGGER.warn(warning);
+            if (context != null) {
+                context.addIssue(warning);
+            }
+            return;
+        }
+        String property = IntentNaming.pascalCase(status.getName());
+        e.put("hasRetiredStatus", true);
+        e.put("retiredStatusProperty", property);
+        // Rendered against the template's loop variable: a retired candidate is stepped over, the first
+        // one that is not is this source's document.
+        StringBuilder condition = new StringBuilder();
+        for (Integer id : retired) {
+            if (condition.length() > 0) {
+                condition.append(" || ");
+            }
+            condition.append("candidate.")
+                     .append(property)
+                     .append(" == ")
+                     .append(id);
+        }
+        e.put("retiredStatusCondition", condition.toString());
     }
 
     /**
@@ -1135,6 +1267,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return buildSetters(model, IntentSettings.parse("{}"));
     }
 
+    /** Test hook: build the {@code expansions} glue collection without a repository. */
+    static List<Map<String, Object>> buildExpansionsForTest(IntentModel model) {
+        return buildExpansions(model, IntentEntities.byName(model), IntentEntities.compositionParents(model),
+                IntentSettings.parse("{}")).reconciliations();
+    }
+
     /** Test hook: build the {@code rollups} glue collection without a repository. */
     static List<Map<String, Object>> buildRollupsForTest(IntentModel model) {
         return buildRollups(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
@@ -1222,12 +1360,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /** Test hook: build the {@code inboundMessages} glue collection without a repository. */
     static List<Map<String, Object>> buildInboundMessagesForTest(IntentModel model) {
         return buildInboundMessages(model, IntentEntities.byName(model), IntentEntities.compositionParents(model),
-                IntentSettings.parse("{}"));
+                IntentSettings.parse("{}"), null);
     }
 
     /** Test hook: build the {@code inboundFiles} glue collection without a repository. */
     static List<Map<String, Object>> buildInboundFilesForTest(IntentModel model) {
-        return buildInboundFiles(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
+        return buildInboundFiles(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                null);
     }
 
     /** Test hook: build the {@code outbound} glue collection without a repository. */
@@ -1238,7 +1377,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /** Test hook: build the {@code inbound} (HTTP webhook) glue collection without a repository. */
     static List<Map<String, Object>> buildInboundForTest(IntentModel model) {
-        return buildInbound(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
+        return buildInbound(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                null);
     }
 
     /**
@@ -1626,8 +1766,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * mapping shape.
      */
     static List<Map<String, Object>> buildGeneratesForTest(IntentModel model) {
+        return buildGeneratesForTest(model, null);
+    }
+
+    /**
+     * Test hook: build the {@code generates} glue collection against a context, so the warnings a
+     * create-from collects (an event-driven one whose target lifecycle nobody classified) are readable.
+     */
+    static List<Map<String, Object>> buildGeneratesForTest(IntentModel model, IntentGenerationContext context) {
         return buildGenerates(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
-                null);
+                context);
     }
 
     /**
@@ -2469,6 +2617,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return sb.toString();
     }
 
+    /**
+     * Copies a descriptor into one per-event handler entry - the shape shared by every recompute-style
+     * listener (roll-ups, expansions, settlements): the same descriptor rendered once per bound event,
+     * distinguished only by its class name and the topic suffix it binds.
+     *
+     * @param base the descriptor
+     * @param className the generated handler class name
+     * @param topicSuffix the bound event's topic suffix
+     * @return the entry
+     */
     private static Map<String, Object> rollupEntry(Map<String, Object> base, String className, String topicSuffix) {
         Map<String, Object> entry = new LinkedHashMap<>(base);
         entry.put("className", className);
@@ -2477,15 +2635,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Period expansions: per expansion, two handlers - on the master's create and update events - that
-     * (re)generate the child rows for the span. Everything type-dependent (the defaults literals, the
-     * count write-back) is pre-rendered here as Java lines so the template stays shape-only; the child
-     * rows go through the child repository, so their create/delete events fire and downstream
-     * roll-ups/guards run exactly as for hand-entered rows.
+     * Period expansions: per expansion, three handlers - on the master's create and update events, that
+     * reconcile the child rows for the span as a diff (insert the missing periods, delete the ones that
+     * fell out of it, keep the rest), and on its delete event, that removes them again. Everything
+     * type-dependent (the defaults literals, the count write-back) is pre-rendered here as Java lines
+     * so the template stays shape-only; the child rows go through the child repository, so their
+     * create/delete events fire and downstream roll-ups/guards run exactly as for hand-entered rows.
      */
-    private static List<Map<String, Object>> buildExpansions(IntentModel model, Map<String, EntityIntent> byName,
+    private static ExpansionHandlers buildExpansions(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentSettings settings) {
         List<Map<String, Object>> expansions = new ArrayList<>();
+        List<Map<String, Object>> cleanups = new ArrayList<>();
         for (ExpansionIntent expansion : model.getExpansions()) {
             if (expansion.getName() == null || expansion.getName()
                                                         .isBlank()) {
@@ -2530,6 +2690,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             base.put("masterPk", IntentEntities.keyFieldName(master));
             base.put("childEntity", expansion.getInto());
             base.put("childPerspective", IntentEntities.resolvePerspective(expansion.getInto(), compositionParents, model));
+            // The child's key: the reconciliation keeps the rows whose period survives a span change and
+            // re-spreads their share by id, so it needs the primary key property to address them.
+            base.put("childPk", IntentEntities.keyFieldName(child));
             base.put("fkProperty", fkProperty);
             base.put("startProperty", IntentNaming.pascalCase(expansion.getBetween()
                                                                        .getStart()));
@@ -2560,8 +2723,21 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             String className = IntentNaming.pascalIdentifier(expansion.getName()) + "Expansion";
             expansions.add(rollupEntry(base, className + "OnCreate", ""));
             expansions.add(rollupEntry(base, className + "OnUpdate", "-updated"));
+            cleanups.add(rollupEntry(base, className + "OnDelete", "-deleted"));
         }
-        return expansions;
+        return new ExpansionHandlers(expansions, cleanups);
+    }
+
+    /**
+     * The handlers an intent's expansions contribute, split by the template that renders them: the
+     * reconciliation pair per expansion, and the cleanup that removes the generated rows when their
+     * master is deleted. They are two collections rather than one because a template source renders
+     * once per collection entry, and the cleanup's body shares nothing with the reconciliation's.
+     *
+     * @param reconciliations the create/update handlers
+     * @param cleanups the master-delete handlers
+     */
+    private record ExpansionHandlers(List<Map<String, Object>> reconciliations, List<Map<String, Object>> cleanups) {
     }
 
     /** Pre-rendered Java assignment lines for the expansion's literal child defaults. */
@@ -2659,13 +2835,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     private static List<Map<String, Object>> buildInbound(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> inbound = new ArrayList<>();
         for (InboundIntent webhook : model.getInbound()) {
             if (webhook.getSource() != null) {
                 continue; // a non-HTTP source is its own collection (its own generated handler shape)
             }
-            Map<String, Object> entry = inboundEntry(webhook, model, byName, compositionParents, settings, "controller");
+            Map<String, Object> entry = inboundEntry(webhook, model, byName, compositionParents, settings, "controller", context);
             if (entry == null) {
                 continue;
             }
@@ -2680,7 +2856,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * record off the declared destination and saving it exactly as the webhook does with a posted body.
      */
     private static List<Map<String, Object>> buildInboundMessages(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> messages = new ArrayList<>();
         for (InboundIntent ingest : model.getInbound()) {
             InboundSourceIntent source = ingest.getSource();
@@ -2691,7 +2867,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (!queue && !topic) {
                 continue;
             }
-            Map<String, Object> entry = inboundEntry(ingest, model, byName, compositionParents, settings, "consumer");
+            Map<String, Object> entry = inboundEntry(ingest, model, byName, compositionParents, settings, "consumer", context);
             if (entry == null) {
                 continue;
             }
@@ -2707,7 +2883,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * saving every record of every file that arrived.
      */
     private static List<Map<String, Object>> buildInboundFiles(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> files = new ArrayList<>();
         for (InboundIntent ingest : model.getInbound()) {
             InboundSourceIntent source = ingest.getSource();
@@ -2715,7 +2891,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                                       .isBlank()) {
                 continue;
             }
-            Map<String, Object> entry = inboundEntry(ingest, model, byName, compositionParents, settings, "job");
+            Map<String, Object> entry = inboundEntry(ingest, model, byName, compositionParents, settings, "job", context);
             if (entry == null) {
                 continue;
             }
@@ -2729,9 +2905,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /**
      * The facts every inbound ingest shares, whatever it arrives on - or {@code null} when the entry is
      * unusable (no name, an unknown entity) or the developer opted out of generating it.
+     *
+     * <p>
+     * The declared {@code accept:} gate and {@code map:} projection are shared too: what an arrival's
+     * payload looks like has nothing to do with what it travelled on, so all three handler shapes read
+     * it from the same plan. A mapping that cannot be resolved drops the whole arrival with the reason
+     * - ingesting the raw payload instead would silently store something else.
      */
     private static Map<String, Object> inboundEntry(InboundIntent ingest, IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings, String handlerNoun) {
+            Map<String, String> compositionParents, IntentSettings settings, String handlerNoun, IntentGenerationContext context) {
         if (ingest.getName() == null || ingest.getName()
                                               .isBlank()) {
             return null;
@@ -2744,11 +2926,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             LOGGER.info("Settings opt-out: keeping existing {} for inbound [{}] (not generated)", handlerNoun, ingest.getName());
             return null;
         }
+        ArrivalSupport.Plan arrival;
+        try {
+            arrival = ArrivalSupport.plan(ingest, byName.get(entity), byName, compositionParents, model);
+        } catch (IllegalArgumentException ex) {
+            reportDroppedGlue(context, "Inbound [" + ingest.getName() + "]: " + ex.getMessage() + " - the arrival was NOT generated");
+            return null;
+        }
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("name", ingest.getName());
         entry.put("className", IntentNaming.pascalCase(ingest.getName()));
         entry.put("entity", entity);
         entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
+        entry.putAll(ArrivalSupport.arrivalFields(arrival));
         return entry;
     }
 

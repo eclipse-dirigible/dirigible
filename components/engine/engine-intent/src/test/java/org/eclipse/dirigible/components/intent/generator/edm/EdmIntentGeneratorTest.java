@@ -777,15 +777,48 @@ class EdmIntentGeneratorTest {
 
         // The aggregate's SOURCE entity carries its grouping keys + pk, so the DAO can detect that a
         // key moved and let the aggregate repair the tuple the row left (there is no event for it).
-        List<Map<String, String>> sourceKeys = (List<Map<String, String>>) movement.get("aggregateKeys");
+        List<Map<String, String>> sourceKeys = (List<Map<String, String>>) movement.get("groupingKeys");
         assertEquals(2, sourceKeys.size(), "the aggregate source must carry every grouping key");
         assertEquals("Product", sourceKeys.get(0)
                                           .get("key"));
         assertEquals("Store", sourceKeys.get(1)
                                         .get("key"));
-        assertEquals("Id", movement.get("aggregateSourcePk"));
+        assertEquals("Id", movement.get("groupingSourcePk"));
         // The TARGET is not a source, so it carries no rekey metadata.
-        assertNull(entityByName(entities(model), "ProductAvailability").get("aggregateKeys"));
+        assertNull(entityByName(entities(model), "ProductAvailability").get("groupingKeys"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void rollupChildCarriesItsParentFkAsAGroupingKey() {
+        String yaml = """
+                name: orders
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: orderCount, type: integer }
+                    relations:
+                      - { name: orders, kind: oneToMany, to: Order }
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                rollups:
+                  - { name: orderCount, entity: Order, via: Customer, field: orderCount, op: count }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "orders");
+        // Re-parenting a roll-up child moves its rows between parents exactly as an aggregate key does,
+        // so the child must carry the `via` FK too - the DAO compares it and publishes "-rekeyed", which
+        // is the only signal the parent the child moved AWAY from ever gets (#6819).
+        List<Map<String, String>> keys = (List<Map<String, String>>) entityByName(entities(model), "Order").get("groupingKeys");
+        assertEquals(1, keys.size(), "a roll-up child must track its parent FK");
+        assertEquals("Customer", keys.get(0)
+                                     .get("key"));
+        assertEquals("Id", entityByName(entities(model), "Order").get("groupingSourcePk"));
+        // The PARENT of a roll-up is not grouped by anything - only the child moves.
+        assertNull(entityByName(entities(model), "Customer").get("groupingKeys"));
     }
 
     /**

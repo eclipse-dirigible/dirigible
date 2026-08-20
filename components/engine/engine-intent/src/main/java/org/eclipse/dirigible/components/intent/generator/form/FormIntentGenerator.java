@@ -20,6 +20,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
@@ -71,11 +72,14 @@ import org.springframework.stereotype.Component;
  * When the form backs a BPM user task it is rendered <b>read-only by default</b> (each control is
  * marked {@code readonly}; the runtime shows a Label: Value card), with only the fields listed in
  * {@code editable} kept as bound inputs - those edits are written back to the entity by the
- * process's writer service task. A {@code close} action is auto-appended (a non-completing button
- * that just closes the form/dialog, like the dialog frame's X), so the task stays open in the
- * inbox. The form's other actions are the task's choices: list {@code approve}/{@code reject} when
- * a decision branches on the chosen {@code action}, or a single action (e.g. {@code issue}) when
- * the task flows on linearly with no branching.
+ * process's writer service task. An {@code editable} entry naming a <b>to-one relation</b> renders
+ * as a picker over the related records ({@code input-select}) rather than an input, which is what
+ * lets a person choose the driver / the account / the approver inside the flow instead of in a
+ * separate entity form. A {@code close} action is auto-appended (a non-completing button that just
+ * closes the form/dialog, like the dialog frame's X), so the task stays open in the inbox. The
+ * form's other actions are the task's choices: list {@code approve}/{@code reject} when a decision
+ * branches on the chosen {@code action}, or a single action (e.g. {@code issue}) when the task
+ * flows on linearly with no branching.
  * <p>
  * Actions become buttons in a trailing {@code container-hbox}. The button {@code type} is inferred
  * from the action name ({@code approve} -> positive, {@code reject}/{@code decline}/{@code delete}
@@ -409,7 +413,12 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                 // Task-form fields are read-only unless explicitly opted in via `editable`; other forms
                 // keep the legacy "editable except a generated PK" behavior.
                 boolean readonly = isTaskForm ? !editable.contains(fieldName) : isReadonlyByDefault(fieldsByName.get(fieldName));
-                controls.add(fieldControl(fieldName, fieldsByName.get(fieldName), readonly));
+                RelationIntent relation = fieldsByName.containsKey(fieldName) || entity == null ? null : toOneRelation(entity, fieldName);
+                if (relation != null && !readonly) {
+                    controls.add(relationPickerControl(relation, entitiesByName));
+                } else {
+                    controls.add(fieldControl(fieldName, fieldsByName.get(fieldName), readonly));
+                }
             }
         }
         List<String> actions = effectiveActions(form, isTaskForm);
@@ -421,6 +430,41 @@ public class FormIntentGenerator implements IntentTargetGenerator {
 
     private static boolean isReadonlyByDefault(FieldIntent field) {
         return field != null && field.isPrimaryKey() && field.isGenerated();
+    }
+
+    /**
+     * The picker for an {@code editable} to-one relation - the one control on a task form that lets a
+     * person choose a RELATED RECORD (the driver, the account, the approver) rather than type a value.
+     * <p>
+     * Its {@code model} is the FK property, so the chosen id lands in the process variable the
+     * generated Writer reads. The option list is NOT a URL baked in here - the intent layer must stay
+     * agnostic about the paths a template publishes. Instead it names the two process variables the
+     * trigger listener already seeds for every to-one relation of its trigger entity:
+     * {@code __<Fk>EntityUrl} (the target's controller) and {@code __<Fk>EntityLabel} (which property
+     * to show). The form runtime reads the URL out of its own model and loads the options from there,
+     * the same coordinates it already uses to render a read-only FK as a name.
+     * <p>
+     * {@code optionValue} is the target's own key property - a logical model name, which this layer
+     * does know.
+     */
+    private static Map<String, Object> relationPickerControl(RelationIntent relation, Map<String, EntityIntent> entitiesByName) {
+        String property = IntentNaming.pascalCase(relation.getName());
+        EntityIntent target = entitiesByName.get(relation.getTo());
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("controlId", "input-select");
+        map.put("groupId", "fb-controls");
+        map.put("id", property + "Id");
+        map.put("label", humanize(relation.getName()));
+        map.put("horizontal", false);
+        map.put("isCompact", false);
+        map.put("readonly", false);
+        map.put("staticData", false);
+        map.put("model", property);
+        map.put("options", "__" + property + "EntityUrl");
+        map.put("optionLabel", "__" + property + "EntityLabel");
+        map.put("optionValue", IntentEntities.keyFieldName(target));
+        map.put("required", relation.isRequired());
+        return map;
     }
 
     /**

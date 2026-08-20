@@ -297,13 +297,19 @@ final class StatusSymbolResolver {
         }
     }
 
-    /** The entity whose lifecycle event starts the process - the target of its {@code trigger}. */
+    /**
+     * The entity whose event starts the process - the target of its {@code trigger}. This runs on the
+     * RAW tree, before the typed mapping, so it cannot read {@code EventBinding} and the kinds are
+     * spelled out; keep them in step with it. Missing one is silent in the worst way: the trigger
+     * entity does not resolve, so a status NAME anywhere in that process cannot be looked up and the
+     * whole model is refused with a message about the nomenclature rather than the trigger.
+     */
     private static String triggerEntityOf(Map<?, ?> process) {
         Map<?, ?> trigger = asMap(process.get("trigger"));
         if (trigger == null) {
             return null;
         }
-        for (String event : List.of("onCreate", "onUpdate", "onDelete")) {
+        for (String event : List.of("onCreate", "onUpdate", "onDelete", "onTransition")) {
             String entity = text(trigger, event);
             if (entity != null) {
                 return entity;

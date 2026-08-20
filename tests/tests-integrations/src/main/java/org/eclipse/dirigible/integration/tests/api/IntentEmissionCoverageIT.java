@@ -11,6 +11,7 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
@@ -18,6 +19,7 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,6 +31,7 @@ import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -43,11 +46,14 @@ import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import ch.qos.logback.classic.Level;
 
 /**
  * DSL emission + runtime coverage: for the intent features whose enforcement lives in GENERATED
@@ -567,6 +573,32 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
+                relations:
+                  # Filled by the mapped arrival below from the e-mail its envelope carries - never
+                  # posted as an id. Optional, so the three unmapped arrivals keep working unchanged.
+                  - { name: raisedBy, kind: manyToOne, to: Person }
+
+              # expansions: the generated child set is OWNED by the expansion, so the master's DELETE
+              # has to take it with it (#6821). Nothing else would - a foreign key never becomes a
+              # database constraint on this platform - so the rows would otherwise outlive the record
+              # and keep counting. Asserted at runtime, both halves: the rows appear on create and are
+              # gone once the master is deleted.
+              - name: Retainer
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: note,      type: string, length: 200 }
+                  - { name: startDate, type: date, required: true }
+                  - { name: endDate,   type: date, required: true }
+                  - { name: fee,       type: decimal, required: true }
+                  - { name: periods,   type: integer, readOnly: true }
+
+              - name: RetainerPeriod
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: dueDate, type: date }
+                  - { name: amount,  type: decimal }
+                relations:
+                  - { name: Retainer, kind: manyToOne, to: Retainer, composition: true, required: true }
 
               # BPM events wave 2 (abortOn): an approval whose confirm task is cancelled the moment
               # the record is voided via the CancelApproval transition (reusing the EntryStatus seeds:
@@ -695,6 +727,91 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 100 }
 
+              # resolves: (#6712) the effective-dated register lookup and, crucially, what happens
+              # AFTER it succeeds. Zone is the match key, Inspector is what gets resolved, Duty is the
+              # register whose validity period decides which Inspector was on duty on the patrol's date.
+              - name: Zone
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+              - name: Inspector
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+              # The register: exactly ONE to-one to Inspector (what `set:` resolves), the match key,
+              # and the period. Two rows for one Zone with non-overlapping windows, so only the row
+              # covering the patrol's date can match - a lookup that ignored the period would pick the
+              # wrong Inspector rather than none, which is the failure worth catching.
+              - name: Duty
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: validFrom, type: date }
+                  - { name: validTo,   type: date }
+                relations:
+                  - { name: Zone,      kind: manyToOne, to: Zone }
+                  - { name: Inspector, kind: manyToOne, to: Inspector }
+              # The record the lookup fills in. Its status is routed by the outcome, and that status
+              # write is the transition the generates below is bound to.
+              - name: Patrol
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: visitedAt, type: date }
+                  - { name: outcome,   type: string, length: 20 }
+                relations:
+                  - { name: Zone,      kind: manyToOne, to: Zone }
+                  - { name: Inspector, kind: manyToOne, to: Inspector }
+                  - { name: Status,    kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+              # The downstream proof: this exists only if the automatic resolution published
+              # "-transitioned". The back-reference to Patrol is also the at-most-once guard.
+              - name: PatrolReport
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 100 }
+                relations:
+                  - { name: Patrol, kind: manyToOne, to: Patrol }
+
+              # generates step axis + mode: append (#6800): a shipment whose flow is observed at two
+              # moments, a log the observations are APPENDED to (several rows per source - the
+              # cardinality the at-most-once create-from could not express), and a summary minted
+              # ONCE for the same source on the same axis.
+              - name: Shipment
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 200 }
+              - name: ShipmentLog
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: step, type: string, length: 100 }
+                relations:
+                  - { name: Shipment, kind: manyToOne, to: Shipment }
+              - name: ShipmentSummary
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 200 }
+                relations:
+                  - { name: Shipment, kind: manyToOne, to: Shipment }
+
+              # expansions: the stay's from-to span generates one night row per day and spreads the
+              # total across them. Asserted at RUNTIME because what the reconciliation promises is a
+              # property of the rows, not of the source: an edited span keeps the rows whose day
+              # survives it (dirigible #6817).
+              - name: Stay
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: fromDate, type: date }
+                  - { name: toDate,   type: date }
+                  - { name: total,    type: decimal }
+                  - { name: nights,   type: integer, readOnly: true }
+              - name: StayNight
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: day,    type: date }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Stay, kind: manyToOne, to: Stay, composition: true, required: true }
+
             aggregates:
               - name: ledgerTotal
                 of: Ledger
@@ -717,6 +834,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             # totalCost is NOT authored sensitive on purpose.
             rollups:
               - { name: claimCost, entity: ClaimLine, via: Claim, field: totalCost, op: sum, of: cost }
+
+            expansions:
+              - name: retainer-periods
+                from: Retainer
+                into: RetainerPeriod
+                unit: month
+                between: { start: startDate, end: endDate }
+                map: { dueDate: period }
+                spread: { total: fee, into: amount, round: 2 }
+                count: periods
+              - name: nights
+                from: Stay
+                into: StayNight
+                between: { start: fromDate, end: toDate }
+                map: { day: period }
+                spread: { total: total, into: amount, round: 2 }
+                count: nights
 
             # collection-driven generation: the monthly job creates one Claim per Person and,
             # under each, one ClaimLine per working day of the month (amount defaulted).
@@ -761,6 +895,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: markExpired, kind: serviceTask, args: { setField: state, value: EXPIRED, next: end } }
                   - { name: awaitReply,  kind: wait, args: { onCreate: RfqReply, via: Rfq, when: "internal == false", next: markReplied } }
                   - { name: markReplied, kind: serviceTask, args: { setField: state, value: REPLIED, next: end } }
+                  - { name: end, kind: end }
+
+              # generates step axis (#6800): every step is a serviceTask, so both observed moments -
+              # dispatch REACHED and settle COMPLETED - fire without any inbox interaction. The two
+              # appending create-froms and the one at-most-once create-from below bind to them.
+              - name: ShipmentFlow
+                trigger: { onCreate: Shipment }
+                steps:
+                  - { name: dispatch, kind: serviceTask, args: { setField: note, value: DISPATCHED, next: settle } }
+                  - { name: settle,   kind: serviceTask, args: { setField: note, value: SETTLED, next: end } }
                   - { name: end, kind: end }
 
               # abortOn: voiding the approval (CancelApproval -> status 3) cancels the confirm task.
@@ -867,6 +1011,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - { name: signalHook,  path: /signal, create: Signal }
               - { name: signalQueue, source: { queue: emission-signals }, create: Signal }
               - { name: signalDrop,  source: { folder: target/inbox-emission, cron: "0/2 * * * * ?" }, create: Signal }
+              # Mapping on arrival (#6769): the payload is an ENVELOPE, so a gate decides whether this
+              # app understands it and a map projects it onto the record - including the business key
+              # (an e-mail) that becomes the raisedBy relation. The three arrivals above declare
+              # neither key, which is what keeps them proving the unmapped path at the same time.
+              - name: signalEnvelope
+                source: { queue: emission-signal-envelopes }
+                accept: { type: signal.raised, version: 1 }
+                create: Signal
+                map:
+                  note:     message
+                  raisedBy: { lookup: Person, by: email, from: raisedBy }
 
             # The departure half (#6767): the same record leaving on a queue, as a DECLARED envelope
             # rather than the row as stored. The guard keeps an internal note off the wire, which is
@@ -919,6 +1074,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 setStatus: POSTED
                 label: Post
                 icon: check
+              # Voiding the GENERATED document is what releases the slip's one-shot slot (#6814): the
+              # create-from's at-most-once guard steps over a voucher whose status stage is `cancelled`,
+              # so the slip can be generated from again. Nothing about the create-from declares this -
+              # the seeds' `stage:` classification is what says the voided voucher no longer counts.
+              - name: VoidVoucher
+                forEntity: Voucher
+                from: [DRAFT]
+                setStatus: CANCELLED
+                label: Void
+                icon: ban
               # send-document: the transition mails AFTER the flip commits, with the bill's own print
               # rendered to PDF and attached. The recipient is a LITERAL so the runtime always gets past
               # the recipient check and actually attempts the attachment - which cannot succeed on this
@@ -989,6 +1154,39 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - note: "Slip {label}"
                     amount: "Total * 2"
                     when: "Total != 0"
+              # generates on the step axis with mode: append (#6800). TWO appending rules share the
+              # target AND the back-reference on purpose: that is legal under append (each row records
+              # a different moment), where mode: once would make the second one a permanent no-op.
+              # `button: true` on the second keeps the click, which appends as well - append is the
+              # ABSENCE of a guard, not a state-aware one.
+              - name: log-dispatch
+                from: Shipment
+                to: ShipmentLog
+                event: { onStepReached: { process: ShipmentFlow, step: dispatch }, mode: append }
+                map:
+                  Shipment: id
+                defaults:
+                  step: "dispatch"
+              - name: log-settle
+                from: Shipment
+                to: ShipmentLog
+                event: { onStepCompleted: { process: ShipmentFlow, step: settle }, mode: append }
+                button: true
+                map:
+                  Shipment: id
+                defaults:
+                  step: "settle"
+              # the DEFAULT cardinality on the very same axis: one summary per shipment, and a click
+              # after the event hands back the one that exists instead of minting a second.
+              - name: summary-from-shipment
+                from: Shipment
+                to: ShipmentSummary
+                event: { onStepCompleted: { process: ShipmentFlow, step: settle } }
+                button: true
+                map:
+                  Shipment: id
+                defaults:
+                  note: "summary"
               # Prompted create-from (#6685): a per-record action that collects the input the source
               # cannot derive (here: a manual line's note + amount) before creating a composition
               # child. The prompted values are posted with the source id and set on the target after
@@ -1002,6 +1200,33 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 prompt:
                   - { field: note }
                   - { field: amount, required: true }
+              # The automatic half of the same axis: the create-from below is triggered by a status
+              # the REGISTER LOOKUP wrote, not by a button and not by a workflow step. The lookup
+              # persists that status with a targeted write, which publishes no event of its own, so
+              # this entry only ever fires if the lookup announces the transition itself.
+              - name: report-from-patrol
+                from: Patrol
+                to: PatrolReport
+                event: { onTransition: Patrol, when: "Status == POSTED" }
+                map:
+                  Patrol: id
+                defaults:
+                  note: "AUTO"
+
+            # resolves: (#6712) fill Patrol.Inspector from the Duty row whose validity period covers
+            # the patrol's date, stamp the outcome, and route the record by status. The status write is
+            # the point of the coverage: it is a transition like any other, and the generates entry
+            # above is bound to it - so this asserts the AUTOMATIC path reaches the same consumers the
+            # manual one does, which is exactly what silently did not happen.
+            resolves:
+              - name: assign-inspector
+                event: { onCreate: Patrol }
+                set: Inspector
+                from: Duty
+                match: { Zone: Zone }
+                between: { start: validFrom, end: validTo, value: visitedAt }
+                outcome: outcome
+                found: { setStatus: POSTED }
 
             # The roles the model issues - and the ones a `visibleTo:` field may name.
             permissions:
@@ -1039,12 +1264,32 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 entity: Party
                 rows:
                   - { id: 1, name: Acme }
+              # stage: what each status MEANS to the lifecycle (#6645) - metadata, never a column of
+              # the seeded table. Consumed by a report's `scope:` and by the event-driven create-from's
+              # at-most-once guard, which steps over a target retired into `cancelled`/`void` (#6814).
               - name: entry-statuses
                 entity: EntryStatus
                 rows:
-                  - { id: 1, name: DRAFT }
-                  - { id: 2, name: POSTED }
-                  - { id: 3, name: CANCELLED }
+                  - { id: 1, name: DRAFT,     stage: draft }
+                  - { id: 2, name: POSTED,    stage: live }
+                  - { id: 3, name: CANCELLED, stage: cancelled }
+              - name: zones
+                entity: Zone
+                rows:
+                  - { id: 1, name: North }
+              - name: inspectors
+                entity: Inspector
+                rows:
+                  - { id: 1, name: Early }
+                  - { id: 2, name: Late }
+              # Two duties for one zone, windows that do not overlap: the visit's date falls inside
+              # the SECOND, so resolving to inspector 2 can only mean the period was honoured - a
+              # lookup that matched on the zone alone would answer 1 (or refuse as ambiguous).
+              - name: duties
+                entity: Duty
+                rows:
+                  - { id: 1, Zone: 1, Inspector: 1, validFrom: "2020-01-01", validTo: "2020-12-31" }
+                  - { id: 2, Zone: 1, Inspector: 2, validFrom: "2021-01-01", validTo: "2021-12-31" }
               - name: units
                 entity: Unit
                 rows:
@@ -1361,6 +1606,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // silent-degradation class this IT exists to catch).
         assertTrue(entryRepository.contains("public int updateProperties(") && entryRepository.contains("enforceChecks(entity)"),
                 "a checks-bearing entity must enforce its document checks on the targeted updateProperties write path");
+        // The mirror image, and the reason the gate is CONDITIONAL: a write that touches only
+        // platform-owned columns has nothing for a document check to refuse. The trigger's ProcessId
+        // write-back arrives on this very path, after its process instance has already started, so a gate
+        // that refused it left the instance running with nothing pointing at it (#6815).
+        assertTrue(
+                entryRepository.contains("SYSTEM_PROPERTIES = java.util.List.of(\"ProcessId\")")
+                        && entryRepository.contains("boolean authoredWrite = touchesAuthoredColumn(values)")
+                        && entryRepository.contains("if (authoredWrite) {"),
+                "the document gate must run only for a write that touches an authored column, got: " + entryRepository);
 
         String lineController = contentOf("gen/emission/api/entry/EntryLineController.java");
         assertTrue(lineController.contains("Exactly one of debit/credit"),
@@ -1443,6 +1697,26 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String billLineRepository = contentOf("gen/emission/data/bill/BillLineRepository.java");
         assertTrue(billLineRepository.contains("new BillRepository().recalculate("),
                 "a line change must trigger the master's document-totals recompute");
+        // ...and a line written by a TARGETED primitive is still a line change (#6822). A workflow
+        // setField and any glue updateProperty / updateProperties / updateDerived land in
+        // updateProperties, which used to write the column and leave the header summing to something
+        // else than its lines. The guard is on the written columns, so only a write that actually
+        // touches an aggregated column - or the FK, which MOVES the line to another document - pays
+        // for the resum.
+        assertTrue(billLineRepository.contains("values.containsKey(\"Amount\")"),
+                "a targeted write of an aggregated column must resum the master: " + billLineRepository);
+        assertTrue(billLineRepository.contains("Object documentBefore = entity == null ? null : entity.Bill;"),
+                "the targeted write must capture the document the line belonged to before it: " + billLineRepository);
+        assertTrue(
+                billLineRepository.contains("new BillRepository().recalculate(documentAfter)")
+                        && billLineRepository.contains("new BillRepository().recalculate(documentBefore)"),
+                "a line moved between documents must resum both: " + billLineRepository);
+        // The event-suppressed system write is the third targeted-ish path: it suppresses the event,
+        // not the arithmetic.
+        String updateWithoutEvent = billLineRepository.substring(billLineRepository.indexOf("public BillLineEntity updateWithoutEvent"));
+        assertTrue(updateWithoutEvent.substring(0, updateWithoutEvent.indexOf("\n    }"))
+                                     .contains("new BillRepository().recalculate("),
+                "updateWithoutEvent must keep the master's totals in step: " + billLineRepository);
 
         // The roll-up handler records every column it recomputes and persists them through the targeted
         // derived write. The derived.put assertion is load-bearing in the other direction too: an EMPTY
@@ -1469,18 +1743,44 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // recomputes that former tuple - otherwise it keeps the moved row's contribution forever.
         String ledgerRepository = contentOf("gen/emission/data/ledger/LedgerRepository.java");
         assertTrue(
-                ledgerRepository.contains("aggregatePrevious = findById(entity.Id)")
-                        && ledgerRepository.contains("java.util.Objects.equals(aggregatePrevious.Person, entity.Person)")
-                        && ledgerRepository.contains("java.util.Objects.equals(aggregatePrevious.Unit, entity.Unit)"),
+                ledgerRepository.contains("groupingPrevious = findById(entity.Id)")
+                        && ledgerRepository.contains("java.util.Objects.equals(groupingPrevious.Person, entity.Person)")
+                        && ledgerRepository.contains("java.util.Objects.equals(groupingPrevious.Unit, entity.Unit)"),
                 "an aggregate source must compare EVERY grouping key against the previous row on update");
         assertTrue(
-                ledgerRepository.contains("if (aggregateRekeyed)")
-                        && ledgerRepository.contains("-rekeyed\", Json.stringify(aggregatePrevious)"),
+                ledgerRepository.contains("if (groupingMoved)")
+                        && ledgerRepository.contains("-rekeyed\", Json.stringify(groupingPrevious)"),
                 "a moved grouping key must publish the PREVIOUS row on the -rekeyed topic");
         String ledgerRekey = contentOf("gen/events/emission/LedgerTotalAggregateOnRekey.java");
         assertTrue(ledgerRekey.contains("-Ledger-rekeyed"), "the rekey handler must bind the source's -rekeyed topic");
         assertTrue(ledgerRekey.contains("targets.updateDerived("),
                 "the rekey handler must repair the former tuple through the targeted derived write");
+
+        // The TARGETED writers (a workflow setter, a resolver, a task-form writer) move a grouping column
+        // exactly as a user edit does but publish no "-updated" at all - so both sides of the move are
+        // signalled here, on the topic only the aggregate / roll-up handlers subscribe to (#6819).
+        assertTrue(
+                ledgerRepository.contains("Object groupingPreviousPerson = entity.Person")
+                        && ledgerRepository.contains("Object groupingPreviousUnit = entity.Unit")
+                        && ledgerRepository.contains("groupingMoved = false")
+                        && ledgerRepository.contains("!java.util.Objects.equals(groupingPreviousPerson, entity.Person)"),
+                "the targeted write must compare every grouping key before and after the write: " + ledgerRepository);
+        assertTrue(
+                ledgerRepository.contains("if (updatedCount > 0 && groupingMoved)")
+                        && ledgerRepository.contains("-rekeyed\", groupingPrevious)")
+                        && ledgerRepository.contains("-rekeyed\", Json.stringify(entity))"),
+                "a targeted write that moved a grouping key must publish BOTH the previous and the written row");
+
+        // Fix 2: the same move on a ROLL-UP child. Its parent FK is a grouping column too, so the child's
+        // DAO tracks it and a roll-up handler binds "-rekeyed" - without it the parent a child was moved
+        // AWAY from kept the child's contribution forever (no create/update/delete event names it).
+        String claimLineRepository = contentOf("gen/emission/data/claim/ClaimLineRepository.java");
+        assertTrue(claimLineRepository.contains("java.util.Objects.equals(groupingPrevious.Claim, entity.Claim)"),
+                "a roll-up child must compare its parent FK against the previous row: " + claimLineRepository);
+        String claimRekey = contentOf("gen/events/emission/ClaimLineClaimRollupOnRekey.java");
+        assertTrue(claimRekey.contains("-ClaimLine-rekeyed"), "the roll-up rekey handler must bind the child's -rekeyed topic");
+        assertTrue(claimRekey.contains("Criteria.create().eq(\"Claim\", entity.Claim)") && claimRekey.contains("parents.updateDerived("),
+                "the roll-up rekey handler must recompute the parent the PAYLOAD names, through the targeted derived write");
 
         // checks: kind: guard - the aggregate precondition, one assertion per outcome. The guard
         // recomputes the keyed sum from the GUARDED entity's own store (race-free, not the async
@@ -1637,8 +1937,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(bpmn.contains("flowable:assignee=\"${__personalUser}\""),
                 "assignee: personal must emit a per-user flowable:assignee, not a candidate group");
         String claimTrigger = contentOf("gen/events/emission/ClaimConfirmTrigger.java");
-        assertTrue(claimTrigger.contains("__personalUser"),
+        assertTrue(claimTrigger.contains("variables.put(\"__personalUser\""),
                 "the trigger listener must seed the __personalUser variable from the identity mapping");
+        // The assignee expression is evaluated when the task is created, INSIDE Process.start, so the
+        // variable has to ride the start payload - a setVariable afterwards is too late (and, for a
+        // process without a wait state, runs against an instance that already finished).
+        assertTrue(claimTrigger.contains("Json.stringify(variables))") && !claimTrigger.contains("Process.setVariable("),
+                "every process variable must ride the start payload, not a post-start setVariable");
+        // The write-back is the only post-start step, and an instance nothing points at is cancelled
+        // rather than left running untracked (#6815).
+        assertTrue(
+                claimTrigger.contains("repository.updateProperty(entity.Id, \"ProcessId\", processId)")
+                        && claimTrigger.contains("Process.cancel(processId,"),
+                "the ProcessId write-back must be the targeted write, with the instance cancelled when it does not land");
 
         // wait + boundary timers (BPM events wave 1): the catch event, the two boundary timers and
         // the loader/correlating glue must all be present - a missing piece degrades silently into a
@@ -1696,6 +2007,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a folder source must emit a JobHandler polling that folder on the declared cron");
         assertTrue(fileImport.contains("SignalEntity[].class") && fileImport.contains("Files.move"),
                 "a file ingest must accept a batch and move every read file out of the drop folder");
+
+        // Mapping on arrival (#6769): the gate, the projection and the business-key lookup. The three
+        // arrivals above must be untouched by it - that is what "omitting the keys changes nothing"
+        // means, and only asserting the absence proves it.
+        assertFalse(consumer.contains("envelope"), "an arrival declaring no accept/map keeps reading the payload AS the record");
+        String mapped = contentOf("gen/events/emission/SignalEnvelopeConsumer.java");
+        assertTrue(mapped.contains("java.util.Map<?, ?> envelope = Json.parse(message, java.util.Map.class)"),
+                "a mapped arrival reads the payload as an envelope");
+        assertTrue(
+                mapped.contains("\"signal.raised\".equals(envelope.get(\"type\"))")
+                        && mapped.contains("((Number) envelope.get(\"version\")).doubleValue() == 1")
+                        && mapped.contains("acknowledged and ignored"),
+                "the accept gate must compare both declared keys and IGNORE a message it does not match, never fail it");
+        assertTrue(mapped.contains("entity.Note = String.valueOf(raw)") && mapped.contains("envelope.get(\"message\")"),
+                "a mapped field is filled from the envelope key the map names, not from its own name");
+        assertTrue(
+                mapped.contains(".eq(\"Email\", String.valueOf(lookupRaisedByKey))")
+                        && mapped.contains("entity.RaisedBy = lookupRaisedByMatches.get(0).Id"),
+                "the lookup resolves the target's unique field and stores its primary key");
+        assertTrue(mapped.contains("no unique Person matches") && mapped.contains("NOT ingested"),
+                "an unresolvable lookup rejects the arrival rather than storing a null relation");
 
         // The glue event axis, outbound half (#6767): the publisher subscribes to the record's own
         // event topic, guards, builds the DECLARED envelope and sends it on the named channel. A
@@ -2181,9 +2513,54 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the listener must delegate to the create-from rather than re-implement the mapping");
         assertFalse(generateOnEvent.contains("VoucherLineEntity"), "the listener must carry no mapping of its own");
         assertTrue(generate.contains("@Post(\"/run\")"), "button: true must keep the endpoint alongside the event trigger");
-        // The at-most-once guard lives in the create-from, so BOTH triggers get it.
-        assertTrue(generate.contains(".eq(\"Slip\", sourceId)") && generate.contains("return existing.get(0);"),
+        // The at-most-once guard lives in the create-from, so BOTH triggers get it - and it is
+        // state-aware (#6814): a voucher retired into a stage the seeds classify `cancelled`/`void` is
+        // stepped over, so voiding it releases the slip's slot instead of consuming it forever.
+        assertTrue(generate.contains(".eq(\"Slip\", sourceId)") && generate.contains("VoucherEntity candidate : existing"),
                 "an event-driven create-from must return the document already back-referencing the source");
+        assertTrue(generate.contains("if (candidate.Status == null || !(candidate.Status == 3)) {"),
+                "the guard must step over a target whose status stage is cancelled/void, and only over those");
+
+        // generates on the step axis + mode: append (#6800): the listener binds the step-scoped topic
+        // the generated emitter publishes the trigger entity on (NOT a lifecycle topic), and the
+        // appending create-from renders WITHOUT the existing-target lookup - while its at-most-once
+        // sibling on the same moment keeps it. The emitter itself exists because a create-from asked
+        // for that moment, with no notification or integration bound to it.
+        String logSettleOnEvent = contentOf("gen/events/emission/LogSettleGenerateOnEvent.java");
+        assertTrue(logSettleOnEvent.contains("-Shipment-step-ShipmentFlow-settle-completed"),
+                "a step-bound create-from must bind the step-scoped topic of the trigger entity");
+        assertTrue(
+                contentOf("gen/events/emission/LogDispatchGenerateOnEvent.java").contains("-Shipment-step-ShipmentFlow-dispatch-reached"),
+                "onStepReached must bind the reached moment's topic");
+        String logSettleGenerate = contentOf("gen/events/emission/LogSettleGenerate.java");
+        assertFalse(logSettleGenerate.contains(".eq(\"Shipment\", sourceId)"),
+                "mode: append must drop the existing-target lookup - every event appends a row");
+        assertTrue(logSettleGenerate.contains("target.Step = \"settle\";"),
+                "the appended row must still be built by the whole create-from (map + defaults)");
+        assertTrue(contentOf("gen/events/emission/SummaryFromShipmentGenerate.java").contains(".eq(\"Shipment\", sourceId)"),
+                "the default cardinality must keep the at-most-once lookup");
+        assertTrue(contentOf("gen/events/emission/ShipmentFlowSettleCompleted.java").contains("implements JavaDelegate"),
+                "a create-from asking for a step moment must get that moment's emitter, even as its only consumer");
+
+        // resolves (#6712): the lookup persists its outcome with a TARGETED write, which publishes no
+        // event at all - so when that write routes the record by status it has to announce the
+        // transition itself. Without this the automatic path wrote the status and told nobody, while a
+        // transitions: button on the same entity worked: the primary path silently dead, the fallback
+        // fine. The consumers are bound to "-transitioned" (see the create-from above), so that is the
+        // channel it must publish on.
+        String resolve = contentOf("gen/events/emission/AssignInspectorResolve.java");
+        assertTrue(resolve.contains("updateProperties("), "the lookup must persist its outcome as one targeted write");
+        assertTrue(resolve.contains("-Patrol-transitioned"),
+                "a resolve that routes the record by status must publish the record's -transitioned topic, "
+                        + "or nothing bound to onTransition can ever observe an automatic resolution");
+        assertTrue(resolve.contains("Producer.sendToTopic"), "the resolve must publish through the messaging producer");
+        // Guarded on a status having been written: a lookup that only filled the relation (or found
+        // nothing) transitioned nothing, and must not announce one.
+        assertTrue(resolve.indexOf("if (status != null)") < resolve.indexOf("Producer.sendToTopic"),
+                "the publish must sit under the status guard, so a lookup that wrote no status announces no transition");
+        String reportOnEvent = contentOf("gen/events/emission/ReportFromPatrolGenerateOnEvent.java");
+        assertTrue(reportOnEvent.contains("-Patrol-transitioned"),
+                "the create-from driven by the lookup must listen on the very topic the lookup publishes");
 
         // generates prompt (#6685): the prompted controller takes a values map, enforces the
         // required input with a 400, and converts each posted value to the target field's Java type
@@ -2509,6 +2886,42 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             assertEquals(autoVoucherId.get(), io.restassured.path.json.JsonPath.from(voucher)
                                                                                .getInt("Id"),
                     "a click after the event must return the existing voucher, not a second one");
+        });
+
+        // ...and the other half of that guard's semantics (#6814): VOIDING the voucher releases the
+        // slip. The guard is not "has this slip ever produced a voucher" but "does it have one that
+        // still counts", so once the voided one is classified `cancelled` by the seeds, generating from
+        // the same slip mints a SECOND voucher instead of handing back the retired one. Void and
+        // reissue - an ordinary business flow - was inexpressible while the guard asked existence only.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + autoVoucherId.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/VoidVoucherTransition/run")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(3)));
+        restAssuredExecutor.execute(() -> {
+            String reissuedVoucher = given().contentType("application/json")
+                                            .body("{\"id\":" + postedSlip.get() + "}")
+                                            .when()
+                                            .post("/services/java/" + PROJECT + "/gen/events/emission/VoucherFromSlipGenerate/run")
+                                            .then()
+                                            .statusCode(200)
+                                            .extract()
+                                            .asString();
+            int reissued = io.restassured.path.json.JsonPath.from(reissuedVoucher)
+                                                            .getInt("Id");
+            assertNotEquals(autoVoucherId.get(), reissued, "a voided voucher must not go on blocking its replacement");
+            String matching = "findAll { it.Slip == " + postedSlip.get() + " }";
+            assertEquals(2, given().when()
+                                   .get(API + "/voucher/VoucherController")
+                                   .then()
+                                   .statusCode(200)
+                                   .extract()
+                                   .jsonPath()
+                                   .getList(matching)
+                                   .size(),
+                    "the voided voucher must be kept, not replaced in place - both documents stay on the audit trail");
         });
 
         // generates prompt (#6685) at the outermost layer: the prompted values reach the created
@@ -3123,6 +3536,20 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body(org.hamcrest.Matchers.containsString("Confirm")),
                 30);
 
+        // ...and the record knows about the instance that task belongs to: the trigger stamped the
+        // started instance's id back onto it. That stamp is the at-most-once guard, so an unstamped
+        // ProcessId is not a cosmetic gap - the instance is untracked and the next qualifying event
+        // starts a second one (#6815). It also pins the ordering the listener depends on: the write-back
+        // must survive whatever the entity layers onto a targeted write (this entity carries a `label:`,
+        // so its repository overrides that path).
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/claim/ClaimController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.Note == 'spoofed' && it.ProcessId != null && it.ProcessId != '' }.size()",
+                                                         equalTo(1)),
+                30);
+
         // The composition child guards through its parent: the foreign claim's lines are a 404,
         // creating a line under a foreign claim is a 404, under my own claim it works.
         restAssuredExecutor.execute(() -> given().when()
@@ -3322,7 +3749,193 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertManyToManyRuntime();
         assertInboundSourcesRuntime();
         assertOutboundDepartureRuntime();
+        assertExpansionLifecycleRuntime();
         assertBpmEventsRuntime();
+        assertResolveTransitionRuntime();
+        assertGeneratesStepAxisRuntime();
+    }
+
+    /**
+     * The register lookup end to end (#6712), and specifically what happens once it succeeds: the
+     * resolved relation and the routing status are written, and the create-from bound to that
+     * transition mints its document - with nobody clicking anything.
+     *
+     * <p>
+     * The last step is the one worth having. The lookup persists through a targeted write, which
+     * publishes no event, so an automatic resolution used to reach no consumer at all while a manual
+     * transition on the same entity reached every one of them - the automation's primary path silently
+     * doing nothing, its fallback working, and no log line either way. Asserting only that the
+     * Inspector was filled in would still pass in that world.
+     */
+    private void assertResolveTransitionRuntime() {
+        String patrolApi = API + "/patrol/PatrolController";
+        AtomicInteger patrol = new AtomicInteger();
+        // Zone 1 has two duties; this date falls inside the SECOND window only.
+        restAssuredExecutor.execute(() -> patrol.set(given().contentType("application/json")
+                                                            .body("{\"Zone\":1,\"VisitedAt\":\"2021-06-15\"}")
+                                                            .when()
+                                                            .post(patrolApi)
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .extract()
+                                                            .path("Id")));
+        // The lookup runs off the create event, so it lands after the POST returns.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(patrolApi + "/" + patrol.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 // Inspector 2, not 1: the covering period decided it, not the zone alone.
+                                                 .body("Inspector", equalTo(2))
+                                                 .body("Outcome", equalTo("found"))
+                                                 .body("Status", equalTo(2)),
+                90);
+        // The transition the lookup wrote must have reached the create-from bound to it.
+        restAssuredExecutor.execute(() -> {
+            io.restassured.path.json.JsonPath reports = given().when()
+                                                               .get(API + "/patrolreport/PatrolReportController")
+                                                               .then()
+                                                               .statusCode(200)
+                                                               .extract()
+                                                               .jsonPath();
+            assertEquals(1, reports.getList("findAll { it.Patrol == " + patrol.get() + " }")
+                                   .size(),
+                    "the create-from bound to onTransition must mint its document from an AUTOMATIC resolution, "
+                            + "not only from a transition button");
+        }, 90);
+    }
+
+    /**
+     * The step axis and both cardinalities of an event-driven create-from (#6800) at the outermost
+     * layer, on ONE shipment whose all-serviceTask flow runs by itself: the two appending create-froms
+     * bound to two moments of it append TWO log rows for that single source - sharing the target AND
+     * the back-reference, which is exactly what {@code mode: once} makes impossible - and clicking the
+     * kept button appends a THIRD, because append is the absence of a guard rather than a state-aware
+     * one. The at-most-once create-from bound to the SAME moment mints exactly one summary, and a click
+     * after the event hands back that one instead of a second.
+     */
+    private void assertGeneratesStepAxisRuntime() {
+        AtomicInteger shipmentId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> shipmentId.set(given().contentType("application/json")
+                                                                .body("{\"Note\":\"crate 7\"}")
+                                                                .when()
+                                                                .post(API + "/shipment/ShipmentController")
+                                                                .then()
+                                                                .statusCode(200)
+                                                                .extract()
+                                                                .path("Id")));
+
+        // Both moments of the process fired and each appended its own row - the step topic reached a
+        // create-from, which no construct could do before, and the second rule was NOT swallowed by the
+        // first one's back-reference.
+        restAssuredExecutor.execute(() -> {
+            String rows = "findAll { it.Shipment == " + shipmentId.get() + " }";
+            io.restassured.path.json.JsonPath logs = given().when()
+                                                            .get(API + "/shipmentlog/ShipmentLogController")
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .extract()
+                                                            .jsonPath();
+            assertEquals(2, logs.getList(rows)
+                                .size(),
+                    "each observed step moment must append its own log row");
+            assertEquals(List.of("dispatch", "settle"), logs.getList(rows + ".Step")
+                                                            .stream()
+                                                            .map(String::valueOf)
+                                                            .sorted()
+                                                            .toList(),
+                    "the appended rows must record which moment each of them is about");
+        }, 60);
+
+        // The at-most-once sibling on the same moment: exactly one summary.
+        AtomicInteger summaryId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> {
+            String rows = "findAll { it.Shipment == " + shipmentId.get() + " }";
+            io.restassured.path.json.JsonPath summaries = given().when()
+                                                                 .get(API + "/shipmentsummary/ShipmentSummaryController")
+                                                                 .then()
+                                                                 .statusCode(200)
+                                                                 .extract()
+                                                                 .jsonPath();
+            assertEquals(1, summaries.getList(rows)
+                                     .size(),
+                    "the default cardinality must mint exactly one summary per source");
+            summaryId.set(summaries.getInt(rows + ".Id[0]"));
+        }, 60);
+
+        // A click on the appending create-from's kept button appends a THIRD row...
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + shipmentId.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/LogSettleGenerate/run")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> {
+            String rows = "findAll { it.Shipment == " + shipmentId.get() + " }";
+            assertEquals(3, given().when()
+                                   .get(API + "/shipmentlog/ShipmentLogController")
+                                   .then()
+                                   .statusCode(200)
+                                   .extract()
+                                   .jsonPath()
+                                   .getList(rows)
+                                   .size(),
+                    "append carries no guard at all - a click after the events appends another row");
+        });
+
+        // ...while the same click on the at-most-once sibling hands back the summary that exists.
+        restAssuredExecutor.execute(() -> {
+            String summary = given().contentType("application/json")
+                                    .body("{\"id\":" + shipmentId.get() + "}")
+                                    .when()
+                                    .post("/services/java/" + PROJECT + "/gen/events/emission/SummaryFromShipmentGenerate/run")
+                                    .then()
+                                    .statusCode(200)
+                                    .extract()
+                                    .asString();
+            assertEquals(summaryId.get(), io.restassured.path.json.JsonPath.from(summary)
+                                                                           .getInt("Id"),
+                    "mode: once must still return the existing target on a second delivery");
+        });
+    }
+
+    /**
+     * An expansion's generated rows, over their whole life (#6821): they appear when the master is
+     * created and they are gone once it is deleted. The delete half is the one that was missing - the
+     * construct bound create and update only, and because a foreign key never becomes a database
+     * constraint here, the rows simply survived as orphans still counted by every roll-up and report.
+     * Only the runtime shows it: the emitted handler can be present and still be subscribed to a topic
+     * nothing publishes to.
+     */
+    private void assertExpansionLifecycleRuntime() {
+        String retainerApi = API + "/retainer/RetainerController";
+        String periodApi = API + "/retainer/RetainerPeriodController";
+        AtomicInteger retainerId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> retainerId.set(given().contentType("application/json")
+                                                                .body("{\"Note\":\"expanded\",\"StartDate\":\"2026-01-15\",\"EndDate\":\"2026-03-15\",\"Fee\":300}")
+                                                                .when()
+                                                                .post(retainerApi)
+                                                                .then()
+                                                                .statusCode(200)
+                                                                .extract()
+                                                                .path("Id")));
+        // A month span over three months yields a row per month, each carrying its share of the fee.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(periodApi + "?Retainer=" + retainerId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(3)),
+                30);
+
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(retainerApi + "/" + retainerId.get())
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(periodApi + "?Retainer=" + retainerId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(0)),
+                30);
     }
 
     /**
@@ -3334,6 +3947,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
      */
     private void assertInboundSourcesRuntime() {
         String signalApi = API + "/signal/SignalController";
+
+        // The HTTP arrival, POSTed for real. It had never been until #6769 needed it, and it did not
+        // work: the platform binds a request body straight into the declared parameter type, so the
+        // `@Body String` the template used could only accept a JSON *string* and answered 400 to the
+        // object every sender posts. Asserting the emitted source could not have shown that.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Note\":\"from the webhook\"}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/SignalHookWebhook/signal")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Note", equalTo("from the webhook")));
 
         MessagingFacade.sendToQueue("emission-signals", "{\"Note\":\"from the queue\"}");
         restAssuredExecutor.execute(() -> given().when()
@@ -3364,6 +3989,49 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // Every read file leaves the drop folder, so the next tick cannot ingest it again.
         assertTrue(Files.exists(dropFolder.resolve("processed/signals.json")),
                 "an ingested file must be moved out of the drop folder, into processed/");
+
+        assertArrivalMappingRuntime(signalApi);
+    }
+
+    /**
+     * Mapping on arrival end to end (#6769). The three outcomes only exist at this layer: the emitted
+     * source can show that a lookup was generated, not that it resolves a name to the row's id, that a
+     * gate really drops what it does not match, and that an unresolvable key really stores nothing.
+     *
+     * <p>
+     * The two refused envelopes are published FIRST and the accepted one last, so the arrival of the
+     * accepted record proves the refused ones were already consumed - one queue, one consumer, in order
+     * - and their absence is a fact rather than a race.
+     */
+    private void assertArrivalMappingRuntime(String signalApi) {
+        // Attached here rather than in a field: Spring re-initializes logback while it starts the
+        // context, which drops an appender attached any earlier.
+        LogsAsserter consumerLogs = new LogsAsserter("app.gen.events.emission.SignalEnvelopeConsumer", Level.WARN);
+
+        MessagingFacade.sendToQueue("emission-signal-envelopes", envelope("envelope-v2", 2, "other@example.com"));
+        MessagingFacade.sendToQueue("emission-signal-envelopes", envelope("envelope-nobody", 1, "nobody@example.com"));
+        MessagingFacade.sendToQueue("emission-signal-envelopes", envelope("envelope-ok", 1, "other@example.com"));
+
+        // The business key becomes the relation: Person row 2 is deliberately not the first row, so a
+        // RaisedBy of 2 can only be the lookup having matched the e-mail the envelope sent.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(signalApi)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("find { it.Note == 'envelope-ok' }.RaisedBy", equalTo(2))
+                                                 .body("Note", not(hasItem("envelope-v2")))
+                                                 .body("Note", not(hasItem("envelope-nobody"))),
+                60);
+
+        // Both refusals are observable - which is the whole point of ignoring rather than failing: a
+        // silent drop and a working receiver look identical from the outside.
+        consumerLogs.assertLoggedMessage("does not match accept", Level.WARN);
+        consumerLogs.assertLoggedMessage("no unique Person matches", Level.ERROR);
+    }
+
+    /** The arrival contract as a sender writes it: an envelope, not the row. */
+    private static String envelope(String message, int version, String raisedBy) {
+        return "{\"type\":\"signal.raised\",\"version\":" + version + ",\"message\":\"" + message + "\",\"raisedBy\":\"" + raisedBy + "\"}";
     }
 
     /**
@@ -3445,6 +4113,98 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("$", hasSize(1))
                                                  .body("[0].Tag", equalTo(tagId.get())));
+
+        assertExpansionReconcilesTheChildSet();
+    }
+
+    /**
+     * The expansion RECONCILES its child set instead of rebuilding it (dirigible #6817). A client-Java
+     * handler has no transaction boundary - every delete and every insert commits on its own - so
+     * wiping the whole set before recreating it meant a failure partway through the recreation had
+     * already committed the deletes: rows lost for good, with a stale count and roll-ups that consumed
+     * a shrink which never happened.
+     *
+     * <p>
+     * The observable promise of the diff is a property of the ROWS, which is why it is asserted here
+     * and not only on the generated source: a day that survives an edited span keeps its identity, so
+     * whatever referenced that night row still references the same row. The dropped day goes, the new
+     * days arrive, and every kept row's share is re-spread for the new row count.
+     */
+    private void assertExpansionReconcilesTheChildSet() {
+        AtomicInteger stayId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> stayId.set(given().contentType("application/json")
+                                                            .body("{\"FromDate\":\"2026-03-10\",\"ToDate\":\"2026-03-12\",\"Total\":300}")
+                                                            .when()
+                                                            .post(API + "/stay/StayController")
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .extract()
+                                                            .path("Id")));
+        // The expansion runs off the master's create event, so the rows arrive asynchronously.
+        AtomicReference<Map<String, Integer>> before = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> {
+            Map<String, Integer> nights = stayNights(stayId.get());
+            assertEquals(3, nights.size(), "a three-day span expands into one night row per day, got: " + nights);
+            before.set(nights);
+        }, 60);
+
+        // The span moves one day forward and two days out: 10 falls out, 11 and 12 survive, 13 and 14
+        // are new.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + stayId.get()
+                                                         + ",\"FromDate\":\"2026-03-11\",\"ToDate\":\"2026-03-14\",\"Total\":300}")
+                                                 .when()
+                                                 .put(API + "/stay/StayController/" + stayId.get())
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> {
+            Map<String, Integer> after = stayNights(stayId.get());
+            assertEquals(4, after.size(), "the edited span expands into four night rows, got: " + after);
+            // The surviving days KEPT their rows - the whole point of the diff. Two of the three
+            // original days are still in the span, and both must answer with the identifier they had.
+            int survivors = 0;
+            for (Map.Entry<String, Integer> night : before.get()
+                                                          .entrySet()) {
+                if (after.containsKey(night.getKey())) {
+                    survivors++;
+                    assertEquals(night.getValue(), after.get(night.getKey()),
+                            "a day the edited span still covers must keep its row, day " + night.getKey());
+                }
+            }
+            assertEquals(2, survivors, "two of the three original days stay in the span, got before " + before.get() + " after " + after);
+        }, 60);
+
+        // A kept row's share is DERIVED from the total and the row count, so it is re-spread rather
+        // than left at the value the old count produced (300 over four nights, not three).
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/stay/StayNightController?Stay=" + stayId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Amount", everyItem(equalTo(75.0F))),
+                60);
+        // ... and the count write-back followed the new row count.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/stay/StayController/" + stayId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Nights", equalTo(4)),
+                60);
+    }
+
+    /** The stay's night rows as day (as serialized) to row identifier. */
+    private Map<String, Integer> stayNights(int stayId) {
+        List<Map<String, Object>> rows = given().when()
+                                                .get(API + "/stay/StayNightController?Stay=" + stayId)
+                                                .then()
+                                                .statusCode(200)
+                                                .extract()
+                                                .jsonPath()
+                                                .getList("$");
+        Map<String, Integer> nights = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            nights.put(String.valueOf(row.get("Day")), (Integer) row.get("Id"));
+        }
+        return nights;
     }
 
     /**

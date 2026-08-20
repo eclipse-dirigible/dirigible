@@ -203,4 +203,93 @@ class LifecycleGraphIntentTest {
         assertEquals(1, model.getProcesses()
                              .size());
     }
+
+    /**
+     * A create-from that mints a follow-up document and flips the source into its post-generation
+     * status. The status is a seed id: unlike a transition, a check or a resolve outcome,
+     * {@code sourceStatus} is not one of the sites the symbolic-name resolver rewrites, so a seeded
+     * name would not reach the graph as an id at all.
+     */
+    private static final String GENERATES = """
+            generates:
+              - name: credit-from-invoice
+                from: Invoice
+                to: CreditNote
+                forEntity: Invoice
+                sourceStatus: %s
+            """;
+
+    private static final String CREDIT_NOTE = """
+              - name: CreditNote
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string }
+            """;
+
+    /**
+     * The worst of the unchecked status writes: the flip runs after the target document is already
+     * committed, so a move the graph does not declare leaves a credit note behind whose invoice never
+     * transitioned - and the only symptom is "the note exists but the invoice still shows as issued".
+     */
+    @Test
+    void rejectsACreateFromFlippingTheSourceToAStatusNoEdgeReaches() {
+        String yaml = MODEL.replace("seeds:", CREDIT_NOTE + "seeds:") + GENERATES.formatted("1");
+        assertIssue(issuesOf(yaml), "generates [credit-from-invoice] flips the source status to [DRAFT], which no edge of the [Invoice]"
+                + " lifecycle reaches");
+    }
+
+    @Test
+    void acceptsACreateFromFlippingTheSourceAlongAnEdge() {
+        String yaml = MODEL.replace("seeds:", CREDIT_NOTE + "seeds:") + GENERATES.formatted("8");
+        assertEquals(1, IntentParser.parse(yaml)
+                                    .getGenerates()
+                                    .size());
+    }
+
+    /**
+     * A register lookup routing its outcome by status writes the same FK as every other status site.
+     */
+    private static final String RESOLVE = """
+              - name: Rate
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: validFrom, type: date }
+                relations:
+                  - { name: currency, kind: manyToOne, to: Currency }
+              - name: Currency
+                kind: setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+            resolves:
+              - name: invoice-rate
+                event: { onCreate: Invoice }
+                set: currency
+                from: Rate
+                match: { currency: currency }
+                between: { start: validFrom, value: issuedOn }
+                notFound: { setStatus: %s }
+            """;
+
+    private static String modelWithResolve(String status) {
+        return MODEL.replace("      - { name: number, type: string, documentTitle: true }",
+                "      - { name: number, type: string, documentTitle: true }\n      - { name: issuedOn, type: date }")
+                    .replace("      - { name: status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }",
+                            "      - { name: status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }\n"
+                                    + "      - { name: currency, kind: manyToOne, to: Currency }")
+                    .replace("seeds:", RESOLVE.formatted(status) + "seeds:");
+    }
+
+    @Test
+    void rejectsARegisterLookupRoutingToAStatusNoEdgeReaches() {
+        assertIssue(issuesOf(modelWithResolve("DRAFT")),
+                "resolve [invoice-rate] notFound routes the record to [DRAFT], which no edge of the [Invoice] lifecycle reaches");
+    }
+
+    @Test
+    void acceptsARegisterLookupRoutingAlongAnEdge() {
+        assertEquals(1, IntentParser.parse(modelWithResolve("CANCELLED"))
+                                    .getResolves()
+                                    .size());
+    }
 }

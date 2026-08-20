@@ -17,6 +17,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
+import org.awaitility.Awaitility;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -126,10 +127,23 @@ public class IntentBuilderShellIT extends UserInterfaceIntegrationTest {
         openBuilder();
 
         // Alpine started and the Builder's own stores registered - a mis-ordered or missing script
-        // leaves the page rendering nothing while every endpoint behind it stays green.
-        Object bootstrapped = Selenide.executeJavaScript("return !!(window.Alpine && Alpine.store('intent')"
-                + " && Alpine.store('conversation') && Alpine.store('publish') && window.IntentDiagrams);");
-        Assertions.assertTrue(Boolean.TRUE.equals(bootstrapped), "The Builder shell failed to bootstrap its stores and renderer.");
+        // leaves the page rendering nothing while every endpoint behind it stays green. Polled rather
+        // than sampled once: openBuilder() returns as soon as navigation does, and the shell's scripts
+        // are deferred, so a single probe races the boot and reports a healthy page as broken on a slow
+        // runner. A genuinely mis-ordered script never registers the stores, so it still fails - just at
+        // the timeout instead of instantly.
+        Awaitility.await()
+                  // In the calling thread: Selenide binds its WebDriver per-thread, so a probe on
+                  // Awaitility's own poll thread finds no driver at all.
+                  .pollInSameThread()
+                  .atMost(Duration.ofSeconds(30))
+                  .pollInterval(Duration.ofMillis(250))
+                  .untilAsserted(() -> {
+                      Object bootstrapped = Selenide.executeJavaScript("return !!(window.Alpine && Alpine.store('intent')"
+                              + " && Alpine.store('conversation') && Alpine.store('publish') && window.IntentDiagrams);");
+                      Assertions.assertTrue(Boolean.TRUE.equals(bootstrapped),
+                              "The Builder shell failed to bootstrap its stores and renderer.");
+                  });
 
         // The first-run surface is there: the invitation and the composer.
         Selenide.$(By.xpath("//*[contains(text(), 'Describe the application you need')]"))

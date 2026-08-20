@@ -239,6 +239,37 @@
             "guardProperty": "Status",
             "guardValue": "3",
             "backRefProperty": "SalesOrder"
+        },
+        {
+            "name": "pickListFromOrder",
+            "className": "PickListFromOrder",
+            "crossModel": false,
+            "fromEntity": "SalesOrder",
+            "fromPerspective": "Sales Orders",
+            "fromPk": "Id",
+            "crossModelSource": false,
+            "fromModel": "",
+            "fromProject": "",
+            "toEntity": "PickList",
+            "toModel": "",
+            "toPerspective": "Deliveries",
+            "toPk": "Id",
+            "fieldAssignments": "        target.SalesOrder = source.Id;\n",
+            "sourceStatusProperty": "",
+            "sourceStatusValue": "",
+            "hasItems": false,
+            "hasItemLines": false,
+            "eventOnly": true,
+            "hasEvent": true,
+            "isCreate": false,
+            "isStep": true,
+            "stepProcess": "OrderApproval",
+            "stepName": "warehousePick",
+            "topicSuffix": "-step-OrderApproval-warehousePick-reached",
+            "appendMode": true,
+            "guardProperty": "",
+            "guardValue": "",
+            "backRefProperty": "SalesOrder"
         }
     ],
     "generateEvents": [
@@ -267,6 +298,99 @@
             "guardProperty": "Status",
             "guardValue": "3",
             "backRefProperty": "SalesOrder"
+        },
+        {
+            "name": "pickListFromOrder",
+            "className": "PickListFromOrder",
+            "crossModel": false,
+            "fromEntity": "SalesOrder",
+            "fromPerspective": "Sales Orders",
+            "fromPk": "Id",
+            "crossModelSource": false,
+            "fromModel": "",
+            "fromProject": "",
+            "toEntity": "PickList",
+            "toModel": "",
+            "toPerspective": "Deliveries",
+            "toPk": "Id",
+            "fieldAssignments": "        target.SalesOrder = source.Id;\n",
+            "sourceStatusProperty": "",
+            "sourceStatusValue": "",
+            "hasItems": false,
+            "hasItemLines": false,
+            "eventOnly": true,
+            "hasEvent": true,
+            "isCreate": false,
+            "isStep": true,
+            "stepProcess": "OrderApproval",
+            "stepName": "warehousePick",
+            "topicSuffix": "-step-OrderApproval-warehousePick-reached",
+            "appendMode": true,
+            "guardProperty": "",
+            "guardValue": "",
+            "backRefProperty": "SalesOrder"
+        }
+    ],
+    "resolves": [
+        {
+            "name": "salesRep",
+            "className": "SalesRep",
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "keyProperty": "Id",
+            "topicSuffix": "",
+            "guardExpression": "",
+            "setProperty": "SalesRep",
+            "registerEntity": "TerritoryAssignment",
+            "registerPerspective": "Settings",
+            "registerValueProperty": "SalesRep",
+            "matches": [
+                {
+                    "registerProperty": "Territory",
+                    "recordProperty": "Territory"
+                }
+            ],
+            "matchSummary": "Territory",
+            "startProperty": "ValidFrom",
+            "endProperty": "ValidTo",
+            "valueProperty": "OrderedOn",
+            "outcomeProperty": "SalesRepOutcome",
+            "statusProperty": "Status",
+            "foundStatus": "2",
+            "notFoundStatus": "3",
+            "ambiguousStatus": "4",
+            "writesStatus": "true"
+        }
+    ],
+    "writers": [
+        {
+            "process": "OrderApproval",
+            "userTask": "review",
+            "className": "OrderApprovalReviewWrite",
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "keyProperty": "Id",
+            "keyAccessor": "intValue",
+            "fields": [
+                {
+                    "property": "ShippedOn",
+                    "coercion": "date"
+                },
+                {
+                    "property": "Quantity",
+                    "coercion": "integer"
+                }
+            ]
+        }
+    ],
+    "numbering": [
+        {
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "masterPk": "Id",
+            "field": "Number",
+            "series": "Sales Order",
+            "per": ""
         }
     ]
 }

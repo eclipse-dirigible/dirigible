@@ -93,6 +93,23 @@ class GlueWaitsTest {
         assertEquals("true", wait.get("guardExpression"));
     }
 
+    /**
+     * A wait may park on a STATUS change. It could not before: a status write publishes only
+     * {@code -transitioned}, so a wait bound to {@code onUpdate} never woke for one and the instance
+     * parked forever, silently - while {@code abortOn:} bound that same channel, so a transition could
+     * kill the instance but never resume it.
+     */
+    @Test
+    void aWaitCanParkOnATransition() {
+        String yaml = YAML.replace("{ onCreate: CaseMessage, via: case, when: \"internal == 0\", next: done }",
+                "{ onTransition: Case, when: \"Subject == CLOSED\", next: done }");
+        Map<String, Object> wait = GlueIntentGenerator.buildWaitsForTest(IntentParser.parse(yaml))
+                                                      .get(0);
+        assertEquals("Case", wait.get("eventEntity"));
+        assertEquals("-transitioned", wait.get("topicSuffix"));
+        assertEquals("", wait.get("viaFkProperty"), "the trigger entity carries the ProcessId itself - no via walk");
+    }
+
     @Test
     void rendersTheExpireDateLoader() {
         IntentModel model = IntentParser.parse(YAML);
