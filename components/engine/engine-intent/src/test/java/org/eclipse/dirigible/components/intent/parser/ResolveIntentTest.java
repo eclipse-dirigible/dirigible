@@ -228,6 +228,28 @@ class ResolveIntentTest {
                 "got: " + ex.getIssues());
     }
 
+    /**
+     * The trace exists to be read afterwards, and it is truncated at the DB where nothing reports it.
+     * Routing widens the set the handler writes, because a status the record cannot take amends the
+     * trace rather than losing the whole attempt.
+     */
+    @Test
+    void rejectsAnOutcomeFieldTooShortForTheValuesWritten() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(
+                VALID.replace("{ name: resolution, type: string, readOnly: true }", "{ name: resolution, type: string, length: 12 }")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(issue -> issue.contains("outcome [resolution] is length [12], too short") && issue.contains("at least [19]")
+                             && issue.contains("routes by setStatus")),
+                "got: " + ex.getIssues());
+        // Without routing, the handler writes only the three plain outcomes, so 12 is ample.
+        IntentParser.parse(
+                VALID.replace("{ name: resolution, type: string, readOnly: true }", "{ name: resolution, type: string, length: 12 }")
+                     .replace("found: { setStatus: IDENTIFIED }", "found: {}")
+                     .replace("notFound: { setStatus: UNRESOLVED }", "notFound: {}")
+                     .replace("ambiguous: { setStatus: UNRESOLVED }", "ambiguous: {}"));
+    }
+
     @Test
     void rejectsAnUnknownRegister() {
         IntentValidationException ex = assertThrows(IntentValidationException.class,
