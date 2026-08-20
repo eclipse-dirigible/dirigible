@@ -2158,9 +2158,12 @@ class IntentEngineIT extends IntegrationTest {
         generateFromModel("template-application-dao-java/template/template.js", "orders.model");
         assertTrue(resource("gen/orders/data/order/OrderRepository.java").exists(),
                 "the DAO template should generate the repository under gen/orders");
-        // The create-event publish must serialize via the java.time-aware SDK helper, not a bare Gson.
+        // The create event travels WITH the write: the repository hands its topic to save(), which
+        // records the event in the tenant's outbox inside the insert's own transaction instead of
+        // publishing after the commit (issue #6816). Serialization is still the java.time-aware SDK
+        // helper - applied by the platform now, rather than pasted into every generated repository.
         String repository = contentOf("gen/orders/data/order/OrderRepository.java");
-        assertTrue(repository.contains("Json.stringify(saved)"), "the repository should publish the event with the SDK Json helper");
+        assertTrue(repository.contains("super.save(entity, \""), "the repository should hand its create topic to the write");
         assertFalse(repository.contains("new Gson()"), "the repository must not use a bare Gson (fails on java.time fields)");
         // Generating the glue template must clean only gen/events, not gen/<modelName> - so the
         // full-stack output survives (the reported bug was the events generation wiping gen/orders).
