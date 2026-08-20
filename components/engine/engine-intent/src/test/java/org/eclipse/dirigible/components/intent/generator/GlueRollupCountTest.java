@@ -48,20 +48,21 @@ class GlueRollupCountTest {
         IntentModel model = IntentParser.parse(YAML);
         List<Map<String, Object>> rollups = GlueIntentGenerator.buildRollupsForTest(model);
 
-        assertEquals(3, rollups.size(), "a count roll-up must recompute on create, update and delete");
-        assertEquals(List.of("", "-updated", "-deleted"), rollups.stream()
-                                                                 .map(r -> String.valueOf(r.get("topicSuffix")))
-                                                                 .toList(),
-                "the three handlers bind the child's base, -updated and -deleted topics");
-        assertEquals(List.of("LoanMemberRollupOnCreate", "LoanMemberRollupOnUpdate", "LoanMemberRollupOnDelete"), rollups.stream()
-                                                                                                                         .map(r -> String.valueOf(
-                                                                                                                                 r.get("className")))
-                                                                                                                         .toList());
+        assertEquals(4, rollups.size(),
+                "a count roll-up must recompute on create, update, delete and rekey (the rekey variant repairs the vacated parent, #6819)");
+        assertEquals(List.of("", "-updated", "-deleted", "-rekeyed"), rollups.stream()
+                                                                             .map(r -> String.valueOf(r.get("topicSuffix")))
+                                                                             .toList(),
+                "the handlers bind the child's base, -updated, -deleted and -rekeyed topics");
+        assertEquals(List.of("LoanMemberRollupOnCreate", "LoanMemberRollupOnUpdate", "LoanMemberRollupOnDelete", "LoanMemberRollupOnRekey"),
+                rollups.stream()
+                       .map(r -> String.valueOf(r.get("className")))
+                       .toList());
         // Every variant carries the same op and recompute criteria - the update handler is not a
         // special case, it is the same idempotent read-modify-write of the affected parent.
         assertTrue(rollups.stream()
                           .allMatch(r -> "count".equals(r.get("op"))
                                   && "Criteria.create().eq(\"Member\", entity.Member)".equals(r.get("criteriaExpression"))),
-                "all three handlers must recompute the same way: " + rollups);
+                "all handlers must recompute the same way: " + rollups);
     }
 }
