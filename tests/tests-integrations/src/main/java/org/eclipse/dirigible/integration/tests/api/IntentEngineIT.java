@@ -1849,6 +1849,16 @@ class IntentEngineIT extends IntegrationTest {
         String onDelete = codeOf("gen/events/library/LoanMemberRollupOnDelete.java");
         assertTrue(onDelete.contains("@Component") && onDelete.contains("return \"intent-test-Loan-Loan-deleted\""),
                 "the delete listener binds the child's -deleted topic via destination()");
+
+        // A child moves between parents by an ordinary EDIT of its parent relation, so a count needs the
+        // update handler too - without it the parent the loan was moved to never counted it (#6820).
+        String onUpdate = contentOf("gen/events/library/LoanMemberRollupOnUpdate.java");
+        assertTrue(onUpdate.contains("@Component") && onUpdate.contains("return \"intent-test-Loan-Loan-updated\""),
+                "a count roll-up must also bind the child's -updated topic, so re-parenting recomputes the new parent");
+        assertTrue(
+                onUpdate.contains("new LoanRepository().findAll(Criteria.create().eq(\"Member\", entity.Member))")
+                        && onUpdate.contains("int count = rows.size();") && onUpdate.contains("parent.LoanCount = count"),
+                "the update listener recomputes exactly like the create one");
     }
 
     @Test

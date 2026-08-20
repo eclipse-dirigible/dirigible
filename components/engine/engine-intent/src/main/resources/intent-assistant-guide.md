@@ -2501,6 +2501,11 @@ must be an existing field on the parent (**integer** for `count`, **numeric** fo
 extras: `capacity`/`balance` are numeric parent fields, `status` a to-one relation of the parent, and
 `statusWhenFull`/`statusWhenPartial` its target seed ids.
 
+**When it recomputes.** Every roll-up - `count`, `sum` and `latest` alike - recomputes on the child's
+create, update **and** delete. The update pass is what keeps a count right when an ordinary edit moves
+a child to a different parent: the parent it moved *to* is corrected immediately (the one it moved
+*away from* is corrected the next time one of its own children changes).
+
 ### settlements - auto-allocate payments across invoices
 
 **Use when:** a payment should be automatically applied to a customer's open invoices (partial / full),
