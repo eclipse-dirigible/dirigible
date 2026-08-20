@@ -11,11 +11,13 @@ package org.eclipse.dirigible.components.listeners.config;
 
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 import jakarta.jms.Connection;
 import jakarta.jms.JMSException;
 import jakarta.jms.Session;
 import org.apache.activemq.broker.BrokerService;
 import org.eclipse.dirigible.components.listeners.service.ListenersManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
@@ -23,6 +25,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.ContextStartedEvent;
 import org.springframework.context.event.ContextStoppedEvent;
@@ -36,6 +39,10 @@ class CloseActiveMQResourcesApplicationListenerTest {
     /** The listener. */
     @InjectMocks
     private CloseActiveMQResourcesApplicationListener listener;
+
+    /** The broker provider. */
+    @Mock
+    private ObjectProvider<BrokerService> brokerProvider;
 
     /** The broker. */
     @Mock
@@ -64,6 +71,17 @@ class CloseActiveMQResourcesApplicationListenerTest {
     /** The started event. */
     @Mock
     private ContextStartedEvent startedEvent;
+
+    /**
+     * By default the deployment runs the embedded broker. Lenient because the tests which assert that a
+     * non-applicable event is ignored never reach the broker at all.
+     */
+    @BeforeEach
+    void setUp() {
+        Mockito.lenient()
+               .when(brokerProvider.getIfAvailable())
+               .thenReturn(broker);
+    }
 
     /**
      * Test on context closed event.
@@ -179,6 +197,32 @@ class CloseActiveMQResourcesApplicationListenerTest {
         listener.onApplicationEvent(closedEvent);
 
         verifyClosedResources();
+    }
+
+    /**
+     * With an external broker there is no broker bean to stop - everything this deployment does own is
+     * still closed, in the same order.
+     *
+     * @throws Exception the exception
+     */
+    @Test
+    void testExternalBrokerLeavesTheBrokerAlone() throws Exception {
+        when(brokerProvider.getIfAvailable()).thenReturn(null);
+
+        listener.onApplicationEvent(closedEvent);
+
+        InOrder inOrder = Mockito.inOrder(listenersManager, session, connection);
+
+        inOrder.verify(listenersManager)
+               .stopListeners();
+
+        inOrder.verify(session)
+               .close();
+
+        inOrder.verify(connection)
+               .close();
+
+        verifyNoInteractions(broker);
     }
 
 }

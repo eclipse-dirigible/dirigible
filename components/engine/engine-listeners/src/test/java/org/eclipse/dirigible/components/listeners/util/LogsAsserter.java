@@ -42,6 +42,17 @@ public class LogsAsserter {
     }
 
     /**
+     * Whether a message was logged, for the cases where its absence is what has to be asserted.
+     *
+     * @param message the message
+     * @param level the level
+     * @return true, if the message was logged at that level
+     */
+    public boolean containsMessage(String message, Level level) {
+        return memoryAppender.contains(message, level);
+    }
+
+    /**
      * Assert logged message.
      *
      * @param expectedMessage the expected message
