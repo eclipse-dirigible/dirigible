@@ -67,6 +67,20 @@ public abstract class JavaRepository<T> {
     }
 
     /**
+     * Insert a new entity instance and publish it on the given topic — atomically. The event is
+     * recorded in the tenant's event outbox inside the insert's own transaction, so the row and its
+     * event commit together; the broker sees the event only once the row is durable, and a broker that
+     * refuses it leaves the entry for the relay to retry instead of failing this call.
+     *
+     * @param entity the entity to insert
+     * @param eventTopic the topic to publish the saved entity on
+     * @return the saved entity (with any generated identifier populated)
+     */
+    public T save(T entity, String eventTopic) {
+        return store().save(entity, eventTopic);
+    }
+
+    /**
      * Update an existing entity instance.
      *
      * @param entity the entity to update
@@ -74,6 +88,32 @@ public abstract class JavaRepository<T> {
      */
     public T update(T entity) {
         return store().update(entity);
+    }
+
+    /**
+     * Update an existing entity instance and publish it on the given topic — atomically, see
+     * {@link #save(Object, String)}.
+     *
+     * @param entity the entity to update
+     * @param eventTopic the topic to publish the updated entity on
+     * @return the updated entity
+     */
+    public T update(T entity, String eventTopic) {
+        return store().update(entity, eventTopic);
+    }
+
+    /**
+     * Update an existing entity instance, publishing it on the given topic plus any further events the
+     * write emits about other rows — an aggregate's {@code "-rekeyed"} notice about the tuple the row
+     * just left. All of them share the update's transaction.
+     *
+     * @param entity the entity to update
+     * @param eventTopic the topic to publish the updated entity on
+     * @param additionalEvents further events to record with the same write
+     * @return the updated entity
+     */
+    public T update(T entity, String eventTopic, List<DomainEvent> additionalEvents) {
+        return store().update(entity, eventTopic, additionalEvents);
     }
 
     /**
@@ -107,7 +147,31 @@ public abstract class JavaRepository<T> {
      *         empty)
      */
     public int updateProperties(Object id, Map<String, Object> values) {
-        return store().updateProperties(entityClass, id, values);
+        // Deliberately NOT delegating to the event-carrying overload: a generated repository overrides
+        // both, and its recalculation path reaches the plain write through `super` precisely to bypass
+        // the semantics it adds. Re-dispatching here would drag them back in.
+        return store().updateProperties(entityClass, id, values, null);
+    }
+
+    /**
+     * Targeted multi-column write that publishes the resulting row on the given topic — atomically, see
+     * {@link #save(Object, String)}. This is the derived-column path (roll-up totals, keyed
+     * aggregates): every column not named is left alone, and the event still fires so downstream
+     * reactions keep cascading.
+     *
+     * <p>
+     * A generated repository that adds semantics to targeted writes (declarative checks, a stored
+     * display name) overrides <em>this</em> method, so both {@link #updateProperties(Object, Map)} and
+     * the event-carrying path go through it.
+     *
+     * @param id the primary-key value
+     * @param values the properties to set (plain identifiers) with their new values
+     * @param eventTopic the topic to publish the resulting row on; {@code null} publishes nothing
+     * @return the number of updated rows ({@code 0} when the id does not exist or {@code values} is
+     *         empty)
+     */
+    public int updateProperties(Object id, Map<String, Object> values, String eventTopic) {
+        return store().updateProperties(entityClass, id, values, eventTopic);
     }
 
     /**
@@ -176,12 +240,35 @@ public abstract class JavaRepository<T> {
     }
 
     /**
+     * Delete an entity instance and publish it on the given topic — atomically, see
+     * {@link #save(Object, String)}.
+     *
+     * @param entity the entity to delete
+     * @param eventTopic the topic to publish the deleted entity on
+     */
+    public void delete(T entity, String eventTopic) {
+        store().delete(entity, eventTopic);
+    }
+
+    /**
      * Delete an entity by primary key.
      *
      * @param id the primary-key value
      */
     public void deleteById(Object id) {
         store().deleteById(entityClass, id);
+    }
+
+    /**
+     * Delete an entity by primary key and publish the deleted row on the given topic — atomically, see
+     * {@link #save(Object, String)}. The payload is the row as it was read inside the deleting
+     * transaction.
+     *
+     * @param id the primary-key value
+     * @param eventTopic the topic to publish the deleted row on
+     */
+    public void deleteById(Object id, String eventTopic) {
+        store().deleteById(entityClass, id, eventTopic);
     }
 
     /**

@@ -133,8 +133,15 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.component.Repository;
+#if($groupingKeys && $groupingKeys.size() > 0)
+## The rekey notices are the ONLY events this repository still names: the update event itself is
+## recorded in the outbox by the base write. The update path records its notice there too (a
+## DomainEvent riding the write's transaction); the targeted path publishes directly, which is why
+## Producer is still needed here.
+import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.eclipse.dirigible.sdk.messaging.Producer;
 import org.eclipse.dirigible.sdk.utils.Json;
+#end
 #if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges)
 import org.eclipse.dirigible.sdk.db.ValidationException;
 #end
@@ -262,14 +269,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
 #end
-        ${name}Entity saved = super.save(entity);
+        // The create event is handed to the write itself, which records it in the tenant's event outbox
+        // INSIDE the insert's transaction: row and event commit together, so a broker outage can
+        // neither swallow an event whose row exists nor fail a call whose row was written. Listeners
+        // (intent process triggers, the reactions under gen/events) see it the moment it is durable.
+        ${name}Entity saved = super.save(entity, "${projectName}-${perspectiveName}-${name}");
 #if($history == "true")
         // Change history: the initial state as a null -> value delta per property, attributed to the
         // user whose request created the row.
         History.recordCreate(HISTORY_TABLE, saved.${pkPropertyName}, History.USER, saved, HISTORY_PROPERTIES);
 #end
-        // Publish the create event so listeners (e.g. intent process triggers / reactions under gen/events) can react.
-        Producer.sendToTopic("${projectName}-${perspectiveName}-${name}", Json.stringify(saved));
 #if($documentItem)
         // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
         new ${documentItem.parentEntity}Repository().recalculate(saved.${documentItem.fkProperty});
@@ -338,19 +347,24 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // and a translated value diffed against the stored one would report an edit nobody made.
         ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
 #end
-        ${name}Entity updated = super.update(entity);
+#if($groupingKeys && $groupingKeys.size() > 0)
+        java.util.List<DomainEvent> rekeyEvents = new java.util.ArrayList<>();
+        if (groupingMoved) {
+            // The "-rekeyed" notice carries the PREVIOUS row: the aggregate / roll-up handler recomputes
+            // that row's old group from the store, which no longer contains this row, so the total it
+            // left behind drops instead of staying stale. It rides the SAME transaction as the update,
+            // so the group the row left cannot be stranded by a broker that was down for the second of
+            // two separate publishes.
+            rekeyEvents.add(new DomainEvent("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(groupingPrevious)));
+        }
+        ${name}Entity updated = super.update(entity, "${projectName}-${perspectiveName}-${name}-updated", rekeyEvents);
+#else
+        // The update event is recorded in the event outbox inside this write's own transaction - see
+        // save() - so the intent reactions under gen/events see exactly the changes that committed.
+        ${name}Entity updated = super.update(entity, "${projectName}-${perspectiveName}-${name}-updated");
+#end
 #if($history == "true")
         History.recordUpdate(HISTORY_TABLE, updated.${pkPropertyName}, History.USER, historyBefore, updated, HISTORY_PROPERTIES);
-#end
-        // Publish the update event (suffixed topic) so intent reactions under gen/events can react.
-        Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-updated", Json.stringify(updated));
-#if($groupingKeys && $groupingKeys.size() > 0)
-        if (groupingMoved) {
-            // Published AFTER the write, carrying the PREVIOUS row: the aggregate / roll-up handler
-            // recomputes that row's old group from the store, which no longer contains this row, so the
-            // total it left behind drops instead of staying stale.
-            Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(groupingPrevious));
-        }
 #end
 #if($documentItem)
         // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
@@ -418,16 +432,28 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * Name) are persisted in one statement. The workflow setters/writers come through here; a plain
      * pass-through to the base targeted write would silently skip the posting gate - and, on a document
      * line, leave the master summing to something other than its lines.
+     *
+     * <p>
+     * Both forms are overridden and the plain one delegates to the event-carrying one, so a targeted
+     * write keeps these semantics whether or not it publishes. {@code recalculate} is the deliberate
+     * exception: it reaches the base write through {@code super}, having already computed the row.
 #if($groupingKeys && $groupingKeys.size() > 0)
      *
      * <p>
      * Still event-free for the reactions: the only event it can publish is {@code "-rekeyed"}, and only
      * when the write MOVED the row between groups - a topic nothing but the generated aggregate /
-     * roll-up handlers subscribes to.
+     * roll-up handlers subscribes to. Those two notices are published directly rather than recorded in
+     * the outbox: the targeted write carries at most one outbox topic, and this path needs two bodies
+     * (the row as it stood, and the row as written).
 #end
      */
     @Override
     public int updateProperties(Object id, java.util.Map<String, Object> values) {
+        return updateProperties(id, values, null);
+    }
+
+    @Override
+    public int updateProperties(Object id, java.util.Map<String, Object> values, String eventTopic) {
         if (values == null || values.isEmpty()) {
             return 0;
         }
@@ -510,12 +536,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // workflow write-back, a stamped number), so the trail attributes it to SYSTEM - a person
         // reading the record must be able to tell those apart from an edit somebody made.
         ${name}Entity historyBefore = super.findById(id);
-        int updatedCount = super.updateProperties(id, values);
+        int updatedCount = super.updateProperties(id, values, eventTopic);
         if (updatedCount > 0) {
             History.recordUpdate(HISTORY_TABLE, id, History.SYSTEM, historyBefore, super.findById(id), HISTORY_PROPERTIES);
         }
 #else
-        int updatedCount = super.updateProperties(id, values);
+        int updatedCount = super.updateProperties(id, values, eventTopic);
 #end
 #if($documentItem)
         if (updatedCount > 0 && (values.containsKey("${documentItem.fkProperty}")#foreach($f in $documentItem.fields) || values.containsKey("${f.field}")#end)) {
@@ -571,14 +597,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         if (values == null || values.isEmpty()) {
             return 0;
         }
-        int count = updateProperties(id, values);
-        if (count > 0) {
-            ${name}Entity current = findById(id);
-            if (current != null) {
-                Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-updated", Json.stringify(current));
-            }
-        }
-        return count;
+        // The event travels with the write: the resulting row is read back on the write's own
+        // connection, before its commit, and recorded in the event outbox alongside it.
+        return updateProperties(id, values, "${projectName}-${perspectiveName}-${name}-updated");
     }
 #if($lifecycleEdges)
 
@@ -735,12 +756,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // stored, so read the row (untranslated) before it is gone.
         ${name}Entity historyDeleted = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
 #end
-        super.delete(entity);
+        // The delete event is recorded in the event outbox inside this write's own transaction - see
+        // save() - so the intent reactions under gen/events cannot miss a row that is really gone.
+        super.delete(entity, "${projectName}-${perspectiveName}-${name}-deleted");
 #if($history == "true")
         History.recordDelete(HISTORY_TABLE, entity.${pkPropertyName}, History.USER, historyDeleted, HISTORY_PROPERTIES);
 #end
-        // Publish the delete event (suffixed topic) so intent reactions under gen/events can react.
-        Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-deleted", Json.stringify(entity));
 #if($documentItem)
         // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
         new ${documentItem.parentEntity}Repository().recalculate(entity.${documentItem.fkProperty});
@@ -749,21 +770,24 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public void deleteById(Object id) {
+#if($documentItem)
         ${name}Entity entity = findById(id);
+#end
 #if($history == "true")
         ${name}Entity historyDeleted = super.findById(id);
 #end
-        super.deleteById(id);
+        // The payload is the row as the deleting transaction read it, recorded in the event outbox
+        // beside the delete itself - see save().
+        super.deleteById(id, "${projectName}-${perspectiveName}-${name}-deleted");
 #if($history == "true")
         History.recordDelete(HISTORY_TABLE, id, History.USER, historyDeleted, HISTORY_PROPERTIES);
 #end
-        if (entity != null) {
-            Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-deleted", Json.stringify(entity));
 #if($documentItem)
+        if (entity != null) {
             // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
             new ${documentItem.parentEntity}Repository().recalculate(entity.${documentItem.fkProperty});
-#end
         }
+#end
     }
 #if($multilingual == "true")
 
