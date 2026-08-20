@@ -19,8 +19,10 @@ import org.apache.activemq.store.PListStore;
 import org.apache.activemq.store.PersistenceAdapter;
 import org.apache.activemq.store.jdbc.JDBCPersistenceAdapter;
 import org.apache.activemq.store.kahadb.plist.PListStoreImpl;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.DependsOn;
 import jakarta.jms.Connection;
@@ -28,10 +30,13 @@ import jakarta.jms.JMSException;
 import jakarta.jms.Session;
 
 /**
- * The Class MessagingConfig.
+ * The messaging beans backed by the platform's own in-process ActiveMQ broker - the default mode,
+ * active whenever no external broker is configured. Its counterpart is
+ * {@link ExternalBrokerMessagingConfig}; the two are mutually exclusive by construction.
  */
 @Configuration
-class MessagingConfig {
+@Conditional(EmbeddedMessagingBrokerCondition.class)
+class EmbeddedBrokerMessagingConfig {
 
     /** The Constant CONNECTOR_URL_ATTACH. */
     private static final String CONNECTOR_URL_ATTACH = "vm://localhost?create=false";
@@ -79,8 +84,7 @@ class MessagingConfig {
         try {
             BrokerService broker = new BrokerService();
             if (!broker.isStarted()) {
-                if (Boolean.parseBoolean(
-                        org.eclipse.dirigible.commons.config.Configuration.get("DIRIGIBLE_MESSAGING_USE_DEFAULT_DATABASE", "true"))) {
+                if (DirigibleConfig.MESSAGING_USE_DEFAULT_DATABASE.getBooleanValue()) {
                     PersistenceAdapter persistenceAdapter = new JDBCPersistenceAdapter(dataSource, new OpenWireFormat());
                     broker.setPersistenceAdapter(persistenceAdapter);
                 }
