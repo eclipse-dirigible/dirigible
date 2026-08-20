@@ -582,11 +582,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // this one class.
             String className = rollup.getEntity() + fkProperty;
             rollups.add(rollupEntry(base, className + "RollupOnCreate", ""));
-            if (sum || latest) {
-                // A line edit changes the sum (or which row is latest / its value), so sum AND latest
-                // roll-ups must also recompute on update.
-                rollups.add(rollupEntry(base, className + "RollupOnUpdate", "-updated"));
-            }
+            // EVERY op recomputes on update, not just sum / latest: a line edit changes the sum (or which
+            // row is latest, or its value), and an edit that RE-PARENTS a child - the ordinary way a child
+            // moves between parents - changes the count of the parent it moved TO. The recompute is the
+            // same query for every op and reads the child rows back from the store, so the update handler
+            // is idempotent and never op-specific. (The parent the child moved AWAY from is repaired by
+            // the RollupOnRekey handler below, off the "-rekeyed" event the DAO publishes for the move.)
+            rollups.add(rollupEntry(base, className + "RollupOnUpdate", "-updated"));
             rollups.add(rollupEntry(base, className + "RollupOnDelete", "-deleted"));
             // Re-parenting: the child's create/update/delete events all name the parent it belongs to NOW,
             // so the parent it moved AWAY from is named by no event of theirs and kept the child's
@@ -686,6 +688,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // The create handler keeps its established class name; the correction one is suffixed.
             listeners.add(rollupEntry(settlement, name + "OnPayment", ""));
             listeners.add(rollupEntry(settlement, name + "OnPaymentUpdated", "-updated"));
+            if (!Boolean.TRUE.equals(settlement.get("crossModel"))) {
+                // A corrected MATCH column re-targets the allocation wholesale: the payment's DAO
+                // publishes "-rekeyed" for the move (the match columns are grouping keys), and this
+                // handler releases everything and re-allocates from the STORE - which needs the
+                // payment's repository, so it exists only for a local payment. A cross-model payment's
+                // DAO belongs to the owner model, which knows nothing of this settlement.
+                listeners.add(rollupEntry(settlement, name + "OnPaymentRekeyed", "-rekeyed"));
+            }
         }
         return listeners;
     }
@@ -1275,6 +1285,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     static List<Map<String, Object>> buildRollupsForTest(IntentModel model) {
         return buildRollups(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
                 null);
+    }
+
+    /** Test hook: build the {@code settlementListeners} glue collection without a repository. */
+    static List<Map<String, Object>> buildSettlementListenersForTest(IntentModel model) {
+        IntentGenerationContext context =
+                new IntentGenerationContext(model, "/" + model.getName(), model.getName(), "workspace", model.getName(), null);
+        return buildSettlementListeners(buildSettlements(model, IntentEntities.byName(model), IntentEntities.compositionParents(model),
+                IntentSettings.parse("{}"), context));
     }
 
     /** Test hook: build the {@code waits} glue collection without a repository. */

@@ -51,6 +51,7 @@ import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.RelatedIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
+import org.eclipse.dirigible.components.intent.model.SettlementIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.model.UniqueIntent;
@@ -632,6 +633,19 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 if (rollup.getVia() != null && entity.getName()
                                                      .equals(rollup.getEntity())) {
                     addGroupingKey(groupingKeys, seenGroupingKeys, rollup.getVia());
+                }
+            }
+            // A settlement matches invoices by columns of the PAYMENT row (its Customer, its Company),
+            // so a correction that moves one of them re-targets the whole allocation - the settlement's
+            // rekey handler releases and re-allocates from the store. Without these keys the DAO never
+            // notices the move and the junction rows keep paying the OLD counterparty's invoices.
+            for (SettlementIntent settlement : model.getSettlements()) {
+                if (entity.getName()
+                          .equals(settlement.getPayment())
+                        && settlement.getMatch() != null) {
+                    for (String matchColumn : settlement.getMatch()) {
+                        addGroupingKey(groupingKeys, seenGroupingKeys, matchColumn);
+                    }
                 }
             }
             if (!groupingKeys.isEmpty()) {

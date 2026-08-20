@@ -37,8 +37,10 @@ import org.apache.activemq.util.ByteSequence;
 import org.eclipse.dirigible.components.ide.messaging.monitoring.dto.BrokerSummary;
 import org.eclipse.dirigible.components.ide.messaging.monitoring.dto.DestinationSummary;
 import org.eclipse.dirigible.components.ide.messaging.monitoring.dto.MessageDetail;
+import org.eclipse.dirigible.components.listeners.config.EmbeddedMessagingBrokerCondition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Service;
 
 /**
@@ -46,8 +48,14 @@ import org.springframework.stereotype.Service;
  * the broker is started with JMX disabled. Queues expose a {@code browse()} accessor that returns
  * the in-memory pending set; topics do not retain non-persistent messages, so the topic browser
  * only reports current subscriber/producer counts.
+ * <p>
+ * Reaching into the broker object is what makes this embedded-only: a deployment configured against
+ * an external broker has no {@code BrokerService} to read, so neither this service nor its endpoint
+ * is registered there and the monitoring perspective's calls answer 404. Such a broker is
+ * administered through its own console.
  */
 @Service
+@Conditional(EmbeddedMessagingBrokerCondition.class)
 public class MessagingMonitoringService {
 
     private static final Logger logger = LoggerFactory.getLogger(MessagingMonitoringService.class);

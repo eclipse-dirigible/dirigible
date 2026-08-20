@@ -1073,10 +1073,15 @@ class IntentEngineIT extends IntegrationTest {
         generateFromModel("template-application-events-java/template/template.js", "fines.glue");
         String lookup = codeOf("gen/events/fines/IdentifyDriverResolve.java");
 
-        // The result goes out on its own, and the status is NOT in that batch.
+        // The result goes out on its own, and the status is NOT in that batch. The routing write hands
+        // its "-transitioned" topic to the write itself, so the flip and its announcement commit
+        // together through the outbox - never a bare publish beside the write.
         int result = onlyIndexOf(lookup, "repository.updateProperties(id, values)");
-        int routing = onlyIndexOf(lookup, "repository.updateProperty(id, \"Status\", status)");
+        int routing = onlyIndexOf(lookup, "repository.updateProperties(id, java.util.Map.of(\"Status\", status)");
         assertTrue(result < routing, "the resolved relation and the trace must be persisted BEFORE the routing status is attempted");
+        assertTrue(lookup.contains("-Fine-Fine-transitioned\");"), "the routing write must carry the -transitioned topic into the outbox");
+        assertFalse(lookup.contains("Producer.sendToTopic"),
+                "the lookup must not publish beside its writes - a broker outage would lose the announcement");
         assertFalse(lookup.contains("values.put(\"Status\", status)"),
                 "the status must NOT ride in the same map - a rejected move would take the relation and the trace with it");
 
@@ -1177,7 +1182,7 @@ class IntentEngineIT extends IntegrationTest {
         // and the async consumer re-loads the source on receive - it must observe those writes.
         assertTrue(
                 activate.contains("Process.executeAfterCommit(")
-                        && activate.contains("Producer.sendToTopic(\"" + PROJECT + "-Member-Member-transitioned\", transitioned)"),
+                        && activate.contains("Producer.sendToTopicDurable(\"" + PROJECT + "-Member-Member-transitioned\", transitioned)"),
                 "the setter should publish the -transitioned topic after the BPMN chain commits");
     }
 
@@ -1406,7 +1411,7 @@ class IntentEngineIT extends IntegrationTest {
                 "an onTransition wait must bind the -transitioned topic, got: " + wait);
         // The setter on the same entity is the publisher the two now hear.
         String setter = contentOf("gen/events/fines/IdentifyAttribute.java");
-        assertTrue(setter.contains("Producer.sendToTopic(\"" + PROJECT + "-Fine-Fine-transitioned\", transitioned)"),
+        assertTrue(setter.contains("Producer.sendToTopicDurable(\"" + PROJECT + "-Fine-Fine-transitioned\", transitioned)"),
                 "the setter must publish the very topic the notification and the wait subscribe to");
     }
 
@@ -1942,6 +1947,16 @@ class IntentEngineIT extends IntegrationTest {
         String onDelete = codeOf("gen/events/library/LoanMemberRollupOnDelete.java");
         assertTrue(onDelete.contains("@Component") && onDelete.contains("return \"intent-test-Loan-Loan-deleted\""),
                 "the delete listener binds the child's -deleted topic via destination()");
+
+        // A child moves between parents by an ordinary EDIT of its parent relation, so a count needs the
+        // update handler too - without it the parent the loan was moved to never counted it (#6820).
+        String onUpdate = contentOf("gen/events/library/LoanMemberRollupOnUpdate.java");
+        assertTrue(onUpdate.contains("@Component") && onUpdate.contains("return \"intent-test-Loan-Loan-updated\""),
+                "a count roll-up must also bind the child's -updated topic, so re-parenting recomputes the new parent");
+        assertTrue(
+                onUpdate.contains("new LoanRepository().findAll(Criteria.create().eq(\"Member\", entity.Member))")
+                        && onUpdate.contains("int count = rows.size();") && onUpdate.contains("parent.LoanCount = count"),
+                "the update listener recomputes exactly like the create one");
     }
 
     @Test
@@ -2055,6 +2070,11 @@ class IntentEngineIT extends IntegrationTest {
                 "it should create allocation rows through the junction repository (never the generic Store)");
         assertTrue(onPayment.contains("return \"" + PROJECT + "-Payment-Payment\";"),
                 "the create listener should bind the bare payment topic");
+        // A create event is the FIRST word about a payment - it has nothing to release. A negative pot
+        // on this handler means the event was DELAYED past a correction the updated handler already
+        // allocated, and releasing on that stale payload would undo the correction (#6865).
+        assertFalse(onPayment.contains("release(payment.Id, pot.negate())"),
+                "the create listener must never release - the updated handler owns every shrink");
 
         // A payment corrected after it was booked - or created incomplete and completed later - must be
         // re-allocated, so the same recompute is bound to the payment's update event too (#6818).
@@ -2067,6 +2087,19 @@ class IntentEngineIT extends IntegrationTest {
                 "a payment corrected below what it already covers should release the excess allocation");
         assertTrue(onPaymentUpdated.contains(".orderByDesc(\"Id\")") && onPaymentUpdated.contains("rows.delete(row)"),
                 "the release should give back the newest allocations first, through the junction repository");
+
+        // A corrected MATCH column (the payment re-filed under another Customer) re-targets the whole
+        // allocation: the payment's DAO publishes "-rekeyed" for the move (the match columns are
+        // grouping keys) and this third handler releases everything and re-allocates from the STORE -
+        // both re-key notices run the same store-driven recompute, so delivery order cannot matter
+        // (#6864).
+        String onPaymentRekeyed = contentOf("gen/events/settle/AutoSettleOnPaymentRekeyed.java");
+        assertTrue(onPaymentRekeyed.contains("return \"" + PROJECT + "-Payment-Payment-rekeyed\";"),
+                "the re-key listener should bind the payment's -rekeyed topic");
+        assertTrue(onPaymentRekeyed.contains("new PaymentRepository().findById(payment.Id)"),
+                "the re-key recompute must read the payment from the store, never trust the moved payload");
+        assertTrue(onPaymentRekeyed.contains("release(payment.Id, allocated(payment.Id))"),
+                "the re-key recompute must release the whole allocation before re-allocating");
 
         String onInvoice = codeOf("gen/events/settle/AutoSettleOnInvoice.java");
         assertTrue(onInvoice.contains("class AutoSettleOnInvoice implements JavaDelegate"),
@@ -3101,7 +3134,7 @@ class IntentEngineIT extends IntegrationTest {
         // edits only reached anything by accident - when an unrelated setter on the same task happened
         // to sweep them into its own reload. Deferred, because a consumer re-loads on receive and would
         // otherwise race the rest of the BPMN chain.
-        assertTrue(writer.contains("Producer.sendToTopic(\"" + PROJECT + "-SalesOrder-SalesOrder-updated\", payload)"),
+        assertTrue(writer.contains("Producer.sendToTopicDurable(\"" + PROJECT + "-SalesOrder-SalesOrder-updated\", payload)"),
                 "the writer must publish the entity's -updated topic, got: " + writer);
         assertTrue(writer.contains("Process.executeAfterCommit("), "the publish must be deferred to after the BPMN chain commits");
         int write = writer.indexOf("repository.updateProperties(id, values)");
@@ -3133,7 +3166,7 @@ class IntentEngineIT extends IntegrationTest {
 
         String stamp = contentOf("gen/events/orders/SalesInvoiceNumberStamp.java");
         assertTrue(stamp.contains("DocumentNumbers.next(\"Sales Invoice\")"), "the stamp must allocate from the declared series");
-        assertTrue(stamp.contains("Producer.sendToTopic(\"" + PROJECT + "-SalesInvoice-SalesInvoice-updated\", payload)"),
+        assertTrue(stamp.contains("Producer.sendToTopicDurable(\"" + PROJECT + "-SalesInvoice-SalesInvoice-updated\", payload)"),
                 "the stamp must publish the entity's -updated topic - the raw perspective, not the sanitized Java one, got: " + stamp);
         assertTrue(stamp.contains("Process.executeAfterCommit("), "the publish must be deferred to after the BPMN chain commits");
         int write = stamp.indexOf("repository.updateProperty(id, \"Number\", number)");

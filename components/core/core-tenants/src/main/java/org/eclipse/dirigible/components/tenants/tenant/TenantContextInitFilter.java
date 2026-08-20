@@ -77,7 +77,7 @@ public class TenantContextInitFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        Optional<Tenant> currentTenant = tenantExtractor.determineTenantSubdomain(request);
+        Optional<Tenant> currentTenant = tenantExtractor.determineTenant(request);
         if (currentTenant.isEmpty()) {
             writeNotFoundResponse(request, response, "There is no registered tenant for the current host");
             if (LOGGER.isWarnEnabled()) {

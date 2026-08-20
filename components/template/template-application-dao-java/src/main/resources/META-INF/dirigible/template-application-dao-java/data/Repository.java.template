@@ -134,12 +134,9 @@ import org.eclipse.dirigible.components.data.store.java.repository.JavaRepositor
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.component.Repository;
 #if($groupingKeys && $groupingKeys.size() > 0)
-## The rekey notices are the ONLY events this repository still names: the update event itself is
-## recorded in the outbox by the base write. The update path records its notice there too (a
-## DomainEvent riding the write's transaction); the targeted path publishes directly, which is why
-## Producer is still needed here.
+## The rekey notices are the ONLY events this repository still names; both paths record them in the
+## outbox as DomainEvents riding the write's own transaction, so no bare publish remains here.
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
-import org.eclipse.dirigible.sdk.messaging.Producer;
 import org.eclipse.dirigible.sdk.utils.Json;
 #end
 #if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges)
@@ -341,6 +338,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
 #end
+#if($documentItem)
+        // The document this line belongs to BEFORE the write: a full-row update may re-point the
+        // line's FK to another document, and the one it leaves has no write of its own to resum it -
+        // the same moved-line hole the targeted path already closes. Read through the BASE find, like
+        // the history before-image below.
+        ${name}Entity documentBeforeRow = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+        Object documentBefore = documentBeforeRow == null ? null : documentBeforeRow.${documentItem.fkProperty};
+#end
 #if($history == "true")
         // Change history: the before-image is read through the BASE find (super), never this class's
         // overridden one - on a multilingual entity the overridden read overlays the caller's language,
@@ -369,6 +374,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($documentItem)
         // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
         new ${documentItem.parentEntity}Repository().recalculate(updated.${documentItem.fkProperty});
+        if (documentBefore != null && !documentBefore.equals(updated.${documentItem.fkProperty})) {
+            // The line MOVED: resum the document it left, which nothing else is going to touch.
+            new ${documentItem.parentEntity}Repository().recalculate(documentBefore);
+        }
 #end
         return updated;
     }
@@ -395,6 +404,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // the gate check makes an unbalanced document fail the transition, not silently post.
         enforceChecks(entity);
 #end
+#if($documentItem)
+        // The document this line belongs to BEFORE the write - a system write can re-point the FK
+        // exactly as a user edit does, and the vacated document has no write of its own to resum it.
+        ${name}Entity documentBeforeRow = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+        Object documentBefore = documentBeforeRow == null ? null : documentBeforeRow.${documentItem.fkProperty};
+#end
 #if($history == "true")
         ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
         ${name}Entity updated = super.update(entity);
@@ -408,6 +423,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // A system write is still a line change: the event is suppressed here, the arithmetic is not.
         // Keep the document consistent exactly as update() does (no async roll-up).
         new ${documentItem.parentEntity}Repository().recalculate(updated.${documentItem.fkProperty});
+        if (documentBefore != null && !documentBefore.equals(updated.${documentItem.fkProperty})) {
+            // The line MOVED: resum the document it left, which nothing else is going to touch.
+            new ${documentItem.parentEntity}Repository().recalculate(documentBefore);
+        }
 #end
         return updated;
     }
@@ -442,9 +461,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * <p>
      * Still event-free for the reactions: the only event it can publish is {@code "-rekeyed"}, and only
      * when the write MOVED the row between groups - a topic nothing but the generated aggregate /
-     * roll-up handlers subscribes to. Those two notices are published directly rather than recorded in
-     * the outbox: the targeted write carries at most one outbox topic, and this path needs two bodies
-     * (the row as it stood, and the row as written).
+     * roll-up handlers subscribes to. Both notices are recorded in the outbox with the write itself,
+     * so the mutation and the recompute signals commit together - a broker outage delays the
+     * recompute instead of losing it.
 #end
      */
     @Override
@@ -531,17 +550,38 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
         }
 #end
+#if($groupingKeys && $groupingKeys.size() > 0)
+        // BOTH sides of the move, on the one topic only the aggregate / roll-up handlers listen to -
+        // so no other reaction sees a second event, which is why this path can signal them without
+        // re-publishing "-updated". The previous row names the group the row LEFT (recomputed without
+        // it, its total drops instead of staying stale); the written row names the one it moved INTO,
+        // which on the targeted path gets no event of its own at all. Handed to the base write so both
+        // notices commit with the mutation itself - a broker outage delays the recompute instead of
+        // losing it - and recorded only when the row actually existed to be written.
+        java.util.List<DomainEvent> rekeyEvents = groupingMoved
+                ? java.util.List.of(new DomainEvent("${projectName}-${perspectiveName}-${name}-rekeyed", groupingPrevious),
+                        new DomainEvent("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(entity)))
+                : java.util.List.of();
+#end
 #if($history == "true")
         // Change history for the targeted write: it is how the system writes (a roll-up total, a
         // workflow write-back, a stamped number), so the trail attributes it to SYSTEM - a person
         // reading the record must be able to tell those apart from an edit somebody made.
         ${name}Entity historyBefore = super.findById(id);
+#if($groupingKeys && $groupingKeys.size() > 0)
+        int updatedCount = super.updateProperties(id, values, eventTopic, rekeyEvents);
+#else
         int updatedCount = super.updateProperties(id, values, eventTopic);
+#end
         if (updatedCount > 0) {
             History.recordUpdate(HISTORY_TABLE, id, History.SYSTEM, historyBefore, super.findById(id), HISTORY_PROPERTIES);
         }
 #else
+#if($groupingKeys && $groupingKeys.size() > 0)
+        int updatedCount = super.updateProperties(id, values, eventTopic, rekeyEvents);
+#else
         int updatedCount = super.updateProperties(id, values, eventTopic);
+#end
 #end
 #if($documentItem)
         if (updatedCount > 0 && (values.containsKey("${documentItem.fkProperty}")#foreach($f in $documentItem.fields) || values.containsKey("${f.field}")#end)) {
@@ -562,17 +602,6 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                 // The line MOVED: resum the document it left, which nothing else is going to touch.
                 new ${documentItem.parentEntity}Repository().recalculate(documentBefore);
             }
-        }
-#end
-#if($groupingKeys && $groupingKeys.size() > 0)
-        if (updatedCount > 0 && groupingMoved) {
-            // BOTH sides of the move, on the one topic only the aggregate / roll-up handlers listen to -
-            // so no other reaction sees a second event, which is why this path can signal them without
-            // re-publishing "-updated". The previous row names the group the row LEFT (recomputed without
-            // it, its total drops instead of staying stale); the written row names the one it moved INTO,
-            // which on the targeted path gets no event of its own at all.
-            Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-rekeyed", groupingPrevious);
-            Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(entity));
         }
 #end
         return updatedCount;

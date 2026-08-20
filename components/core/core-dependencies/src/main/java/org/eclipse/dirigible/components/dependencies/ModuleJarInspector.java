@@ -43,6 +43,12 @@ final class ModuleJarInspector {
     private static final String DIRIGIBLE_ROOT = "META-INF/dirigible/";
 
     /**
+     * A registry project name must be a plain path segment - no dots-only names, no separators - so it
+     * can never escape the registry when concatenated into a repository path.
+     */
+    private static final java.util.regex.Pattern PLAIN_PROJECT_NAME = java.util.regex.Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]*");
+
+    /**
      * Instantiates a new module jar inspector.
      */
     private ModuleJarInspector() {
@@ -72,7 +78,19 @@ final class ModuleJarInspector {
                     String rest = name.substring(DIRIGIBLE_ROOT.length());
                     int slash = rest.indexOf('/');
                     if (slash > 0) {
-                        projects.add(rest.substring(0, slash));
+                        String project = rest.substring(0, slash);
+                        // The project name becomes a registry path segment: on removal it is handed to
+                        // ClasspathExpander.remove, whose repository path is plain string concatenation -
+                        // a crafted "META-INF/dirigible/../x" entry would name the project ".." and its
+                        // removal would delete the registry root. Refuse anything that is not a plain
+                        // name, loudly: a jar carrying such an entry is malformed or malicious, and the
+                        // expand side already rejects its kind (the Zip-Slip guard).
+                        if (!PLAIN_PROJECT_NAME.matcher(project)
+                                               .matches()) {
+                            throw new IOException("Module jar [" + jarPath.getFileName() + "] declares an invalid registry project name ["
+                                    + project + "] under META-INF/dirigible/ - refusing the jar");
+                        }
+                        projects.add(project);
                     }
                 } else if (name.endsWith(".so") || name.endsWith(".dylib") || name.endsWith(".dll")) {
                     nativeLibraries.add(name);

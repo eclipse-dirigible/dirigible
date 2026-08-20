@@ -125,6 +125,21 @@ class EventOutboxStore {
     }
 
     /**
+     * Records one event on a connection of its own — the standalone variant for an announcement that is
+     * deliberately decoupled from the write it is about (a deferred publish after a synchronous chain's
+     * commit), where there is no enclosing transaction to join.
+     *
+     * @param event the event to record
+     * @param nextAttemptAt when the relay may first take the entry over
+     * @throws SQLException if the insert fails
+     */
+    void insert(PendingEvent event, Instant nextAttemptAt) throws SQLException {
+        try (Connection connection = connection()) {
+            insert(connection, event, nextAttemptAt);
+        }
+    }
+
+    /**
      * @return true when the current tenant has an outbox table at all — a tenant that never wrote an
      *         entity has none, and the relay must not fail on it
      * @throws SQLException if the metadata lookup fails

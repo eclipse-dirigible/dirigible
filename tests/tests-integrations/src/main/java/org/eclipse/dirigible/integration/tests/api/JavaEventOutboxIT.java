@@ -20,6 +20,8 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -102,6 +104,37 @@ class JavaEventOutboxIT extends IntegrationTest {
                   });
 
         // Nothing is left behind: what the in-process dispatch delivered, it also cleared.
+        Awaitility.await()
+                  .pollInterval(1, TimeUnit.SECONDS)
+                  .atMost(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                  .until(() -> countOutboxEntries() == 0);
+
+        // A targeted write's EXTRA events (the shape of the generated DAO's "-rekeyed" pair) ride the
+        // same outbox: one mutation, two notices - the written row and the caller's own message - both
+        // delivered and both cleared. Without the event-carrying overload these were bare publishes a
+        // broker outage would swallow.
+        drainEchoQueue();
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(CONTROLLER + "/retarget")
+                                                 .then()
+                                                 .statusCode(200));
+        Set<String> notices = new HashSet<>();
+        Awaitility.await()
+                  .pollInterval(1, TimeUnit.SECONDS)
+                  .atMost(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                  .until(() -> {
+                      String echo = receiveEcho();
+                      if (echo != null) {
+                          notices.add(echo);
+                      }
+                      return notices.size() >= 2;
+                  });
+        assertTrue(notices.stream()
+                          .anyMatch(notice -> notice.contains("moved")),
+                "the targeted write must record the written row: " + notices);
+        assertTrue(notices.stream()
+                          .anyMatch(notice -> notice.contains("previous")),
+                "the targeted write must record the caller's extra event with the same write: " + notices);
         Awaitility.await()
                   .pollInterval(1, TimeUnit.SECONDS)
                   .atMost(TIMEOUT_SECONDS, TimeUnit.SECONDS)

@@ -43,7 +43,7 @@ import org.springframework.stereotype.Component;
  * "sent" is only known once the row is gone.
  */
 @Component
-public class EventOutbox {
+public class EventOutbox implements org.eclipse.dirigible.components.api.messaging.DurableMessagePublisher {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EventOutbox.class);
 
@@ -87,6 +87,34 @@ public class EventOutbox {
             }
         });
         return new Batch(this, pending);
+    }
+
+    /**
+     * The durable publish for an announcement DECOUPLED from the write it is about — deferred past a
+     * synchronous chain's commit, or ordered after several transactions — where {@link #record} has no
+     * transaction to join. The entry is recorded in its own short transaction and handed to the broker
+     * immediately; whatever the broker refuses stays for the relay, exactly as a write-attached event
+     * would. If even the recording fails (the outbox table unreachable), the message is handed to the
+     * broker directly — the caller's work has already committed and an at-most-once attempt beats
+     * failing a caller whose announcement machinery is down.
+     *
+     * @param topic the topic to publish on
+     * @param payload the message body
+     */
+    @Override
+    public void publishToTopic(String topic, String payload) {
+        PendingEvent event = new PendingEvent(UUID.randomUUID()
+                                                  .toString(),
+                topic, payload, 0);
+        try {
+            prepare();
+            store.insert(event, nextAttemptAt());
+        } catch (RuntimeException | SQLException ex) {
+            LOGGER.error("Failed to record a durable publish on topic [{}]; attempting the direct publish instead.", topic, ex);
+            MessagingFacade.sendToTopic(topic, payload);
+            return;
+        }
+        deliver(event);
     }
 
     /**

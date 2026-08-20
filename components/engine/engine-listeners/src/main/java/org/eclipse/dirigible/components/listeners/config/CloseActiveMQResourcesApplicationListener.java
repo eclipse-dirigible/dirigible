@@ -17,6 +17,7 @@ import org.eclipse.dirigible.components.base.ApplicationListenersOrder.Applicati
 import org.eclipse.dirigible.components.listeners.service.ListenersManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEvent;
@@ -39,8 +40,8 @@ class CloseActiveMQResourcesApplicationListener implements ApplicationListener<A
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(CloseActiveMQResourcesApplicationListener.class);
 
-    /** The broker. */
-    private final BrokerService broker;
+    /** The broker, absent when the deployment uses an external broker. */
+    private final ObjectProvider<BrokerService> brokerProvider;
 
     /** The connection. */
     private final Connection connection;
@@ -54,15 +55,17 @@ class CloseActiveMQResourcesApplicationListener implements ApplicationListener<A
     /**
      * Instantiates a new close active MQ resources application listener.
      *
-     * @param broker the broker
+     * @param brokerProvider provides the embedded broker, which an external-broker deployment does not
+     *        have
      * @param connection the connection
      * @param session the session
      * @param listenersManager the listeners manager
      */
     @Autowired
-    CloseActiveMQResourcesApplicationListener(BrokerService broker, @Qualifier("ActiveMQConnection") Connection connection,
-            @Qualifier("ActiveMQSession") Session session, ListenersManager listenersManager) {
-        this.broker = broker;
+    CloseActiveMQResourcesApplicationListener(ObjectProvider<BrokerService> brokerProvider,
+            @Qualifier("ActiveMQConnection") Connection connection, @Qualifier("ActiveMQSession") Session session,
+            ListenersManager listenersManager) {
+        this.brokerProvider = brokerProvider;
         this.connection = connection;
         this.session = session;
         this.listenersManager = listenersManager;
@@ -137,9 +140,15 @@ class CloseActiveMQResourcesApplicationListener implements ApplicationListener<A
     }
 
     /**
-     * Stop broker.
+     * Stop broker. There is none to stop when the messaging rides an external broker - the connection
+     * and the session closed above are all this deployment owns.
      */
     private void stopBroker() {
+        BrokerService broker = brokerProvider.getIfAvailable();
+        if (null == broker) {
+            LOGGER.debug("No embedded ActiveMQ broker to stop - the messaging uses an external broker");
+            return;
+        }
         try {
             broker.stop();
         } catch (Exception ex) {
