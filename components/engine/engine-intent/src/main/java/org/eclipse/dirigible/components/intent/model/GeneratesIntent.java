@@ -56,6 +56,14 @@ import java.util.Map;
 public class GeneratesIntent {
 
     /**
+     * The default event cardinality: at most one target row per source, guarded by the back-reference.
+     */
+    public static final String MODE_ONCE = "once";
+
+    /** The opt-in event cardinality: one target row per delivered event, with no guard at all. */
+    public static final String MODE_APPEND = "append";
+
+    /**
      * Unique name within the model; drives the action id, the contribution files and the controller.
      */
     private String name;
@@ -106,17 +114,29 @@ public class GeneratesIntent {
 
     /**
      * Optional event trigger (issue #6711): the create-from runs by itself when the SOURCE reaches a
-     * state, instead of waiting for a click. {@code onTransition} (a status write; a {@code when}
-     * status guard is mandatory) or {@code onCreate} (the source's insert; the guard is optional) names
-     * the source entity - the same one {@link #from} declares, repeated for symmetry with
-     * {@code postings}' event axis and validated against it. The owning model is NOT repeated here:
-     * {@link #fromUses} already declares it.
+     * moment, instead of waiting for a click. Exactly one of two axes, the same pair the rest of the
+     * declarative glue binds to:
+     * <ul>
+     * <li>the source's <b>lifecycle</b> - {@code onTransition} (a status write; a {@code when} status
+     * guard is mandatory) or {@code onCreate} (the source's insert; the guard is optional), naming the
+     * source entity - the same one {@link #from} declares, repeated for symmetry with {@code postings}'
+     * event axis and validated against it; and</li>
+     * <li>a <b>process step</b> (issue #6800) - {@code onStepReached} / {@code onStepCompleted}:
+     * <code>{ process, step }</code>, the axis {@code notifications} / {@code integrations} /
+     * {@code outbound} already use, whose record is the process's trigger entity (which must be
+     * {@link #from}). The {@code when} guard stays optional: the step IS the moment.</li>
+     * </ul>
+     * The owning model is NOT repeated here: {@link #fromUses} already declares it.
      *
      * <p>
-     * An event-driven create-from is <b>at-most-once</b>: the target's back-reference to the source
-     * (the {@link #map} entry copying the source's primary key) is checked before anything is created,
-     * so an event redelivery - and a click on a button that is still declared - is a no-op that returns
-     * the document that already exists.
+     * {@code mode} declares the <b>cardinality</b>. The default {@code once} is at-most-once: the
+     * target's back-reference to the source (the {@link #map} entry copying the source's primary key)
+     * is checked before anything is created, so an event redelivery - and a click on a button that is
+     * still declared - is a no-op that returns the document that already exists. {@code append} drops
+     * that lookup, so every delivery of the event creates a row: the "one log/protocol row per step,
+     * per transition" shape. It is the ABSENCE of a guard, not a state-aware one - a redelivery appends
+     * a duplicate, and a replacement for a voided target is not what it expresses. The back-reference
+     * is required in BOTH modes: the dedup key in {@code once}, the row's provenance in {@code append}.
      */
     private Map<String, Object> event;
 
@@ -265,6 +285,27 @@ public class GeneratesIntent {
     /** Whether this create-from is triggered by a source event rather than only by a click. */
     public boolean isEventDriven() {
         return event != null && !event.isEmpty();
+    }
+
+    /**
+     * The declared cardinality of the event trigger (see {@link #event}).
+     *
+     * @return {@link #MODE_APPEND} when the author asked for a row per event, {@link #MODE_ONCE}
+     *         otherwise (the default, and the value for a create-from with no event at all)
+     */
+    public String getEventMode() {
+        Object mode = event == null ? null : event.get("mode");
+        String declared = mode == null ? null
+                : mode.toString()
+                      .trim();
+        return declared == null || declared.isEmpty() ? MODE_ONCE : declared;
+    }
+
+    /**
+     * @return whether every delivery of the event appends a target row (no at-most-once guard)
+     */
+    public boolean isAppendMode() {
+        return MODE_APPEND.equals(getEventMode());
     }
 
     public Boolean getButton() {

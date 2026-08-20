@@ -18,12 +18,21 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * The ${entity} repository publishes the event to the topic this listener binds to; the started
  * process-instance id is written back to ProcessId (so the process is started at most once).
  *
+ * The guard against a second instance IS that stamped ProcessId, so recording it is the one thing
+ * that may not fail silently: the start and the write-back commit separately, and an instance no
+ * record points at is invisible to the application while its user tasks still reach an inbox. Hence
+ * the shape below - everything that CAN happen before the start does (the minted correlation key,
+ * every process variable rides the start payload), the write-back is the only post-start step and no
+ * document gate can refuse it, and if it still does not land the instance is cancelled instead of
+ * left running untracked.
+ *
  * Self-describing MessageHandler (strong-interface style): the destination/kind come from the
  * interface, not an annotation; @Component makes it a managed bean with constructor injection.
  */
 @Component("${javaGenFolderName}_${process}Trigger")
 public class ${process}Trigger implements MessageHandler {
 
+    /** Application logger - nested under the platform's `app.` root, like every other app logger. */
     private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${process}Trigger");
 
     private final ${entity}Repository repository;
@@ -61,54 +70,93 @@ public class ${process}Trigger implements MessageHandler {
         }
 #end
 #if(${generateBusinessKey} == "true")
-        String minted = null;
         if (entity.${businessKeyProperty} == null || entity.${businessKeyProperty}.isBlank()) {
-            minted = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-            entity.${businessKeyProperty} = minted;
+            // Mint the correlation key and persist it BEFORE starting: the instance is started WITH this
+            // key, so failing to store it must prevent the start rather than follow it. A retry then
+            // reuses the stored key instead of minting a second one.
+            entity.${businessKeyProperty} = java.time.LocalDateTime.now()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+            repository.updateProperty(entity.${keyProperty}, "${businessKeyProperty}", entity.${businessKeyProperty});
         }
 #end
         String businessKey = String.valueOf(entity.${businessKeyProperty});
+        // Clear-D context: start the process with ONLY locators - the entity id plus the REST URLs the
+        // task form fetches through - never a snapshot of the entity's fields. Everything else is read
+        // dynamically when needed (the task form loads the live entity, decision resolvers load it by
+        // this id), so the process can never present the entity stale - e.g. a document whose line
+        // items, and therefore its total, are added after the process started.
+        //
+        // Every variable rides the START PAYLOAD rather than a setVariable call afterwards. They are all
+        // known before the start, and a task created inside Process.start therefore has its locators from
+        // its first moment; a process without a wait state, which runs to its end inside the start, no
+        // longer fails on a setVariable against an instance that is already finished.
+        java.util.Map<String, Object> variables = new java.util.LinkedHashMap<>();
+        variables.put("${keyProperty}", entity.${keyProperty});
+        variables.put("__entityUrl",
+                "/services/java/${projectName}/gen/${javaGenFolderName}/api/${javaPerspective}/${entity}Controller");
+        variables.put("__entityId", entity.${keyProperty});
+#foreach($rl in $relationLinks)
+        // FK locator: the task form fetches __${rl.fkProperty}EntityUrl/<fk id> and shows its
+        // __${rl.fkProperty}EntityLabel field, so a foreign key renders as a name (falls back to the id).
+        variables.put("__${rl.fkProperty}EntityUrl", "${rl.url}");
+        variables.put("__${rl.fkProperty}EntityLabel", "${rl.labelField}");
+#end
 #if($personalFkProperty)
         // Personal task assignment: resolve the record's owner to the mapped login username BEFORE
         // starting - a task's `assignee: personal` expression evaluates at task creation, inside
         // Process.start, so the variable must ride the start payload (set afterwards it is too late).
-        String personalUser = "";
         var personalOwner = entity.${personalFkProperty} == null ? null
                 : new ${personalIdentityRepositoryClass}().findOne(entity.${personalFkProperty}).orElse(null);
         if (personalOwner != null && personalOwner.${personalIdentityProperty} != null) {
-            personalUser = ", \"__personalUser\": " + Json.stringify(personalOwner.${personalIdentityProperty});
+            variables.put("__personalUser", personalOwner.${personalIdentityProperty});
         }
 #end
-        // Clear-D context: start the process with ONLY the entity id, not a snapshot of its fields.
-        // Everything else is fetched dynamically when needed - the task form loads the live entity and
-        // decision resolvers load it by this id - so the process never carries the entity's data and can
-        // never present it stale.
-        String processId = Process.start("${process}", businessKey,
-                "{\"${keyProperty}\": " + entity.${keyProperty}#if($personalFkProperty) + personalUser#end + "}");
-        // Clear-D context: publish only a LOCATOR for the entity - its REST controller URL + id - so the
-        // task form fetches the LIVE entity dynamically when it is opened, rather than relying on the
-        // start-time snapshot in `message` (which is stale once the entity is edited after the process
-        // starts - e.g. a document whose line items, and therefore its total, are added after creation).
-        Process.setVariable(processId, "__entityUrl",
-                "/services/java/${projectName}/gen/${javaGenFolderName}/api/${javaPerspective}/${entity}Controller");
-        Process.setVariable(processId, "__entityId", entity.${keyProperty});
-#foreach($rl in $relationLinks)
-        // FK locator: the task form fetches __${rl.fkProperty}EntityUrl/<fk id> and shows its
-        // __${rl.fkProperty}EntityLabel field, so a foreign key renders as a name (falls back to the id).
-        Process.setVariable(processId, "__${rl.fkProperty}EntityUrl", "${rl.url}");
-        Process.setVariable(processId, "__${rl.fkProperty}EntityLabel", "${rl.labelField}");
-#end
-        // Persist ONLY the columns this trigger owns - targeted single-column writes, never a full-row
+        String processId = Process.start("${process}", businessKey, Json.stringify(variables));
+        if (processId == null) {
+            // The platform already logged why the start failed. ProcessId stays unset, so the next
+            // qualifying event retries instead of the record silently never having a process.
+            LOG.error("Starting the {} process for {} [{}] failed - the record carries no process", "${process}", "${entity}",
+                    entity.${keyProperty});
+            return;
+        }
+        // Persist ONLY the column this trigger owns - a targeted single-column write, never a full-row
         // update: the entity snapshot loaded above is stale the moment line items or workflow steps
         // write the same row (a document's recalculated totals, a start-step status), and merging the
-        // snapshot back would silently revert those concurrent writes. No event is published either -
-        // a system write, not a user edit, so onUpdate reactions must not re-fire.
-        repository.updateProperty(entity.${keyProperty}, "ProcessId", processId);
-#if(${generateBusinessKey} == "true")
-        if (minted != null) {
-            repository.updateProperty(entity.${keyProperty}, "${businessKeyProperty}", minted);
+        // snapshot back would silently revert those concurrent writes. No event either: a system write,
+        // not a user edit, so onUpdate reactions must not re-fire. ProcessId is a platform-owned column,
+        // so the entity's declarative gates deliberately do not apply to this write - a document check
+        // has no opinion about which process handles the document and must not be able to refuse it.
+        try {
+            if (repository.updateProperty(entity.${keyProperty}, "ProcessId", processId) == 0) {
+                // The record is gone - deleted between the start and this write. Nothing will ever point
+                // at the instance, so cancel it rather than leave it running with no record behind it.
+                LOG.warn("{} [{}] disappeared while the {} process was starting - cancelling instance [{}]", "${entity}",
+                        entity.${keyProperty}, "${process}", processId);
+                cancelStarted(processId);
+            }
+        } catch (RuntimeException e) {
+            // The instance is running and nothing points at it: cancel it, so the next qualifying event
+            // starts exactly one process instead of adding a second, and re-throw - this is not something
+            // to absorb.
+            LOG.error("Could not record the started {} instance [{}] on {} [{}] - cancelling it", "${process}", processId, "${entity}",
+                    entity.${keyProperty}, e);
+            cancelStarted(processId);
+            throw e;
         }
-#end
+    }
+
+    /**
+     * Cancels the instance this listener just started, once it is clear nothing will point at it.
+     * Tolerant on purpose: a process without a wait state has already run to its end inside
+     * Process.start and there is then nothing left to cancel, and a cancellation problem must not
+     * replace the failure that led here.
+     */
+    private static void cancelStarted(String processId) {
+        try {
+            Process.cancel(processId, "The ${entity} record does not carry this ${process} instance");
+        } catch (RuntimeException e) {
+            LOG.warn("Could not cancel the {} instance [{}] - it may already have completed", "${process}", processId, e);
+        }
     }
 
     @Override

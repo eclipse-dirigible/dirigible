@@ -31,8 +31,14 @@ import org.eclipse.dirigible.components.intent.model.StepIntent;
  */
 public final class ProcessWaitSupport {
 
-    /** Entity lifecycle events a {@code wait} step may bind to (delete cannot resume a wait). */
-    public static final List<String> EVENT_KINDS = List.of("onCreate", "onUpdate");
+    /**
+     * Entity events a {@code wait} step may bind to. Delete cannot resume a wait - there is no record
+     * left to correlate through. {@code onTransition} can, and had to be added: a status write
+     * publishes {@code -transitioned} only, so a wait bound to {@code onUpdate} never woke for one -
+     * and since {@code abortOn:} already binds that same channel, a transition could KILL a parked
+     * instance but never resume it.
+     */
+    public static final List<String> EVENT_KINDS = List.of("onCreate", "onUpdate", "onTransition");
 
     private ProcessWaitSupport() {}
 

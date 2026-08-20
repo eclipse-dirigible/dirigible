@@ -54,8 +54,9 @@ class GlueRollupLatestTest {
     void rendersTheLatestRollupHandlers() {
         IntentModel model = IntentParser.parse(YAML);
         List<Map<String, Object>> rollups = GlueIntentGenerator.buildRollupsForTest(model);
-        // create + update + delete (a new/edited/removed rate can change which row is latest).
-        assertEquals(3, rollups.size(), "latest must recompute on create, update and delete");
+        // create + update + delete (a new/edited/removed rate can change which row is latest), plus the
+        // rekey handler that repairs the currency a rate was moved AWAY from.
+        assertEquals(4, rollups.size(), "latest must recompute on create, update, delete and rekey");
         Map<String, Object> create = rollups.get(0);
         assertEquals("latest", create.get("op"));
         assertEquals("Rate", create.get("countField")); // parent field
@@ -73,5 +74,9 @@ class GlueRollupLatestTest {
                           .anyMatch(r -> String.valueOf(r.get("topicSuffix"))
                                                .equals("-updated")),
                 "latest must have an update handler");
+        assertTrue(rollups.stream()
+                          .anyMatch(r -> String.valueOf(r.get("topicSuffix"))
+                                               .equals("-rekeyed")),
+                "latest must have a rekey handler");
     }
 }

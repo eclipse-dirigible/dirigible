@@ -144,6 +144,13 @@ export function getTemplate(parameters) {
                 collection: "expansions"
             },
             {
+                location: "/template-application-events-java/events/ExpansionCleanup.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}.java",
+                engine: "velocity",
+                collection: "expansionCleanups"
+            },
+            {
                 location: "/template-application-events-java/events/PrintFeeder.java.template",
                 action: "generate",
                 rename: "gen/events/{{javaGenFolderName}}/{{className}}PrintFeeder.java",
@@ -167,9 +174,9 @@ export function getTemplate(parameters) {
             {
                 location: "/template-application-events-java/events/SettlementOnPayment.java.template",
                 action: "generate",
-                rename: "gen/events/{{javaGenFolderName}}/{{name}}OnPayment.java",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}.java",
                 engine: "velocity",
-                collection: "settlements"
+                collection: "settlementListeners"
             },
             {
                 location: "/template-application-events-java/events/SettlementOnInvoice.java.template",

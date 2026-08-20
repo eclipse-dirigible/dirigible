@@ -1,0 +1,70 @@
+name: assignments
+description: Mapping on arrival - business keys become relations, and a type/version gate ignores what this app does not understand (dirigible #6769)
+
+entities:
+  # The two registers the arriving envelope references BY NAME. Each carries a unique business key,
+  # which is what makes a lookup on it legal: a non-unique key could match several rows, and picking
+  # one of them silently is worse than failing.
+  - name: Tenant
+    fields:
+      - { name: id,       type: integer, primaryKey: true, generated: true }
+      - { name: tenantId, type: string, required: true, unique: true, length: 100 }
+      - { name: name,     type: string, required: true, length: 200 }
+
+  - name: AssignmentRole
+    function: Setting
+    fields:
+      - { name: id,   type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, required: true, unique: true, length: 100 }
+
+  # What an arrival creates. The relations are required, so a lookup that resolved to nothing could
+  # not be stored even if the handler tried - it rejects the message instead.
+  - name: TenantUserAssignment
+    fields:
+      - { name: id,        type: integer, primaryKey: true, generated: true }
+      - { name: messageId, type: string, required: true, unique: true, length: 100 }
+      - { name: email,     type: string, required: true, length: 200 }
+      - { name: seats,     type: integer }
+    relations:
+      - { name: tenant, kind: manyToOne, to: Tenant, required: true }
+      - { name: role,   kind: manyToOne, to: AssignmentRole, required: true }
+
+inbound:
+  # The real arrival contract: an envelope with a type and a version, two business keys, and only
+  # then some record fields. Without `map:` this could only be ingested by a hand-written consumer.
+  - name: assignmentRequests
+    source: { queue: codbex.user-assignment-requests }
+    accept: { type: user.assignment.requested, version: 1 }
+    create: TenantUserAssignment
+    map:
+      messageId: messageId
+      email:     email
+      seats:     seatCount
+      tenant:    { lookup: Tenant,         by: tenantId, from: tenantId }
+      role:      { lookup: AssignmentRole, by: name,     from: role }
+
+  # The same envelope, posted instead of published: the mapping describes the PAYLOAD, so it is the
+  # same on every arrival - only the transport differs.
+  - name: assignmentHook
+    path: /assignments
+    accept: { type: user.assignment.requested, version: 1 }
+    create: TenantUserAssignment
+    map:
+      messageId: messageId
+      email:     email
+      seats:     seatCount
+      tenant:    { lookup: Tenant,         by: tenantId, from: tenantId }
+      role:      { lookup: AssignmentRole, by: name,     from: role }
+
+seeds:
+  - name: assignment-tenants
+    entity: Tenant
+    rows:
+      - { id: 1, tenantId: acme,   name: "ACME Ltd." }
+      - { id: 2, tenantId: globex, name: "Globex Inc." }
+
+  - name: assignment-roles
+    entity: AssignmentRole
+    rows:
+      - { id: 1, name: User }
+      - { id: 2, name: Administrator }
