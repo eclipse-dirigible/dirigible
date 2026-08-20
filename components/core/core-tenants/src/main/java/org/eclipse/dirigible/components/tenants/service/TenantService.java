@@ -74,6 +74,9 @@ public class TenantService {
     public Tenant save(Tenant tenant) {
         Tenant newTenant = tenantRepository.save(tenant);
         TenantExtractor.TENANT_CACHE.put(newTenant.getSubdomain(), Optional.of(TenantImpl.createFromEntity(newTenant)));
+        // the id-keyed cache holds provisioned tenants only, and a save may be what just provisioned
+        // this one - so it is evicted and looked up again rather than written here
+        TenantExtractor.evictFromCaches(newTenant.getId(), null);
         return newTenant;
     }
 
@@ -94,7 +97,7 @@ public class TenantService {
      */
     public void delete(Tenant tenant) {
         tenantRepository.delete(tenant);
-        TenantExtractor.TENANT_CACHE.invalidate(tenant.getSubdomain());
+        TenantExtractor.evictFromCaches(tenant.getId(), tenant.getSubdomain());
     }
 
 }
