@@ -1,0 +1,252 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<!--
+  The tenant picker - where a user of several tenants says which one they are working in.
+
+  Reached by a redirect from the tenant selection filter, or opened with ?switch=true to change
+  tenant without logging out. It is a classpath static page rather than a registry resource on
+  purpose: the registry is itself tenant scoped, and this page has to work before a tenant is known.
+  Pure Harmonia + Alpine, like the Home landing page; the script is inline so the page is a single
+  file behind a single permitted URL.
+-->
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Placeholder favicon, replaced at runtime from the platform branding. -->
+    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Select a tenant</title>
+
+    <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
+
+    <script>
+      (function () {
+        try { if (!localStorage.getItem('codbex.harmonia.colorMode')) localStorage.setItem('codbex.harmonia.colorMode', 'light'); } catch (e) { /* no storage */ }
+      })();
+    </script>
+    <style>
+      /* The tenant rows are framed tiles that lift towards the brand colour, like the Home tiles. */
+      .tenant-tile { transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; text-align: left; }
+      .tenant-tile:not(:disabled):hover, .tenant-tile:not(:disabled):focus-visible {
+        border-color: var(--primary); box-shadow: 0 6px 20px -8px rgb(0 0 0 / .18); transform: translateY(-2px);
+      }
+      .tenant-tile:not(:disabled):hover .tenant-tile-icon, .tenant-tile:not(:disabled):focus-visible .tenant-tile-icon {
+        background: var(--primary); color: var(--primary-foreground);
+      }
+      .tenant-tile-icon { transition: background-color .15s ease, color .15s ease; }
+      .tenant-tile:disabled { opacity: .6; cursor: not-allowed; }
+    </style>
+  </head>
+
+  <body class="vbox size-full" x-data="tenantSelection">
+
+    <!-- Top bar: the instance brand on the left, theme + user on the right. -->
+    <div x-h-toolbar data-variant="transparent" x-cloak>
+      <div class="hbox items-center gap-2 p-1">
+        <img x-show="branding.logo" :src="branding.logo" :alt="branding.name" class="size-5" />
+        <div class="vbox gap-0">
+          <span class="font-bold leading-tight" x-text="branding.name"></span>
+          <span x-show="branding.subtitle" class="text-xs text-muted-foreground leading-tight" x-text="branding.subtitle"></span>
+        </div>
+      </div>
+      <div x-h-toolbar-spacer></div>
+      <button x-h-button data-variant="transparent" data-size="icon-sm" @click="toggleTheme()"
+              :aria-label="dark ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
+        <svg x-h-lucide x-show="!dark" role="img" data-lucide="moon"></svg>
+        <svg x-h-lucide x-show="dark" role="img" data-lucide="sun"></svg>
+      </button>
+      <span class="text-sm text-muted-foreground px-2" x-show="userName" x-text="userName"></span>
+      <button x-h-button data-variant="transparent" data-size="sm" @click="logout()">
+        <i role="img" x-h-lucide data-lucide="log-out"></i> <span>Log out</span>
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-auto" x-cloak>
+      <div class="mx-auto w-full px-6" style="max-width: 40rem; padding-top: 8vh; padding-bottom: 4rem;">
+
+        <p class="text-sm text-muted-foreground">Where are you working today</p>
+        <h1 class="text-3xl font-bold leading-tight tracking-tight" style="margin-top: .25rem;">Select a tenant</h1>
+        <p class="text-muted-foreground" style="margin-top: .75rem; max-width: 46ch;">
+          Your account belongs to more than one tenant of this application. Everything you see and
+          change afterwards belongs to the one you pick.
+        </p>
+
+        <div x-show="loading" class="hbox items-center gap-2 text-sm text-muted-foreground" style="margin-top: 2.5rem;">
+          <i role="img" x-h-lucide data-lucide="loader-circle" class="size-4"></i>
+          <span>Loading your tenants...</span>
+        </div>
+
+        <div x-show="error" role="alert" class="rounded-md border border-destructive p-4 text-sm"
+             style="margin-top: 2.5rem;">
+          <span x-text="error"></span>
+        </div>
+
+        <div class="vbox gap-3" style="margin-top: 2.5rem;">
+          <template x-for="tenant in tenants" :key="tenant.id">
+            <button type="button" class="tenant-tile hbox items-center gap-4 rounded-lg border border-border bg-card p-5"
+                    :disabled="!tenant.provisionedHere || busy" @click="select(tenant)"
+                    :aria-current="tenant.id === selectedTenantId ? 'true' : 'false'">
+              <span class="tenant-tile-icon hbox items-center justify-center rounded-md bg-muted size-11 flex-none">
+                <i role="img" x-h-lucide data-lucide="building-2" class="size-5"></i>
+              </span>
+              <span class="vbox min-w-0 flex-1" style="gap: .15rem;">
+                <span class="hbox items-center gap-2 text-lg font-semibold">
+                  <span x-text="tenant.name"></span>
+                  <span x-show="tenant.id === selectedTenantId" x-h-badge data-variant="secondary">Current</span>
+                </span>
+                <span class="text-sm text-muted-foreground" x-text="tenant.id"></span>
+                <span x-show="!tenant.provisionedHere" class="text-sm text-muted-foreground">
+                  Being prepared. Try again in a few minutes.
+                </span>
+              </span>
+              <i role="img" x-h-lucide data-lucide="arrow-right" class="size-4 text-muted-foreground flex-none"
+                 x-show="tenant.provisionedHere"></i>
+            </button>
+          </template>
+        </div>
+
+        <p x-show="!loading && !tenants.length && !error" class="text-sm text-muted-foreground" style="margin-top: 2.5rem;">
+          Your account is not assigned to any tenant of this application yet. Ask an administrator to
+          invite you.
+        </p>
+
+      </div>
+    </div>
+
+    <!-- Instance branding (DIRIGIBLE_BRANDING_*): sets window.PlatformBranding before Alpine starts. -->
+    <script src="/services/js/platform-branding/branding.js" defer></script>
+
+    <script>
+      document.addEventListener('alpine:init', () => {
+          const ENDPOINT = '/services/security/tenant-selection';
+          // Marks the call as programmatic, so an expired session is answered with a plain 401
+          // instead of a challenge the browser would render as its own login dialog.
+          const HEADERS = { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+
+          Alpine.data('tenantSelection', () => ({
+              branding: { name: '', subtitle: '', logo: '' },
+              userName: '',
+              tenants: [],
+              selectedTenantId: null,
+              loading: true,
+              busy: false,
+              error: '',
+              dark: false,
+
+              async init() {
+                  const b = window.PlatformBranding || (window.top && window.top.PlatformBranding) || {};
+                  this.branding = { name: b.name || '', subtitle: b.subtitle || '', logo: b.logo || '' };
+                  const favicon = b.icons && b.icons.favicon;
+                  if (favicon) {
+                      const link = document.querySelector('link[rel="icon"]');
+                      if (link) link.href = favicon;
+                  }
+                  try { this.dark = window.Harmonia && Harmonia.getColorScheme() === 'dark'; } catch (e) { this.dark = false; }
+                  await Promise.all([this.loadUser(), this.loadTenants()]);
+                  this.loading = false;
+              },
+
+              async loadUser() {
+                  try {
+                      const r = await fetch('/services/js/platform-core/services/user-name.js', {
+                          headers: { 'Accept': 'text/plain' }, credentials: 'same-origin',
+                      });
+                      if (r.ok) this.userName = (await r.text()).trim();
+                  } catch (e) {
+                      console.error('tenant-selection: could not load the user name', e);
+                  }
+              },
+
+              async loadTenants() {
+                  try {
+                      const r = await fetch(ENDPOINT, { headers: HEADERS, credentials: 'same-origin' });
+                      if (!r.ok) {
+                          this.error = this.messageFor(r.status, 'Could not load your tenants.');
+                          return;
+                      }
+                      const state = await r.json();
+                      this.tenants = Array.isArray(state.tenants) ? state.tenants : [];
+                      this.selectedTenantId = state.selectedTenantId || null;
+                      // Landing here with a tenant already selected means the page was opened as a
+                      // way home, not as a switch - so go home instead of asking again.
+                      if (this.selectedTenantId && !new URLSearchParams(window.location.search).has('switch')) {
+                          this.goHome();
+                      }
+                  } catch (e) {
+                      console.error('tenant-selection: could not load the tenants', e);
+                      this.error = 'Could not reach the server. Check your connection and reload.';
+                  }
+              },
+
+              async select(tenant) {
+                  if (!tenant.provisionedHere || this.busy) return;
+                  this.busy = true;
+                  this.error = '';
+                  try {
+                      const r = await fetch(ENDPOINT, {
+                          method: 'POST',
+                          headers: { ...HEADERS, 'Content-Type': 'application/json' },
+                          credentials: 'same-origin',
+                          body: JSON.stringify({ tenantId: tenant.id }),
+                      });
+                      if (r.ok) {
+                          this.goHome();
+                          return;
+                      }
+                      this.error = this.messageFor(r.status, 'Could not enter ' + tenant.name + '.');
+                      // The state may have moved on - a tenant lost, or one finished provisioning.
+                      await this.loadTenants();
+                  } catch (e) {
+                      console.error('tenant-selection: could not select the tenant', e);
+                      this.error = 'Could not reach the server. Check your connection and try again.';
+                  } finally {
+                      this.busy = false;
+                  }
+              },
+
+              messageFor(status, fallback) {
+                  switch (status) {
+                      case 401: return 'Your session has expired. Reload the page to sign in again.';
+                      case 403: return 'You are no longer assigned to this tenant.';
+                      case 404: return 'This application does not let users select a tenant.';
+                      case 409: return 'This tenant is still being prepared. Try again in a few minutes.';
+                      default: return fallback;
+                  }
+              },
+
+              // The platform answers /home with a redirect to DIRIGIBLE_HOME_URL, so this is the
+              // only place that has to know where home is.
+              goHome() { window.location.assign('/home'); },
+
+              toggleTheme() {
+                  this.dark = !this.dark;
+                  if (window.Harmonia) Harmonia.setColorScheme(this.dark ? 'dark' : 'light');
+              },
+
+              logout() { window.location.replace('/logout'); },
+          }));
+      });
+    </script>
+
+    <!-- Alpine LAST (the Harmonia bundle auto-starts Alpine - do NOT call Alpine.start()) -->
+    <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
+    <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>
+
+    <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
+    <script src="/webjars/codbex__harmonia/dist/harmonia-lucide.min.js"></script>
+  </body>
+
+</html>

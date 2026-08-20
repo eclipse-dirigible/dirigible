@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
+import org.eclipse.dirigible.components.base.tenant.TenantResolutionStrategy;
 import org.eclipse.dirigible.components.tenants.tenant.TenantExtractor;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
@@ -48,8 +49,11 @@ public class CognitoTenantFilter extends OncePerRequestFilter {
     public CognitoTenantFilter(TenantExtractor tenantExtractor) {
         this.tenantExtractor = tenantExtractor;
         this.multitenantModeEnabled = DirigibleConfig.MULTI_TENANT_MODE_ENABLED.getBooleanValue();
+        // The token groups strategy replaces this custom:tenant model. The two are already mutually
+        // exclusive at startup; this keeps the filter honest should that validation ever loosen.
         this.multitenantModeCognitoSingleUserPoolEnabled =
-                DirigibleConfig.MULTI_TENANT_MODE_COGNITO_SINGLE_USER_POOL_ENABLED.getBooleanValue();
+                DirigibleConfig.MULTI_TENANT_MODE_COGNITO_SINGLE_USER_POOL_ENABLED.getBooleanValue()
+                        && TenantResolutionStrategy.TOKEN_GROUPS != TenantResolutionStrategy.fromConfiguration();
     }
 
     /**
