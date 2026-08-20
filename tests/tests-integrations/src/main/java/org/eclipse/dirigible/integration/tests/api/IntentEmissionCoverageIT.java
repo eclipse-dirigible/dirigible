@@ -2550,22 +2550,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(contentOf("gen/events/emission/ShipmentFlowSettleCompleted.java").contains("implements JavaDelegate"),
                 "a create-from asking for a step moment must get that moment's emitter, even as its only consumer");
 
-        // resolves (#6712): the lookup persists its outcome with a TARGETED write, which publishes no
-        // event at all - so when that write routes the record by status it has to announce the
-        // transition itself. Without this the automatic path wrote the status and told nobody, while a
+        // resolves (#6712): the lookup persists its outcome with a TARGETED write, and when that write
+        // routes the record by status it announces the transition by handing the "-transitioned" topic
+        // to the routing write itself - flip and announcement commit together through the outbox.
+        // Without an announcement the automatic path wrote the status and told nobody, while a
         // transitions: button on the same entity worked: the primary path silently dead, the fallback
         // fine. The consumers are bound to "-transitioned" (see the create-from above), so that is the
-        // channel it must publish on.
+        // channel the write must carry.
         String resolve = contentOf("gen/events/emission/AssignInspectorResolve.java");
         assertTrue(resolve.contains("updateProperties("), "the lookup must persist its outcome as one targeted write");
-        assertTrue(resolve.contains("-Patrol-transitioned"),
-                "a resolve that routes the record by status must publish the record's -transitioned topic, "
+        assertTrue(resolve.contains("-Patrol-transitioned\");"),
+                "a resolve that routes the record by status must carry the record's -transitioned topic on the routing write, "
                         + "or nothing bound to onTransition can ever observe an automatic resolution");
-        assertTrue(resolve.contains("Producer.sendToTopic"), "the resolve must publish through the messaging producer");
+        assertFalse(resolve.contains("Producer.sendToTopic"),
+                "the resolve must not publish beside its writes - a broker outage would lose the announcement");
         // Guarded on a status having been written: a lookup that only filled the relation (or found
         // nothing) transitioned nothing, and must not announce one.
-        assertTrue(resolve.indexOf("if (status != null)") < resolve.indexOf("Producer.sendToTopic"),
-                "the publish must sit under the status guard, so a lookup that wrote no status announces no transition");
+        assertTrue(resolve.indexOf("if (status != null)") < resolve.indexOf("-Patrol-transitioned\");"),
+                "the announcing write must sit under the status guard, so a lookup that wrote no status announces no transition");
         String reportOnEvent = contentOf("gen/events/emission/ReportFromPatrolGenerateOnEvent.java");
         assertTrue(reportOnEvent.contains("-Patrol-transitioned"),
                 "the create-from driven by the lookup must listen on the very topic the lookup publishes");
