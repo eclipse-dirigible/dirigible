@@ -29,6 +29,11 @@ import gen.${javaGenFolderName}.data.${javaRegisterPerspective}.${registerEntity
  * and a re-delivered event is a no-op. The write is TARGETED (updateProperties) - only the resolved
  * column, the outcome and the status are in the UPDATE statement, so a concurrent user write to any
  * other column cannot be reverted, and no "-updated" event re-fires.
+ *
+ * When an outcome routes the record by status, the "-transitioned" topic IS published afterwards, so
+ * that an automatic resolution reaches the same constructs a manual transition does - `generates:` and
+ * `postings:` bound to `event: { onTransition: ... }`. A targeted write raises no event of its own, so
+ * this publish is the only thing that makes the automatic path observable at all.
  */
 @Component("${javaGenFolderName}_${className}Resolve")
 public class ${className}Resolve implements MessageHandler {
@@ -108,6 +113,9 @@ public class ${className}Resolve implements MessageHandler {
     /**
      * One targeted write carrying everything this attempt decided: the resolved relation when there is
      * one, the outcome trace, and the routing status. Nothing else of the record is touched.
+     *
+     * A targeted write publishes NO event, so when this lookup routes the record by status it must
+     * announce that transition itself - see the "-transitioned" publish below.
      */
     private static void stamp(Object id, String outcome, Integer resolved#if($writesStatus == "true"), Integer status#end) {
         java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
@@ -125,6 +133,22 @@ public class ${className}Resolve implements MessageHandler {
         if (!values.isEmpty()) {
             new ${entity}Repository().updateProperties(id, values);
         }
+#if($writesStatus == "true")
+        if (status != null) {
+            // The status this lookup just routed the record to IS a transition, and the constructs that
+            // react to one - `generates:` and `postings:` bound to `event: { onTransition: ... }` - listen
+            // on "-transitioned". updateProperties above publishes nothing at all, so without this the
+            // AUTOMATIC path silently did nothing while the manual one (a `transitions:` button, which
+            // does publish) worked: exactly the wrong way round, and with no log line to show it.
+            // Reload so the payload carries the committed row rather than the pre-write snapshot, the
+            // same shape the transition controller and the create-from completion hook publish.
+            ${entity}Entity transitioned = new ${entity}Repository().findById(id);
+            if (transitioned != null) {
+                org.eclipse.dirigible.sdk.messaging.Producer.sendToTopic("${projectName}-${perspective}-${entity}-transitioned",
+                        Json.stringify(transitioned));
+            }
+        }
+#end
     }
 
     /**
