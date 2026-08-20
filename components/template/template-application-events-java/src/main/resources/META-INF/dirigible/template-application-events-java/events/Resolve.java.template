@@ -126,8 +126,9 @@ public class ${className}Resolve implements MessageHandler {
      * longer destroy the identification, and the audit trace is the LAST thing a failure can take.
      *
      * Nothing else of the record is touched (both writes are targeted), so no "-updated" re-fires and a
-     * concurrent write to any other column cannot be reverted. A targeted write also publishes NO event,
-     * so a status that IS written announces itself - see the "-transitioned" publish below.
+     * concurrent write to any other column cannot be reverted. A plain targeted write publishes NO
+     * event, so the routing write carries the "-transitioned" topic itself - the flip and its
+     * announcement commit together through the outbox.
      */
     private static void stamp(Object id, String outcome, Integer resolved#if($writesStatus == "true"), Integer status#end) {
         ${entity}Repository repository = new ${entity}Repository();
@@ -144,21 +145,16 @@ public class ${className}Resolve implements MessageHandler {
 #if($writesStatus == "true")
         if (status != null) {
             try {
-                repository.updateProperty(id, "${statusProperty}", status);
                 // The status this lookup just routed the record to IS a transition, and the constructs
                 // that react to one - `generates:` and `postings:` bound to `event: { onTransition: ... }`
-                // - listen on "-transitioned". The targeted write above publishes nothing at all, so
-                // without this the AUTOMATIC path silently did nothing while the manual one (a
-                // `transitions:` button, which does publish) worked: exactly the wrong way round, and with
-                // no log line to show it. Inside the try on purpose - a status the record could not take
-                // is not a transition, so a rejected move must announce nothing. Reload so the payload
-                // carries the committed row rather than the pre-write snapshot, the same shape the
-                // transition controller and the create-from completion hook publish.
-                ${entity}Entity transitioned = repository.findById(id);
-                if (transitioned != null) {
-                    org.eclipse.dirigible.sdk.messaging.Producer.sendToTopic("${projectName}-${perspective}-${entity}-transitioned",
-                            Json.stringify(transitioned));
-                }
+                // - listen on "-transitioned". A plain targeted write publishes nothing at all, so the
+                // topic rides the routing write into the outbox: the flip and its announcement commit
+                // together, the payload is the row exactly as the statement left it, and a broker outage
+                // delays the announcement instead of losing it. Inside the try on purpose - a status the
+                // record could not take is not a transition, so a rejected move must announce nothing,
+                // and a rejected write records no event either.
+                repository.updateProperties(id, java.util.Map.of("${statusProperty}", status),
+                        "${projectName}-${perspective}-${entity}-transitioned");
             } catch (org.eclipse.dirigible.sdk.db.ValidationException rejected) {
                 // The record cannot take this status where it currently stands - an unmodeled lifecycle
                 // move, or a gate the status would trip. Retrying cannot help (nothing about the record

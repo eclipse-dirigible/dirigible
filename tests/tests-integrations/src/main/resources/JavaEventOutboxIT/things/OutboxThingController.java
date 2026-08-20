@@ -27,4 +27,10 @@ public class OutboxThingController {
         thing.name = "seeded";
         return String.valueOf(things.save(thing).id);
     }
+
+    @Get("/retarget")
+    public String retarget() {
+        OutboxThing thing = things.findAll().get(0);
+        return String.valueOf(things.move(thing.id));
+    }
 }

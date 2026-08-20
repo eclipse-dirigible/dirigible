@@ -20,10 +20,11 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * Transition ${name}: the guarded on-demand status flip on a ${entity} (loaded by the id in the
  * posted body). The record must currently be in one of the allowed statuses [${fromStatuses}]#if($guardExpr != "")
  * and satisfy the guard [${guardText}]#end; otherwise 409 and the record stays untouched. On success
- * ONLY the status column is written - through the targeted updateProperty primitive, a
+ * ONLY the status column is written - through the targeted updateProperties primitive, a
  * workflow-style system write (no "-updated" re-fire; a full-row update would merge the stale
- * pre-check snapshot and revert concurrent writes) - and the "-transitioned" topic is published so
- * posting glue / integrations observe the transition.
+ * pre-check snapshot and revert concurrent writes) - and the "-transitioned" notice rides that write
+ * into the outbox, so the flip and its announcement commit together and posting glue / integrations
+ * can never miss a transition whose row is durable.
  *
  * Generated from the intent transitions block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories.
@@ -69,11 +70,14 @@ public class ${className}Transition {
             return "{\"error\": \"${name} requires ${guardText}\"}";
         }
 #end
-        repository.updateProperty(req.id, "${statusProperty}", ${setStatus});
-        // Reload so the "-transitioned" payload carries the committed row, not the pre-check snapshot.
+        // The status write and its "-transitioned" notice commit together: the topic rides the
+        // targeted write into the outbox, so a broker outage delays the announcement instead of losing
+        // it, and the event payload is the row exactly as the statement left it - never a re-read a
+        // concurrent write could have moved on.
+        repository.updateProperties(req.id, java.util.Map.of("${statusProperty}", ${setStatus}),
+                "${projectName}-${perspective}-${entity}-transitioned");
+        // Reload so the response (and the notify block) carries the committed row, not the pre-check snapshot.
         source = repository.findById(req.id);
-        org.eclipse.dirigible.sdk.messaging.Producer.sendToTopic(
-                "${projectName}-${perspective}-${entity}-transitioned", Json.stringify(source));
 #if($notify == "true")
         sendNotification(source);
 #end

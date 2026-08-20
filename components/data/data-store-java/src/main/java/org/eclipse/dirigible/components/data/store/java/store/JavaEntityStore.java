@@ -91,10 +91,25 @@ public class JavaEntityStore {
      * @return the same entity (with any generated identifier populated)
      */
     public <T> T save(T entity, String eventTopic) {
+        return save(entity, eventTopic, List.of());
+    }
+
+    /**
+     * Insert a new entity, publishing it on the given topic plus any further events the write emits
+     * about other rows — e.g. a create-from announcing its source's completed transition only once the
+     * document that transition was about exists. All of them share the insert's transaction.
+     *
+     * @param <T> the entity type
+     * @param entity the entity to insert
+     * @param eventTopic the topic to publish the saved entity on; {@code null} publishes nothing
+     * @param additionalEvents further events to record with the same write
+     * @return the same entity (with any generated identifier populated)
+     */
+    public <T> T save(T entity, String eventTopic, List<DomainEvent> additionalEvents) {
         RegisteredEntity meta = resolve(entity.getClass());
         applyCreateAudit(entity, meta);
         Map<String, Object> data = EntityBeanMapper.toMap(entity, meta);
-        prepareOutbox(eventTopic != null);
+        prepareOutbox(eventTopic != null || !additionalEvents.isEmpty());
 
         try (Session session = entityManager.getSessionFactory()
                                             .openSession()) {
@@ -112,7 +127,7 @@ public class JavaEntityStore {
                     // the row was actually inserted with.
                     writeId(entity, meta, generatedId);
                 }
-                events = outbox.record(session, eventsOf(eventTopic, entity, List.of()));
+                events = outbox.record(session, eventsOf(eventTopic, entity, additionalEvents));
                 tx.commit();
             } catch (RuntimeException ex) {
                 rollback(tx, ex);
@@ -258,6 +273,26 @@ public class JavaEntityStore {
      *         empty)
      */
     public <T> int updateProperties(Class<T> type, Object id, Map<String, Object> values, String eventTopic) {
+        return updateProperties(type, id, values, eventTopic, List.of());
+    }
+
+    /**
+     * Targeted multi-column write publishing the resulting row on the given topic plus any further
+     * events the write emits about other rows — an aggregate's {@code "-rekeyed"} notice about the
+     * tuple the row just left. All of them share the mutation's transaction and are recorded only when
+     * the row actually existed to be written.
+     *
+     * @param <T> the entity type
+     * @param type the entity class
+     * @param id the primary-key value
+     * @param values the properties to set (plain identifiers) with their new values
+     * @param eventTopic the topic to publish the resulting row on; {@code null} publishes nothing
+     * @param additionalEvents further events to record with the same write
+     * @return the number of updated rows ({@code 0} when the id does not exist or {@code values} is
+     *         empty)
+     */
+    public <T> int updateProperties(Class<T> type, Object id, Map<String, Object> values, String eventTopic,
+            List<DomainEvent> additionalEvents) {
         if (values == null || values.isEmpty()) {
             return 0;
         }
@@ -278,7 +313,7 @@ public class JavaEntityStore {
         RegisteredEntity meta = resolve(type);
         String idProperty = meta.idField()
                                 .getName();
-        prepareOutbox(eventTopic != null);
+        prepareOutbox(eventTopic != null || !additionalEvents.isEmpty());
         try (Session session = entityManager.getSessionFactory()
                                             .openSession()) {
             Transaction tx = session.beginTransaction();
@@ -293,8 +328,8 @@ public class JavaEntityStore {
                 }
                 updated = query.setParameter("id", id)
                                .executeUpdate();
-                events = outbox.record(session, eventTopic == null || updated == 0 ? List.of()
-                        : eventsOf(eventTopic, readInTransaction(session, type, meta, id), List.of()));
+                events = outbox.record(session, updated == 0 ? List.of()
+                        : eventsOf(eventTopic, eventTopic == null ? null : readInTransaction(session, type, meta, id), additionalEvents));
                 tx.commit();
             } catch (RuntimeException ex) {
                 rollback(tx, ex);

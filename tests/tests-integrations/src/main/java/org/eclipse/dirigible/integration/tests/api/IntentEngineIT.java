@@ -980,10 +980,15 @@ class IntentEngineIT extends IntegrationTest {
         generateFromModel("template-application-events-java/template/template.js", "fines.glue");
         String lookup = codeOf("gen/events/fines/IdentifyDriverResolve.java");
 
-        // The result goes out on its own, and the status is NOT in that batch.
+        // The result goes out on its own, and the status is NOT in that batch. The routing write hands
+        // its "-transitioned" topic to the write itself, so the flip and its announcement commit
+        // together through the outbox - never a bare publish beside the write.
         int result = onlyIndexOf(lookup, "repository.updateProperties(id, values)");
-        int routing = onlyIndexOf(lookup, "repository.updateProperty(id, \"Status\", status)");
+        int routing = onlyIndexOf(lookup, "repository.updateProperties(id, java.util.Map.of(\"Status\", status)");
         assertTrue(result < routing, "the resolved relation and the trace must be persisted BEFORE the routing status is attempted");
+        assertTrue(lookup.contains("-Fine-Fine-transitioned\");"), "the routing write must carry the -transitioned topic into the outbox");
+        assertFalse(lookup.contains("Producer.sendToTopic"),
+                "the lookup must not publish beside its writes - a broker outage would lose the announcement");
         assertFalse(lookup.contains("values.put(\"Status\", status)"),
                 "the status must NOT ride in the same map - a rejected move would take the relation and the trace with it");
 

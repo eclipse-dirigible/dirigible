@@ -1766,10 +1766,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         && ledgerRepository.contains("!java.util.Objects.equals(groupingPreviousPerson, entity.Person)"),
                 "the targeted write must compare every grouping key before and after the write: " + ledgerRepository);
         assertTrue(
-                ledgerRepository.contains("if (updatedCount > 0 && groupingMoved)")
+                ledgerRepository.contains("java.util.List<DomainEvent> rekeyEvents = groupingMoved")
+                        && ledgerRepository.contains("super.updateProperties(id, values, eventTopic, rekeyEvents)")
                         && ledgerRepository.contains("-rekeyed\", groupingPrevious)")
                         && ledgerRepository.contains("-rekeyed\", Json.stringify(entity))"),
-                "a targeted write that moved a grouping key must publish BOTH the previous and the written row");
+                "a targeted write that moved a grouping key must record BOTH the previous and the written row"
+                        + " with the write itself (the outbox), never as a bare publish beside it");
+        assertFalse(ledgerRepository.contains("Producer.sendToTopic"),
+                "a generated repository must announce every event through its writes - no bare publish may remain");
 
         // Fix 2: the same move on a ROLL-UP child. Its parent FK is a grouping column too, so the child's
         // DAO tracks it and a roll-up handler binds "-rekeyed" - without it the parent a child was moved
@@ -2280,8 +2284,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(transition.contains("currentStatus == 1"), "transitions must emit the allowed-statuses guard");
         assertTrue(transition.contains("Calc.eval(\"Paid\", source, 6)"), "the when guard must emit a Calc comparison");
         assertTrue(transition.contains("Response.setStatus(409)"), "a failed guard must surface as 409");
-        assertTrue(transition.contains("updateProperty"), "the status flip must be the targeted single-column write");
-        assertTrue(transition.contains("-transitioned"), "the flip must publish the -transitioned topic");
+        assertTrue(transition.contains("repository.updateProperties(req.id, java.util.Map.of("),
+                "the status flip must be the targeted write, touching only the status column");
+        assertTrue(transition.contains("-transitioned\");"),
+                "the -transitioned notice must ride the targeted write into the outbox, so flip and announcement commit together");
+        assertFalse(transition.contains("Producer.sendToTopic"),
+                "the transition must not publish beside its write - a broker outage would lose the announcement");
         String transitionExtension = contentOf("CancelEntry-transition-action.extension");
         assertTrue(transitionExtension.contains("-custom-action"),
                 "the transition button must contribute to the app's custom-action extension point");
@@ -2542,22 +2550,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(contentOf("gen/events/emission/ShipmentFlowSettleCompleted.java").contains("implements JavaDelegate"),
                 "a create-from asking for a step moment must get that moment's emitter, even as its only consumer");
 
-        // resolves (#6712): the lookup persists its outcome with a TARGETED write, which publishes no
-        // event at all - so when that write routes the record by status it has to announce the
-        // transition itself. Without this the automatic path wrote the status and told nobody, while a
+        // resolves (#6712): the lookup persists its outcome with a TARGETED write, and when that write
+        // routes the record by status it announces the transition by handing the "-transitioned" topic
+        // to the routing write itself - flip and announcement commit together through the outbox.
+        // Without an announcement the automatic path wrote the status and told nobody, while a
         // transitions: button on the same entity worked: the primary path silently dead, the fallback
         // fine. The consumers are bound to "-transitioned" (see the create-from above), so that is the
-        // channel it must publish on.
+        // channel the write must carry.
         String resolve = contentOf("gen/events/emission/AssignInspectorResolve.java");
         assertTrue(resolve.contains("updateProperties("), "the lookup must persist its outcome as one targeted write");
-        assertTrue(resolve.contains("-Patrol-transitioned"),
-                "a resolve that routes the record by status must publish the record's -transitioned topic, "
+        assertTrue(resolve.contains("-Patrol-transitioned\");"),
+                "a resolve that routes the record by status must carry the record's -transitioned topic on the routing write, "
                         + "or nothing bound to onTransition can ever observe an automatic resolution");
-        assertTrue(resolve.contains("Producer.sendToTopic"), "the resolve must publish through the messaging producer");
+        assertFalse(resolve.contains("Producer.sendToTopic"),
+                "the resolve must not publish beside its writes - a broker outage would lose the announcement");
         // Guarded on a status having been written: a lookup that only filled the relation (or found
         // nothing) transitioned nothing, and must not announce one.
-        assertTrue(resolve.indexOf("if (status != null)") < resolve.indexOf("Producer.sendToTopic"),
-                "the publish must sit under the status guard, so a lookup that wrote no status announces no transition");
+        assertTrue(resolve.indexOf("if (status != null)") < resolve.indexOf("-Patrol-transitioned\");"),
+                "the announcing write must sit under the status guard, so a lookup that wrote no status announces no transition");
         String reportOnEvent = contentOf("gen/events/emission/ReportFromPatrolGenerateOnEvent.java");
         assertTrue(reportOnEvent.contains("-Patrol-transitioned"),
                 "the create-from driven by the lookup must listen on the very topic the lookup publishes");
