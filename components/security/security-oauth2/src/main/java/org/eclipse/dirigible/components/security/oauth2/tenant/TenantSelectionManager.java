@@ -26,6 +26,7 @@ import org.eclipse.dirigible.components.tenants.service.TenantService;
 import org.eclipse.dirigible.components.tenants.tenant.TenantSelectionConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
@@ -64,11 +65,13 @@ public class TenantSelectionManager {
     private final SecurityContextRepository securityContextRepository;
 
     /**
-     * Instantiates a new tenant selection manager.
+     * Instantiates a new tenant selection manager. Annotated because the class carries a second
+     * constructor for the tests, so the injectable one has to be named.
      *
      * @param groupsClaim the claim the user groups are read from
      * @param tenantService the tenant registry of this instance
      */
+    @Autowired
     public TenantSelectionManager(TenantGroupsClaim groupsClaim, TenantService tenantService) {
         this(groupsClaim, tenantService, new HttpSessionSecurityContextRepository());
     }
