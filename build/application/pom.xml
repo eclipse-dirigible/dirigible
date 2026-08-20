@@ -351,7 +351,7 @@
                 <!-- Pinned: an unpinned antrun resolves to 1.3 under older local Maven installs,
                      where the injection below silently degrades - the known local-vs-CI split behind
                      LauncherAgentDeliveryIT failing on developer machines while green on CI. -->
-                <version>3.1.0</version>
+                <version>3.2.0</version>
                 <executions>
                     <execution>
                         <!-- Turns the resolved dependency list into the provided-BOM (a standard
