@@ -2304,6 +2304,30 @@ Every axis binding also takes an optional **`when:` guard** inside the `event:` 
 comparison against a direct field of the record (`when: "channel != internal"`), which decides per
 record whether the reaction runs at all.
 
+### which writes are observable (what a reaction can actually see)
+
+Not every write the system makes raises an event, and the difference is not guessable from the DSL -
+so before binding a reaction, check what the thing you care about publishes.
+
+| The write | Publishes | So it can be bound with |
+|---|---|---|
+| A person creating / editing / deleting a record (app or REST) | create / `-updated` / `-deleted` | `onCreate` / `onUpdate` / `onDelete` |
+| Fields a reviewer edited in a task form (`editable:`) | `-updated` | `onUpdate` |
+| `number: { stampOn: issue }` stamping the document number | `-updated` | `onUpdate` |
+| A maintained roll-up / aggregate / keyed total | `-updated` | `onUpdate` |
+| `setField` / `setRelationField` on a step | `-transitioned` | `postings:`, `generates` `event: { onTransition }`, `abortOn:` |
+| A `transitions:` button (void / cancel / reopen) | `-transitioned` | the same three |
+| `generates` `sourceStatus:` flipping the source | `-transitioned` | the same three |
+| A `userTask` / `serviceTask` being reached or completed | a per-step topic | `onStepReached` / `onStepCompleted` |
+
+**Deliberately silent, and correct** - each of these would re-trigger its own handler if it published:
+the process trigger writing `ProcessId` back, an `expansions:` child-count write, and a `resolves:`
+lookup filling its relation (that one is what `outcome:` is for - stamp the attempt into a string
+field a list filter or a `decision` can read, instead of waiting for an event).
+
+**Silent, and worth knowing:** a document's header totals recomputed from its line items. The line's
+own create / `-updated` / `-deleted` fires, so bind the reaction to the LINE, not to the header.
+
 ### inbound - an external system creates records
 
 **Use when:** something **outside the app hands us a record**: a partner POSTs it, a message arrives
@@ -2542,7 +2566,13 @@ are a filterable worklist a human can finish, and so a process `decision` can br
 - `between.start` / `between.end` are register date fields, `between.value` the record's date. Either
   bound may be omitted (open-ended = still valid); the end is **inclusive**, and a date-only bound
   covers its whole day.
-- Only the resolved relation, the outcome and the status are written - nothing else of the record.
+- Only the resolved relation, the outcome and the status are written - nothing else of the record,
+  and the RESULT (relation + outcome) is written FIRST, separately from the routing status. A
+  status the record cannot take where it stands - an unmodeled `lifecycle:` move, a `checks:`
+  gate - is rejected by the repository, and batching the three meant that rejection discarded the
+  identification and the trace along with it. Split, the routing can fail without taking the work
+  with it: the outcome is amended to `<outcome>-notRouted` (e.g. `found-notRouted`) and logged,
+  so the record itself shows a routed-but-rejected attempt.
 - **`where:` is how a register keeps its history without poisoning its lookups.** `match` can only
   bind a register column to a column of the RECORD, so "and only the rows that are still valid" has no
   form there. A register accumulates corrections - the cancelled row stays beside the active one and
@@ -2564,11 +2594,12 @@ are a filterable worklist a human can finish, and so a process `decision` can br
 
 **Rules:** `event` binds `onCreate` or `onUpdate` of a declared entity (never `onDelete`); `set` is a
 to-one of that entity; `from` is an entity declared in **this** model; `match` needs at least one pair
-(left = register property, right = record property); each optional `where` key is a register property
-carrying a scalar literal and may not repeat a `match` key; `between.value` is required and every period
-field must be a `date` or `timestamp`; `outcome` must be a `string` field of the record; a `setStatus`
-needs the record to declare a `function: EntityStatus` relation, and may be a seed id or a seeded
-name.
+(left = register property, right = record property); each optional `where` key is a register
+property carrying a scalar literal and may not repeat a `match` key; `between.value` is required and every period
+field must be a `date` or `timestamp`; `outcome` must be a `string` field of the record, long enough for
+the values written (9, or 19 once any outcome routes by `setStatus` - the amended trace); a
+`setStatus` needs the record to declare a `function: EntityStatus` relation, and may be a seed id
+or a seeded name.
 
 ## Allowed values
 
@@ -2606,7 +2637,7 @@ name.
 | transition `when` op | `==`, `!=` |
 | resolve `event` | `onCreate`, `onUpdate` (never `onDelete`); `when` is `<Field> ==\|!= <value>` |
 | resolve `between` field type | `date`, `timestamp` |
-| resolve `outcome` values | `found`, `notFound`, `ambiguous` (stamped into a `string` field) |
+| resolve `outcome` values | `found`, `notFound`, `ambiguous`, plus `<outcome>-notRouted` when a `setStatus` route is rejected (stamped into a `string` field) |
 
 ## Mapping requests to capabilities (quick reference)
 

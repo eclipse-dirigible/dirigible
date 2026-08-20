@@ -9,6 +9,61 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
+// Entity fields the explicit block below already emits (or that are editor-internal). Everything else on
+// the cell value is preserved generically by extraAttributes so intent-era attributes (rollupGuard, checks,
+// uniqueConstraints, ... and future scalars) are never dropped on save - #6826.
+const ENTITY_HANDLED = new Set(['name', 'dataName', 'dataCount', 'dataQuery', 'entityType', 'title', 'caption',
+	'description', 'tooltip', 'icon', 'menuKey', 'menuLabel', 'menuIndex', 'layoutType', 'perspectiveName',
+	'perspectiveLabel', 'perspectiveHeader', 'perspectiveIcon', 'perspectiveOrder', 'perspectiveNavId',
+	'perspectiveRole', 'generateReport', 'multilingual', 'generateDefaultRoles', 'feedUrl', 'feedUsername',
+	'feedPassword', 'feedSchedule', 'feedPath', 'roleRead', 'roleWrite', 'projectionReferencedModel',
+	'projectionReferencedEntity', 'importsCode', 'referenceProjections']);
+
+// Property fields the explicit block below already emits. relationshipEntityName is carried by the <relation>
+// element, not the <property>, so it stays out of the generic pass.
+const PROPERTY_HANDLED = new Set(['name', 'description', 'tooltip', 'dataName', 'dataType', 'dataOrderBy',
+	'dataLength', 'dataNotNull', 'dataNullable', 'dataPrimaryKey', 'dataAutoIncrement', 'dataUnique',
+	'dataDefaultValue', 'dataPrecision', 'dataScale', 'isRequiredProperty', 'isCalculatedProperty',
+	'calculatedPropertyExpressionCreate', 'calculatedPropertyExpressionUpdate', 'calculatedActionOnCreate',
+	'calculatedActionOnUpdate', 'auditType', 'isReadOnlyProperty', 'relationshipType', 'relationshipCardinality',
+	'relationshipName', 'relationshipEntityName', 'widgetType', 'widgetSize', 'widgetLength', 'widgetLabel',
+	'widgetShortLabel', 'widgetPattern', 'widgetFormat', 'widgetSection', 'widgetService', 'widgetIsMajor',
+	'feedPropertyName', 'roleRead', 'roleWrite', 'widgetDropDownKey', 'widgetDropDownValue',
+	'widgetDropDownMultiSelect', 'widgetDependsOnProperty', 'widgetDependsOnEntity', 'widgetDependsOnValueFrom',
+	'widgetDependsOnHeader', 'widgetDependsOnHeaderEntity', 'widgetDependsOnValueBy', 'widgetDependsOnValueByHeader',
+	'widgetDependsOnValueByHeaderEntity', 'widgetDependsOnValueByEntity', 'widgetDependsOnValueCases',
+	'widgetDependsOnValueDefault', 'widgetDependsOnFilterBy', 'relationshipEntityPerspectiveName',
+	'relationshipEntityPerspectiveLabel']);
+
+// Serialize every field not covered by the explicit block as a flat attribute, JSON-encoding structured
+// values (objects/arrays). A structured value loaded from the .edm arrives here as its JSON string (mxCodec
+// decodes attributes as strings) and is written back verbatim; an object gets JSON.stringify. transform-edm
+// (editor-entity/template/transform-edm.js, ENTITY_STRUCTURED/PROPERTY_STRUCTURED) parses the known
+// structured keys back into objects (#6826).
+function extraAttributes(obj, handled) {
+	let out = '';
+	for (let key in obj) {
+		// OWN properties only: the value objects are Entity/Property prototype instances (model.js), and
+		// the intent-era attributes are decoded onto them as own fields. Own-only iteration writes back
+		// exactly what was loaded and avoids coupling to model.js's enumerable prototype defaults.
+		if (!Object.prototype.hasOwnProperty.call(obj, key)) {
+			continue;
+		}
+		if (handled.has(key) || typeof obj[key] === 'function') {
+			continue;
+		}
+		let val = obj[key];
+		// An empty string is treated as absent (nothing to preserve). The explicit block above still emits
+		// its own empty attributes (e.g. dataQuery="") where the schema expects them.
+		if (val === null || val === undefined || val === '') {
+			continue;
+		}
+		let text = (typeof val === 'object') ? JSON.stringify(val) : val;
+		out += ' ' + key + '="' + _.escape(text) + '"';
+	}
+	return out;
+}
+
 function createModel(graph) {
 	let model = [];
 	model.push('<model>\n');
@@ -87,6 +142,7 @@ function createModel(graph) {
 				child.value.importsCode = btoa(child.value.importsCode);
 				entityContent += ' importsCode="' + child.value.importsCode + '"';
 			}
+			entityContent += extraAttributes(child.value, ENTITY_HANDLED);
 
 			entityContent += '>\n';
 			model.push(entityContent);
@@ -261,6 +317,7 @@ function createModel(graph) {
 					if (property.relationshipEntityPerspectiveLabel !== null) {
 						model.push(' relationshipEntityPerspectiveLabel="' + _.escape(property.relationshipEntityPerspectiveLabel) + '"');
 					}
+					model.push(extraAttributes(property, PROPERTY_HANDLED));
 
 					model.push('></property>\n');
 				}

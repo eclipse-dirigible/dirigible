@@ -14,6 +14,29 @@ import { Workspace as workspaceManager } from "@aerokit/sdk/platform";
 import { Bytes } from "@aerokit/sdk/io";
 import { XML } from "@aerokit/sdk/utils";
 
+// Structured (List/Map) attributes the EDM generator / serializer write as JSON strings in flat attributes
+// so the .edm stays lossless; parse them back into objects so the .model matches the intent's .model (#6826).
+// These two lists MUST mirror EdmIntentGenerator.STRUCTURED_ATTRIBUTES (Java) - a key handled on one side
+// but not the other round-trips as a JSON string (caught by EdmModelRoundTripIT's structural diff).
+// uniqueConstraints is intentionally NOT here: the composite-unique-key feature emits it as a
+// <constraints>/<uniqueKey> section that transformUniqueKey (below) rebuilds, so parsing it here too would
+// duplicate it (#6826).
+const ENTITY_STRUCTURED = ['rollupGuard', 'checks', 'labelParts', 'aggregateKeys', 'groupingKeys', 'relatedEntities'];
+const PROPERTY_STRUCTURED = ['lookupColumns'];
+
+function parseStructured(obj, keys) {
+    for (const key of keys) {
+        const val = obj[key];
+        if (typeof val === 'string' && (val.startsWith('{') || val.startsWith('['))) {
+            try {
+                obj[key] = JSON.parse(val);
+            } catch (e) {
+                console.error("Failed to parse structured .edm attribute [" + key + "]: " + e);
+            }
+        }
+    }
+}
+
 export function transform(workspaceName, projectName, filePath) {
 
     if (!filePath.endsWith('.edm')) {
@@ -107,6 +130,7 @@ export function transform(workspaceName, projectName, filePath) {
         } else {
             entity.properties.push(transformProperty(raw.property))
         }
+        parseStructured(entity, ENTITY_STRUCTURED);
         return entity;
     }
 
@@ -115,6 +139,7 @@ export function transform(workspaceName, projectName, filePath) {
         for (let propertyName in raw) {
             property[propertyName.substring(1, propertyName.length)] = raw[propertyName];
         }
+        parseStructured(property, PROPERTY_STRUCTURED);
         return property;
     }
 
