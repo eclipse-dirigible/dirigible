@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.listeners.config;
 
 import java.io.File;
+import java.time.Duration;
 import javax.sql.DataSource;
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.activemq.broker.BrokerService;
@@ -42,6 +43,22 @@ class MessagingConfig {
     private static final String LOCATION_TEMP_STORE = "./target/dirigible/kahadb";
 
     /**
+     * How long a durable subscription may stay offline before the broker discards it, and how often
+     * that sweep runs. A durable subscription outlives its subscriber by design - that is what stops a
+     * message published during a republish from being lost - so nothing reclaims one whose handler was
+     * deleted rather than reloaded. The consumer cannot do it: a class deleted while the server was
+     * down is never reported as unloaded at all, so there is no moment at which to unsubscribe. A
+     * generous timeout collects those orphans without ever expiring a subscription that a restart or a
+     * republish is about to reconnect.
+     */
+    private static final long OFFLINE_DURABLE_SUBSCRIBER_TIMEOUT = Duration.ofDays(7)
+                                                                           .toMillis();
+
+    /** The Constant OFFLINE_DURABLE_SUBSCRIBER_TASK_SCHEDULE. */
+    private static final long OFFLINE_DURABLE_SUBSCRIBER_TASK_SCHEDULE = Duration.ofHours(1)
+                                                                                 .toMillis();
+
+    /**
      * Creates the active MQ connection factory.
      *
      * @return the active MQ connection factory
@@ -69,6 +86,8 @@ class MessagingConfig {
                 }
                 broker.setPersistent(true);
                 broker.setUseJmx(false);
+                broker.setOfflineDurableSubscriberTimeout(OFFLINE_DURABLE_SUBSCRIBER_TIMEOUT);
+                broker.setOfflineDurableSubscriberTaskSchedule(OFFLINE_DURABLE_SUBSCRIBER_TASK_SCHEDULE);
                 PListStore pListStore = new PListStoreImpl();
                 pListStore.setDirectory(new File(LOCATION_TEMP_STORE));
                 broker.setTempDataStore(pListStore);

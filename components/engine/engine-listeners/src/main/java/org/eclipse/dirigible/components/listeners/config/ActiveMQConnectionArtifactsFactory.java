@@ -55,9 +55,31 @@ public class ActiveMQConnectionArtifactsFactory {
      * @throws IllegalStateException the illegal state exception
      */
     public Connection createConnection(ExceptionListener exceptionListener) throws IllegalStateException {
+        return createConnection(exceptionListener, null);
+    }
+
+    /**
+     * Creates a connection, optionally identified by a client id. A client id is what lets a
+     * subscription on it be DURABLE: the broker remembers what a {@code clientId + subscription name}
+     * pair has already consumed, so a topic message published while that subscriber is disconnected is
+     * kept for it instead of dropped. It must therefore be stable across reconnects - a fresh id each
+     * time is a fresh subscription, which retains nothing and leaves the old one orphaned - and unique
+     * among live connections, since the broker refuses a second connection claiming an id already in
+     * use.
+     *
+     * @param exceptionListener the exception listener
+     * @param clientId the client id to identify the connection by, or {@code null} for an anonymous one
+     * @return the connection
+     * @throws IllegalStateException the illegal state exception
+     */
+    public Connection createConnection(ExceptionListener exceptionListener, String clientId) throws IllegalStateException {
         try {
             Connection connection = connectionFactory.createConnection();
             connection.setExceptionListener(exceptionListener);
+            if (clientId != null) {
+                // Must precede start() - JMS forbids setting the client id on a started connection.
+                connection.setClientID(clientId);
+            }
 
             connection.start();
 
