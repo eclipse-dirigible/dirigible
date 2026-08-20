@@ -323,7 +323,15 @@ User projects can declare a `*.nativeapp` JSON file that turns an external web s
 
 **Detailed guide:** [`components/engine/engine-native-apps/CLAUDE.md`](components/engine/engine-native-apps/CLAUDE.md). Read it before changing anything under that module — it covers the synchronizer model, kinds + start modes, port resolution, the stop / teardown contract (three layered guarantees), the dual-DELETE rehydrate requirement, PID + port logging, the proxy filter chain, placeholder expansion, the credentials field naming, the management endpoint's role policy, integration-test patterns including the no-manual-cleanup rule, and the macOS gotchas (Python 3.14 bind regression, wildcard-vs-loopback `ServerSocket` probe, `PollingWatchService` deadlock).
 
-## Tenant-aware configuration (`commons-config` + `core-configurations`)
+## Multitenancy (`core-tenants` + `core-base/tenant` + `data-sources`)
+
+Shared application instance, shared `SystemDB`, **schema + dedicated DB user per tenant** for application data, shared on-disk repository. Requests map to a tenant by **subdomain** (`DIRIGIBLE_TENANT_SUBDOMAIN_REGEX`); the tenant travels in a `ThreadLocal` (`TenantContext`). The isolation mechanism is a **datasource-name rewrite** (`TenantDataSourceNameManager`: `DefaultDB` → `<tenantId>_DefaultDB`), not a routing DataSource — so outside a tenant scope you silently get the *default* tenant's datasource.
+
+**Detailed guide:** [`components/core/core-tenants/CLAUDE.md`](components/core/core-tenants/CLAUDE.md). Read it before touching tenant resolution, provisioning, the tenant-aware datasource routing, or before adding an artefact type that should be per-tenant. It covers the resolution algorithm and its caching gotchas, the `TenantContext` scope API and the thread-hand-off rule, the naming indirection + one-Hikari-pool-per-tenant model (pool sizing is **hardcoded**, overriding `<DS>_HIKARI_*`), provisioning (two states only, non-idempotent retry, no de-provisioning, the required `CREATE ROLE`/`CREATE SCHEMA` privileges), the per-tenant replay in `BaseSynchronizer` and which eight synchronizers opt in, the Cognito/Keycloak `custom:tenant` filters and the per-tenant OAuth client-registration design, the cross-tenant admin authorization gap, the config-key table, the multi-node/clustering status (why the app is effectively single-writer), the executable-spec ITs, and the footguns.
+
+**Deployment:** [`AWS_MULTITENANCY_RESEARCH.md`](AWS_MULTITENANCY_RESEARCH.md) — a production AWS architecture built on this model (schema-per-tenant on Aurora, ECS Fargate, wildcard subdomains, Cognito single user pool, cell-based scale-out). Research note, nothing implemented.
+
+### Tenant-aware configuration (`commons-config` + `core-configurations`)
 
 Each tenant can override selected configuration values; overrides are resolved **per request**, scoped to the current tenant. Added on PR [#6205](https://github.com/eclipse-dirigible/dirigible/pull/6205).
 
