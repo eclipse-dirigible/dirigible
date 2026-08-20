@@ -819,9 +819,15 @@ class GlueGenerator {
      */
     private static void bindResolve(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "keyProperty", "topicSuffix", "guardExpression", "setProperty",
-                "registerEntity", "registerPerspective", "registerValueProperty", "matches", "matchSummary", "filters", "filterSummary",
-                "startProperty", "endProperty", "valueProperty", "outcomeProperty", "statusProperty", "foundStatus", "notFoundStatus",
-                "ambiguousStatus", "writesStatus");
+                "registerEntity", "registerPerspective", "registerValueProperty", "matches", "matchSummary", "startProperty", "endProperty",
+                "valueProperty", "outcomeProperty", "statusProperty", "foundStatus", "notFoundStatus", "ambiguousStatus", "writesStatus");
+        // The `where:` filter keys arrived after resolves shipped, so a `.glue` written before them
+        // carries neither - and `copy` REMOVES an absent key, which Velocity then renders as its own
+        // literal (`${filterSummary}` in the generated javadoc, an unfiltered lookup that LOOKS
+        // filtered). Default them to the no-filter shape instead, the same migration pattern the
+        // create-from's topicSuffix uses.
+        context.put("filters", item.containsKey("filters") ? item.get("filters") : java.util.List.of());
+        context.put("filterSummary", strOr(item, "filterSummary", ""));
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("javaRegisterPerspective", sanitize(item, "registerPerspective"));
     }
