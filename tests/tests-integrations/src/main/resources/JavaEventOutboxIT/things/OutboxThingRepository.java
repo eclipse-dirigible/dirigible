@@ -9,6 +9,7 @@
  */
 package things;
 
+import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
 import org.eclipse.dirigible.sdk.component.Repository;
 
@@ -28,5 +29,14 @@ public class OutboxThingRepository extends JavaRepository<OutboxThing> {
     @Override
     public OutboxThing save(OutboxThing thing) {
         return super.save(thing, CREATED_TOPIC);
+    }
+
+    /**
+     * A targeted write carrying an extra event beside the row's own — the shape of the generated
+     * DAO's "-rekeyed" pair: one mutation, two notices, all committed together.
+     */
+    public int move(Object id) {
+        return super.updateProperties(id, java.util.Map.of("name", "moved"), CREATED_TOPIC,
+                java.util.List.of(new DomainEvent(CREATED_TOPIC, "{\"name\":\"previous\"}")));
     }
 }

@@ -1766,10 +1766,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         && ledgerRepository.contains("!java.util.Objects.equals(groupingPreviousPerson, entity.Person)"),
                 "the targeted write must compare every grouping key before and after the write: " + ledgerRepository);
         assertTrue(
-                ledgerRepository.contains("if (updatedCount > 0 && groupingMoved)")
+                ledgerRepository.contains("java.util.List<DomainEvent> rekeyEvents = groupingMoved")
+                        && ledgerRepository.contains("super.updateProperties(id, values, eventTopic, rekeyEvents)")
                         && ledgerRepository.contains("-rekeyed\", groupingPrevious)")
                         && ledgerRepository.contains("-rekeyed\", Json.stringify(entity))"),
-                "a targeted write that moved a grouping key must publish BOTH the previous and the written row");
+                "a targeted write that moved a grouping key must record BOTH the previous and the written row"
+                        + " with the write itself (the outbox), never as a bare publish beside it");
+        assertFalse(ledgerRepository.contains("Producer.sendToTopic"),
+                "a generated repository must announce every event through its writes - no bare publish may remain");
 
         // Fix 2: the same move on a ROLL-UP child. Its parent FK is a grouping column too, so the child's
         // DAO tracks it and a roll-up handler binds "-rekeyed" - without it the parent a child was moved
@@ -2280,8 +2284,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(transition.contains("currentStatus == 1"), "transitions must emit the allowed-statuses guard");
         assertTrue(transition.contains("Calc.eval(\"Paid\", source, 6)"), "the when guard must emit a Calc comparison");
         assertTrue(transition.contains("Response.setStatus(409)"), "a failed guard must surface as 409");
-        assertTrue(transition.contains("updateProperty"), "the status flip must be the targeted single-column write");
-        assertTrue(transition.contains("-transitioned"), "the flip must publish the -transitioned topic");
+        assertTrue(transition.contains("repository.updateProperties(req.id, java.util.Map.of("),
+                "the status flip must be the targeted write, touching only the status column");
+        assertTrue(transition.contains("-transitioned\");"),
+                "the -transitioned notice must ride the targeted write into the outbox, so flip and announcement commit together");
+        assertFalse(transition.contains("Producer.sendToTopic"),
+                "the transition must not publish beside its write - a broker outage would lose the announcement");
         String transitionExtension = contentOf("CancelEntry-transition-action.extension");
         assertTrue(transitionExtension.contains("-custom-action"),
                 "the transition button must contribute to the app's custom-action extension point");

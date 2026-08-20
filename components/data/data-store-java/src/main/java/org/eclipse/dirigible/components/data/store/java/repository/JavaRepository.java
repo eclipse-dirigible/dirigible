@@ -81,6 +81,20 @@ public abstract class JavaRepository<T> {
     }
 
     /**
+     * Insert a new entity instance, publishing it on the given topic plus any further events the write
+     * emits about other rows — e.g. a create-from announcing its source's completed transition only
+     * once the document that transition was about exists. All of them share the insert's transaction.
+     *
+     * @param entity the entity to insert
+     * @param eventTopic the topic to publish the saved entity on; {@code null} publishes nothing
+     * @param additionalEvents further events to record with the same write
+     * @return the saved entity (with any generated identifier populated)
+     */
+    public T save(T entity, String eventTopic, List<DomainEvent> additionalEvents) {
+        return store().save(entity, eventTopic, additionalEvents);
+    }
+
+    /**
      * Update an existing entity instance.
      *
      * @param entity the entity to update
@@ -172,6 +186,23 @@ public abstract class JavaRepository<T> {
      */
     public int updateProperties(Object id, Map<String, Object> values, String eventTopic) {
         return store().updateProperties(entityClass, id, values, eventTopic);
+    }
+
+    /**
+     * Targeted multi-column write publishing the resulting row on the given topic plus any further
+     * events the write emits about other rows — an aggregate's {@code "-rekeyed"} notice about the
+     * tuple the row just left. All of them share the mutation's transaction and are recorded only when
+     * the row actually existed to be written.
+     *
+     * @param id the primary-key value
+     * @param values the properties to set (plain identifiers) with their new values
+     * @param eventTopic the topic to publish the resulting row on; {@code null} publishes nothing
+     * @param additionalEvents further events to record with the same write
+     * @return the number of updated rows ({@code 0} when the id does not exist or {@code values} is
+     *         empty)
+     */
+    public int updateProperties(Object id, Map<String, Object> values, String eventTopic, List<DomainEvent> additionalEvents) {
+        return store().updateProperties(entityClass, id, values, eventTopic, additionalEvents);
     }
 
     /**
