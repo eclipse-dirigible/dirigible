@@ -326,7 +326,6 @@ public class Configuration {
                 "DIRIGIBLE_FLOWABLE_DATABASE_DATASOURCE_NAME", //
                 "DIRIGIBLE_FLOWABLE_DATABASE_SCHEMA_UPDATE", //
                 "DIRIGIBLE_FLOWABLE_USE_SYSTEM_DATASOURCE", //
-                "DIRIGIBLE_MESSAGING_USE_DEFAULT_DATABASE", //
                 "DIRIGIBLE_KAFKA_BOOTSTRAP_SERVER", //
                 "DIRIGIBLE_KAFKA_ACKS", //
                 "DIRIGIBLE_KAFKA_KEY_SERIALIZER", //

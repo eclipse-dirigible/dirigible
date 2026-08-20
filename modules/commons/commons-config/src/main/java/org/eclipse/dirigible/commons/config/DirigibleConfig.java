@@ -229,6 +229,28 @@ public enum DirigibleConfig {
     INTENT_AI_VERSION("DIRIGIBLE_INTENT_AI_VERSION", "2023-06-01"),
 
     /**
+     * URL of an external ActiveMQ broker the messaging engine connects to, e.g.
+     * {@code tcp://activemq:61616}, {@code ssl://b-....mq.eu-central-1.amazonaws.com:61617} or a
+     * {@code failover:(...)} list. Left unset (or blank) the platform starts and uses its own embedded
+     * {@code vm://localhost} broker, which is the only mode the messaging monitoring perspective can
+     * introspect.
+     */
+    MESSAGING_BROKER_URL("DIRIGIBLE_MESSAGING_BROKER_URL", null),
+
+    /** Username for the external messaging broker; unset connects anonymously. */
+    MESSAGING_BROKER_USERNAME("DIRIGIBLE_MESSAGING_BROKER_USERNAME", null),
+
+    /** Password for the external messaging broker; unset connects anonymously. */
+    MESSAGING_BROKER_PASSWORD("DIRIGIBLE_MESSAGING_BROKER_PASSWORD", null),
+
+    /**
+     * Whether the EMBEDDED messaging broker persists its messages in the default (system) database.
+     * Applies to the embedded broker only - an external broker owns its own persistence, so the value
+     * is ignored when {@link #MESSAGING_BROKER_URL} is set.
+     */
+    MESSAGING_USE_DEFAULT_DATABASE("DIRIGIBLE_MESSAGING_USE_DEFAULT_DATABASE", Boolean.TRUE.toString()),
+
+    /**
      * Seconds an armed act-as (delegated entry) state survives before it expires on its own. The window
      * is absolute - it starts at arming and is never renewed by activity - so a state left armed and
      * forgotten stops hiding the real identity's world on its own.
