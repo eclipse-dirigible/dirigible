@@ -1089,7 +1089,7 @@ class IntentEngineIT extends IntegrationTest {
         // and the async consumer re-loads the source on receive - it must observe those writes.
         assertTrue(
                 activate.contains("Process.executeAfterCommit(")
-                        && activate.contains("Producer.sendToTopic(\"" + PROJECT + "-Member-Member-transitioned\", transitioned)"),
+                        && activate.contains("Producer.sendToTopicDurable(\"" + PROJECT + "-Member-Member-transitioned\", transitioned)"),
                 "the setter should publish the -transitioned topic after the BPMN chain commits");
     }
 
@@ -1318,7 +1318,7 @@ class IntentEngineIT extends IntegrationTest {
                 "an onTransition wait must bind the -transitioned topic, got: " + wait);
         // The setter on the same entity is the publisher the two now hear.
         String setter = contentOf("gen/events/fines/IdentifyAttribute.java");
-        assertTrue(setter.contains("Producer.sendToTopic(\"" + PROJECT + "-Fine-Fine-transitioned\", transitioned)"),
+        assertTrue(setter.contains("Producer.sendToTopicDurable(\"" + PROJECT + "-Fine-Fine-transitioned\", transitioned)"),
                 "the setter must publish the very topic the notification and the wait subscribe to");
     }
 
@@ -3041,7 +3041,7 @@ class IntentEngineIT extends IntegrationTest {
         // edits only reached anything by accident - when an unrelated setter on the same task happened
         // to sweep them into its own reload. Deferred, because a consumer re-loads on receive and would
         // otherwise race the rest of the BPMN chain.
-        assertTrue(writer.contains("Producer.sendToTopic(\"" + PROJECT + "-SalesOrder-SalesOrder-updated\", payload)"),
+        assertTrue(writer.contains("Producer.sendToTopicDurable(\"" + PROJECT + "-SalesOrder-SalesOrder-updated\", payload)"),
                 "the writer must publish the entity's -updated topic, got: " + writer);
         assertTrue(writer.contains("Process.executeAfterCommit("), "the publish must be deferred to after the BPMN chain commits");
         int write = writer.indexOf("repository.updateProperties(id, values)");
@@ -3073,7 +3073,7 @@ class IntentEngineIT extends IntegrationTest {
 
         String stamp = contentOf("gen/events/orders/SalesInvoiceNumberStamp.java");
         assertTrue(stamp.contains("DocumentNumbers.next(\"Sales Invoice\")"), "the stamp must allocate from the declared series");
-        assertTrue(stamp.contains("Producer.sendToTopic(\"" + PROJECT + "-SalesInvoice-SalesInvoice-updated\", payload)"),
+        assertTrue(stamp.contains("Producer.sendToTopicDurable(\"" + PROJECT + "-SalesInvoice-SalesInvoice-updated\", payload)"),
                 "the stamp must publish the entity's -updated topic - the raw perspective, not the sanitized Java one, got: " + stamp);
         assertTrue(stamp.contains("Process.executeAfterCommit("), "the publish must be deferred to after the BPMN chain commits");
         int write = stamp.indexOf("repository.updateProperty(id, \"Number\", number)");

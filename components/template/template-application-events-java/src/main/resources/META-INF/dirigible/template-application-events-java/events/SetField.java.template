@@ -58,7 +58,7 @@ public class ${className} implements JavaDelegate {
             // of racing them (an auto-posted entry used to catch the create-time UUID placeholder).
             String transitioned = Json.stringify(entity);
             Process.executeAfterCommit(
-                    () -> Producer.sendToTopic("${projectName}-${perspective}-${entity}-transitioned", transitioned));
+                    () -> Producer.sendToTopicDurable("${projectName}-${perspective}-${entity}-transitioned", transitioned));
         }
     }
 }

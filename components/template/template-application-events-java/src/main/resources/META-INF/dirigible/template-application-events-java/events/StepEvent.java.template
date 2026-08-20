@@ -42,6 +42,6 @@ public class ${className} implements JavaDelegate {
             return;
         }
         String payload = Json.stringify(entity);
-        Process.executeAfterCommit(() -> Producer.sendToTopic("${projectName}-${perspective}-${entity}${topicSuffix}", payload));
+        Process.executeAfterCommit(() -> Producer.sendToTopicDurable("${projectName}-${perspective}-${entity}${topicSuffix}", payload));
     }
 }

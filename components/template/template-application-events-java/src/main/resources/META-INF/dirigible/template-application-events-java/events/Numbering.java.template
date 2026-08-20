@@ -55,7 +55,7 @@ public class ${entity}NumberStamp implements JavaDelegate {
         ${entity}Entity stamped = repository.findById(id);
         if (stamped != null) {
             String payload = Json.stringify(stamped);
-            Process.executeAfterCommit(() -> Producer.sendToTopic("${projectName}-${perspective}-${entity}-updated", payload));
+            Process.executeAfterCommit(() -> Producer.sendToTopicDurable("${projectName}-${perspective}-${entity}-updated", payload));
         }
     }
 
