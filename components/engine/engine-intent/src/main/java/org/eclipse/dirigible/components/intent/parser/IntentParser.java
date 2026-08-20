@@ -1845,7 +1845,21 @@ public final class IntentParser {
             issues.add(subject + " outcome [" + field + "] is not a field of [" + record.getName() + "]");
         } else if (!"string".equals(declared.getType())) {
             issues.add(subject + " outcome [" + field + "] must be a string field, was [" + declared.getType() + "]");
+        } else if (declared.getLength() != null && declared.getLength() < outcomeLength(anyStatus)) {
+            // The trace is the one field whose whole job is to be readable afterwards, so a length that
+            // truncates it is worse than useless - and it truncates at the DB, where nothing reports it.
+            // Routing widens the set the handler writes: a status the record cannot take leaves it
+            // amended (`ambiguous-notRouted`) so a routed-but-rejected record is not indistinguishable
+            // from a fully processed one.
+            issues.add(subject + " outcome [" + field + "] is length [" + declared.getLength() + "], too short for the values written - "
+                    + "at least [" + outcomeLength(anyStatus) + "]"
+                    + (anyStatus ? " once an outcome routes by setStatus (a rejected route amends the trace)" : ""));
         }
+    }
+
+    /** The longest trace value the generated handler can write, with and without status routing. */
+    private static int outcomeLength(boolean routesByStatus) {
+        return routesByStatus ? "ambiguous-notRouted".length() : "ambiguous".length();
     }
 
     /** Whether the entity declares a {@code function: EntityStatus} relation. */
