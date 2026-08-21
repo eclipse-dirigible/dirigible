@@ -252,7 +252,7 @@ class SubsetIntentTest {
                      .contains("row sets the subset relation [payerTypes]"),
                 ex.getMessage());
         assertTrue(ex.getMessage()
-                     .contains("selecting by seeded name is not supported yet"),
+                     .contains("Selecting by seeded name is not supported yet"),
                 ex.getMessage());
     }
 
