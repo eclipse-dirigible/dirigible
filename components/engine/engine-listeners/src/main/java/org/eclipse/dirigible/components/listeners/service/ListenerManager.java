@@ -11,10 +11,6 @@ package org.eclipse.dirigible.components.listeners.service;
 
 import jakarta.jms.MessageConsumer;
 import jakarta.jms.*;
-import org.apache.activemq.ActiveMQConnection;
-import org.apache.activemq.RedeliveryPolicy;
-import org.apache.activemq.broker.region.policy.RedeliveryPolicyMap;
-import org.apache.activemq.command.ActiveMQDestination;
 import org.eclipse.dirigible.components.listeners.config.ActiveMQConnectionArtifactsFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,15 +21,6 @@ import java.lang.IllegalStateException;
  * The Class BackgroundListenerManager.
  */
 public class ListenerManager {
-
-    /** The Constant INITIAL_REDELIVERY_DELAY. */
-    private static final int INITIAL_REDELIVERY_DELAY = 1000;
-
-    /** The Constant REDELIVERY_DELAY. */
-    private static final int REDELIVERY_DELAY = 5000;
-
-    /** The Constant MAXIMUM_REDELIVERIES. */
-    private static final int MAXIMUM_REDELIVERIES = 3;
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(ListenerManager.class);
@@ -83,7 +70,7 @@ public class ListenerManager {
             Session session = connectionArtifactsFactory.createSession(connection);
 
             Destination destination = createDestination(session);
-            configureRedeliveryPolicy(connection, destination);
+            connectionArtifactsFactory.configureRedeliveryPolicy(connection, destination);
 
             MessageConsumer consumer = session.createConsumer(destination);
 
@@ -114,36 +101,6 @@ public class ListenerManager {
             case TOPIC -> session.createTopic(destination);
             default -> throw new IllegalArgumentException("Invalid type: " + type);
         };
-    }
-
-    /**
-     * Configure redelivery policy.
-     *
-     * @param connection the connection
-     * @param destination the destination
-     */
-    private void configureRedeliveryPolicy(Connection connection, Destination destination) {
-        if (connection instanceof ActiveMQConnection amqConnection && destination instanceof ActiveMQDestination amqDestination) {
-            RedeliveryPolicy redeliveryPolicy = createRedeliveryPolicy();
-            RedeliveryPolicyMap policyMap = amqConnection.getRedeliveryPolicyMap();
-            policyMap.put(amqDestination, redeliveryPolicy);
-        }
-    }
-
-    /**
-     * Creates the redelivery policy.
-     *
-     * @return the redelivery policy
-     */
-    private RedeliveryPolicy createRedeliveryPolicy() {
-        RedeliveryPolicy redeliveryPolicy = new RedeliveryPolicy();
-
-        redeliveryPolicy.setInitialRedeliveryDelay(INITIAL_REDELIVERY_DELAY);
-        redeliveryPolicy.setRedeliveryDelay(REDELIVERY_DELAY);
-        redeliveryPolicy.setUseExponentialBackOff(true);
-        redeliveryPolicy.setMaximumRedeliveries(MAXIMUM_REDELIVERIES);
-
-        return redeliveryPolicy;
     }
 
     /**

@@ -1,5 +1,8 @@
 package gen.events.${javaGenFolderName};
 
+import org.eclipse.dirigible.sdk.bpm.Process;
+import org.eclipse.dirigible.sdk.messaging.Producer;
+import org.eclipse.dirigible.sdk.utils.Json;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
 
@@ -14,7 +17,12 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * Generated from the intent numbering glue - do not edit; it is re-generated with the application. The
  * number is allocated + formatted via sdk.numbering.DocumentNumbers (the shared per-tenant counter,
  * also managed from the application shell's Document Numbering settings) and written with the targeted
- * updateProperty - a workflow system write (no "-updated" event re-fire, no full-row merge).
+ * updateProperty - only the number column is in the UPDATE statement, never a full-row merge.
+ *
+ * The stamped number is the document's identity to everything outside this system, so "-updated" IS
+ * published: an integration or a notification quoting the number cannot be built on a write nothing
+ * can observe. Deferred to after the BPMN chain commits, like the setter's - which is also why an
+ * asynchronous consumer sees the real number here instead of the create-time UUID placeholder.
  */
 public class ${entity}NumberStamp implements JavaDelegate {
 
@@ -40,7 +48,15 @@ public class ${entity}NumberStamp implements JavaDelegate {
 #else
         String number = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${series}");
 #end
-        repository.updateProperty(id, "${field}", number);
+        if (repository.updateProperty(id, "${field}", number) == 0) {
+            return;
+        }
+        // Re-load AFTER the write so the payload carries the stamped number rather than the placeholder.
+        ${entity}Entity stamped = repository.findById(id);
+        if (stamped != null) {
+            String payload = Json.stringify(stamped);
+            Process.executeAfterCommit(() -> Producer.sendToTopicDurable("${projectName}-${perspective}-${entity}-updated", payload));
+        }
     }
 
     /** Whether the value is still the create-time UUID placeholder (vs an already-stamped number). */

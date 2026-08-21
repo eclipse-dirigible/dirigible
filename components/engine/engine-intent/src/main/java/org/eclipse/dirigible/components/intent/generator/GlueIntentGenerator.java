@@ -582,11 +582,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // this one class.
             String className = rollup.getEntity() + fkProperty;
             rollups.add(rollupEntry(base, className + "RollupOnCreate", ""));
-            if (sum || latest) {
-                // A line edit changes the sum (or which row is latest / its value), so sum AND latest
-                // roll-ups must also recompute on update.
-                rollups.add(rollupEntry(base, className + "RollupOnUpdate", "-updated"));
-            }
+            // EVERY op recomputes on update, not just sum / latest: a line edit changes the sum (or which
+            // row is latest, or its value), and an edit that RE-PARENTS a child - the ordinary way a child
+            // moves between parents - changes the count of the parent it moved TO. The recompute is the
+            // same query for every op and reads the child rows back from the store, so the update handler
+            // is idempotent and never op-specific. (The parent the child moved AWAY from is repaired by
+            // the RollupOnRekey handler below, off the "-rekeyed" event the DAO publishes for the move.)
+            rollups.add(rollupEntry(base, className + "RollupOnUpdate", "-updated"));
             rollups.add(rollupEntry(base, className + "RollupOnDelete", "-deleted"));
             // Re-parenting: the child's create/update/delete events all name the parent it belongs to NOW,
             // so the parent it moved AWAY from is named by no event of theirs and kept the child's
@@ -686,6 +688,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // The create handler keeps its established class name; the correction one is suffixed.
             listeners.add(rollupEntry(settlement, name + "OnPayment", ""));
             listeners.add(rollupEntry(settlement, name + "OnPaymentUpdated", "-updated"));
+            if (!Boolean.TRUE.equals(settlement.get("crossModel"))) {
+                // A corrected MATCH column re-targets the allocation wholesale: the payment's DAO
+                // publishes "-rekeyed" for the move (the match columns are grouping keys), and this
+                // handler releases everything and re-allocates from the STORE - which needs the
+                // payment's repository, so it exists only for a local payment. A cross-model payment's
+                // DAO belongs to the owner model, which knows nothing of this settlement.
+                listeners.add(rollupEntry(settlement, name + "OnPaymentRekeyed", "-rekeyed"));
+            }
         }
         return listeners;
     }
@@ -1277,6 +1287,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 null);
     }
 
+    /** Test hook: build the {@code settlementListeners} glue collection without a repository. */
+    static List<Map<String, Object>> buildSettlementListenersForTest(IntentModel model) {
+        IntentGenerationContext context =
+                new IntentGenerationContext(model, "/" + model.getName(), model.getName(), "workspace", model.getName(), null);
+        return buildSettlementListeners(buildSettlements(model, IntentEntities.byName(model), IntentEntities.compositionParents(model),
+                IntentSettings.parse("{}"), context));
+    }
+
     /** Test hook: build the {@code waits} glue collection without a repository. */
     static List<Map<String, Object>> buildWaitsForTest(IntentModel model) {
         return buildWaits(model, IntentSettings.parse("{}"));
@@ -1664,6 +1682,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("registerPerspective", IntentEntities.resolvePerspective(register.getName(), compositionParents, model));
             e.put("registerValueProperty", IntentNaming.pascalCase(value.getName()));
             e.put("matches", matches);
+            // The static register narrowing, pre-rendered as Java literals: the template only chains
+            // them onto the Criteria, so nothing about a value's type has to be decided in Velocity.
+            List<Map<String, String>> filters = new ArrayList<>();
+            for (Map.Entry<String, Object> pair : resolve.getWhere()
+                                                         .entrySet()) {
+                Map<String, String> filter = new LinkedHashMap<>();
+                filter.put("property", IntentNaming.pascalCase(pair.getKey()));
+                filter.put("literal", javaLiteral(pair.getValue()));
+                filters.add(filter);
+            }
+            e.put("filters", filters);
+            e.put("filterSummary", filters.stream()
+                                          .map(filter -> filter.get("property") + " = " + filter.get("literal"))
+                                          .collect(java.util.stream.Collectors.joining(", ")));
             e.put("matchSummary", matches.stream()
                                          .map(match -> match.get("registerProperty") + " = " + match.get("recordProperty"))
                                          .collect(java.util.stream.Collectors.joining(", ")));
@@ -2117,11 +2149,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /** A YAML scalar as a Java literal: numbers bare, everything else a quoted string. */
     private static String javaLiteral(Object value) {
+        // A Boolean written as a String would filter a boolean column with the text "true" and match
+        // nothing; the backslash is escaped before the quote so a value carrying either cannot close the
+        // literal early. Statuses arrive already resolved to ids, so a lifecycle filter takes the bare
+        // integer branch.
+        if (value instanceof Boolean) {
+            return String.valueOf(value);
+        }
         String v = String.valueOf(value);
         if (v.matches("-?\\d+")) {
             return v;
         }
-        return '"' + v.replace("\"", "\\\"") + '"';
+        return '"' + v.replace("\\", "\\\\")
+                      .replace("\"", "\\\"")
+                + '"';
     }
 
     /**

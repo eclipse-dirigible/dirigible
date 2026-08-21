@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.listeners.config;
 
 import java.io.File;
+import java.time.Duration;
 import javax.sql.DataSource;
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.activemq.broker.BrokerService;
@@ -18,8 +19,10 @@ import org.apache.activemq.store.PListStore;
 import org.apache.activemq.store.PersistenceAdapter;
 import org.apache.activemq.store.jdbc.JDBCPersistenceAdapter;
 import org.apache.activemq.store.kahadb.plist.PListStoreImpl;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.DependsOn;
 import jakarta.jms.Connection;
@@ -27,10 +30,13 @@ import jakarta.jms.JMSException;
 import jakarta.jms.Session;
 
 /**
- * The Class MessagingConfig.
+ * The messaging beans backed by the platform's own in-process ActiveMQ broker - the default mode,
+ * active whenever no external broker is configured. Its counterpart is
+ * {@link ExternalBrokerMessagingConfig}; the two are mutually exclusive by construction.
  */
 @Configuration
-class MessagingConfig {
+@Conditional(EmbeddedMessagingBrokerCondition.class)
+class EmbeddedBrokerMessagingConfig {
 
     /** The Constant CONNECTOR_URL_ATTACH. */
     private static final String CONNECTOR_URL_ATTACH = "vm://localhost?create=false";
@@ -40,6 +46,22 @@ class MessagingConfig {
 
     /** The Constant LOCATION_TEMP_STORE. */
     private static final String LOCATION_TEMP_STORE = "./target/dirigible/kahadb";
+
+    /**
+     * How long a durable subscription may stay offline before the broker discards it, and how often
+     * that sweep runs. A durable subscription outlives its subscriber by design - that is what stops a
+     * message published during a republish from being lost - so nothing reclaims one whose handler was
+     * deleted rather than reloaded. The consumer cannot do it: a class deleted while the server was
+     * down is never reported as unloaded at all, so there is no moment at which to unsubscribe. A
+     * generous timeout collects those orphans without ever expiring a subscription that a restart or a
+     * republish is about to reconnect.
+     */
+    private static final long OFFLINE_DURABLE_SUBSCRIBER_TIMEOUT = Duration.ofDays(7)
+                                                                           .toMillis();
+
+    /** The Constant OFFLINE_DURABLE_SUBSCRIBER_TASK_SCHEDULE. */
+    private static final long OFFLINE_DURABLE_SUBSCRIBER_TASK_SCHEDULE = Duration.ofHours(1)
+                                                                                 .toMillis();
 
     /**
      * Creates the active MQ connection factory.
@@ -62,13 +84,14 @@ class MessagingConfig {
         try {
             BrokerService broker = new BrokerService();
             if (!broker.isStarted()) {
-                if (Boolean.parseBoolean(
-                        org.eclipse.dirigible.commons.config.Configuration.get("DIRIGIBLE_MESSAGING_USE_DEFAULT_DATABASE", "true"))) {
+                if (DirigibleConfig.MESSAGING_USE_DEFAULT_DATABASE.getBooleanValue()) {
                     PersistenceAdapter persistenceAdapter = new JDBCPersistenceAdapter(dataSource, new OpenWireFormat());
                     broker.setPersistenceAdapter(persistenceAdapter);
                 }
                 broker.setPersistent(true);
                 broker.setUseJmx(false);
+                broker.setOfflineDurableSubscriberTimeout(OFFLINE_DURABLE_SUBSCRIBER_TIMEOUT);
+                broker.setOfflineDurableSubscriberTaskSchedule(OFFLINE_DURABLE_SUBSCRIBER_TASK_SCHEDULE);
                 PListStore pListStore = new PListStoreImpl();
                 pListStore.setDirectory(new File(LOCATION_TEMP_STORE));
                 broker.setTempDataStore(pListStore);

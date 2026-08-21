@@ -18,8 +18,10 @@ import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.ide.messaging.monitoring.dto.BrokerSummary;
 import org.eclipse.dirigible.components.ide.messaging.monitoring.dto.MessageDetail;
 import org.eclipse.dirigible.components.ide.messaging.monitoring.service.MessagingMonitoringService;
+import org.eclipse.dirigible.components.listeners.config.EmbeddedMessagingBrokerCondition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -33,8 +35,12 @@ import org.springframework.web.server.ResponseStatusException;
 /**
  * Exposes the embedded ActiveMQ broker for read-only inspection plus a few targeted devops actions
  * (purge, delete) needed when debugging queue/topic behaviour from the browser IDE.
+ * <p>
+ * Registered only alongside the embedded broker, like the service it delegates to: there is nothing
+ * to inspect in-process when the messaging is pointed at an external broker.
  */
 @RestController
+@Conditional(EmbeddedMessagingBrokerCondition.class)
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_IDE + "messaging-monitoring")
 @RolesAllowed({"ADMINISTRATOR", "DEVELOPER", "OPERATOR"})
 public class MessagingMonitoringEndpoint {

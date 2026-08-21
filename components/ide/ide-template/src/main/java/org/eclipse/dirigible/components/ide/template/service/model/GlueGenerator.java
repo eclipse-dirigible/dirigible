@@ -803,7 +803,9 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindNumbering(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "entity", "masterPk", "field", "series", "per");
+        // The RAW perspective too, not only the sanitized Java one: the stamp publishes "-updated", and
+        // an event topic is built from the raw perspective (the sanitized form is the Java package).
+        copy(context, item, "entity", "masterPk", "field", "series", "per", "perspective");
         context.put("javaPerspective", sanitize(item, "perspective"));
     }
 
@@ -819,6 +821,13 @@ class GlueGenerator {
         copy(context, item, "name", "className", "entity", "perspective", "keyProperty", "topicSuffix", "guardExpression", "setProperty",
                 "registerEntity", "registerPerspective", "registerValueProperty", "matches", "matchSummary", "startProperty", "endProperty",
                 "valueProperty", "outcomeProperty", "statusProperty", "foundStatus", "notFoundStatus", "ambiguousStatus", "writesStatus");
+        // The `where:` filter keys arrived after resolves shipped, so a `.glue` written before them
+        // carries neither - and `copy` REMOVES an absent key, which Velocity then renders as its own
+        // literal (`${filterSummary}` in the generated javadoc, an unfiltered lookup that LOOKS
+        // filtered). Default them to the no-filter shape instead, the same migration pattern the
+        // create-from's topicSuffix uses.
+        context.put("filters", item.containsKey("filters") ? item.get("filters") : java.util.List.of());
+        context.put("filterSummary", strOr(item, "filterSummary", ""));
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("javaRegisterPerspective", sanitize(item, "registerPerspective"));
     }
@@ -829,9 +838,10 @@ class GlueGenerator {
      *
      * <p>
      * The coalescing is what keeps the totals correct: separate handlers would each persist the whole
-     * parent row and clobber each other's fields. Grouping by the event as well as the relation is what
-     * makes each event's aggregate set right - a count roll-up contributes no update entry, so the
-     * update handler ends up sum-only.
+     * parent row and clobber each other's fields. The event is part of the grouping key because a
+     * handler binds exactly one topic, so each of the child's create / update / delete events yields
+     * its own handler carrying the aggregate blocks of every roll-up that shares that child and
+     * relation.
      *
      * @param source the template source
      * @param content the template content

@@ -822,6 +822,59 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * A settlement matches invoices by columns of the PAYMENT row, so a corrected match value (the
+     * payment re-filed under another Customer) moves the whole allocation between counterparties. The
+     * payment must track those columns as grouping keys - the DAO's "-rekeyed" publish is the only
+     * signal the settlement's re-key handler ever gets.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aSettlementsMatchColumnsAreThePaymentsGroupingKeys() {
+        String yaml = """
+                name: settle
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: date,  type: date }
+                      - { name: total, type: decimal, precision: 18, scale: 2 }
+                      - { name: paid,  type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: Payment
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: date,   type: date }
+                      - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: Customer
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string,  required: true, length: 100 }
+                  - name: InvoicePayment
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                      - { name: Payment, kind: manyToOne, to: Payment, required: true }
+                settlements:
+                  - { name: autoSettle, junction: InvoicePayment, invoice: Invoice, payment: Payment,
+                      amount: amount, total: total, paid: paid, pot: amount, order: date,
+                      match: [Customer] }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "settle");
+        List<Map<String, String>> keys = (List<Map<String, String>>) entityByName(entities(model), "Payment").get("groupingKeys");
+        assertEquals(1, keys.size(), "the payment must track its settlement match column");
+        assertEquals("Customer", keys.get(0)
+                                     .get("key"));
+        // The invoice side is matched by the RECORD's own column and never moves an allocation by
+        // itself - only the payment's match value re-targets the settlement.
+        assertNull(entityByName(entities(model), "Invoice").get("groupingKeys"));
+    }
+
+    /**
      * The two non-blocking guard outcomes. Both PERSIST the row and mark it instead of failing the
      * write: {@code task} stamps a boolean marker that the entity's process decision branches on (the
      * credit-limit shape - the order is accepted, then parked on a hold step), {@code reject} forces

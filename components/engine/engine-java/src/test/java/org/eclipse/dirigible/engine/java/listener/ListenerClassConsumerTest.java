@@ -11,12 +11,14 @@ package org.eclipse.dirigible.engine.java.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,6 +66,7 @@ class ListenerClassConsumerTest {
 
         Map<String, String> observedDuringDispatch;
         RuntimeException failWith;
+        final List<String> reportedErrors = new ArrayList<>();
 
         @Override
         public String destination() {
@@ -77,11 +80,19 @@ class ListenerClassConsumerTest {
                 throw failWith;
             }
         }
+
+        @Override
+        public void onError(String error) {
+            reportedErrors.add(error);
+        }
     }
 
     private TenantConfigurationService tenantConfigurationService;
     private RecordingHandler handler;
     private MessageListener capturedListener;
+    private ActiveMQConnectionArtifactsFactory connectionFactory;
+    private Connection connection;
+    private Queue queue;
     private ListAppender<ILoggingEvent> appender;
     private Logger consumerLogger;
 
@@ -89,7 +100,7 @@ class ListenerClassConsumerTest {
     @SuppressWarnings("rawtypes")
     void setUp() throws Exception {
         ComponentContainer componentContainer = mock(ComponentContainer.class);
-        ActiveMQConnectionArtifactsFactory connectionFactory = mock(ActiveMQConnectionArtifactsFactory.class);
+        connectionFactory = mock(ActiveMQConnectionArtifactsFactory.class);
         TenantContext tenantContext = mock(TenantContext.class);
         TenantPropertyManager tenantPropertyManager = mock(TenantPropertyManager.class);
         tenantConfigurationService = mock(TenantConfigurationService.class);
@@ -98,11 +109,11 @@ class ListenerClassConsumerTest {
 
         when(componentContainer.instanceOf(RecordingHandler.class)).thenReturn(Optional.of(handler));
 
-        Connection connection = mock(Connection.class);
+        connection = mock(Connection.class);
         Session session = mock(Session.class);
-        Queue queue = mock(Queue.class);
+        queue = mock(Queue.class);
         MessageConsumer messageConsumer = mock(MessageConsumer.class);
-        when(connectionFactory.createConnection(any())).thenReturn(connection);
+        when(connectionFactory.createConnection(any(), any())).thenReturn(connection);
         when(connectionFactory.createSession(connection)).thenReturn(session);
         when(session.createQueue("notifications")).thenReturn(queue);
         when(session.createConsumer(queue)).thenReturn(messageConsumer);
@@ -177,10 +188,11 @@ class ListenerClassConsumerTest {
     }
 
     /**
-     * A handler that throws must leave a trace. The message is acknowledged and discarded either way
-     * (AUTO_ACKNOWLEDGE, and the handler's own onError defaults to a no-op), so this log line is the
-     * only evidence the failure ever happened - without it a failing trigger, rollup, posting or
-     * register lookup is indistinguishable from one that never fired.
+     * A handler that throws must leave a trace, and carry the throwable itself - logging only its
+     * message loses the stack trace, which is the whole diagnostic value. The failure is now also
+     * handed back to the broker (below), but that is a separate guarantee: redelivery re-runs the work,
+     * it does not explain it. Without this line a failing trigger, rollup, posting or register lookup
+     * is indistinguishable from one that never fired.
      */
     @Test
     void aThrowingHandlerIsReportedInsteadOfSilentlyDiscarded() throws Exception {
@@ -190,7 +202,8 @@ class ListenerClassConsumerTest {
         TextMessage message = mock(TextMessage.class);
         when(message.getText()).thenReturn("{}");
 
-        capturedListener.onMessage(message);
+        // The failure escapes the listener now, so the report is asserted around the throw.
+        assertThrows(Exception.class, () -> capturedListener.onMessage(message));
 
         List<ILoggingEvent> errors = appender.list.stream()
                                                   .filter(event -> event.getLevel() == Level.ERROR)
@@ -203,5 +216,51 @@ class ListenerClassConsumerTest {
                 "the report must carry the failure's message, got: " + error.getFormattedMessage());
         assertNotNull(error.getThrowableProxy(), "the throwable itself must be logged - passing only getMessage() loses the stack trace, "
                 + "which is the whole diagnostic value");
+    }
+
+    /**
+     * The failure must also LEAVE the listener, because that is the only thing the broker can observe.
+     * A swallowed exception is indistinguishable from success: the message is acknowledged and the
+     * event is gone for good, which also strands every handler whose correctness depends on a second
+     * delivery - the generated posting glue repairs a half-written post on redelivery.
+     */
+    @Test
+    void aThrowingHandlerIsHandedBackToTheBrokerRatherThanAcknowledged() throws Exception {
+        when(tenantConfigurationService.resolveInjectableForCurrentTenant()).thenReturn(Map.of());
+        handler.failWith = new IllegalStateException("journal line 3 of 5 violated a constraint");
+
+        TextMessage message = mock(TextMessage.class);
+        when(message.getText()).thenReturn("{}");
+
+        Exception thrown = assertThrows(Exception.class, () -> capturedListener.onMessage(message),
+                "the failure must escape onMessage - otherwise the broker sees a successful delivery");
+        assertEquals("journal line 3 of 5 violated a constraint", thrown.getCause()
+                                                                        .getMessage(),
+                "the original failure must survive as the cause, not be flattened into a message");
+    }
+
+    /**
+     * Reporting still happens first - handing the message back must not skip the handler's own hook.
+     */
+    @Test
+    void theHandlersOnErrorStillRunsBeforeTheMessageIsHandedBack() throws Exception {
+        when(tenantConfigurationService.resolveInjectableForCurrentTenant()).thenReturn(Map.of());
+        handler.failWith = new IllegalStateException("boom");
+
+        TextMessage message = mock(TextMessage.class);
+        when(message.getText()).thenReturn("{}");
+
+        assertThrows(Exception.class, () -> capturedListener.onMessage(message));
+
+        assertEquals(List.of("boom"), handler.reportedErrors, "onError must still be invoked for the failed attempt");
+    }
+
+    /**
+     * Without a policy the broker falls back to its own defaults, so the two listener paths would
+     * disagree on how many times a failure is retried before it is dead-lettered.
+     */
+    @Test
+    void theSubscriptionBoundsItsRetriesLikeTheJavaScriptListenerPath() {
+        verify(connectionFactory).configureRedeliveryPolicy(connection, queue);
     }
 }

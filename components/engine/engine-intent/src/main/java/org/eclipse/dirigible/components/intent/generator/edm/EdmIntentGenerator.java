@@ -23,6 +23,8 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
@@ -49,6 +51,7 @@ import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.RelatedIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
+import org.eclipse.dirigible.components.intent.model.SettlementIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.model.UniqueIntent;
@@ -630,6 +633,19 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 if (rollup.getVia() != null && entity.getName()
                                                      .equals(rollup.getEntity())) {
                     addGroupingKey(groupingKeys, seenGroupingKeys, rollup.getVia());
+                }
+            }
+            // A settlement matches invoices by columns of the PAYMENT row (its Customer, its Company),
+            // so a correction that moves one of them re-targets the whole allocation - the settlement's
+            // rekey handler releases and re-allocates from the store. Without these keys the DAO never
+            // notices the move and the junction rows keep paying the OLD counterparty's invoices.
+            for (SettlementIntent settlement : model.getSettlements()) {
+                if (entity.getName()
+                          .equals(settlement.getPayment())
+                        && settlement.getMatch() != null) {
+                    for (String matchColumn : settlement.getMatch()) {
+                        addGroupingKey(groupingKeys, seenGroupingKeys, matchColumn);
+                    }
                 }
             }
             if (!groupingKeys.isEmpty()) {
@@ -2610,19 +2626,16 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             sb.append("  <entity");
             List<Map<String, Object>> properties = (List<Map<String, Object>>) entity.getOrDefault("properties", List.of());
             for (Map.Entry<String, Object> attr : entity.entrySet()) {
-                // EDM attributes are scalar. A structured value (checks, uniqueConstraints, ...) belongs
-                // only to the .model twin and would render here as a stringified Java collection - the
-                // same guard the mxGraph property cells already apply.
-                if ("properties".equals(attr.getKey()) || attr.getValue() instanceof Iterable || attr.getValue() instanceof Map) {
+                if ("properties".equals(attr.getKey())) {
                     continue;
                 }
-                appendAttribute(sb, attr.getKey(), attr.getValue());
+                appendModelAttribute(sb, attr.getKey(), attr.getValue());
             }
             sb.append(">\n");
             for (Map<String, Object> property : properties) {
                 sb.append("   <property");
                 for (Map.Entry<String, Object> attr : property.entrySet()) {
-                    appendAttribute(sb, attr.getKey(), attr.getValue());
+                    appendModelAttribute(sb, attr.getKey(), attr.getValue());
                 }
                 sb.append("></property>\n");
             }
@@ -2980,12 +2993,19 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if ("DEPENDENT".equals(entityType) || "SETTING".equals(entityType) || "PROJECTION".equals(entityType)) {
             appendAttribute(sb, "entityType", entityType);
         }
-        for (String key : new String[] {"dataName", "dataCount", "dataQuery", "title", "caption", "description", "tooltip", "menuKey",
-                "menuLabel", "layoutType", "perspectiveName", "importsCode", "generateDefaultRoles", "roleRead", "roleWrite",
-                "projectionReferencedModel", "projectionReferencedEntity"}) {
-            if (entity.get(key) != null) {
-                appendAttribute(sb, key, entity.get(key));
+        // Every remaining entity attribute rides the cell value, so a live EDM-editor open->save preserves
+        // it: serializer.js re-serializes the DECODED cell, not the <entities> block, and would otherwise
+        // drop any attribute the cell did not carry (the intent-era attributes "wholesale" of #6826) -
+        // scalars verbatim, the structured values (rollupGuard, checks, ...) as JSON attributes (a flat
+        // attribute survives mxGraph's codec, a nested element would not). 'name' is already emitted above;
+        // 'type' is the mxObjectCodec class marker emitted below (the entity's own type rides as
+        // 'entityType'); 'properties' are child cells, not attributes.
+        for (Map.Entry<String, Object> attr : entity.entrySet()) {
+            String key = attr.getKey();
+            if ("name".equals(key) || "type".equals(key) || "properties".equals(key)) {
+                continue;
             }
+            appendModelAttribute(sb, key, attr.getValue());
         }
         appendAttribute(sb, "type", "Entity");
         sb.append(" as=\"value\"/>\n");
@@ -2995,12 +3015,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static void appendPropertyValue(StringBuilder sb, Map<String, Object> property) {
         sb.append("    <Property");
         for (Map.Entry<String, Object> attr : property.entrySet()) {
-            // EDM attributes are scalar; a structured value (e.g. lookupColumns, .model-JSON-only) is not
-            // an EDM attribute and would render as a junk string - it belongs only in the .model twin.
-            if (attr.getValue() instanceof Iterable || attr.getValue() instanceof Map) {
-                continue;
-            }
-            appendAttribute(sb, attr.getKey(), attr.getValue());
+            appendModelAttribute(sb, attr.getKey(), attr.getValue());
         }
         // The EDM editor's "Not null" checkbox binds to dataNotNull, not dataNullable (dataNullable is
         // only the checkbox's derived serializer output). A NOT NULL column must therefore carry
@@ -3017,6 +3032,56 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /** mxGraph cell ids must be attribute-safe and stable; keep only word characters. */
     private static String sanitizeId(String raw) {
         return raw == null ? "" : raw.replaceAll("[^A-Za-z0-9_]", "_");
+    }
+
+    /**
+     * The entity/property attributes whose value is a List/Map. They are emitted into the {@code .edm}
+     * as a JSON string in a flat attribute (never dropped, never a nested element) so the {@code .edm}
+     * stays a lossless source for the derived {@code .model}: a flat attribute survives both the
+     * mxGraph cell-value round-trip of a live editor save and the {@code transform-edm} regeneration,
+     * which a nested element would not - #6826. {@code transform-edm.js} parses these keys back into
+     * objects.
+     *
+     * <p>
+     * {@code uniqueConstraints} is deliberately NOT here: the composite-unique-key modeler feature owns
+     * it, emitting a top-level {@code <constraints>}/{@code <uniqueKey>} section that
+     * {@code transform-edm} rebuilds into {@code uniqueConstraints}. Emitting it here too would write
+     * it twice and round-trip it as a duplicate.
+     */
+    private static final Set<String> STRUCTURED_ATTRIBUTES =
+            Set.of("rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys", "relatedEntities", "lookupColumns");
+
+    /**
+     * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value
+     * carries no structural newlines (XML attribute-value normalization would turn them into spaces),
+     * and HTML-escaping is off so the {@code .edm} reads cleanly - {@code transform-edm.js}'s
+     * {@code JSON.parse} accepts either form, and the round-trip is asserted on parsed structure, not
+     * bytes.
+     */
+    private static final Gson STRUCTURED_JSON = new GsonBuilder().disableHtmlEscaping()
+                                                                 .create();
+
+    /**
+     * Emit one model attribute: a known structured value as a JSON string, an unknown non-scalar
+     * skipped (kept {@code .model}-only, defensively), and a scalar verbatim - matching the pre-#6826
+     * scalar behaviour (a null scalar still renders as an empty attribute).
+     */
+    private static void appendModelAttribute(StringBuilder sb, String key, Object value) {
+        if (STRUCTURED_ATTRIBUTES.contains(key)) {
+            if (value != null) {
+                appendStructuredAttribute(sb, key, value);
+            }
+            return;
+        }
+        if (value instanceof Iterable || value instanceof Map) {
+            return;
+        }
+        appendAttribute(sb, key, value);
+    }
+
+    /** Emit a structured value as a JSON string attribute (XML-escaped by {@link #appendAttribute}). */
+    private static void appendStructuredAttribute(StringBuilder sb, String key, Object value) {
+        appendAttribute(sb, key, STRUCTURED_JSON.toJson(value));
     }
 
     private static void appendAttribute(StringBuilder sb, String key, Object value) {

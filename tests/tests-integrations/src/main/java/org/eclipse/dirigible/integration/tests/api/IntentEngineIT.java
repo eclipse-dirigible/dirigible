@@ -56,6 +56,12 @@ class IntentEngineIT extends IntegrationTest {
     private static final String PARSE_URL = "/services/ide/intent/parse";
     private static final String GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
+    /**
+     * The generated -transitioned publish, matched on its sendToTopic argument. The code comments that
+     * explain the flip mention "-transitioned" as well, and they sit before the target save - matching
+     * the bare word would find a comment and read as a publish in the wrong place.
+     */
+    private static final String TRANSITIONED_PUBLISH = "-transitioned\", Json.stringify(source)";
     private static final String AGENT_URL = "/services/ide/intent/agent";
     private static final String ASSIST_URL = "/services/ide/intent/assist";
 
@@ -634,7 +640,7 @@ class IntentEngineIT extends IntegrationTest {
         // this exercises the generateUtils.js "triggers" + "resolvers" collection cases end to end.
         generateFromModel("template-application-events-java/template/template.js", "orders.glue");
 
-        String handler = contentOf("gen/events/orders/OrderApprovalTrigger.java");
+        String handler = codeOf("gen/events/orders/OrderApprovalTrigger.java");
         assertTrue(handler.contains("class OrderApprovalTrigger"),
                 "the glue template should generate a handler class named after the process");
         assertTrue(handler.contains("implements MessageHandler"), "the trigger should be a self-describing MessageHandler");
@@ -650,7 +656,7 @@ class IntentEngineIT extends IntegrationTest {
 
         // The decision resolver (customer.creditLimit) is a JavaDelegate that loads Customer and sets
         // the variable the rewritten condition tests.
-        String resolver = contentOf("gen/events/orders/ResolveCustomerCreditLimit.java");
+        String resolver = codeOf("gen/events/orders/ResolveCustomerCreditLimit.java");
         assertTrue(resolver.contains("class ResolveCustomerCreditLimit implements JavaDelegate"),
                 "the resolver should be a Flowable JavaDelegate");
         assertTrue(resolver.contains("import gen.orders.data.customer.CustomerRepository"),
@@ -667,7 +673,7 @@ class IntentEngineIT extends IntegrationTest {
         // The form-only relation.field (customer.name on the ApproveOrder form) produces its own resolver
         // even though no decision references it - the user-task form is a resolver trigger in its own
         // right.
-        String formResolver = contentOf("gen/events/orders/ResolveCustomerName.java");
+        String formResolver = codeOf("gen/events/orders/ResolveCustomerName.java");
         assertTrue(formResolver.contains("class ResolveCustomerName implements JavaDelegate"),
                 "a relation.field referenced only by a user-task form should still generate a resolver");
         assertTrue(formResolver.contains("execution.setVariable(\"customer_name\"") && formResolver.contains("entity.Name"),
@@ -675,7 +681,7 @@ class IntentEngineIT extends IntegrationTest {
 
         // The resolver-path assignee (cfoReview -> salesRep.manager): a JavaDelegate that walks the
         // order's relations to the reviewing person and publishes their login for the task to bind to.
-        String assignee = contentOf("gen/events/orders/ResolveOrderApprovalCfoReviewAssignee.java");
+        String assignee = codeOf("gen/events/orders/ResolveOrderApprovalCfoReviewAssignee.java");
         assertTrue(assignee.contains("class ResolveOrderApprovalCfoReviewAssignee implements JavaDelegate"),
                 "the assignee resolver should be a Flowable JavaDelegate");
         // Published FIRST, on every path out: the task's assignee expression reads it at task creation
@@ -693,7 +699,7 @@ class IntentEngineIT extends IntegrationTest {
         // The notification (onUpdate: Order) is a self-describing @Component MessageHandler that sends mail
         // when an Order is updated -
         // exercises the generateUtils.js "notifications" collection case end to end.
-        String notification = contentOf("gen/events/orders/OrderUpdatedNotification.java");
+        String notification = codeOf("gen/events/orders/OrderUpdatedNotification.java");
         assertTrue(notification.contains("class OrderUpdatedNotification implements MessageHandler"),
                 "the notification should be a message-handling listener (PascalCased class name)");
         assertTrue(notification.contains("@Component") && notification.contains("return \"intent-test-Order-Order-updated\""),
@@ -730,7 +736,7 @@ class IntentEngineIT extends IntegrationTest {
 
         // The schedule is a self-describing @Component JobHandler (cron()) that queries via a typed
         // Criteria and notifies per row.
-        String job = contentOf("gen/events/orders/StaleOrdersJob.java");
+        String job = codeOf("gen/events/orders/StaleOrdersJob.java");
         assertTrue(
                 job.contains("@Component") && job.contains("class StaleOrdersJob implements JobHandler")
                         && job.contains("return \"0 0 9 * * ?\""),
@@ -756,7 +762,7 @@ class IntentEngineIT extends IntegrationTest {
 
         // The integration is a self-describing @Component MessageHandler that forwards the entity JSON to
         // an external endpoint.
-        String integration = contentOf("gen/events/orders/PushOrderToWarehouseIntegration.java");
+        String integration = codeOf("gen/events/orders/PushOrderToWarehouseIntegration.java");
         assertTrue(integration.contains("class PushOrderToWarehouseIntegration implements MessageHandler"),
                 "the integration should be a message-handling listener");
         assertTrue(integration.contains("@Component") && integration.contains("return \"intent-test-Order-Order\""),
@@ -771,7 +777,7 @@ class IntentEngineIT extends IntegrationTest {
         // A declared payload replaces that raw record with the envelope the intent spells out - every
         // value form in one generated method, so a contract is expressible without a hand-written
         // publisher (and adding an entity column no longer changes what the outside world receives).
-        String announce = contentOf("gen/events/orders/AnnounceOrderIntegration.java");
+        String announce = codeOf("gen/events/orders/AnnounceOrderIntegration.java");
         assertTrue(announce.contains("OrderEntity entity = Json.parse(message, OrderEntity.class)"),
                 "a payload-bearing integration should read the record the values resolve against");
         assertTrue(
@@ -795,12 +801,12 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(announce.contains("String body = Json.stringify(payload)") && announce.contains("options.put(\"text\", body)"),
                 "the declared payload, not the record, should be the request body");
         assertTrue(
-                announce.indexOf("payload.put(\"type\"") < announce.indexOf("payload.put(\"version\"")
-                        && announce.indexOf("payload.put(\"version\"") < announce.indexOf("payload.put(\"messageId\""),
+                onlyIndexOf(announce, "payload.put(\"type\"") < onlyIndexOf(announce, "payload.put(\"version\"")
+                        && onlyIndexOf(announce, "payload.put(\"version\"") < onlyIndexOf(announce, "payload.put(\"messageId\""),
                 "the envelope should keep the order it was authored in");
 
         // The inbound webhook is a @Controller that ingests a posted JSON payload as the entity.
-        String webhook = contentOf("gen/events/orders/IngestOrderWebhook.java");
+        String webhook = codeOf("gen/events/orders/IngestOrderWebhook.java");
         assertTrue(webhook.contains("@Controller") && webhook.contains("class IngestOrderWebhook"),
                 "the inbound webhook should be a @Controller");
         assertTrue(webhook.contains("@Post(\"/ingest\")"), "the webhook should expose the declared path");
@@ -852,13 +858,13 @@ class IntentEngineIT extends IntegrationTest {
         // Together with the assertions above, this proves the full declarative-glue catalog - triggers,
         // resolvers, notifications, schedules, integrations, inbound webhooks and rollups - is generated
         // from a single app.intent.
-        String rollupCreate = contentOf("gen/events/orders/OrderCustomerRollupOnCreate.java");
+        String rollupCreate = codeOf("gen/events/orders/OrderCustomerRollupOnCreate.java");
         assertTrue(
                 rollupCreate.contains("@Component") && rollupCreate.contains("return \"intent-test-Order-Order\"")
                         && rollupCreate.contains("new OrderRepository().findAll(Criteria.create().eq(\"Customer\", entity.Customer))")
                         && rollupCreate.contains("int count = rows.size();") && rollupCreate.contains("parent.OrderCount = count"),
                 "the rollup create-listener should recompute the parent count via Criteria");
-        assertTrue(contentOf("gen/events/orders/OrderCustomerRollupOnDelete.java").contains("intent-test-Order-Order-deleted"),
+        assertTrue(codeOf("gen/events/orders/OrderCustomerRollupOnDelete.java").contains("intent-test-Order-Order-deleted"),
                 "the rollup delete-listener should bind the child's -deleted topic");
 
         // The print feeder (Order is a document master via the OrderItem composition child): a @Controller
@@ -866,7 +872,7 @@ class IntentEngineIT extends IntegrationTest {
         // { document, items } payload the .print template binds - exercises the generateUtils.js
         // "printFeeders" collection case end to end. This class IS the audit of what a print receives.
         assertTrue(contentOf("orders.glue").contains("\"printFeeders\""), "the glue should carry a printFeeders collection");
-        String feeder = contentOf("gen/events/orders/OrderPrintFeeder.java");
+        String feeder = codeOf("gen/events/orders/OrderPrintFeeder.java");
         assertTrue(feeder.contains("@Controller") && feeder.contains("class OrderPrintFeeder") && feeder.contains("@Get(\"/{id}\")"),
                 "the feeder should be a @Controller exposing GET /{id}");
         assertTrue(feeder.contains("new gen.orders.data.order.OrderRepository().findById(id)"),
@@ -886,7 +892,7 @@ class IntentEngineIT extends IntegrationTest {
         // The effective-dated register lookup: a self-describing @Component MessageHandler that queries
         // the register by the match keys, keeps only the rows whose period covers the order date, and
         // treats found / notFound / ambiguous as three distinct outcomes.
-        String lookup = contentOf("gen/events/orders/AssignSalesRepResolve.java");
+        String lookup = codeOf("gen/events/orders/AssignSalesRepResolve.java");
         assertTrue(
                 lookup.contains("@Component") && lookup.contains("class AssignSalesRepResolve implements MessageHandler")
                         && lookup.contains("return \"intent-test-Order-Order\""),
@@ -903,10 +909,189 @@ class IntentEngineIT extends IntegrationTest {
                 lookup.contains("stamp(entity.Id, \"found\", resolved)") && lookup.contains("\"notFound\"")
                         && lookup.contains("\"ambiguous\""),
                 "all three outcomes should be generated - an ambiguous register is never resolved by picking one");
+        // The RESULT - the relation and the trace - is one targeted update. The routing status is a
+        // second one; this lookup declares none, so resolve_writes_the_result_before_the_routing_status
+        // covers that half.
         assertTrue(
                 lookup.contains("values.put(\"SalesRep\", resolved)") && lookup.contains("values.put(\"RepResolution\", outcome)")
-                        && lookup.contains("new OrderRepository().updateProperties(id, values)"),
+                        && lookup.contains("repository.updateProperties(id, values)"),
                 "the resolved relation and the outcome trace should be written in ONE targeted update");
+    }
+
+    /**
+     * A register lookup narrows the register with a constant predicate ({@code where:}).
+     *
+     * <p>
+     * Without it a register's own history poisons its lookups: {@code match:} can only bind a register
+     * column to a column of the RECORD, so a superseded row keeps covering its old period and a lookup
+     * with exactly one right answer reports {@code ambiguous} and routes to a human. The fixture is
+     * that register - a CANCELLED assignment beside the ACTIVE one over the same dates - and the two
+     * nomenclatures are numbered differently on purpose, so a symbol resolved against the record's
+     * lifecycle instead of the register's could not pass as the right id.
+     */
+    @Test
+    void a_register_lookup_filters_the_register_with_a_constant_predicate() {
+        writeIntent("""
+                name: fines
+                entities:
+                  - name: FineStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: AssignmentStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Vehicle
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: plate, type: string, length: 20 }
+                  - name: Driver
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, length: 100 }
+                  - name: VehicleAssignment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: validFrom, type: date }
+                      - { name: validTo, type: date }
+                      - { name: kind, type: string, length: 20 }
+                    relations:
+                      - { name: vehicle, kind: manyToOne, to: Vehicle }
+                      - { name: driver, kind: manyToOne, to: Driver }
+                      - { name: status, kind: manyToOne, to: AssignmentStatus, function: EntityStatus, init: 7 }
+                  - name: Fine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: violationAt, type: timestamp }
+                      - { name: resolution, type: string, readOnly: true, length: 40 }
+                    relations:
+                      - { name: vehicle, kind: manyToOne, to: Vehicle }
+                      - { name: driver, kind: manyToOne, to: Driver }
+                      - { name: status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+                seeds:
+                  - name: fineStatuses
+                    entity: FineStatus
+                    rows:
+                      - { id: 1, name: NEW }
+                      - { id: 2, name: ACTIVE }
+                  - name: assignmentStatuses
+                    entity: AssignmentStatus
+                    rows:
+                      - { id: 7, name: ACTIVE }
+                      - { id: 8, name: CANCELLED }
+                resolves:
+                  - name: identifyDriver
+                    event: { onCreate: Fine }
+                    set: driver
+                    from: VehicleAssignment
+                    match: { vehicle: vehicle }
+                    where: { status: ACTIVE, kind: PRIMARY }
+                    between: { start: validFrom, end: validTo, value: violationAt }
+                    outcome: resolution
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "fines.glue");
+
+        String lookup = contentOf("gen/events/fines/IdentifyDriverResolve.java");
+        // The filters are chained onto the SAME Criteria as the match keys, so they narrow the query
+        // rather than being applied after the period comparison.
+        assertTrue(lookup.contains(
+                "new VehicleAssignmentRepository().findAll(Criteria.create().eq(\"Vehicle\", entity.Vehicle).eq(\"Status\", 7).eq(\"Kind\", \"PRIMARY\"))"),
+                "the register filter must be ANDed into the lookup's Criteria, got: " + lookup);
+        // 7 is the REGISTER's ACTIVE; the record's own nomenclature seeds ACTIVE as 2.
+        assertFalse(lookup.contains("eq(\"Status\", 2)"),
+                "a symbolic register filter must resolve on the register's nomenclature, not the record's");
+        assertTrue(lookup.contains("filtered to [Status = 7, Kind = \"PRIMARY\"]"),
+                "the handler should name the filter it applied, so a too-narrow one is diagnosable");
+    }
+
+    @Test
+    void resolve_writes_the_result_before_the_routing_status() {
+        // A lookup that also ROUTES by status. The three values it decides are semantically independent,
+        // and the DAO runs the lifecycle and checks gates against the post-write row BEFORE persisting -
+        // so batching them meant a rejected status move discarded the resolved relation and the outcome
+        // trace with it: the work was done, the answer was right, and all of it was thrown away.
+        String yaml = """
+                name: fines
+                entities:
+                  - name: FineStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Vehicle
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: plate, type: string }
+                  - name: Driver
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: VehicleAssignment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: validFrom, type: date }
+                    relations:
+                      - { name: vehicle, kind: manyToOne, to: Vehicle }
+                      - { name: driver, kind: manyToOne, to: Driver }
+                  - name: Fine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: violationAt, type: timestamp }
+                      - { name: resolution, type: string, readOnly: true }
+                    relations:
+                      - { name: vehicle, kind: manyToOne, to: Vehicle }
+                      - { name: driver, kind: manyToOne, to: Driver }
+                      - { name: status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+                seeds:
+                  - name: fineStatuses
+                    entity: FineStatus
+                    rows:
+                      - { id: 1, name: NEW }
+                      - { id: 2, name: IDENTIFIED }
+                resolves:
+                  - name: identifyDriver
+                    event: { onCreate: Fine }
+                    set: driver
+                    from: VehicleAssignment
+                    match: { vehicle: vehicle }
+                    between: { start: validFrom, value: violationAt }
+                    outcome: resolution
+                    found: { setStatus: IDENTIFIED }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "fines.glue");
+        String lookup = codeOf("gen/events/fines/IdentifyDriverResolve.java");
+
+        // The result goes out on its own, and the status is NOT in that batch. The routing write hands
+        // its "-transitioned" topic to the write itself, so the flip and its announcement commit
+        // together through the outbox - never a bare publish beside the write.
+        int result = onlyIndexOf(lookup, "repository.updateProperties(id, values)");
+        int routing = onlyIndexOf(lookup, "repository.updateProperties(id, java.util.Map.of(\"Status\", status)");
+        assertTrue(result < routing, "the resolved relation and the trace must be persisted BEFORE the routing status is attempted");
+        assertTrue(lookup.contains("-Fine-Fine-transitioned\");"), "the routing write must carry the -transitioned topic into the outbox");
+        assertFalse(lookup.contains("Producer.sendToTopic"),
+                "the lookup must not publish beside its writes - a broker outage would lose the announcement");
+        assertFalse(lookup.contains("values.put(\"Status\", status)"),
+                "the status must NOT ride in the same map - a rejected move would take the relation and the trace with it");
+
+        // A status the record cannot take is recorded, not thrown: retrying cannot help, and the record
+        // itself must carry the evidence or a routed-but-rejected record reads as fully processed.
+        assertTrue(lookup.contains("catch (org.eclipse.dirigible.sdk.db.ValidationException rejected)"),
+                "the routing write should catch the lifecycle/checks rejection the DAO raises");
+        assertTrue(lookup.contains("repository.updateProperty(id, \"Resolution\", outcome + \"-notRouted\")"),
+                "a rejected route should amend the trace so the record shows what happened");
+        assertTrue(lookup.contains("could not be routed to status"), "a rejected route should also be logged");
     }
 
     @Test
@@ -976,7 +1161,7 @@ class IntentEngineIT extends IntegrationTest {
         // the TARGETED single-column updateProperty (only that column is in the UPDATE statement, so a
         // concurrent write to another column cannot be reverted), WITHOUT re-publishing an update event.
         generateFromModel("template-application-events-java/template/template.js", "members.glue");
-        String activate = contentOf("gen/events/members/MemberApprovalActivate.java");
+        String activate = codeOf("gen/events/members/MemberApprovalActivate.java");
         assertTrue(activate.contains("class MemberApprovalActivate implements JavaDelegate"),
                 "the setter should be generated as a Flowable JavaDelegate");
         assertTrue(activate.contains("import gen.members.data.member.MemberEntity") && activate.contains("execution.getVariable(\"Id\")"),
@@ -985,7 +1170,7 @@ class IntentEngineIT extends IntegrationTest {
                 "the setter should persist the field via the targeted single-column updateProperty");
         assertFalse(activate.contains("updateWithoutEvent"),
                 "the setter must NOT full-row merge (updateWithoutEvent) - that reverts concurrent writes to other columns");
-        assertTrue(contentOf("gen/events/members/MemberApprovalReject.java").contains("\"Status\", \"REJECTED\""),
+        assertTrue(codeOf("gen/events/members/MemberApprovalReject.java").contains("\"Status\", \"REJECTED\""),
                 "the reject setter should persist the rejected status via the targeted write");
         // The transition IS observable: the setter publishes the dedicated -transitioned topic (the
         // status-reached channel for posting glue / integrations), which reactions never listen on -
@@ -997,7 +1182,7 @@ class IntentEngineIT extends IntegrationTest {
         // and the async consumer re-loads the source on receive - it must observe those writes.
         assertTrue(
                 activate.contains("Process.executeAfterCommit(")
-                        && activate.contains("Producer.sendToTopic(\"" + PROJECT + "-Member-Member-transitioned\", transitioned)"),
+                        && activate.contains("Producer.sendToTopicDurable(\"" + PROJECT + "-Member-Member-transitioned\", transitioned)"),
                 "the setter should publish the -transitioned topic after the BPMN chain commits");
     }
 
@@ -1127,7 +1312,7 @@ class IntentEngineIT extends IntegrationTest {
                 bpmn.contains("<serviceTask id=\"loadCaseHandlingWorkExpire\"")
                         && bpmn.contains("gen.events.services.LoadCaseHandlingWorkExpire"),
                 "an expire timer should insert the generated date-loader delegate");
-        assertTrue(bpmn.indexOf("id=\"loadCaseHandlingWorkExpire\"") < bpmn.indexOf("<userTask id=\"work\""),
+        assertTrue(onlyIndexOf(bpmn, "id=\"loadCaseHandlingWorkExpire\"") < onlyIndexOf(bpmn, "<userTask id=\"work\""),
                 "the expire date loader must run before the user task it arms");
 
         // Glue: the waits + timerLoaders collections drive the events template.
@@ -1141,7 +1326,7 @@ class IntentEngineIT extends IntegrationTest {
         // parent through the via FK, and correlates fail-soft on its stamped ProcessId; the loader
         // publishes the java.util.Date due value with the end-of-day semantics for a `date` field.
         generateFromModel("template-application-events-java/template/template.js", "services.glue");
-        String wait = contentOf("gen/events/services/CaseHandlingAwaitReplyWait.java");
+        String wait = codeOf("gen/events/services/CaseHandlingAwaitReplyWait.java");
         assertTrue(wait.contains("class CaseHandlingAwaitReplyWait implements MessageHandler"),
                 "the wait listener should be a self-describing MessageHandler");
         assertTrue(wait.contains("return \"" + PROJECT + "-Case-CaseMessage\";"),
@@ -1154,7 +1339,7 @@ class IntentEngineIT extends IntegrationTest {
                 "the listener should correlate the catch event's message on the stamped ProcessId");
         assertTrue(wait.contains("catch (RuntimeException"),
                 "correlation must be fail-soft - an instance not parked on the message is a no-op");
-        String loader = contentOf("gen/events/services/LoadCaseHandlingWorkExpire.java");
+        String loader = codeOf("gen/events/services/LoadCaseHandlingWorkExpire.java");
         assertTrue(loader.contains("class LoadCaseHandlingWorkExpire implements JavaDelegate"),
                 "the expire date loader should be a Flowable JavaDelegate");
         assertTrue(loader.contains("execution.setVariable(\"__workExpireDate\", due)"),
@@ -1226,7 +1411,7 @@ class IntentEngineIT extends IntegrationTest {
                 "an onTransition wait must bind the -transitioned topic, got: " + wait);
         // The setter on the same entity is the publisher the two now hear.
         String setter = contentOf("gen/events/fines/IdentifyAttribute.java");
-        assertTrue(setter.contains("Producer.sendToTopic(\"" + PROJECT + "-Fine-Fine-transitioned\", transitioned)"),
+        assertTrue(setter.contains("Producer.sendToTopicDurable(\"" + PROJECT + "-Fine-Fine-transitioned\", transitioned)"),
                 "the setter must publish the very topic the notification and the wait subscribe to");
     }
 
@@ -1309,11 +1494,11 @@ class IntentEngineIT extends IntegrationTest {
         // Generated handler: the recordFailure setter reads the variable the runtime conversion
         // published just before it raised the caught BPMN error; the literal setter path is untouched.
         generateFromModel("template-application-events-java/template/template.js", "provisioning.glue");
-        String setter = contentOf("gen/events/provisioning/TenantProvisioningRecordFailure.java");
+        String setter = codeOf("gen/events/provisioning/TenantProvisioningRecordFailure.java");
         assertTrue(setter.contains("execution.getVariable(\"__errorMessage\")"),
                 "the {error} setter should read the published failure message");
         assertFalse(setter.contains("\"{error}\""), "the {error} token must never be written as a literal");
-        String relationSetter = contentOf("gen/events/provisioning/TenantProvisioningMarkFailed.java");
+        String relationSetter = codeOf("gen/events/provisioning/TenantProvisioningMarkFailed.java");
         assertTrue(relationSetter.contains("updateProperty") && relationSetter.contains(", \"Status\", 3)"),
                 "the relation setter keeps assigning the unquoted seed id");
     }
@@ -1470,7 +1655,7 @@ class IntentEngineIT extends IntegrationTest {
                 "the glue should carry the aborts collection with the abort message name");
 
         generateFromModel("template-application-events-java/template/template.js", "orders2.glue");
-        String abort = contentOf("gen/events/orders2/OrderApprovalAbort.java");
+        String abort = codeOf("gen/events/orders2/OrderApprovalAbort.java");
         assertTrue(abort.contains("class OrderApprovalAbort implements MessageHandler"),
                 "the abort listener should be a self-describing MessageHandler");
         assertTrue(abort.contains("return \"" + PROJECT + "-SalesOrder-SalesOrder-transitioned\";"),
@@ -1675,7 +1860,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "hr.glue");
 
-        String job = contentOf("gen/events/hr/MonthlyTimesheetsJob.java");
+        String job = codeOf("gen/events/hr/MonthlyTimesheetsJob.java");
         assertTrue(job.contains("class MonthlyTimesheetsJob implements JobHandler"),
                 "a hyphenated schedule name should still yield a valid Java class (pascalIdentifier)");
         assertTrue(job.contains("new EmployeeRepository().findAll("), "the job should query the source rows");
@@ -1712,7 +1897,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "shipping.glue");
 
-        String trigger = contentOf("gen/events/shipping/DeliverTrigger.java");
+        String trigger = codeOf("gen/events/shipping/DeliverTrigger.java");
         assertTrue(trigger.contains("return \"intent-test-Shipment-Shipment-updated\""),
                 "an onUpdate trigger should bind to the entity's -updated topic via destination()");
         assertTrue(trigger.contains("if (!(java.util.Objects.equals(entity.Status, \"SHIPPED\")))"),
@@ -1747,7 +1932,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "library.glue");
 
-        String onCreate = contentOf("gen/events/library/LoanMemberRollupOnCreate.java");
+        String onCreate = codeOf("gen/events/library/LoanMemberRollupOnCreate.java");
         assertTrue(onCreate.contains("class LoanMemberRollupOnCreate implements MessageHandler"),
                 "the create-side rollup listener should be generated");
         assertTrue(onCreate.contains("@Component") && onCreate.contains("return \"intent-test-Loan-Loan\""),
@@ -1759,9 +1944,19 @@ class IntentEngineIT extends IntegrationTest {
                         && onCreate.contains("int count = rows.size();") && onCreate.contains("parent.LoanCount = count"),
                 "it should recompute the count via a typed Criteria and write it to the parent counter");
 
-        String onDelete = contentOf("gen/events/library/LoanMemberRollupOnDelete.java");
+        String onDelete = codeOf("gen/events/library/LoanMemberRollupOnDelete.java");
         assertTrue(onDelete.contains("@Component") && onDelete.contains("return \"intent-test-Loan-Loan-deleted\""),
                 "the delete listener binds the child's -deleted topic via destination()");
+
+        // A child moves between parents by an ordinary EDIT of its parent relation, so a count needs the
+        // update handler too - without it the parent the loan was moved to never counted it (#6820).
+        String onUpdate = contentOf("gen/events/library/LoanMemberRollupOnUpdate.java");
+        assertTrue(onUpdate.contains("@Component") && onUpdate.contains("return \"intent-test-Loan-Loan-updated\""),
+                "a count roll-up must also bind the child's -updated topic, so re-parenting recomputes the new parent");
+        assertTrue(
+                onUpdate.contains("new LoanRepository().findAll(Criteria.create().eq(\"Member\", entity.Member))")
+                        && onUpdate.contains("int count = rows.size();") && onUpdate.contains("parent.LoanCount = count"),
+                "the update listener recomputes exactly like the create one");
     }
 
     @Test
@@ -1803,7 +1998,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "billing.glue");
 
-        String onCreate = contentOf("gen/events/billing/BillPaymentBillRollupOnCreate.java");
+        String onCreate = codeOf("gen/events/billing/BillPaymentBillRollupOnCreate.java");
         assertTrue(onCreate.contains("parent.Paid = sum"), "the sum roll-up should write the summed field");
         assertTrue(onCreate.contains("parent.Balance = capacity.subtract(sum)"),
                 "with a capacity + balance, it should keep balance = capacity - sum");
@@ -1864,7 +2059,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "settle.glue");
 
-        String onPayment = contentOf("gen/events/settle/AutoSettleOnPayment.java");
+        String onPayment = codeOf("gen/events/settle/AutoSettleOnPayment.java");
         assertTrue(onPayment.contains("class AutoSettleOnPayment implements MessageHandler"),
                 "the onPayment settlement listener should be generated");
         assertTrue(onPayment.contains("PaymentEntity payment = Json.parse(message, PaymentEntity.class)"),
@@ -1875,6 +2070,11 @@ class IntentEngineIT extends IntegrationTest {
                 "it should create allocation rows through the junction repository (never the generic Store)");
         assertTrue(onPayment.contains("return \"" + PROJECT + "-Payment-Payment\";"),
                 "the create listener should bind the bare payment topic");
+        // A create event is the FIRST word about a payment - it has nothing to release. A negative pot
+        // on this handler means the event was DELAYED past a correction the updated handler already
+        // allocated, and releasing on that stale payload would undo the correction (#6865).
+        assertFalse(onPayment.contains("release(payment.Id, pot.negate())"),
+                "the create listener must never release - the updated handler owns every shrink");
 
         // A payment corrected after it was booked - or created incomplete and completed later - must be
         // re-allocated, so the same recompute is bound to the payment's update event too (#6818).
@@ -1888,7 +2088,20 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(onPaymentUpdated.contains(".orderByDesc(\"Id\")") && onPaymentUpdated.contains("rows.delete(row)"),
                 "the release should give back the newest allocations first, through the junction repository");
 
-        String onInvoice = contentOf("gen/events/settle/AutoSettleOnInvoice.java");
+        // A corrected MATCH column (the payment re-filed under another Customer) re-targets the whole
+        // allocation: the payment's DAO publishes "-rekeyed" for the move (the match columns are
+        // grouping keys) and this third handler releases everything and re-allocates from the STORE -
+        // both re-key notices run the same store-driven recompute, so delivery order cannot matter
+        // (#6864).
+        String onPaymentRekeyed = contentOf("gen/events/settle/AutoSettleOnPaymentRekeyed.java");
+        assertTrue(onPaymentRekeyed.contains("return \"" + PROJECT + "-Payment-Payment-rekeyed\";"),
+                "the re-key listener should bind the payment's -rekeyed topic");
+        assertTrue(onPaymentRekeyed.contains("new PaymentRepository().findById(payment.Id)"),
+                "the re-key recompute must read the payment from the store, never trust the moved payload");
+        assertTrue(onPaymentRekeyed.contains("release(payment.Id, allocated(payment.Id))"),
+                "the re-key recompute must release the whole allocation before re-allocating");
+
+        String onInvoice = codeOf("gen/events/settle/AutoSettleOnInvoice.java");
         assertTrue(onInvoice.contains("class AutoSettleOnInvoice implements JavaDelegate"),
                 "the onInvoice settlement delegate should be generated");
         assertTrue(onInvoice.contains("new PaymentRepository().findAll") && onInvoice.contains(".eq(\"Customer\", invoice.Customer)"),
@@ -1921,7 +2134,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "orders.glue");
 
-        String trigger = contentOf("gen/events/orders/ApproveTrigger.java");
+        String trigger = codeOf("gen/events/orders/ApproveTrigger.java");
         assertTrue(trigger.contains("repository.findById(created.Id)"), "the listener must still load the entity by its primary key");
         assertTrue(trigger.contains("String businessKey = String.valueOf(entity.OrderNumber);"),
                 "the BPM business key must be the flagged field (OrderNumber), not the primary key");
@@ -1954,7 +2167,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "orders.glue");
 
-        String trigger = contentOf("gen/events/orders/ApproveTrigger.java");
+        String trigger = codeOf("gen/events/orders/ApproveTrigger.java");
         assertTrue(trigger.contains("repository.findById(created.Id)"), "the listener must still load the entity by its primary key");
         assertTrue(
                 trigger.contains("if (entity.Number == null || entity.Number.isBlank())")
@@ -1994,10 +2207,12 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
 
         assertTrue(resource("custom/OrderNumberAction.java").exists(), "a named calculated action should scaffold a custom/ Java stub");
-        String stub = contentOf("custom/OrderNumberAction.java");
+        String stub = codeOf("custom/OrderNumberAction.java");
         assertTrue(stub.contains("package custom;") && stub.contains("class OrderNumberAction implements CalculatedField<Object, String>"),
                 "the stub should implement the SDK contract, returning the field's type");
-        assertTrue(stub.contains("Order.number"), "the stub should say which field it computes");
+        // contentOf, not codeOf: the stub names its field in the scaffolded javadoc, so the prose is
+        // exactly what is being asserted.
+        assertTrue(contentOf("custom/OrderNumberAction.java").contains("Order.number"), "the stub should say which field it computes");
         assertFalse(stub.contains("System.out") || stub.contains("System.err"), "the scaffolded stub must never print to stdout/stderr");
 
         // An action in somebody else's package is somebody else's compilation unit - scaffolding it
@@ -2019,7 +2234,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .post(GENERATE_URL)
                                                  .then()
                                                  .statusCode(200));
-        assertTrue(contentOf("custom/OrderNumberAction.java").contains("MY IMPLEMENTATION"),
+        assertTrue(codeOf("custom/OrderNumberAction.java").contains("MY IMPLEMENTATION"),
                 "the developer's calculated action must be preserved across regeneration");
     }
 
@@ -2089,7 +2304,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         // notifyCustomer has no `call`, so a Java JavaDelegate stub is scaffolded under custom/.
         assertTrue(resource("custom/NotifyCustomer.java").exists(), "a no-call service task should scaffold a custom/ Java stub");
-        String stub = contentOf("custom/NotifyCustomer.java");
+        String stub = codeOf("custom/NotifyCustomer.java");
         assertTrue(stub.contains("package custom;") && stub.contains("class NotifyCustomer implements JavaDelegate"),
                 "the stub should be a custom-package JavaDelegate");
         // A generated class is read as house style, so the stub logs through the SDK logger - it never
@@ -2112,6 +2327,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .post(GENERATE_URL)
                                                  .then()
                                                  .statusCode(200));
+        // contentOf, not codeOf: preservation is about the developer's FILE, and their marker is a comment.
         assertTrue(contentOf("custom/NotifyCustomer.java").contains("MY IMPLEMENTATION"),
                 "the developer's service-task handler must be preserved across regeneration");
     }
@@ -2152,9 +2368,12 @@ class IntentEngineIT extends IntegrationTest {
         generateFromModel("template-application-dao-java/template/template.js", "orders.model");
         assertTrue(resource("gen/orders/data/order/OrderRepository.java").exists(),
                 "the DAO template should generate the repository under gen/orders");
-        // The create-event publish must serialize via the java.time-aware SDK helper, not a bare Gson.
+        // The create event travels WITH the write: the repository hands its topic to save(), which
+        // records the event in the tenant's outbox inside the insert's own transaction instead of
+        // publishing after the commit (issue #6816). Serialization is still the java.time-aware SDK
+        // helper - applied by the platform now, rather than pasted into every generated repository.
         String repository = contentOf("gen/orders/data/order/OrderRepository.java");
-        assertTrue(repository.contains("Json.stringify(saved)"), "the repository should publish the event with the SDK Json helper");
+        assertTrue(repository.contains("super.save(entity, \""), "the repository should hand its create topic to the write");
         assertFalse(repository.contains("new Gson()"), "the repository must not use a bare Gson (fails on java.time fields)");
         // Generating the glue template must clean only gen/events, not gen/<modelName> - so the
         // full-stack output survives (the reported bug was the events generation wiping gen/orders).
@@ -2167,7 +2386,7 @@ class IntentEngineIT extends IntegrationTest {
         // languageFrom: customer.locale): it loads the document, follows the Customer FK, reads the
         // locale, and falls back to the first entry of the tenant-resolved application language set
         // when the chain is null or blank - the language is never hardcoded into the delegate.
-        String snapshotGenerator = contentOf("gen/events/orders/OrderSnapshotGenerator.java");
+        String snapshotGenerator = codeOf("gen/events/orders/OrderSnapshotGenerator.java");
         assertTrue(snapshotGenerator.contains("OrderEntity document = new OrderRepository().findById(id);"),
                 "languageFrom must load the master document, got: " + snapshotGenerator);
         assertTrue(snapshotGenerator.contains("new CustomerRepository().findById(document.Customer)"),
@@ -2392,7 +2611,7 @@ class IntentEngineIT extends IntegrationTest {
         // count column is in the UPDATE statement, so the stale message copy of the master cannot
         // revert concurrent writes to other columns, and no event fires).
         generateFromModel("template-application-events-java/template/template.js", "loans.glue");
-        String onCreate = contentOf("gen/events/loans/InstallmentsExpansionOnCreate.java");
+        String onCreate = codeOf("gen/events/loans/InstallmentsExpansionOnCreate.java");
         assertTrue(onCreate.contains("intent-test-Loan-Loan\""), "the OnCreate handler binds the master's create topic");
         assertTrue(onCreate.contains("d.plusMonths(1)"), "unit month steps by month");
         assertTrue(onCreate.contains("total.subtract(share.multiply("), "the last row absorbs the rounding remainder");
@@ -2411,7 +2630,7 @@ class IntentEngineIT extends IntegrationTest {
                 "the count write-back must be a targeted single-column updateProperty");
         assertFalse(onCreate.contains("updateWithoutEvent"),
                 "the count write-back must not full-row merge (updateWithoutEvent) - that reverts concurrent writes to other columns");
-        String onUpdate = contentOf("gen/events/loans/InstallmentsExpansionOnUpdate.java");
+        String onUpdate = codeOf("gen/events/loans/InstallmentsExpansionOnUpdate.java");
         assertTrue(onUpdate.contains("intent-test-Loan-Loan-updated\""), "the OnUpdate handler binds the -updated topic");
 
         // The master's delete removes the rows the expansion generated. Nothing else would: a foreign
@@ -2543,7 +2762,7 @@ class IntentEngineIT extends IntegrationTest {
         // Events template: the generated handler is idempotent + resumable (the cloud-native posting
         // semantics - no cross-step transaction): it skips a complete post and rebuilds a half-post.
         generateFromModel("template-application-events-java/template/template.js", "postingtest.glue");
-        String posting = contentOf("gen/events/postingtest/OrderLedgerPosting.java");
+        String posting = codeOf("gen/events/postingtest/OrderLedgerPosting.java");
         assertTrue(posting.contains("implements MessageHandler"), "the posting is a self-describing message handler");
         assertTrue(posting.contains("-transitioned"), "it listens on the source's -transitioned channel");
         assertTrue(posting.contains("int expectedItems = 0"), "it computes the expected item count for the completeness check");
@@ -2614,13 +2833,17 @@ class IntentEngineIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "condposting.glue");
-        String posting = contentOf("gen/events/condposting/PaymentLedgerPosting.java");
+        String posting = codeOf("gen/events/condposting/PaymentLedgerPosting.java");
         assertTrue(
                 posting.contains("Calc.eval(\"Method\", source, 6).compareTo(new java.math.BigDecimal(\"1\")) == 0 ? ruleRow.BankAccount"),
                 "the account is a classifier ternary over the rule row's columns");
         assertTrue(posting.contains("ruleRow.CashAccount") && posting.contains("ruleRow.SuspenseAccount"),
                 "every case column + the default is reachable from the ternary");
-        assertTrue(posting.contains("selected no account"), "the whole selection is null-guarded at runtime (fail-soft skip)");
+        // The guard is over the dynamic SELECTION - the classifier ternary itself - which together with
+        // the assertFalse below is what distinguishes it from a static per-column skip. Matched on the
+        // guard rather than the explanatory comment that trails it.
+        assertTrue(posting.contains("if ((Calc.eval(\"Method\", source, 6)"),
+                "the whole selection is null-guarded at runtime (fail-soft skip)");
         assertFalse(posting.contains("if (ruleRow.BankAccount == null)"),
                 "a conditional case column must NOT be a static usedRuleColumns skip");
     }
@@ -2662,7 +2885,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
 
         generateFromModel("template-application-events-java/template/template.js", "proforma.glue");
-        String generate = contentOf("gen/events/proforma/InvoiceFromProformaGenerate.java");
+        String generate = codeOf("gen/events/proforma/InvoiceFromProformaGenerate.java");
         // The completion hook flips the source status via the targeted single-column primitive...
         // (the create-from's body is a create(Integer sourceId) method both the button endpoint and an
         // event trigger call - hence sourceId rather than the posted request's id, since #6711.)
@@ -2670,11 +2893,23 @@ class IntentEngineIT extends IntegrationTest {
                 "the source status must be flipped with the targeted updateProperty write");
         // ...and reloads before publishing so the -transitioned payload is the committed row...
         assertTrue(generate.contains("findById(sourceId)"), "it should reload the source for the -transitioned payload");
-        assertTrue(generate.contains("-transitioned"), "it should publish the source's -transitioned channel");
+        // Anchored on the sendToTopic ARGUMENT, not the bare word: the explanatory comments around the
+        // flip name "-transitioned" too, and a comment must not stand in for the publish.
+        assertTrue(generate.contains(TRANSITIONED_PUBLISH), "it should publish the source's -transitioned channel");
         // ...NOT the full-row merge that would revert a concurrent write to the source row (the actual
         // call pattern; an explanatory code comment naming it is expected and must not trip this).
         assertFalse(generate.contains("Repository().updateWithoutEvent(source)"),
                 "the source flip must NOT go through a full-row updateWithoutEvent (stale-snapshot clobber)");
+        // The flip runs BEFORE the target is saved. It is a lifecycle move the source's repository
+        // enforces, so a move the graph does not declare must throw with nothing yet created - flipping
+        // afterwards left a committed document behind whose source never transitioned, and the guard on
+        // the back-reference then made a redelivery return that document instead of repairing the flip.
+        // The publish stays last: the transition is complete only once the document it was about exists.
+        int flip = generate.indexOf("updateProperty(sourceId, \"Status\", 3)");
+        int save = generate.indexOf("Repository().save(target)");
+        int publish = generate.indexOf(TRANSITIONED_PUBLISH);
+        assertTrue(flip < save, "the source flip must precede the target save, got flip@" + flip + " save@" + save);
+        assertTrue(save < publish, "the -transitioned publish must follow the target save, got save@" + save + " publish@" + publish);
 
         // The custom-action BUTTON localizes like every other label: the descriptor carries the
         // model-catalog translation key (the renderer shows T(translation.key, label)), and the
@@ -2706,14 +2941,14 @@ class IntentEngineIT extends IntegrationTest {
         assertFalse(schema.contains("ORDERS_CUSTOMER_LANG"), "a non-multilingual entity must not get a language table");
 
         // Java DAO: every read overlays the translations for the caller's Accept-Language.
-        String repository = contentOf("gen/orders/data/settings/CountryRepository.java");
+        String repository = codeOf("gen/orders/data/settings/CountryRepository.java");
         assertTrue(repository.contains("Translator.translateList(super.findAll(), User.getLanguage(), \"ORDERS_COUNTRY\")"),
                 "the multilingual repository should overlay translations on findAll");
         assertTrue(repository.contains("Translator.translateEntity(super.findById(id)"),
                 "the multilingual repository should overlay translations on findById");
         assertTrue(repository.contains("public java.util.Optional<CountryEntity> findOne(Object id)"),
                 "the multilingual repository must also override findOne - the generated controller reads single records through it");
-        String customerRepository = contentOf("gen/orders/data/customer/CustomerRepository.java");
+        String customerRepository = codeOf("gen/orders/data/customer/CustomerRepository.java");
         assertFalse(customerRepository.contains("Translator."), "a non-multilingual repository must stay untouched");
 
         // Shell config: the offered data languages feed the Region & Language setting.
@@ -2741,14 +2976,14 @@ class IntentEngineIT extends IntegrationTest {
 
         // Backend: the report repository validates and applies per-column conditions over the wrapped
         // query, typed from the report's own column metadata.
-        String repository = contentOf("gen/ordersbycustomer/data/reports/OrdersByCustomerRepository.java");
+        String repository = codeOf("gen/ordersbycustomer/data/reports/OrdersByCustomerRepository.java");
         assertTrue(repository.contains("FILTER_COLUMNS"), "the report repository should carry the filterable-column allowlist");
         assertTrue(repository.contains("SELECT * FROM (\").append(QUERY).append(\") AS \\\"REPORT_DATA\\\" WHERE"),
                 "conditions should wrap the report query");
         assertTrue(repository.contains("SELECT COUNT(*) AS \\\"REPORT_COUNT\\\" FROM ("),
                 "the count alias must be quoted - PostgreSQL folds an unquoted alias to lower case and the case-sensitive read misses it");
         assertTrue(repository.contains("\"GTE\", \">=\""), "range operators should be whitelisted");
-        String controller = contentOf("gen/ordersbycustomer/api/reports/OrdersByCustomerController.java");
+        String controller = codeOf("gen/ordersbycustomer/api/reports/OrdersByCustomerController.java");
         assertTrue(controller.contains("exportCsv(@Body Map<String, Object> filter)"), "export should honor the active filters");
 
         // Frontend: the generated report page carries typed column metadata and the filter machinery.
@@ -2833,7 +3068,7 @@ class IntentEngineIT extends IntegrationTest {
         // The Java DAO template injects the imports and emits the action call-out
         // (Beans.get(...).calculate).
         generateFromModel("template-application-dao-java/template/template.js", "invoicing.model");
-        String repository = contentOf("gen/invoicing/data/invoice/InvoiceRepository.java");
+        String repository = codeOf("gen/invoicing/data/invoice/InvoiceRepository.java");
         assertTrue(repository.contains("import custom.invoicing.InvoiceNumberAction;"),
                 "the entity Imports should be injected into the generated repository");
         assertTrue(repository.contains("import org.eclipse.dirigible.sdk.component.Beans;"),
@@ -2877,7 +3112,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "orders.glue");
 
-        String writer = contentOf("gen/events/orders/ApproveReviewWrite.java");
+        String writer = codeOf("gen/events/orders/ApproveReviewWrite.java");
         assertTrue(writer.contains("class ApproveReviewWrite implements JavaDelegate"),
                 "a user task with editable fields should generate a Writer JavaDelegate");
         assertTrue(writer.contains("values.put(\"ShippedOn\", java.time.LocalDate.parse(ShippedOnValue.toString().trim()));"),
@@ -2887,10 +3122,58 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(writer.contains("((Number) QuantityValue).intValue()"), "an integer editable should be coerced to int");
         assertTrue(writer.contains("Boolean.valueOf(ApprovedValue.toString().trim())"),
                 "a boolean editable should be coerced with Boolean.valueOf");
-        assertTrue(writer.contains("repository.updateProperties(((Number) key).intValue(), values)"),
+        // The coerced key is hoisted into a local rather than inlined into the call, because the reload
+        // that builds the published payload needs the same id - so both halves are asserted.
+        assertTrue(writer.contains("Object id = ((Number) key).intValue();") && writer.contains("repository.updateProperties(id, values)"),
                 "the writer must persist the edited columns in one targeted multi-column write");
         assertFalse(writer.contains("updateWithoutEvent"),
                 "the writer must NOT full-row merge (updateWithoutEvent) - that reverts concurrent writes to unedited columns");
+
+        // What a reviewer edits in the task form is a PERSON's change, so it must be observable: while
+        // the write was silent, no notifications:/integrations:/outbound: consumer could see it, and the
+        // edits only reached anything by accident - when an unrelated setter on the same task happened
+        // to sweep them into its own reload. Deferred, because a consumer re-loads on receive and would
+        // otherwise race the rest of the BPMN chain.
+        assertTrue(writer.contains("Producer.sendToTopicDurable(\"" + PROJECT + "-SalesOrder-SalesOrder-updated\", payload)"),
+                "the writer must publish the entity's -updated topic, got: " + writer);
+        assertTrue(writer.contains("Process.executeAfterCommit("), "the publish must be deferred to after the BPMN chain commits");
+        int write = writer.indexOf("repository.updateProperties(id, values)");
+        int reload = writer.indexOf("repository.findById(id)");
+        assertTrue(write > 0 && write < reload, "the payload must be re-loaded AFTER the write, not from a pre-write snapshot");
+    }
+
+    @Test
+    void numbering_stamp_publishes_the_stamped_document_number() {
+        // number: { stampOn: issue } replaces the create-time UUID placeholder at the issue step. The
+        // number is the document's identity to everything outside the system, so an integration or a
+        // notification quoting it needs the write to be observable - it was not.
+        // The descriptor comes from the FIELD alone (NumberingSupport keys on stampOn: issue), so no
+        // process is needed here - the author wires the delegate at whichever step issues the document.
+        writeIntent("""
+                name: orders
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                      - { name: number, type: string, length: 100, number: { series: Sales Invoice, stampOn: issue } }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "orders.glue");
+
+        String stamp = contentOf("gen/events/orders/SalesInvoiceNumberStamp.java");
+        assertTrue(stamp.contains("DocumentNumbers.next(\"Sales Invoice\")"), "the stamp must allocate from the declared series");
+        assertTrue(stamp.contains("Producer.sendToTopicDurable(\"" + PROJECT + "-SalesInvoice-SalesInvoice-updated\", payload)"),
+                "the stamp must publish the entity's -updated topic - the raw perspective, not the sanitized Java one, got: " + stamp);
+        assertTrue(stamp.contains("Process.executeAfterCommit("), "the publish must be deferred to after the BPMN chain commits");
+        int write = stamp.indexOf("repository.updateProperty(id, \"Number\", number)");
+        // Anchored on the assignment: the delegate ALSO reads the row before the write, to skip an
+        // already-stamped document, and a bare findById(id) would find that guard read instead.
+        int reload = stamp.indexOf("stamped = repository.findById(id)");
+        assertTrue(write > 0 && write < reload, "the payload must carry the stamped number, so it is re-loaded AFTER the write");
     }
 
     @Test
@@ -2945,7 +3228,7 @@ class IntentEngineIT extends IntegrationTest {
                 "the chosen id arrives as the FK's own process variable");
         assertTrue(writer.contains("values.put(\"Driver\", DriverValue instanceof Number ? ((Number) DriverValue).intValue()"),
                 "the FK is the target's integer key, so it rides the Writer's existing integer coercion: " + writer);
-        assertTrue(writer.contains("repository.updateProperties(((Number) key).intValue(), values)"),
+        assertTrue(writer.contains("Object id = ((Number) key).intValue();") && writer.contains("repository.updateProperties(id, values)"),
                 "the picked relation is persisted by the same targeted multi-column write as any other editable");
 
         // The task form's own runtime: the picker is registered so the options are loaded from that
@@ -3108,6 +3391,91 @@ class IntentEngineIT extends IntegrationTest {
 
     private String contentOf(String fileName) {
         return new String(resource(fileName).getContent(), StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Generated source with its comments stripped - what the assertions in here are almost always
+     * about.
+     *
+     * The templates carry long explanatory comments that necessarily name the very calls, topics and
+     * primitives being asserted on ("...never a full-row updateWithoutEvent", "...publishes
+     * -transitioned only once the document exists"). Matched against the raw file, a comment satisfies
+     * a contains() the code does not, or trips an assertFalse() the code never earned - so editing a
+     * comment can turn a correct generator red, or a broken one green. Read the code alone; assert on
+     * prose with {@link #contentOf} where the prose is genuinely the point.
+     */
+    private String codeOf(String fileName) {
+        return stripComments(contentOf(fileName));
+    }
+
+    /**
+     * Removes Java comments, leaving string literals intact.
+     *
+     * Deliberately a scanner and not a regex: a generated endpoint URL ("http://...") or a JSON
+     * template carries "//" inside a literal, and a line-comment regex would cut the rest of that line
+     * away as if it were prose - silently deleting the very code an assertion is about.
+     */
+    private static String stripComments(String source) {
+        StringBuilder code = new StringBuilder(source.length());
+        boolean inLine = false;
+        boolean inBlock = false;
+        char quote = 0;
+        for (int i = 0; i < source.length(); i++) {
+            char current = source.charAt(i);
+            char next = i + 1 < source.length() ? source.charAt(i + 1) : 0;
+            if (inLine) {
+                if (current == '\n') {
+                    inLine = false;
+                    code.append(current);
+                }
+            } else if (inBlock) {
+                if (current == '*' && next == '/') {
+                    inBlock = false;
+                    i++;
+                } else if (current == '\n') {
+                    // Keep the line structure so reported offsets stay comparable to the file.
+                    code.append(current);
+                }
+            } else if (quote != 0) {
+                code.append(current);
+                if (current == '\\' && next != 0) {
+                    code.append(next);
+                    i++;
+                } else if (current == quote) {
+                    quote = 0;
+                }
+            } else if (current == '/' && next == '/') {
+                inLine = true;
+                i++;
+            } else if (current == '/' && next == '*') {
+                inBlock = true;
+                i++;
+            } else {
+                code.append(current);
+                if (current == '"' || current == '\'') {
+                    quote = current;
+                }
+            }
+        }
+        return code.toString();
+    }
+
+    /**
+     * The index of the ONLY occurrence of an anchor - for assertions about the order of two statements.
+     *
+     * indexOf() answers with the first match and says nothing about a second, so an anchor that becomes
+     * ambiguous (a call the generator now makes twice, in two different places, for two different
+     * reasons) silently relocates the assertion to whichever came first. That is not a hypothetical:
+     * the number stamp reads its row once to skip an already-stamped document and once more after the
+     * write to build the payload, and a bare findById(id) anchor found the guard read. Fail at the
+     * anchor instead, so the next such split is a message about the anchor rather than a mystery about
+     * order.
+     */
+    private static int onlyIndexOf(String code, String anchor) {
+        int first = code.indexOf(anchor);
+        assertTrue(first >= 0, "anchor not found in the generated code: [" + anchor + "]");
+        assertEquals(first, code.lastIndexOf(anchor), "anchor [" + anchor + "] occurs more than once - pick a more specific one");
+        return first;
     }
 
     /** Run a language template against a generated model through the real generation service. */

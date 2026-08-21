@@ -49,6 +49,24 @@
             <artifactId>dirigible-components-engine-java</artifactId>
         </dependency>
 
+        <!-- SDK: the JSON helper the event outbox serializes entity payloads with -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-api-modules-java</artifactId>
+        </dependency>
+
+        <!-- Messaging: the broker the event outbox drains into -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-api-messaging</artifactId>
+        </dependency>
+
+        <!-- Jobs: the SystemJob the outbox relay is scheduled as -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-jobs</artifactId>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

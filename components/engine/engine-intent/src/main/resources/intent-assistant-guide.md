@@ -1540,6 +1540,17 @@ generates:
   create-from looks for a target that already back-references this source and returns it instead, so an
   event redelivery - or a click afterwards - is a no-op rather than a duplicate document. Under
   `mode: append` it is the appended row's provenance. Authoring an event without it is rejected.
+- **That guard belongs to ONE rule.** It asks whether the source already has a row through the
+  back-reference, and cannot tell which rule wrote it - so two event-driven rules sharing a target AND a
+  back-reference divide into a winner and a loser: whichever fires first claims the source forever, and
+  the other hands back that row instead of writing, for that source and every future one. **Disjoint
+  `when:` guards do not save it** (the collision is decided by the target's EXISTENCE, not the condition
+  that led to it), and nothing shows at runtime - the loser looks like a rule whose condition never
+  matched. This is now refused at parse time. To write two kinds of row about one source, give them
+  separate back-references (two to-one relations to the source) or separate targets; declare
+  `mode: append` on **every** one of them if each event should add a row. The same applies to `posts:`
+  through its `idempotentBy:`, and across the two constructs - a `posts:` row satisfies a `generates:`
+  guard just as well.
 - **`mode:` - the cardinality.** `once` (default, today's behaviour) creates at most one target per
   source. `append` creates one **per delivered event**: the "a row per step, a row per transition" shape -
   a log entry, a protocol line, an activity record.
@@ -2304,6 +2315,30 @@ Every axis binding also takes an optional **`when:` guard** inside the `event:` 
 comparison against a direct field of the record (`when: "channel != internal"`), which decides per
 record whether the reaction runs at all.
 
+### which writes are observable (what a reaction can actually see)
+
+Not every write the system makes raises an event, and the difference is not guessable from the DSL -
+so before binding a reaction, check what the thing you care about publishes.
+
+| The write | Publishes | So it can be bound with |
+|---|---|---|
+| A person creating / editing / deleting a record (app or REST) | create / `-updated` / `-deleted` | `onCreate` / `onUpdate` / `onDelete` |
+| Fields a reviewer edited in a task form (`editable:`) | `-updated` | `onUpdate` |
+| `number: { stampOn: issue }` stamping the document number | `-updated` | `onUpdate` |
+| A maintained roll-up / aggregate / keyed total | `-updated` | `onUpdate` |
+| `setField` / `setRelationField` on a step | `-transitioned` | `postings:`, `generates` `event: { onTransition }`, `abortOn:` |
+| A `transitions:` button (void / cancel / reopen) | `-transitioned` | the same three |
+| `generates` `sourceStatus:` flipping the source | `-transitioned` | the same three |
+| A `userTask` / `serviceTask` being reached or completed | a per-step topic | `onStepReached` / `onStepCompleted` |
+
+**Deliberately silent, and correct** - each of these would re-trigger its own handler if it published:
+the process trigger writing `ProcessId` back, an `expansions:` child-count write, and a `resolves:`
+lookup filling its relation (that one is what `outcome:` is for - stamp the attempt into a string
+field a list filter or a `decision` can read, instead of waiting for an event).
+
+**Silent, and worth knowing:** a document's header totals recomputed from its line items. The line's
+own create / `-updated` / `-deleted` fires, so bind the reaction to the LINE, not to the header.
+
 ### inbound - an external system creates records
 
 **Use when:** something **outside the app hands us a record**: a partner POSTs it, a message arrives
@@ -2466,6 +2501,11 @@ must be an existing field on the parent (**integer** for `count`, **numeric** fo
 extras: `capacity`/`balance` are numeric parent fields, `status` a to-one relation of the parent, and
 `statusWhenFull`/`statusWhenPartial` its target seed ids.
 
+**When it recomputes.** Every roll-up - `count`, `sum` and `latest` alike - recomputes on the child's
+create, update **and** delete. The update pass is what keeps a count right when an ordinary edit moves
+a child to a different parent: the parent it moved *to* is corrected immediately (the one it moved
+*away from* is corrected the next time one of its own children changes).
+
 ### settlements - auto-allocate payments across invoices
 
 **Use when:** a payment should be automatically applied to a customer's open invoices (partial / full),
@@ -2521,6 +2561,7 @@ resolves:
     set: driver                             # the to-one of Fine this fills
     from: VehicleAssignment                 # the register
     match: { vehicle: vehicle }             # register property <- record property (one or more)
+    where: { status: ACTIVE }               # optional: constant register filter (one or more, ANDed)
     between: { start: validFrom, end: validTo, value: violationAt }
     outcome: resolution                     # optional string field stamped found/notFound/ambiguous
     found:     { setStatus: IDENTIFIED }
@@ -2541,14 +2582,40 @@ are a filterable worklist a human can finish, and so a process `decision` can br
 - `between.start` / `between.end` are register date fields, `between.value` the record's date. Either
   bound may be omitted (open-ended = still valid); the end is **inclusive**, and a date-only bound
   covers its whole day.
-- Only the resolved relation, the outcome and the status are written - nothing else of the record.
+- Only the resolved relation, the outcome and the status are written - nothing else of the record,
+  and the RESULT (relation + outcome) is written FIRST, separately from the routing status. A
+  status the record cannot take where it stands - an unmodeled `lifecycle:` move, a `checks:`
+  gate - is rejected by the repository, and batching the three meant that rejection discarded the
+  identification and the trace along with it. Split, the routing can fail without taking the work
+  with it: the outcome is amended to `<outcome>-notRouted` (e.g. `found-notRouted`) and logged,
+  so the record itself shows a routed-but-rejected attempt.
+- **`where:` is how a register keeps its history without poisoning its lookups.** `match` can only
+  bind a register column to a column of the RECORD, so "and only the rows that are still valid" has no
+  form there. A register accumulates corrections - the cancelled row stays beside the active one and
+  keeps covering the same period - so without a filter the lookup finds two covering rows, reports
+  `ambiguous` and routes to a human, for a register with exactly one right answer. Quiet, and worse
+  every year. `where: { status: ACTIVE }` restores the intended single match:
+
+  | id | vehicle | driver | validFrom | validTo | status |
+  |---|---|---|---|---|---|
+  | 1 | CA1234AB | Petrov | 2026-01-01 | 2026-06-30 | CANCELLED |
+  | 2 | CA1234AB | Ivanov | 2026-01-01 | 2026-06-30 | ACTIVE |
+
+  Several pairs are allowed and ANDed (unlike the relation-level `where:`, capped at one pair because
+  it lands in two EDM attributes). A pair naming the register's `function: EntityStatus` relation may
+  use the **seeded name**, resolved on the REGISTER's nomenclature - not the record's, which would be
+  a plausible id from the wrong lifecycle. A pair that repeats a `match` key is refused: on a column
+  already bound to the record a literal either says the same thing twice or contradicts it into
+  matching nothing.
 
 **Rules:** `event` binds `onCreate` or `onUpdate` of a declared entity (never `onDelete`); `set` is a
 to-one of that entity; `from` is an entity declared in **this** model; `match` needs at least one pair
-(left = register property, right = record property); `between.value` is required and every period
-field must be a `date` or `timestamp`; `outcome` must be a `string` field of the record; a `setStatus`
-needs the record to declare a `function: EntityStatus` relation, and may be a seed id or a seeded
-name.
+(left = register property, right = record property); each optional `where` key is a register
+property carrying a scalar literal and may not repeat a `match` key; `between.value` is required and every period
+field must be a `date` or `timestamp`; `outcome` must be a `string` field of the record, long enough for
+the values written (9, or 19 once any outcome routes by `setStatus` - the amended trace); a
+`setStatus` needs the record to declare a `function: EntityStatus` relation, and may be a seed id
+or a seeded name.
 
 ## Allowed values
 
@@ -2586,7 +2653,7 @@ name.
 | transition `when` op | `==`, `!=` |
 | resolve `event` | `onCreate`, `onUpdate` (never `onDelete`); `when` is `<Field> ==\|!= <value>` |
 | resolve `between` field type | `date`, `timestamp` |
-| resolve `outcome` values | `found`, `notFound`, `ambiguous` (stamped into a `string` field) |
+| resolve `outcome` values | `found`, `notFound`, `ambiguous`, plus `<outcome>-notRouted` when a `setStatus` route is rejected (stamped into a `string` field) |
 
 ## Mapping requests to capabilities (quick reference)
 

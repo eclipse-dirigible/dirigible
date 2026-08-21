@@ -133,8 +133,12 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.component.Repository;
-import org.eclipse.dirigible.sdk.messaging.Producer;
+#if($groupingKeys && $groupingKeys.size() > 0)
+## The rekey notices are the ONLY events this repository still names; both paths record them in the
+## outbox as DomainEvents riding the write's own transaction, so no bare publish remains here.
+import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.eclipse.dirigible.sdk.utils.Json;
+#end
 #if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges)
 import org.eclipse.dirigible.sdk.db.ValidationException;
 #end
@@ -262,14 +266,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
 #end
-        ${name}Entity saved = super.save(entity);
+        // The create event is handed to the write itself, which records it in the tenant's event outbox
+        // INSIDE the insert's transaction: row and event commit together, so a broker outage can
+        // neither swallow an event whose row exists nor fail a call whose row was written. Listeners
+        // (intent process triggers, the reactions under gen/events) see it the moment it is durable.
+        ${name}Entity saved = super.save(entity, "${projectName}-${perspectiveName}-${name}");
 #if($history == "true")
         // Change history: the initial state as a null -> value delta per property, attributed to the
         // user whose request created the row.
         History.recordCreate(HISTORY_TABLE, saved.${pkPropertyName}, History.USER, saved, HISTORY_PROPERTIES);
 #end
-        // Publish the create event so listeners (e.g. intent process triggers / reactions under gen/events) can react.
-        Producer.sendToTopic("${projectName}-${perspectiveName}-${name}", Json.stringify(saved));
 #if($documentItem)
         // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
         new ${documentItem.parentEntity}Repository().recalculate(saved.${documentItem.fkProperty});
@@ -332,29 +338,46 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
 #end
+#if($documentItem)
+        // The document this line belongs to BEFORE the write: a full-row update may re-point the
+        // line's FK to another document, and the one it leaves has no write of its own to resum it -
+        // the same moved-line hole the targeted path already closes. Read through the BASE find, like
+        // the history before-image below.
+        ${name}Entity documentBeforeRow = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+        Object documentBefore = documentBeforeRow == null ? null : documentBeforeRow.${documentItem.fkProperty};
+#end
 #if($history == "true")
         // Change history: the before-image is read through the BASE find (super), never this class's
         // overridden one - on a multilingual entity the overridden read overlays the caller's language,
         // and a translated value diffed against the stored one would report an edit nobody made.
         ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
 #end
-        ${name}Entity updated = super.update(entity);
+#if($groupingKeys && $groupingKeys.size() > 0)
+        java.util.List<DomainEvent> rekeyEvents = new java.util.ArrayList<>();
+        if (groupingMoved) {
+            // The "-rekeyed" notice carries the PREVIOUS row: the aggregate / roll-up handler recomputes
+            // that row's old group from the store, which no longer contains this row, so the total it
+            // left behind drops instead of staying stale. It rides the SAME transaction as the update,
+            // so the group the row left cannot be stranded by a broker that was down for the second of
+            // two separate publishes.
+            rekeyEvents.add(new DomainEvent("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(groupingPrevious)));
+        }
+        ${name}Entity updated = super.update(entity, "${projectName}-${perspectiveName}-${name}-updated", rekeyEvents);
+#else
+        // The update event is recorded in the event outbox inside this write's own transaction - see
+        // save() - so the intent reactions under gen/events see exactly the changes that committed.
+        ${name}Entity updated = super.update(entity, "${projectName}-${perspectiveName}-${name}-updated");
+#end
 #if($history == "true")
         History.recordUpdate(HISTORY_TABLE, updated.${pkPropertyName}, History.USER, historyBefore, updated, HISTORY_PROPERTIES);
-#end
-        // Publish the update event (suffixed topic) so intent reactions under gen/events can react.
-        Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-updated", Json.stringify(updated));
-#if($groupingKeys && $groupingKeys.size() > 0)
-        if (groupingMoved) {
-            // Published AFTER the write, carrying the PREVIOUS row: the aggregate / roll-up handler
-            // recomputes that row's old group from the store, which no longer contains this row, so the
-            // total it left behind drops instead of staying stale.
-            Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(groupingPrevious));
-        }
 #end
 #if($documentItem)
         // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
         new ${documentItem.parentEntity}Repository().recalculate(updated.${documentItem.fkProperty});
+        if (documentBefore != null && !documentBefore.equals(updated.${documentItem.fkProperty})) {
+            // The line MOVED: resum the document it left, which nothing else is going to touch.
+            new ${documentItem.parentEntity}Repository().recalculate(documentBefore);
+        }
 #end
         return updated;
     }
@@ -381,6 +404,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // the gate check makes an unbalanced document fail the transition, not silently post.
         enforceChecks(entity);
 #end
+#if($documentItem)
+        // The document this line belongs to BEFORE the write - a system write can re-point the FK
+        // exactly as a user edit does, and the vacated document has no write of its own to resum it.
+        ${name}Entity documentBeforeRow = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+        Object documentBefore = documentBeforeRow == null ? null : documentBeforeRow.${documentItem.fkProperty};
+#end
 #if($history == "true")
         ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
         ${name}Entity updated = super.update(entity);
@@ -394,6 +423,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // A system write is still a line change: the event is suppressed here, the arithmetic is not.
         // Keep the document consistent exactly as update() does (no async roll-up).
         new ${documentItem.parentEntity}Repository().recalculate(updated.${documentItem.fkProperty});
+        if (documentBefore != null && !documentBefore.equals(updated.${documentItem.fkProperty})) {
+            // The line MOVED: resum the document it left, which nothing else is going to touch.
+            new ${documentItem.parentEntity}Repository().recalculate(documentBefore);
+        }
 #end
         return updated;
     }
@@ -418,16 +451,28 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * Name) are persisted in one statement. The workflow setters/writers come through here; a plain
      * pass-through to the base targeted write would silently skip the posting gate - and, on a document
      * line, leave the master summing to something other than its lines.
+     *
+     * <p>
+     * Both forms are overridden and the plain one delegates to the event-carrying one, so a targeted
+     * write keeps these semantics whether or not it publishes. {@code recalculate} is the deliberate
+     * exception: it reaches the base write through {@code super}, having already computed the row.
 #if($groupingKeys && $groupingKeys.size() > 0)
      *
      * <p>
      * Still event-free for the reactions: the only event it can publish is {@code "-rekeyed"}, and only
      * when the write MOVED the row between groups - a topic nothing but the generated aggregate /
-     * roll-up handlers subscribes to.
+     * roll-up handlers subscribes to. Both notices are recorded in the outbox with the write itself,
+     * so the mutation and the recompute signals commit together - a broker outage delays the
+     * recompute instead of losing it.
 #end
      */
     @Override
     public int updateProperties(Object id, java.util.Map<String, Object> values) {
+        return updateProperties(id, values, null);
+    }
+
+    @Override
+    public int updateProperties(Object id, java.util.Map<String, Object> values, String eventTopic) {
         if (values == null || values.isEmpty()) {
             return 0;
         }
@@ -505,17 +550,38 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
         }
 #end
+#if($groupingKeys && $groupingKeys.size() > 0)
+        // BOTH sides of the move, on the one topic only the aggregate / roll-up handlers listen to -
+        // so no other reaction sees a second event, which is why this path can signal them without
+        // re-publishing "-updated". The previous row names the group the row LEFT (recomputed without
+        // it, its total drops instead of staying stale); the written row names the one it moved INTO,
+        // which on the targeted path gets no event of its own at all. Handed to the base write so both
+        // notices commit with the mutation itself - a broker outage delays the recompute instead of
+        // losing it - and recorded only when the row actually existed to be written.
+        java.util.List<DomainEvent> rekeyEvents = groupingMoved
+                ? java.util.List.of(new DomainEvent("${projectName}-${perspectiveName}-${name}-rekeyed", groupingPrevious),
+                        new DomainEvent("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(entity)))
+                : java.util.List.of();
+#end
 #if($history == "true")
         // Change history for the targeted write: it is how the system writes (a roll-up total, a
         // workflow write-back, a stamped number), so the trail attributes it to SYSTEM - a person
         // reading the record must be able to tell those apart from an edit somebody made.
         ${name}Entity historyBefore = super.findById(id);
-        int updatedCount = super.updateProperties(id, values);
+#if($groupingKeys && $groupingKeys.size() > 0)
+        int updatedCount = super.updateProperties(id, values, eventTopic, rekeyEvents);
+#else
+        int updatedCount = super.updateProperties(id, values, eventTopic);
+#end
         if (updatedCount > 0) {
             History.recordUpdate(HISTORY_TABLE, id, History.SYSTEM, historyBefore, super.findById(id), HISTORY_PROPERTIES);
         }
 #else
-        int updatedCount = super.updateProperties(id, values);
+#if($groupingKeys && $groupingKeys.size() > 0)
+        int updatedCount = super.updateProperties(id, values, eventTopic, rekeyEvents);
+#else
+        int updatedCount = super.updateProperties(id, values, eventTopic);
+#end
 #end
 #if($documentItem)
         if (updatedCount > 0 && (values.containsKey("${documentItem.fkProperty}")#foreach($f in $documentItem.fields) || values.containsKey("${f.field}")#end)) {
@@ -536,17 +602,6 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                 // The line MOVED: resum the document it left, which nothing else is going to touch.
                 new ${documentItem.parentEntity}Repository().recalculate(documentBefore);
             }
-        }
-#end
-#if($groupingKeys && $groupingKeys.size() > 0)
-        if (updatedCount > 0 && groupingMoved) {
-            // BOTH sides of the move, on the one topic only the aggregate / roll-up handlers listen to -
-            // so no other reaction sees a second event, which is why this path can signal them without
-            // re-publishing "-updated". The previous row names the group the row LEFT (recomputed without
-            // it, its total drops instead of staying stale); the written row names the one it moved INTO,
-            // which on the targeted path gets no event of its own at all.
-            Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-rekeyed", groupingPrevious);
-            Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(entity));
         }
 #end
         return updatedCount;
@@ -571,14 +626,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         if (values == null || values.isEmpty()) {
             return 0;
         }
-        int count = updateProperties(id, values);
-        if (count > 0) {
-            ${name}Entity current = findById(id);
-            if (current != null) {
-                Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-updated", Json.stringify(current));
-            }
-        }
-        return count;
+        // The event travels with the write: the resulting row is read back on the write's own
+        // connection, before its commit, and recorded in the event outbox alongside it.
+        return updateProperties(id, values, "${projectName}-${perspectiveName}-${name}-updated");
     }
 #if($lifecycleEdges)
 
@@ -735,12 +785,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // stored, so read the row (untranslated) before it is gone.
         ${name}Entity historyDeleted = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
 #end
-        super.delete(entity);
+        // The delete event is recorded in the event outbox inside this write's own transaction - see
+        // save() - so the intent reactions under gen/events cannot miss a row that is really gone.
+        super.delete(entity, "${projectName}-${perspectiveName}-${name}-deleted");
 #if($history == "true")
         History.recordDelete(HISTORY_TABLE, entity.${pkPropertyName}, History.USER, historyDeleted, HISTORY_PROPERTIES);
 #end
-        // Publish the delete event (suffixed topic) so intent reactions under gen/events can react.
-        Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-deleted", Json.stringify(entity));
 #if($documentItem)
         // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
         new ${documentItem.parentEntity}Repository().recalculate(entity.${documentItem.fkProperty});
@@ -749,21 +799,24 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public void deleteById(Object id) {
+#if($documentItem)
         ${name}Entity entity = findById(id);
+#end
 #if($history == "true")
         ${name}Entity historyDeleted = super.findById(id);
 #end
-        super.deleteById(id);
+        // The payload is the row as the deleting transaction read it, recorded in the event outbox
+        // beside the delete itself - see save().
+        super.deleteById(id, "${projectName}-${perspectiveName}-${name}-deleted");
 #if($history == "true")
         History.recordDelete(HISTORY_TABLE, id, History.USER, historyDeleted, HISTORY_PROPERTIES);
 #end
-        if (entity != null) {
-            Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-deleted", Json.stringify(entity));
 #if($documentItem)
+        if (entity != null) {
             // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
             new ${documentItem.parentEntity}Repository().recalculate(entity.${documentItem.fkProperty});
-#end
         }
+#end
     }
 #if($multilingual == "true")
 

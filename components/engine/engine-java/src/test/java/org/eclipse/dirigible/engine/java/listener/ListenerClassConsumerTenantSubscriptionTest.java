@@ -104,7 +104,7 @@ class ListenerClassConsumerTenantSubscriptionTest {
         ActiveMQConnectionArtifactsFactory connectionFactory = mock(ActiveMQConnectionArtifactsFactory.class);
         Connection connection = mock(Connection.class);
         session = mock(Session.class);
-        when(connectionFactory.createConnection(any())).thenReturn(connection);
+        when(connectionFactory.createConnection(any(), any())).thenReturn(connection);
         when(connectionFactory.createSession(connection)).thenReturn(session);
         when(session.createQueue(anyString())).thenReturn(mock(Queue.class));
         when(session.createConsumer(any())).thenReturn(mock(MessageConsumer.class));

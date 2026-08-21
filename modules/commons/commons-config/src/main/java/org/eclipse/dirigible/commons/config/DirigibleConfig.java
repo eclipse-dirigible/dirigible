@@ -129,6 +129,27 @@ public enum DirigibleConfig {
     /** The tenant subdomain regex. */
     TENANT_SUBDOMAIN_REGEX("DIRIGIBLE_TENANT_SUBDOMAIN_REGEX", "^([^\\.]+)\\..+$"),
 
+    /**
+     * How the current tenant is resolved for a request: {@code SUBDOMAIN} (the default - matched from
+     * the host header against {@link #TENANT_SUBDOMAIN_REGEX}) or {@code TOKEN_GROUPS} (the tenant the
+     * user selected, validated against the identity provider groups named
+     * {@code <tenantId>.<appId>.<role>}), which lets one host serve every tenant of the application.
+     */
+    TENANT_RESOLUTION_STRATEGY("DIRIGIBLE_TENANT_RESOLUTION_STRATEGY", "SUBDOMAIN"),
+
+    /**
+     * The id of the application this deployment runs, as it appears in the identity provider group
+     * names {@code <tenantId>.<appId>.<role>}. Groups of other applications are ignored. Mandatory when
+     * {@link #TENANT_RESOLUTION_STRATEGY} is {@code TOKEN_GROUPS}, and it must not contain a dot.
+     */
+    APP_ID("DIRIGIBLE_APP_ID", null),
+
+    /**
+     * The token claim carrying the user groups. AWS Cognito puts them in {@code cognito:groups} (the
+     * default), a Keycloak realm typically in {@code groups}.
+     */
+    TENANT_GROUPS_CLAIM("DIRIGIBLE_TENANT_GROUPS_CLAIM", "cognito:groups"),
+
     SNOWFLAKE_ADMIN_USERNAME("DIRIGIBLE_SNOWFLAKE_ADMIN_USERNAME", null),
 
     /** The basic admin username. */
@@ -204,6 +225,15 @@ public enum DirigibleConfig {
     /** TTL in seconds for the native-app proxy lookup cache. */
     NATIVE_APP_REGISTRY_TTL_SECONDS("DIRIGIBLE_NATIVE_APP_REGISTRY_TTL_SECONDS", "60"),
 
+    /** Interval (seconds) between ticks of the relay that drains the entity event outbox. */
+    EVENT_OUTBOX_RELAY_INTERVAL_SECONDS("DIRIGIBLE_EVENT_OUTBOX_RELAY_INTERVAL_SECONDS", "30"),
+
+    /**
+     * Seconds an outbox entry is left alone after it was written (or last attempted) before the relay
+     * picks it up. Keeps the relay from racing the in-process dispatch that follows every commit.
+     */
+    EVENT_OUTBOX_RELAY_GRACE_SECONDS("DIRIGIBLE_EVENT_OUTBOX_RELAY_GRACE_SECONDS", "60"),
+
     /** Anthropic API key powering the Intent Editor's AI assistant; blank disables the assistant. */
     INTENT_AI_API_KEY("DIRIGIBLE_INTENT_AI_API_KEY", null),
 
@@ -218,6 +248,28 @@ public enum DirigibleConfig {
 
     /** Anthropic API version header sent by the Intent assistant. */
     INTENT_AI_VERSION("DIRIGIBLE_INTENT_AI_VERSION", "2023-06-01"),
+
+    /**
+     * URL of an external ActiveMQ broker the messaging engine connects to, e.g.
+     * {@code tcp://activemq:61616}, {@code ssl://b-....mq.eu-central-1.amazonaws.com:61617} or a
+     * {@code failover:(...)} list. Left unset (or blank) the platform starts and uses its own embedded
+     * {@code vm://localhost} broker, which is the only mode the messaging monitoring perspective can
+     * introspect.
+     */
+    MESSAGING_BROKER_URL("DIRIGIBLE_MESSAGING_BROKER_URL", null),
+
+    /** Username for the external messaging broker; unset connects anonymously. */
+    MESSAGING_BROKER_USERNAME("DIRIGIBLE_MESSAGING_BROKER_USERNAME", null),
+
+    /** Password for the external messaging broker; unset connects anonymously. */
+    MESSAGING_BROKER_PASSWORD("DIRIGIBLE_MESSAGING_BROKER_PASSWORD", null),
+
+    /**
+     * Whether the EMBEDDED messaging broker persists its messages in the default (system) database.
+     * Applies to the embedded broker only - an external broker owns its own persistence, so the value
+     * is ignored when {@link #MESSAGING_BROKER_URL} is set.
+     */
+    MESSAGING_USE_DEFAULT_DATABASE("DIRIGIBLE_MESSAGING_USE_DEFAULT_DATABASE", Boolean.TRUE.toString()),
 
     /**
      * Seconds an armed act-as (delegated entry) state survives before it expires on its own. The window
