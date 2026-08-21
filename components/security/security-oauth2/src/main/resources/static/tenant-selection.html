@@ -56,7 +56,8 @@
     <!-- Top bar: the instance brand on the left, theme + user on the right. -->
     <div x-h-toolbar data-variant="transparent" x-cloak>
       <div class="hbox items-center gap-2 p-1">
-        <img x-show="branding.logo" :src="branding.logo" :alt="branding.name" class="size-5" />
+        <img x-show="branding.logo" :src="branding.logo" :alt="branding.name" class="size-5"
+             @error="branding.logo = ''" />
         <div class="vbox gap-0">
           <span class="font-bold leading-tight" x-text="branding.name"></span>
           <span x-show="branding.subtitle" class="text-xs text-muted-foreground leading-tight" x-text="branding.subtitle"></span>
@@ -70,7 +71,7 @@
       </button>
       <span class="text-sm text-muted-foreground px-2" x-show="userName" x-text="userName"></span>
       <button x-h-button data-variant="transparent" data-size="sm" @click="logout()">
-        <i role="img" x-h-lucide data-lucide="log-out"></i> <span>Log out</span>
+        <svg x-h-lucide role="img" data-lucide="log-out"></svg> <span>Log out</span>
       </button>
     </div>
 
@@ -85,7 +86,7 @@
         </p>
 
         <div x-show="loading" class="hbox items-center gap-2 text-sm text-muted-foreground" style="margin-top: 2.5rem;">
-          <i role="img" x-h-lucide data-lucide="loader-circle" class="size-4"></i>
+          <svg x-h-lucide role="img" data-lucide="loader-circle" class="size-4"></svg>
           <span>Loading your tenants...</span>
         </div>
 
@@ -100,20 +101,24 @@
                     :disabled="!tenant.provisionedHere || busy" @click="select(tenant)"
                     :aria-current="tenant.id === selectedTenantId ? 'true' : 'false'">
               <span class="tenant-tile-icon hbox items-center justify-center rounded-md bg-muted size-11 flex-none">
-                <i role="img" x-h-lucide data-lucide="building-2" class="size-5"></i>
+                  <svg x-h-lucide role="img" data-lucide="building-2" class="size-5"></svg>
               </span>
               <span class="vbox min-w-0 flex-1" style="gap: .15rem;">
                 <span class="hbox items-center gap-2 text-lg font-semibold">
-                  <span x-text="tenant.name"></span>
-                  <span x-show="tenant.id === selectedTenantId" x-h-badge data-variant="secondary">Current</span>
+                  <span x-text="tenant.name || tenant.id"></span>
+                  <template x-if="selectedTenantId && tenant.id === selectedTenantId">
+                    <span x-h-badge data-variant="secondary">Current</span>
+                  </template>
                 </span>
-                <span class="text-sm text-muted-foreground" x-text="tenant.id"></span>
+                <!-- The id is only worth a line of its own when it is not what the name already says. -->
+                <span class="text-sm text-muted-foreground" x-show="tenant.name && tenant.name !== tenant.id"
+                      x-text="tenant.id"></span>
                 <span x-show="!tenant.provisionedHere" class="text-sm text-muted-foreground">
                   Being prepared. Try again in a few minutes.
                 </span>
               </span>
-              <i role="img" x-h-lucide data-lucide="arrow-right" class="size-4 text-muted-foreground flex-none"
-                 x-show="tenant.provisionedHere"></i>
+              <svg x-h-lucide role="img" data-lucide="arrow-right" class="size-4 text-muted-foreground flex-none"
+                   x-show="tenant.provisionedHere"></svg>
             </button>
           </template>
         </div>
