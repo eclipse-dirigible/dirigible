@@ -103,9 +103,11 @@
                   <div x-h-select>
                     <input x-h-select-input x-model="filters[col.key].equals" :placeholder="T('application-core:shell.report.any', 'any')" />
                     <div x-h-select-content>
-                      <div x-h-select-option="T('application-core:shell.report.any', 'any')" data-value=""></div>
-                      <div x-h-select-option="T('application-core:shell.report.yes', 'yes')" data-value="true"></div>
-                      <div x-h-select-option="T('application-core:shell.report.no', 'no')" data-value="false"></div>
+                      <div x-h-select-list>
+                        <div x-h-select-option="T('application-core:shell.report.any', 'any')" data-value=""></div>
+                        <div x-h-select-option="T('application-core:shell.report.yes', 'yes')" data-value="true"></div>
+                        <div x-h-select-option="T('application-core:shell.report.no', 'no')" data-value="false"></div>
+                      </div>
                     </div>
                   </div>
                 </template>

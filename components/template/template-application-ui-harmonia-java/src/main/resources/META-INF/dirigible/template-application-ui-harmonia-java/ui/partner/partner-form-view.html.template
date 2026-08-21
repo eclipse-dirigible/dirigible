@@ -58,9 +58,11 @@
           <input x-h-select-input x-model="form.${property.name}" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select #if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end') })" />
           <div x-h-select-content>
             <div x-h-select-search></div>
-            <template x-for="opt in (options['${property.name}'] || [])" :key="opt.value">
-              <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
-            </template>
+            <div x-h-select-list>
+              <template x-for="opt in (options['${property.name}'] || [])" :key="opt.value">
+                <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+              </template>
+            </div>
           </div>
         </div>
 #elseif($property.widgetType == "NUMBER")

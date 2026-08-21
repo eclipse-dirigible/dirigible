@@ -110,9 +110,11 @@
             <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
             <div x-h-select-content>
               <div x-h-select-search></div>
-              <template x-for="opt in options${property.name}" :key="opt.value">
-                <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
-              </template>
+              <div x-h-select-list>
+                <template x-for="opt in options${property.name}" :key="opt.value">
+                  <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+                </template>
+              </div>
             </div>
           </div>
           <button type="button" x-h-button data-variant="outline" class="shrink-0" x-show="!isPreview" @click="addRelated('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.relationshipEntityName}')"><i x-h-lucide data-lucide="plus" class="size-4"></i> New ${property.relationshipEntityName}</button>
@@ -123,9 +125,11 @@
           <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#else :disabled="isPreview"#end :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
           <div x-h-select-content>
             <div x-h-select-search></div>
-            <template x-for="opt in options${property.name}" :key="opt.value">
-              <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
-            </template>
+            <div x-h-select-list>
+              <template x-for="opt in options${property.name}" :key="opt.value">
+                <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+              </template>
+            </div>
           </div>
         </div>
 #end
@@ -647,10 +651,12 @@
                     <input x-h-select-input x-model="draft[col.name]" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select...', { name: '' })" />
                     <div x-h-select-content>
                       <div x-h-select-search></div>
-                      <!-- dialogOptionsFor: the Depends-On-filtered set when active, else the full set. -->
-                      <template x-for="opt in dialogOptionsFor(col.name)" :key="opt.value">
-                        <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
-                      </template>
+                      <div x-h-select-list>
+                        <!-- dialogOptionsFor: the Depends-On-filtered set when active, else the full set. -->
+                        <template x-for="opt in dialogOptionsFor(col.name)" :key="opt.value">
+                          <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+                        </template>
+                      </div>
                     </div>
                   </div>
                   <!-- Non-setting association: Add new (opens the target's create page in a dialog) + Refresh. -->

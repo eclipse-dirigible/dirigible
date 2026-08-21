@@ -148,7 +148,7 @@ class GeneratesPromptHarmoniaIT extends UserInterfaceIntegrationTest {
 
         // The payment combobox rendered (its trigger shows the placeholder) - the one visible
         // dropdown control the prompt declared.
-        browser.assertElementExistByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.ROLE, "combobox", "Select...");
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", "Select...");
 
         // From here the flow is asserted and completed through the customActions STORE - the same
         // state and methods every dialog control binds. WebDriver's synthesized clicks on the
