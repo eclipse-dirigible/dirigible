@@ -86,6 +86,10 @@ class EdmModelRoundTripIT extends IntegrationTest {
     private static final String PROJECT_PATH = WORKSPACE_PATH + "/" + PROJECT;
     private static final String OWNER_PROJECT_PATH = WORKSPACE_PATH + "/" + OWNER_PROJECT;
     private static final String EDM_PUT_URL = "/services/ide/workspaces/" + WORKSPACE + "/" + PROJECT + "/rt.edm";
+    /** Declares every document-level value the .model root can carry. */
+    private static final String META_PROJECT = "edm-roundtrip-meta";
+    private static final String META_PROJECT_PATH = WORKSPACE_PATH + "/" + META_PROJECT;
+    private static final String META_EDM_PUT_URL = "/services/ide/workspaces/" + WORKSPACE + "/" + META_PROJECT + "/meta.edm";
 
     // The owner of the cross-model target. Currency is a SETTING, so its owner publishes it under the
     // "Settings" perspective - a perspective that is not the entity's name, which is the only shape in
@@ -165,6 +169,66 @@ class EdmModelRoundTripIT extends IntegrationTest {
             rollups:
               - { name: eventSeats, entity: Booking, via: Event, field: seatsTaken,
                   op: sum, of: seats, capacity: capacity, balance: seatsFree }
+            """;
+
+    // Every DOCUMENT-level value the .model root can carry, in one model: `description` and `icon`
+    // directly, `title` from the humanised name, `languages` (the multilingual switch), `widgets`
+    // (the dashboard tiles), `customActionLabels` (from the transition's button) and
+    // `processTaskLabels` (from the process and its userTask steps). The two label maps and the
+    // status seeds are what make the fixture bigger than it looks - a transition needs a classified
+    // status nomenclature to name a from/to.
+    private static final String META_INTENT_YAML = """
+            name: meta
+            description: Round-trip fixture for the document-level metadata
+            icon: receipt
+            languages: [en, bg]
+
+            entities:
+              - name: ClaimStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string,  required: true, length: 40 }
+
+              - name: Claim
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: number,   type: string,  length: 40 }
+                  - { name: filedOn,  type: date }
+                relations:
+                  - { name: Status, kind: manyToOne, to: ClaimStatus, function: EntityStatus, init: DRAFT }
+
+            transitions:
+              - name: VoidClaim
+                forEntity: Claim
+                from: [FILED]
+                setStatus: VOIDED
+                label: Void
+
+            processes:
+              - name: ClaimApproval
+                trigger: { onCreate: Claim }
+                steps:
+                  - name: review
+                    kind: userTask
+                    args: { assignee: manager }
+                  - name: done
+                    kind: end
+
+            widgets:
+              - name: OpenClaims
+                kind: kpi
+                url: /services/js/meta/custom/open-claims.js
+                label: Open Claims
+                icon: activity
+
+            seeds:
+              - name: claim-statuses
+                entity: ClaimStatus
+                rows:
+                  - { id: 1, name: DRAFT,  stage: draft }
+                  - { id: 3, name: FILED,  stage: live }
+                  - { id: 9, name: VOIDED, stage: void }
             """;
 
     @Autowired
@@ -255,6 +319,46 @@ class EdmModelRoundTripIT extends IntegrationTest {
         // scalar that legitimately IS a JSON string (e.g. widgetDependsOnValueCases) is compared
         // value-to-value and never falsely flagged.
         assertEveryKeySurvives(modelFromIntent, modelFromEdm);
+    }
+
+    /**
+     * The document level of the same contract (#6882): the {@code .model} rebuilt from an unmodified
+     * {@code .edm} save must still carry everything the {@code .model} said ABOVE its entities.
+     *
+     * <p>
+     * A separate fixture rather than more relations on the one above, because what it takes to make the
+     * document-level values exist at all - a classified status nomenclature for the transition to name,
+     * a process with a user task, dashboard widgets - has nothing to do with the structured entity
+     * values the other test is tuned for.
+     *
+     * <p>
+     * The assertion is the whole-document diff, not a list of the six keys the issue measured: a hand
+     * list is exactly what let the loss ship the first time.
+     */
+    @Test
+    void document_metadata_survives_the_edm_to_model_round_trip() {
+        writeIntent(META_PROJECT_PATH, META_INTENT_YAML);
+        generate(META_PROJECT);
+
+        JsonObject modelFromIntent = parseModel(contentOf(META_PROJECT_PATH, "meta.model"));
+        JsonObject document = modelFromIntent.getAsJsonObject("model");
+        // Fixture precondition: the model must actually carry each of them, or the diff proves nothing.
+        for (String key : new String[] {"title", "description", "icon", "languages", "widgets", "customActionLabels",
+                "processTaskLabels"}) {
+            assertTrue(document.has(key), "fixture precondition: the generated .model should carry document-level [" + key + "]");
+        }
+
+        byte[] edmBytes = resource(META_PROJECT_PATH, "meta.edm").getContent();
+        resource(META_PROJECT_PATH, "meta.model").delete();
+        restAssuredExecutor.execute(() -> given().contentType("application/octet-stream")
+                                                 .body(edmBytes)
+                                                 .when()
+                                                 .put(META_EDM_PUT_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        assertTrue(resource(META_PROJECT_PATH, "meta.model").exists(), "the .edm -> .model transform must have regenerated meta.model");
+        assertEveryKeySurvives(modelFromIntent, parseModel(contentOf(META_PROJECT_PATH, "meta.model")));
     }
 
     /**
@@ -402,12 +506,30 @@ class EdmModelRoundTripIT extends IntegrationTest {
     private static final java.util.Set<String> ROUND_TRIP_EXCEPTIONS = java.util.Set.of("uniqueConstraints");
 
     /**
-     * Every entity/property key in the intent's .model must survive intact in the one rebuilt from the
-     * .edm.
+     * Every key the intent's .model carries must survive intact in the one rebuilt from the .edm -
+     * enumerated from the WHOLE document, not from its entities.
+     *
+     * <p>
+     * The walk used to start at {@code model.entities}, one level BELOW where the document-level
+     * metadata lives, which is exactly why #6882 shipped alongside a green round-trip test: the
+     * {@code .edm} had no representation for {@code title} / {@code description} / {@code icon} /
+     * {@code languages[]} / {@code customActionLabels} / {@code processTaskLabels}, and a save deleted
+     * all six without a single assertion noticing. Enumerating from the root means a document-level key
+     * added later cannot ship without {@code .edm} serialization either.
      */
     private void assertEveryKeySurvives(JsonObject fromIntent, JsonObject fromEdm) {
-        for (JsonElement e : fromIntent.getAsJsonObject("model")
-                                       .getAsJsonArray("entities")) {
+        JsonObject oracleDocument = fromIntent.getAsJsonObject("model");
+        JsonObject actualDocument = fromEdm.getAsJsonObject("model");
+        for (Map.Entry<String, JsonElement> member : oracleDocument.entrySet()) {
+            String key = member.getKey();
+            if ("entities".equals(key)) {
+                continue; // walked per entity below, so a mismatch names the entity and the attribute
+            }
+            assertTrue(actualDocument.has(key), "the model lost document-level [" + key + "] in the .edm -> .model round-trip");
+            assertEquals(member.getValue(), actualDocument.get(key),
+                    "the model's document-level [" + key + "] changed across the .edm -> .model round-trip");
+        }
+        for (JsonElement e : oracleDocument.getAsJsonArray("entities")) {
             JsonObject oracle = e.getAsJsonObject();
             String name = oracle.get("name")
                                 .getAsString();
@@ -497,16 +619,24 @@ class EdmModelRoundTripIT extends IntegrationTest {
     }
 
     private IResource resource(String fileName) {
-        return repository.getResource(PROJECT_PATH + "/" + fileName);
+        return resource(PROJECT_PATH, fileName);
+    }
+
+    private IResource resource(String projectPath, String fileName) {
+        return repository.getResource(projectPath + "/" + fileName);
     }
 
     private String contentOf(String fileName) {
-        return new String(resource(fileName).getContent(), StandardCharsets.UTF_8);
+        return contentOf(PROJECT_PATH, fileName);
+    }
+
+    private String contentOf(String projectPath, String fileName) {
+        return new String(resource(projectPath, fileName).getContent(), StandardCharsets.UTF_8);
     }
 
     @AfterEach
     void cleanup() {
-        for (String path : new String[] {PROJECT_PATH, OWNER_PROJECT_PATH}) {
+        for (String path : new String[] {PROJECT_PATH, OWNER_PROJECT_PATH, META_PROJECT_PATH}) {
             if (repository.hasCollection(path)) {
                 repository.removeCollection(path);
             }

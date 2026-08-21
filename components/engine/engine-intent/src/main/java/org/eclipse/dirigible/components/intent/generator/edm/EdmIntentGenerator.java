@@ -701,9 +701,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (notBlank(icon)) {
             body.put("icon", icon);
         }
-        // Data-language codes the app offers (intent `languages:`). Carried on the .model root (JSON
-        // only - the XML root renders no attributes); the Harmonia shell's Region & Language setting
-        // lists them and sends the choice as Accept-Language on every request.
+        // Data-language codes the app offers (intent `languages:`). Carried on the .model root, and as a
+        // JSON-string attribute of the .edm's <model> element so a diagram save cannot drop it (#6882);
+        // the Harmonia shell's Region & Language setting lists them and sends the choice as
+        // Accept-Language on every request.
         if (!model.getLanguages()
                   .isEmpty()) {
             body.put("languages", new ArrayList<>(model.getLanguages()));
@@ -2645,7 +2646,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> perspectives = (List<Map<String, Object>>) body.get("perspectives");
 
         StringBuilder sb = new StringBuilder(8192);
-        sb.append("<model>\n");
+        sb.append("<model");
+        appendDocumentAttributes(sb, body);
+        sb.append(">\n");
         sb.append(" <entities>\n");
         for (Map<String, Object> entity : entities) {
             sb.append("  <entity");
@@ -2696,6 +2699,52 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         appendMxGraphModel(sb, document, entities);
         sb.append("</model>\n");
         return sb.toString();
+    }
+
+    /**
+     * The {@code .model} root keys that have their own ELEMENT in the {@code .edm} and so are not also
+     * written as an attribute of {@code <model>}.
+     */
+    private static final Set<String> DOCUMENT_ELEMENT_KEYS = Set.of("entities", "perspectives", "navigations");
+
+    /**
+     * Emit the DOCUMENT-level metadata as attributes of the {@code <model>} element: the identity
+     * scalars ({@code title}, {@code description}, {@code icon}) verbatim, and the structured values
+     * ({@code languages}, {@code widgets}, {@code customActionLabels}, {@code processTaskLabels}) as
+     * JSON strings - the same flat-attribute mechanism the entity/property level uses, for the same
+     * reason: a flat attribute survives both the mxGraph cell round-trip of a live editor save and the
+     * {@code transform-edm} regeneration, which a nested element would not.
+     *
+     * <p>
+     * Without this the {@code <model>} element carried NO attributes at all, so everything the
+     * {@code .model} said above its entities had no representation in the {@code .edm} and a save
+     * simply deleted it (#6882) - the entity/property half of the same defect was #6826. The loss was
+     * silent and the worst of it invisible: {@code languages} gone downgrades a multilingual
+     * application to monolingual, and the two label maps gone replaces every custom-action and
+     * user-task caption with its raw identifier.
+     *
+     * <p>
+     * A non-scalar with no entry in {@link #STRUCTURED_ATTRIBUTES} cannot be written and is REPORTED
+     * rather than dropped quietly - that silence is what let this ship. {@code EdmModelRoundTripIT}
+     * enumerates the whole document, so it fails on such a key too.
+     *
+     * @param sb the buffer
+     * @param body the {@code .model} root
+     */
+    private static void appendDocumentAttributes(StringBuilder sb, Map<String, Object> body) {
+        for (Map.Entry<String, Object> attr : body.entrySet()) {
+            String key = attr.getKey();
+            if (DOCUMENT_ELEMENT_KEYS.contains(key)) {
+                continue;
+            }
+            Object value = attr.getValue();
+            if ((value instanceof Iterable || value instanceof Map) && !STRUCTURED_ATTRIBUTES.contains(key)) {
+                LOGGER.warn("Document-level model value [{}] has no .edm representation and is lost when a diagram is saved -"
+                        + " add it to STRUCTURED_ATTRIBUTES (and to transform-edm.js's MODEL_STRUCTURED)", key);
+                continue;
+            }
+            appendModelAttribute(sb, key, value);
+        }
     }
 
     /**
@@ -3060,12 +3109,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The entity/property attributes whose value is a List/Map. They are emitted into the {@code .edm}
-     * as a JSON string in a flat attribute (never dropped, never a nested element) so the {@code .edm}
-     * stays a lossless source for the derived {@code .model}: a flat attribute survives both the
-     * mxGraph cell-value round-trip of a live editor save and the {@code transform-edm} regeneration,
-     * which a nested element would not - #6826. {@code transform-edm.js} parses these keys back into
-     * objects.
+     * The document/entity/property attributes whose value is a List/Map. They are emitted into the
+     * {@code .edm} as a JSON string in a flat attribute (never dropped, never a nested element) so the
+     * {@code .edm} stays a lossless source for the derived {@code .model}: a flat attribute survives
+     * both the mxGraph cell-value round-trip of a live editor save and the {@code transform-edm}
+     * regeneration, which a nested element would not - #6826, and #6882 for the document level.
+     * {@code transform-edm.js} parses these keys back into objects.
      *
      * <p>
      * {@code uniqueConstraints} is deliberately NOT here: the composite-unique-key modeler feature owns
@@ -3073,8 +3122,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * {@code transform-edm} rebuilds into {@code uniqueConstraints}. Emitting it here too would write
      * it twice and round-trip it as a duplicate.
      */
-    private static final Set<String> STRUCTURED_ATTRIBUTES =
-            Set.of("rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys", "relatedEntities", "lookupColumns");
+    private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys",
+            "relatedEntities", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

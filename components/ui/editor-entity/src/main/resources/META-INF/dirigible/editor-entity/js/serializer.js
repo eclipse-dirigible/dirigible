@@ -64,9 +64,34 @@ function extraAttributes(obj, handled) {
 	return out;
 }
 
+// The <model> element's own attributes: the document-level metadata the .model carries ABOVE its
+// entities - title/description/icon, languages[], and the custom-action / user-task label maps. Nothing
+// in the modeler edits it, so it is written back verbatim from what was loaded (editor.js
+// loadModelMetadata). A save that rebuilt <model> bare deleted it, which silently downgraded a
+// multilingual application to monolingual and replaced every custom-action and user-task caption with
+// its raw identifier - #6882. Generic over the stashed attributes, so a key added later needs no change.
+function modelAttributes(graph) {
+	let metadata = graph.getModel().metadata;
+	if (!metadata) {
+		return '';
+	}
+	let out = '';
+	for (let key in metadata) {
+		if (!Object.prototype.hasOwnProperty.call(metadata, key)) {
+			continue;
+		}
+		let val = metadata[key];
+		if (val === null || val === undefined || val === '') {
+			continue;
+		}
+		out += ' ' + key + '="' + _.escape(val) + '"';
+	}
+	return out;
+}
+
 function createModel(graph) {
 	let model = [];
-	model.push('<model>\n');
+	model.push('<model' + modelAttributes(graph) + '>\n');
 	model.push(' <entities>\n');
 	let parent = graph.getDefaultParent();
 	let childCount = graph.model.getChildCount(parent);
