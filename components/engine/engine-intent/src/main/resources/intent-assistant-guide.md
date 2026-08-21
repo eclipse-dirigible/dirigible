@@ -1394,9 +1394,10 @@ generates:
     label: Generate Invoice        # button label (defaults to a humanized name)
     icon: file-plus                # optional Lucide icon
     scope: entity                  # 'entity' (per-record, default) or 'page'
-    map:                           # target property <- source property (a field or to-one relation)
-      Customer: Customer
+    map:                           # target property <- source property: a field, a to-one relation, or a
+      Customer: Customer           #   one-hop `relation.field` (loaded by FK and copied as a SNAPSHOT)
       Currency: Currency
+      CustomerVatNumber: Customer.vatNumber
     defaults:                      # target property <- now | literal (string / integer / decimal / boolean)
       InvoiceDate: now
       Note: "Generated from timesheet"
@@ -1409,6 +1410,36 @@ generates:
     sourceStatus: 3                # optional completion hook: the SOURCE's EntityStatus seed id
                                    # after the target is created (e.g. proforma -> INVOICED)
 ```
+
+**A `map:` source may hop one relation - and that is how you SNAPSHOT a value.** A value is `map`ped
+rather than reached through a relation when the target must keep what was true at the moment it was
+created: an invoice keeps the customer's VAT number as it stood at invoicing, an audit log keeps the
+plate number the check was actually made against. Holding the relation and displaying
+`Customer.vatNumber` in a list is a different thing - it reads the CURRENT value, so a later
+correction silently rewrites every historical row.
+
+```yaml
+    map:
+      Customer: Customer                      # a to-one relation of the source
+      InvoiceDate: violationAt                # a field of the source
+      CustomerVatNumber: Customer.vatNumber   # one hop: loaded by FK, copied as a snapshot
+```
+
+The generated create-from loads the related row **once** by the source's foreign key (two mapped
+fields off the same relation share that one load) and reads through a null guard, so a nullable
+relation is an empty value rather than a failure. It is the same load a notification's
+`relation.field` recipient has always used.
+
+**Rules:** exactly one hop - a value two relations out belongs in a field of the entity in between.
+The last step must be a **field**, never another relation: copying a foreign key one hop out lands a
+key from a different entity's numbering space in a column that means something else, and because both
+are integers nothing downstream would catch it. Not available in an `items:` map (its source is the
+item row being cloned, so the load would have to run once per row) nor with a `fromUses:` source
+(only the owner model knows that source's relations - author the create-from there instead). A hop
+through a **cross-model** relation is fine. The two ends are not type-checked, exactly as a direct
+`map:` is not - map a string onto a string.
+
+A schedule's `generate.map` takes the same hop, off the row the cron query returned.
 
 **Cross-model SOURCE (`fromUses:`) - author the create-from on the TARGET's module.** By default the
 `from` entity is local and the target may be foreign (`uses:`). `fromUses:` mirrors that: the SOURCE is

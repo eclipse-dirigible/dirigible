@@ -735,6 +735,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (source == null && !crossModelSource) {
                 continue; // parser already reported the bad reference
             }
+            // A one-hop map source needs the SOURCE's relations to know what to load. With `fromUses:`
+            // they live in the owner's .model and nothing here can resolve them, so the hop is refused
+            // instead of emitting a read that walks a foreign key as if it were an object.
+            if (crossModelSource && firstHop(g.getMap()) != null) {
+                reportDroppedGlue(context,
+                        "generates [" + g.getName() + "] map [" + firstHop(g.getMap())
+                                + "] is a relation.field of a cross-model source (fromUses [" + g.getFromUses()
+                                + "]), whose relations are known only to that model - map a direct property of the source, or author the"
+                                + " create-from in [" + g.getFromUses() + "] - the create-from was NOT generated");
+                continue;
+            }
             if (!settings.shouldGenerate("generates", g.getName())) {
                 LOGGER.info("Settings opt-out: keeping existing controller for generates [{}] (not generated)", g.getName());
                 continue;
@@ -771,8 +782,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("toModel", crossModel ? g.getUses() : "");
             e.put("toPerspective", toPerspective);
             e.put("toPk", toPk);
-            e.put("fieldAssignments",
-                    assignments(g.getMap(), g.getDefaults(), "source", temporalKinds(crossModel ? null : byName.get(g.getTo()), target)));
+            // A hop reads the related row, which the create-from must load first: the resolver renders the
+            // null-guarded access and accumulates one load per distinct relation, and `relationLoads`
+            // hands those to the template - the same pair a notification's relation.field recipient uses.
+            NotificationSupport.Resolver hops = crossModelSource ? null
+                    : NotificationSupport.resolver(source, byName, compositionParents, crossModelLookup(model, context));
+            List<Map<String, Object>> fieldAssignments = assignments(g.getMap(), g.getDefaults(), "source",
+                    temporalKinds(crossModel ? null : byName.get(g.getTo()), target), hops);
+            if (fieldAssignments == null) {
+                reportDroppedGlue(context, "generates [" + g.getName() + "] map [" + firstHop(g.getMap())
+                        + "] is not a resolvable one-hop relation.field of [" + g.getFrom() + "] - the create-from was NOT generated");
+                continue;
+            }
+            e.put("fieldAssignments", fieldAssignments);
+            e.put("relationLoads", relationLoads(hops == null ? List.<NotificationSupport.RelationLoad>of() : hops.loads()));
             // Completion hook: the SOURCE's EntityStatus FK is set to this seed id after the target
             // is created (empty = no hook). Pre-resolved to the PascalCase FK property - locally off
             // the relation, cross-model off the owner .model's DOCUMENT_STATUS widget.
@@ -2147,6 +2170,32 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return a;
     }
 
+    /**
+     * Whether a {@code map} value is a one-hop {@code relation.field} path rather than a direct
+     * property of the source. A property name never carries a dot, so the dot alone decides.
+     */
+    private static boolean isHop(String value) {
+        return value != null && value.indexOf('.') >= 0;
+    }
+
+    /**
+     * The first {@code map} entry whose source is a one-hop path, rendered for a message, or
+     * {@code null} when every source is a direct property. Used to refuse a hop where the source entity
+     * is not resolvable here at all - a cross-model source, whose relations live in the owner's
+     * {@code .model}.
+     */
+    private static String firstHop(Map<String, String> map) {
+        if (map == null) {
+            return null;
+        }
+        for (Map.Entry<String, String> entry : map.entrySet()) {
+            if (isHop(entry.getValue())) {
+                return entry.getKey() + " -> " + entry.getValue();
+            }
+        }
+        return null;
+    }
+
     /** A YAML scalar as a Java literal: numbers bare, everything else a quoted string. */
     private static String javaLiteral(Object value) {
         // A Boolean written as a String would filter a boolean column with the text "true" and match
@@ -2171,9 +2220,31 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * date, in the target field's own shape - see {@code literalExpression}) or a literal. The
      * expression is rendered here (in Java, testable) so the Velocity template only emits
      * {@code target.<prop> = <expr>;} - no expression logic in the template.
+     *
+     * <p>
+     * This overload takes no hop resolver, so a dotted {@code map} value keeps the reading it always
+     * had. It serves the item / child mappings, whose source is the row being cloned - the parser
+     * refuses a hop there, because one load per row is a different shape from the create-from's single
+     * load.
      */
     private static List<Map<String, Object>> assignments(Map<String, String> map, Map<String, String> defaults, String sourceVar,
             java.util.function.Function<String, String> temporalKinds) {
+        return assignments(map, defaults, sourceVar, temporalKinds, null);
+    }
+
+    /**
+     * The same pre-rendering, with a resolver that lets a {@code map} value be a one-hop
+     * {@code relation.field} of the source. A direct property is read off the source row the generated
+     * code already holds; a hop is read off the RELATED row, through the null-guarded access the
+     * notification resolver renders - and registering it with that resolver is what puts the
+     * load-by-foreign-key in the template's {@code relationLoads}. Both call sites therefore bind
+     * {@code relationLoads} from {@code hops.loads()} right after calling this.
+     *
+     * @return the assignments, or {@code null} when a hop cannot be resolved - the caller reports that
+     *         and skips the entry rather than emitting a read that does not compile
+     */
+    private static List<Map<String, Object>> assignments(Map<String, String> map, Map<String, String> defaults, String sourceVar,
+            java.util.function.Function<String, String> temporalKinds, NotificationSupport.Resolver hops) {
         List<Map<String, Object>> list = new ArrayList<>();
         if (map != null) {
             for (Map.Entry<String, String> entry : map.entrySet()) {
@@ -2181,7 +2252,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                      .isBlank()) {
                     continue;
                 }
-                list.add(assignment(entry.getKey(), sourceVar + "." + IntentNaming.pascalCase(entry.getValue())));
+                String value = entry.getValue()
+                                    .trim();
+                String expression =
+                        hops != null && isHop(value) ? hops.access(value, false) : sourceVar + "." + IntentNaming.pascalCase(value);
+                if (expression == null) {
+                    return null;
+                }
+                list.add(assignment(entry.getKey(), expression));
             }
         }
         if (defaults != null) {
@@ -3216,8 +3294,29 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.put("genToModel", crossModel ? g.getUses() : "");
                 entry.put("genToPerspective", toPerspective);
                 entry.put("genToPk", toPk);
-                entry.put("genFieldAssignments", assignments(g.getMap(), g.getDefaults(), "entity",
-                        temporalKinds(crossModel ? null : byName.get(g.getTo()), target)));
+                // The row the job queried is the source, so a one-hop map source is loaded off it exactly
+                // as the notify action loads a relation.field recipient - and `relationLoads` is what the
+                // job template renders those loads from, for either action.
+                EntityIntent rowEntity = sourceCrossModel ? null : byName.get(entity);
+                if (rowEntity == null && firstHop(g.getMap()) != null) {
+                    reportDroppedGlue(context,
+                            "Schedule [" + schedule.getName() + "] generate map [" + firstHop(g.getMap())
+                                    + "] is a relation.field of a source this model cannot resolve (model [" + schedule.getModel()
+                                    + "]), whose relations are known only to its owner - map a direct property of the row"
+                                    + " - the schedule was NOT generated");
+                    continue;
+                }
+                NotificationSupport.Resolver hops = rowEntity == null ? null
+                        : NotificationSupport.resolver(rowEntity, byName, compositionParents, crossModelLookup(model, context));
+                List<Map<String, Object>> genFieldAssignments = assignments(g.getMap(), g.getDefaults(), "entity",
+                        temporalKinds(crossModel ? null : byName.get(g.getTo()), target), hops);
+                if (genFieldAssignments == null) {
+                    reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] generate map [" + firstHop(g.getMap())
+                            + "] is not a resolvable one-hop relation.field of [" + entity + "] - the schedule was NOT generated");
+                    continue;
+                }
+                entry.put("genFieldAssignments", genFieldAssignments);
+                entry.put("relationLoads", relationLoads(hops == null ? List.<NotificationSupport.RelationLoad>of() : hops.loads()));
                 if (g.getChildren() != null && !g.getChildren()
                                                  .isEmpty()) {
                     // Collection-driven children: one row per element of a source collection, saved

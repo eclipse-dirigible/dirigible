@@ -47,6 +47,12 @@ public class ${className}Job implements JobHandler {
         List<${entity}Entity> rows = new ${entity}Repository().findAll(${criteriaExpression});
         for (${entity}Entity entity : rows) {
 #if($action == "generate")
+#foreach($load in $relationLoads)
+            // A one-hop `relation.field` map source: the queried row's foreign key loads the related row,
+            // once per row, and the mapping below reads a field off it. Null-guarded - a nullable relation
+            // is a legitimate empty value, not a reason to skip the row.
+            ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
+#end
             gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity target =
                     new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity();
 #foreach($a in $genFieldAssignments)
