@@ -292,6 +292,33 @@ class GlueMapHopTest {
                 "got: " + assignments);
     }
 
+    /**
+     * A relation whose name is one the generated create-from already uses for a local of its own. The
+     * load is declared in a local named after the RELATION - the shared resolver embeds that name in
+     * the read it renders - so {@code source} would emit a second declaration of a name already in
+     * scope. That is a Java compile error on the generated file: loud, but with nothing explaining it,
+     * which is why the collision is named here instead. {@code map:} without a hop is unaffected - the
+     * relation only becomes a local when something reads THROUGH it.
+     */
+    @Test
+    void refusesAHopThroughARelationNamedLikeAGeneratedLocal() {
+        String yaml = YAML.replace("- { name: vehicle, kind: manyToOne, to: Vehicle }", "- { name: source, kind: manyToOne, to: Vehicle }")
+                          .replace("plateNumberChecked: vehicle.plateNumber", "plateNumberChecked: source.plateNumber");
+        List<Map<String, Object>> generates = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(yaml));
+        assertTrue(generates.isEmpty(), "a colliding hop must drop the create-from rather than emit uncompilable Java, got: " + generates);
+    }
+
+    /**
+     * Case matters, because Java locals do: a relation called {@code Vehicle} is not the local
+     * {@code vehicle}, and refusing it would reject a model that compiles perfectly well.
+     */
+    @Test
+    void allowsARelationWhoseNameOnlyDiffersFromALocalByCase() {
+        String yaml = YAML.replace("- { name: vehicle, kind: manyToOne, to: Vehicle }", "- { name: Source, kind: manyToOne, to: Vehicle }")
+                          .replace("plateNumberChecked: vehicle.plateNumber", "plateNumberChecked: Source.plateNumber");
+        assertEquals("(Source == null ? null : Source.PlateNumber)", expressionFor(yaml, "PlateNumberChecked"));
+    }
+
     private static void assertIssue(String yaml, String expected) {
         IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
         assertTrue(ex.getIssues()

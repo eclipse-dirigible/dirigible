@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport.FieldLoad;
@@ -794,8 +795,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                         + "] is not a resolvable one-hop relation.field of [" + g.getFrom() + "] - the create-from was NOT generated");
                 continue;
             }
+            List<NotificationSupport.RelationLoad> hopLoads = hops == null ? List.of() : hops.loads();
+            String collision = collidingLocal(hopLoads);
+            if (collision != null) {
+                reportDroppedGlue(context,
+                        "generates [" + g.getName() + "] hops through the relation [" + collision + "] of [" + g.getFrom()
+                                + "], whose name is one the generated create-from already uses for a local of its own"
+                                + " - rename the relation, or map a direct property instead - the create-from was NOT generated");
+                continue;
+            }
             e.put("fieldAssignments", fieldAssignments);
-            e.put("relationLoads", relationLoads(hops == null ? List.<NotificationSupport.RelationLoad>of() : hops.loads()));
+            e.put("relationLoads", relationLoads(hopLoads));
             // Completion hook: the SOURCE's EntityStatus FK is set to this seed id after the target
             // is created (empty = no hook). Pre-resolved to the PascalCase FK property - locally off
             // the relation, cross-model off the owner .model's DOCUMENT_STATUS widget.
@@ -2171,6 +2181,40 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The local variable names the two create-from templates declare around a one-hop load.
+     *
+     * <p>
+     * A hop's load is declared in a local named after the RELATION - that is what the shared resolver
+     * embeds in the read it renders, and seven templates already render it that way. So a relation
+     * named like one of these would emit a second declaration of a name already in scope: a Java
+     * compile error on the generated file, loud but with nothing explaining it. Naming the collision
+     * here turns that into a message about the model.
+     *
+     * <p>
+     * The list is AUTHORED against {@code Generate.java.template} and {@code Job.java.template}, and
+     * comparison is case-SENSITIVE because Java locals are: a relation called {@code Status} does not
+     * collide with a local called {@code status}. Drift is safe in one direction only, which is the
+     * direction it can drift: a name missing here behaves exactly as it does today (the compile error),
+     * while nothing that compiles is ever refused.
+     */
+    private static final Set<String> CREATE_FROM_LOCALS = Set.of("source", "sourceId", "sourceRepository", "target", "saved", "savedTarget",
+            "existing", "candidate", "item", "raw", "values", "req", "id", "entity", "rows", "day", "monthEnd", "recordUrl", "inboxUrl",
+            "subject", "body", "document", "part", "parts", "from", "to");
+
+    /**
+     * The first one-hop load whose local would collide with a name the template already declares, or
+     * {@code null} when none does.
+     */
+    private static String collidingLocal(List<NotificationSupport.RelationLoad> loads) {
+        for (NotificationSupport.RelationLoad load : loads) {
+            if (CREATE_FROM_LOCALS.contains(load.local())) {
+                return load.local();
+            }
+        }
+        return null;
+    }
+
+    /**
      * Whether a {@code map} value is a one-hop {@code relation.field} path rather than a direct
      * property of the source. A property name never carries a dot, so the dot alone decides.
      */
@@ -3315,8 +3359,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                             + "] is not a resolvable one-hop relation.field of [" + entity + "] - the schedule was NOT generated");
                     continue;
                 }
+                List<NotificationSupport.RelationLoad> hopLoads = hops == null ? List.of() : hops.loads();
+                String collision = collidingLocal(hopLoads);
+                if (collision != null) {
+                    reportDroppedGlue(context,
+                            "Schedule [" + schedule.getName() + "] generate hops through the relation [" + collision + "] of [" + entity
+                                    + "], whose name is one the generated job already uses for a local of its own"
+                                    + " - rename the relation, or map a direct property instead - the schedule was NOT generated");
+                    continue;
+                }
                 entry.put("genFieldAssignments", genFieldAssignments);
-                entry.put("relationLoads", relationLoads(hops == null ? List.<NotificationSupport.RelationLoad>of() : hops.loads()));
+                entry.put("relationLoads", relationLoads(hopLoads));
                 if (g.getChildren() != null && !g.getChildren()
                                                  .isEmpty()) {
                     // Collection-driven children: one row per element of a source collection, saved
