@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.security.oauth2.tenant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -24,6 +25,8 @@ import java.util.Set;
 
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.groups.UserTenantAssignments;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,6 +66,9 @@ class TenantSelectionFilterTest {
     @Mock
     private TenantSelectionManager tenantSelectionManager;
 
+    @Mock
+    private TenantContext tenantContext;
+
     private TenantSelectionFilter filter;
     private MockHttpServletRequest request;
     private MockHttpServletResponse response;
@@ -71,7 +77,14 @@ class TenantSelectionFilterTest {
     @BeforeEach
     void setUp() {
         DirigibleConfig.TENANT_RESOLUTION_STRATEGY.setStringValue("TOKEN_GROUPS");
-        filter = new TenantSelectionFilter(tenantSelectionManager);
+        filter = new TenantSelectionFilter(tenantSelectionManager, tenantContext);
+        // The real one opens the tenant scope around the callable; here it just runs it.
+        try {
+            when(tenantContext.execute(anyString(), any(CallableResultAndException.class))).thenAnswer(
+                    invocation -> ((CallableResultAndException<?, ?>) invocation.getArgument(1)).call());
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
         request = new MockHttpServletRequest("GET", "/services/web/home/index.html");
         request.setSession(new MockHttpSession());
         response = new MockHttpServletResponse();
@@ -94,6 +107,22 @@ class TenantSelectionFilterTest {
         verify(tenantSelectionManager).selectTenant(any(), any(), eq(ACME));
         assertThat(chain.getRequest()).isNotNull();
         assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    /**
+     * The regression this guards: the tenant scope of the current request was opened before the
+     * selection existed, so without re-entering it the request is served with the roles of the selected
+     * tenant and the data of the default one.
+     */
+    @Test
+    void theRequestThatAutoSelectedIsAlreadyServedInThatTenant() throws Exception {
+        authenticate();
+        when(tenantSelectionManager.assignmentsOf(any())).thenReturn(assignments(Map.of(ACME, Set.of("Owner")), Set.of()));
+
+        filter.doFilter(request, response, chain);
+
+        verify(tenantContext).execute(eq(ACME), any(CallableResultAndException.class));
+        assertThat(chain.getRequest()).isNotNull();
     }
 
     @Test
@@ -209,7 +238,7 @@ class TenantSelectionFilterTest {
     @Test
     void theFilterIsInertWhereTenantsAreNotSelected() {
         Configuration.remove(DirigibleConfig.TENANT_RESOLUTION_STRATEGY.getKey());
-        TenantSelectionFilter subdomainFilter = new TenantSelectionFilter(tenantSelectionManager);
+        TenantSelectionFilter subdomainFilter = new TenantSelectionFilter(tenantSelectionManager, tenantContext);
 
         assertThat(subdomainFilter.shouldNotFilter(new MockHttpServletRequest("GET", "/services/web/home/index.html"))).isTrue();
     }

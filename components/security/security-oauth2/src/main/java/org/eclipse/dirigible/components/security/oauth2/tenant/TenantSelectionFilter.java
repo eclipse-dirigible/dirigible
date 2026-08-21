@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.TenantResolutionStrategy;
 import org.eclipse.dirigible.components.base.tenant.groups.UserTenantAssignments;
 import org.slf4j.Logger;
@@ -86,6 +87,8 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
 
     private final TenantSelectionManager tenantSelectionManager;
 
+    private final TenantContext tenantContext;
+
     private final TenantResolutionStrategy resolutionStrategy;
 
     private final Gson gson;
@@ -94,9 +97,11 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
      * Instantiates a new tenant selection filter.
      *
      * @param tenantSelectionManager the tenant selection manager
+     * @param tenantContext the tenant scope of the current execution
      */
-    public TenantSelectionFilter(TenantSelectionManager tenantSelectionManager) {
+    public TenantSelectionFilter(TenantSelectionManager tenantSelectionManager, TenantContext tenantContext) {
         this.tenantSelectionManager = tenantSelectionManager;
+        this.tenantContext = tenantContext;
         this.resolutionStrategy = TenantResolutionStrategy.fromConfiguration();
         this.gson = new GsonBuilder().serializeNulls()
                                      .create();
@@ -138,13 +143,18 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
             return;
         }
         if (assignments.tenantIds()
-                       .size() == 1
-                && autoSelect(request, response, assignments.tenantIds()
-                                                            .iterator()
-                                                            .next(),
-                        authentication)) {
-            chain.doFilter(request, response);
-            return;
+                       .size() == 1) {
+            String onlyTenantId = assignments.tenantIds()
+                                             .iterator()
+                                             .next();
+            if (autoSelect(request, response, onlyTenantId, authentication)) {
+                // The tenant scope of this request was opened before the selection existed, so it is
+                // still the default tenant's. Continuing in it would serve the request with the roles
+                // of the selected tenant and the data of another one - so the rest of the chain runs
+                // in the tenant just entered.
+                continueInTenant(onlyTenantId, request, response, chain);
+                return;
+            }
         }
         requireSelection(request, response, authentication);
     }
@@ -165,6 +175,30 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
         } catch (TenantSelectionException ex) {
             LOGGER.info("The only tenant [{}] of user [{}] cannot be entered: {}", tenantId, authentication.getName(), ex.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Runs the rest of the chain in the scope of a tenant.
+     *
+     * @param tenantId the tenant to run in
+     * @param request the request
+     * @param response the response
+     * @param chain the chain
+     * @throws ServletException the servlet exception
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
+    private void continueInTenant(String tenantId, HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+        try {
+            tenantContext.execute(tenantId, () -> {
+                chain.doFilter(request, response);
+                return null;
+            });
+        } catch (ServletException | IOException | RuntimeException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new ServletException(ex.getMessage(), ex);
         }
     }
 
