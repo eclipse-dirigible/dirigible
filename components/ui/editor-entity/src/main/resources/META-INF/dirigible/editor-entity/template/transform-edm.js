@@ -176,19 +176,39 @@ export function transform(workspaceName, projectName, filePath) {
         });
     }
 
+    // The <relation> element RESTATES naming that the foreign-key <property> element already carries.
+    // The property is the source of truth and its value is kept: it is what the modeler itself edits
+    // (editor.js writes the Relationship-properties dialog onto cell.source.value.relationshipName and
+    // derives the edge label from it), and it is the only one of the two that can carry a cross-model
+    // target's perspective. The <relation> element's copies are a FALLBACK - for an .edm written before
+    // the two writers were converged (#6883), or a modeler save that dropped one. Trusting them renamed
+    // every relationship whose name is not its target's, because serializer.js writes <relation name>
+    // from the source and target ENTITY names; and it repointed every cross-model lookup, because it
+    // writes the perspective off the target CELL, which for a projection is deliberately empty.
+    //
+    // relationshipEntityName is the exception and stays unconditional: no writer puts it on the
+    // <property> (serializer.js emits it on neither the explicit block nor the generic pass), so the
+    // edge's `referenced` - which the modeler keeps live when an edge is redirected - is the only value.
     function transformRelation(relation, entities) {
         entities.forEach(entity => {
             if (entity.name === relation['-entity']) {
                 entity.properties.forEach(property => {
                     if (property.name === relation['-property']) {
-                        property.relationshipName = relation['-name'];
                         property.relationshipEntityName = relation['-referenced'];
-                        property.relationshipEntityPerspectiveName = relation['-relationshipEntityPerspectiveName'];
-                        property.relationshipEntityPerspectiveLabel = relation['-relationshipEntityPerspectiveLabel'];
+                        fillIfAbsent(property, 'relationshipName', relation['-name']);
+                        fillIfAbsent(property, 'relationshipEntityPerspectiveName', relation['-relationshipEntityPerspectiveName']);
+                        fillIfAbsent(property, 'relationshipEntityPerspectiveLabel', relation['-relationshipEntityPerspectiveLabel']);
                     }
                 });
             }
         });
+    }
+
+    function fillIfAbsent(property, key, fallback) {
+        const own = property[key];
+        if (own === undefined || own === null || own === '') {
+            property[key] = fallback;
+        }
     }
 
     function transformPerspective(raw) {
