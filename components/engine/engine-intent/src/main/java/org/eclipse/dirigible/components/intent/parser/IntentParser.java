@@ -855,7 +855,7 @@ public final class IntentParser {
                     validateNotifyBlock(schedule.getNotify(), "schedule [" + name + "] notify", schedule.getEntity(), model, false, issues);
                 }
             } else {
-                validateScheduleGenerate(schedule, source, entityNames, usesAliases, issues);
+                validateScheduleGenerate(schedule, source, byName, entityNames, usesAliases, issues);
             }
         }
     }
@@ -863,12 +863,13 @@ public final class IntentParser {
     /**
      * A schedule's {@code generate} action creates one target record per matching row. The row is the
      * source, so {@code from} is implicit (the schedule's {@code entity}); the author declares
-     * {@code to} (this model, or another via {@code uses:}), a {@code map} (target property -> a field
-     * or to-one relation of the row) and {@code defaults}. Composition-item cloning is out of scope
-     * here - it needs a selected document, so it belongs to an on-demand {@code generates} action.
+     * {@code to} (this model, or another via {@code uses:}), a {@code map} (target property -> a field,
+     * a to-one relation, or a one-hop {@code relation.field} of the row) and {@code defaults}.
+     * Composition-item cloning is out of scope here - it needs a selected document, so it belongs to an
+     * on-demand {@code generates} action.
      */
-    private static void validateScheduleGenerate(ScheduleIntent schedule, EntityIntent source, Set<String> entityNames,
-            Set<String> usesAliases, List<String> issues) {
+    private static void validateScheduleGenerate(ScheduleIntent schedule, EntityIntent source, Map<String, EntityIntent> byName,
+            Set<String> entityNames, Set<String> usesAliases, List<String> issues) {
         String name = schedule.getName();
         GeneratesIntent g = schedule.getGenerate();
         if (g.getTo() == null || g.getTo()
@@ -888,7 +889,7 @@ public final class IntentParser {
             issues.add("schedule [" + name + "] generate to references unknown entity [" + g.getTo()
                     + "] (add a uses: alias if the target lives in another model)");
         }
-        validateMapSource(source, g.getMap(), "schedule [" + name + "]", "generate map", issues);
+        validateMapSource(source, byName, g.getMap(), "schedule [" + name + "]", "generate map", true, issues);
         if (g.getItems() != null || (g.getItemLines() != null && !g.getItemLines()
                                                                    .isEmpty())) {
             issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
@@ -5599,7 +5600,7 @@ public final class IntentParser {
                 issues.add("generates [" + name + "] has invalid scope [" + scope + "] (expected 'entity' or 'page')");
             }
             validateGeneratesEvent(g, name, source, crossModelSource, model, issues);
-            validateMapSource(source, g.getMap(), "generates [" + name + "]", "map", issues);
+            validateMapSource(source, byName, g.getMap(), "generates [" + name + "]", "map", true, issues);
             if (g.getItems() != null) {
                 GeneratesItemsIntent items = g.getItems();
                 EntityIntent itemSource = null;
@@ -5618,7 +5619,7 @@ public final class IntentParser {
                                                   .isBlank()) {
                     issues.add("generates [" + name + "] items has no to entity");
                 }
-                validateMapSource(itemSource, items.getMap(), "generates [" + name + "]", "items map", issues);
+                validateMapSource(itemSource, byName, items.getMap(), "generates [" + name + "]", "items map", false, issues);
             }
             validateGeneratesItemLines(g, name, source, byName, crossModel, issues);
             validateGeneratesPrompt(g, name, byName, crossModel, issues);
@@ -6287,11 +6288,30 @@ public final class IntentParser {
     }
 
     /**
-     * Each {@code map} value must name a field or a to-one relation of the source entity; a one-hop
-     * {@code relation.field} path is rejected (not yet supported). Skipped when the source is unknown -
-     * that error is already reported.
+     * Each {@code map} value names a field or a to-one relation of the source entity, or - where the
+     * call site supports it - a one-hop {@code relation.field} path: one to-one relation of the source,
+     * then a FIELD of the entity it points at. The generated create-from loads that related row by its
+     * foreign key exactly as a notification's {@code relation.field} recipient does, and reads the
+     * field off it, so the mapped value is a <b>snapshot</b> taken when the target was created. That is
+     * the whole reason to map it rather than hold the relation and display through it: a log or an
+     * invoice line must keep the value that was true at the time, not follow the related record when it
+     * is later corrected.
+     *
+     * <p>
+     * Two limits are deliberate. The last step must be a field, never a second relation: copying a
+     * foreign key one hop out would land a key from a DIFFERENT entity's numbering space in a column
+     * whose relation points somewhere else, which no target can read back. And the hop is refused for
+     * an {@code items} map, whose source is the ITEM row being cloned - the load would have to happen
+     * once per row inside the clone loop, a different shape from the one-load-per-create-from the
+     * generator emits.
+     *
+     * <p>
+     * Skipped when the source is unknown - that error is already reported. A hop off a CROSS-MODEL
+     * relation is not checked here (the target's fields live in the owner's {@code .model}); the glue
+     * generator resolves it and fails loudly, the convention every cross-model reference follows.
      */
-    private static void validateMapSource(EntityIntent source, Map<String, String> map, String subject, String role, List<String> issues) {
+    private static void validateMapSource(EntityIntent source, Map<String, EntityIntent> byName, Map<String, String> map, String subject,
+            String role, boolean oneHopSupported, List<String> issues) {
         if (source == null || map == null) {
             return;
         }
@@ -6301,16 +6321,72 @@ public final class IntentParser {
                 issues.add(subject + " " + role + " [" + entry.getKey() + "] has no source property");
                 continue;
             }
-            if (sourceProp.indexOf('.') >= 0) {
-                issues.add(subject + " " + role + " [" + entry.getKey() + "] maps a relation.field path [" + sourceProp
-                        + "] which is not yet supported - map a direct field or to-one relation of [" + source.getName() + "]");
+            int dot = sourceProp.indexOf('.');
+            if (dot < 0) {
+                if (fieldByName(source, sourceProp) == null && toOneRelationByName(source, sourceProp) == null) {
+                    issues.add(subject + " " + role + " source [" + sourceProp + "] is not a field or to-one relation of ["
+                            + source.getName() + "]");
+                }
                 continue;
             }
-            if (fieldByName(source, sourceProp) == null && toOneRelationByName(source, sourceProp) == null) {
-                issues.add(subject + " " + role + " source [" + sourceProp + "] is not a field or to-one relation of [" + source.getName()
-                        + "]");
+            if (!oneHopSupported) {
+                issues.add(subject + " " + role + " [" + entry.getKey() + "] maps a relation.field path [" + sourceProp + "] - an " + role
+                        + " does not support a hop, because its source is the row being cloned; map a direct field or to-one relation of ["
+                        + source.getName() + "]");
+                continue;
             }
+            validateMapHop(source, byName, sourceProp, dot, subject + " " + role + " [" + entry.getKey() + "]", issues);
         }
+    }
+
+    /**
+     * One {@code relation.field} map source: the head must be a to-one relation of the mapping source,
+     * the tail a field of the entity that relation points at. Anything deeper, or a tail that is itself
+     * a relation, is refused with the reason rather than the rule.
+     *
+     * @param source the entity the path is read from
+     * @param byName all LOCAL entities by name (a cross-model hop target is not among them)
+     * @param path the authored {@code relation.field} value
+     * @param dot the index of its first dot
+     * @param subject the message prefix naming the offending map entry
+     * @param issues the collected issues
+     */
+    private static void validateMapHop(EntityIntent source, Map<String, EntityIntent> byName, String path, int dot, String subject,
+            List<String> issues) {
+        String relationName = path.substring(0, dot);
+        String fieldName = path.substring(dot + 1);
+        if (fieldName.indexOf('.') >= 0) {
+            issues.add(subject + " maps a multi-hop path [" + path + "], which is not supported - use a direct property of ["
+                    + source.getName() + "] or a one-hop relation.field of it");
+            return;
+        }
+        if (relationName.isEmpty() || fieldName.isEmpty()) {
+            issues.add(subject + " maps [" + path + "], which is not a relation.field path - both halves are required");
+            return;
+        }
+        RelationIntent relation = toOneRelationByName(source, relationName);
+        if (relation == null) {
+            issues.add(subject + " maps [" + path + "] but [" + relationName + "] is not a to-one relation of [" + source.getName() + "]");
+            return;
+        }
+        if (relation.getModel() != null && !relation.getModel()
+                                                    .isBlank()) {
+            return; // a cross-model hop: the target's fields are known only to the owner's .model
+        }
+        EntityIntent target = byName == null ? null : byName.get(relation.getTo());
+        if (target == null) {
+            return; // the unresolvable relation target is already reported
+        }
+        if (fieldByName(target, fieldName) != null) {
+            return;
+        }
+        if (toOneRelationByName(target, fieldName) != null) {
+            issues.add(subject + " maps [" + path + "] whose last step [" + fieldName + "] is a relation of [" + target.getName()
+                    + "], not a field - a hop copies a VALUE, and a foreign key out of [" + target.getName()
+                    + "] means nothing on a column of this target");
+            return;
+        }
+        issues.add(subject + " maps [" + path + "] but [" + fieldName + "] is not a field of [" + target.getName() + "]");
     }
 
     /**

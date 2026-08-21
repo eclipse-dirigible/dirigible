@@ -407,6 +407,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,        type: integer, primaryKey: true, generated: true }
                   - { name: refNumber, type: string, required: true, length: 50, function: DocumentTitle }
                   - { name: date,      type: date, required: true }
+                  # The one-hop map SNAPSHOT: the name of the status the Slip was in when this voucher
+                  # was minted. A relation to the Slip's status would read today's value instead.
+                  - { name: slipStatusName, type: string, length: 100 }
                 relations:
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1, required: true }
                   # The event-driven create-from's back-reference (#6711): what makes minting the
@@ -1147,6 +1150,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 button: true
                 map:
                   Slip: id
+                  # A one-hop relation.field source: the create-from loads the Slip's EntryStatus row by
+                  # its foreign key and copies the NAME off it - the snapshot an audit trail needs, which
+                  # `map:` could not express while a source had to be a property of the row itself.
+                  slipStatusName: Status.name
                 defaults:
                   refNumber: "AUTO"
                   date: now
@@ -2508,6 +2515,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(generate.contains("VoucherLineEntity item") && generate.contains("item.Voucher = saved.Id;"),
                 "the computed line must write into the auto-resolved target items child and re-point it at the saved master");
 
+        // A one-hop `relation.field` map source: the create-from loads the Slip's status row ONCE by the
+        // foreign key and copies the NAME off it - a snapshot, where holding the relation would read
+        // today's value. Both anchors are code the explanatory comments cannot stand in for: the load
+        // call and the guarded read, rather than the field name (which the comments carry too).
+        assertTrue(generate.contains("Repository().findById(source.Status)"),
+                "a one-hop map source must load the related row by the source's own foreign key");
+        assertTrue(generate.contains("target.SlipStatusName = (Status == null ? null : Status.Name);"),
+                "the hop must be read off the loaded row through a null guard, so a null relation is an empty value");
+        // The load sits AFTER the at-most-once guard: an event redelivery that finds the voucher already
+        // minted must cost no extra query at all.
+        assertTrue(generate.indexOf("VoucherEntity candidate : existing") < generate.indexOf("Repository().findById(source.Status)"),
+                "the one-hop load must follow the at-most-once guard, not precede it");
+
         // generates event: (#6711): the create-from also runs by itself. The listener binds the SOURCE's
         // -transitioned topic (the channel every status write publishes), guards on the status, and
         // delegates to the SAME create-from the button calls - it must not carry a mapping of its own, or
@@ -2866,6 +2886,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             assertEquals(1, vouchers.getList(matching)
                                     .size(),
                     "posting the slip must mint exactly one voucher back-referencing it");
+            // The one-hop map source at RUNTIME: the create-from loaded the Slip's EntryStatus row by the
+            // foreign key and copied its NAME onto the voucher. Asserted on the row rather than on the
+            // generated source because what the hop promises is a VALUE that landed - a load that
+            // silently resolved to null would render and compile exactly the same.
+            assertEquals("POSTED", vouchers.getString(matching + ".SlipStatusName[0]"),
+                    "the one-hop map must snapshot the name of the status the slip was in when it was minted");
             autoVoucherId.set(vouchers.getInt(matching + ".Id[0]"));
         }, 60);
         restAssuredExecutor.execute(() -> {

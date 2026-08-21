@@ -435,8 +435,13 @@ class GeneratesIntentTest {
                 "got: " + ex.getIssues());
     }
 
+    /**
+     * A one-hop {@code relation.field} map source: the create-from loads the related row by the
+     * source's foreign key and copies a field off it, so the target keeps a SNAPSHOT of the value. See
+     * {@code GlueMapHopTest} for what it renders; the rejections that remain live there too.
+     */
     @Test
-    void rejectsOneHopRelationFieldMapping() {
+    void acceptsAOneHopRelationFieldMapping() {
         String yaml = """
                 name: sales
                 entities:
@@ -448,22 +453,23 @@ class GeneratesIntentTest {
                   - name: Order
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string }
                   - name: Customer
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
                       - { name: name, type: string }
                 generates:
-                  - name: bad
+                  - name: good
                     from: Quote
                     to: Order
                     map:
-                      Note: Customer.name
+                      note: Customer.name
                 """;
-        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
-        assertTrue(ex.getIssues()
-                     .stream()
-                     .anyMatch(i -> i.contains("relation.field path") && i.contains("not yet supported")),
-                "got: " + ex.getIssues());
+        assertEquals("Customer.name", IntentParser.parse(yaml)
+                                                  .getGenerates()
+                                                  .get(0)
+                                                  .getMap()
+                                                  .get("note"));
     }
 
     /**
