@@ -536,7 +536,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     // link feeds document.relationsByEntity, from which appendMxGraphModel emits the mxGraph
                     // edge (owner FK cell -> projection PK cell). The target lives in another model, so
                     // relationLink's target is null and referencedProperty defaults to the projection's "Id".
-                    relations.add(relationLink(name, relation, null, compositionParents, settingEntities));
+                    relations.add(relationLink(name, relation, null, info.perspectiveName()));
                     continue;
                 }
                 boolean composition = !compositionAssigned && relation.isComposition();
@@ -556,7 +556,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         target == null || target.getIdentity() == null ? null : IntentNaming.pascalCase(target.getIdentity()),
                         target == null ? null : labelFieldName(target), true);
                 properties.add(fkProperty);
-                relations.add(relationLink(name, relation, target, compositionParents, settingEntities));
+                relations.add(relationLink(name, relation, target, targetPerspective));
             }
             // Explicit UI control order (intent `order:`): reorder the properties so the generated
             // form/list controls follow the author's sequence (fields and to-one relations interleaved)
@@ -1293,12 +1293,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("auditType", "NONE");
         // Relationship metadata the generation reads (Dirigible .model convention): composition vs
         // association + cardinality (composition 1_n; association n_1 for manyToOne, 1_1 for oneToOne);
-        // relationshipName is the FK constraint name <owner>_<target>; relationshipEntityName and
-        // relationshipEntityPerspectiveName drive the dropdown's data-service URL
+        // relationshipName is the relationship's identity (see relationshipName); relationshipEntityName
+        // and relationshipEntityPerspectiveName drive the dropdown's data-service URL
         // (api/<perspective>/<entity>Service.ts) and the create-detail dialog.
         p.put("relationshipType", composition ? "COMPOSITION" : "ASSOCIATION");
         p.put("relationshipCardinality", composition ? "1_n" : (oneToOne ? "1_1" : "n_1"));
-        p.put("relationshipName", ownerEntity + "_" + relation.getTo());
+        p.put("relationshipName", relationshipName(ownerEntity, relation));
         p.put("relationshipEntityName", relation.getTo());
         p.put("relationshipEntityPerspectiveName", targetPerspective);
         p.put("relationshipEntityPerspectiveLabel", "Entities");
@@ -1347,7 +1347,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("auditType", "NONE");
         p.put("relationshipType", "ASSOCIATION");
         p.put("relationshipCardinality", oneToOne ? "1_1" : "n_1");
-        p.put("relationshipName", ownerEntity + "_" + relation.getTo());
+        p.put("relationshipName", relationshipName(ownerEntity, relation));
         p.put("relationshipEntityName", relation.getTo());
         // The owner's perspective for the target drives the dropdown's REST URL
         // (api/<perspective>/<Entity>Controller). Settings live under "Settings", primaries under their
@@ -2340,20 +2340,45 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The relationship's identity, and the ONLY place it is computed: {@code <owner>_<PascalCase
+     * relation name>}. Both writers of the {@code .edm} - the {@code <property>} element
+     * ({@link #relationProperty} / {@link #crossModelRelationProperty}) and the {@code <relation>}
+     * element ({@link #relationLink}) - derive it from here, so the two cannot disagree by construction
+     * (#6883).
+     *
+     * <p>
+     * It is derived from the RELATION's name rather than the target entity's because it must be unique
+     * within the owner: an entity with several relations to the same target (a posting rule naming a
+     * dozen accounts, a document with both a customer and a delivery address) collapses onto one name
+     * under the target form, and the {@code .schema}'s foreign keys then all claim the same
+     * {@code constraintName}.
+     */
+    private static String relationshipName(String ownerEntity, RelationIntent relation) {
+        return ownerEntity + "_" + IntentNaming.pascalCase(relation.getName());
+    }
+
+    /**
      * Top-level {@code <relation>} element interleaved with its owning {@code <entity>} in the XML.
-     * {@code relationshipEntityPerspectiveName} is the target's <i>resolved</i> perspective - for a
-     * dependent target that is its composition parent's perspective, mirroring how the EDM editor
-     * writes these links.
+     *
+     * <p>
+     * Its naming attributes restate what the FK {@code <property>} element already carries, so both are
+     * taken from the property's own inputs: {@link #relationshipName} for the identity, and the
+     * perspective the caller ALREADY resolved for the property - for a same-model target the resolved
+     * one (a dependent target's is its composition parent's, mirroring how the EDM editor writes these
+     * links), for a cross-model one the perspective its OWNER model publishes it under. Resolving it
+     * here instead, against this model, cannot see an external target at all and used to fall back to
+     * the entity's own name - which the save then wrote over the property, pointing the generated
+     * lookup URL at a controller that does not exist (#6883).
      */
     private static Map<String, Object> relationLink(String ownerEntity, RelationIntent relation, EntityIntent target,
-            Map<String, String> compositionParents, Set<String> settingEntities) {
+            String targetPerspective) {
         Map<String, Object> link = new LinkedHashMap<>();
-        String linkName = ownerEntity + "_" + IntentNaming.pascalCase(relation.getName());
+        String linkName = relationshipName(ownerEntity, relation);
         link.put("name", linkName);
         link.put("type", "relation");
         link.put("entity", ownerEntity);
         link.put("relationName", linkName);
-        link.put("relationshipEntityPerspectiveName", perspectiveFor(relation.getTo(), compositionParents, settingEntities));
+        link.put("relationshipEntityPerspectiveName", targetPerspective);
         link.put("relationshipEntityPerspectiveLabel", "Entities");
         link.put("property", IntentNaming.pascalCase(relation.getName()));
         link.put("referenced", relation.getTo());
