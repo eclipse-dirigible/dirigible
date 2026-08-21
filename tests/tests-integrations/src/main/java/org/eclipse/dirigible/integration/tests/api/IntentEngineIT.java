@@ -2925,6 +2925,117 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void generates_reopen_returns_the_source_when_its_target_is_retired() {
+        // The other half of the completion hook (#6868). `sourceStatus:` moves the Proforma OFF the
+        // status its own trigger qualifies on, deliberately - so the guard-claimed source stops matching.
+        // The at-most-once guard learned to step over a RETIRED target (#6814), which frees the
+        // Proforma's one-shot slot, but nothing could refill it: the Proforma stands at INVOICED and its
+        // lifecycle offers no way back to APPROVED, so no qualifying -transitioned was ever published
+        // again and this event-only create-from had no reissue path at all. `sourceStatusOnRetire:`
+        // declares the move back, and the reissue is then the ORDINARY path.
+        String genYaml = """
+                name: reissue
+                entities:
+                  - name: ProformaStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: Proforma
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: ProformaStatus, function: EntityStatus, init: 1 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                    relations:
+                      - { name: Proforma, kind: manyToOne, to: Proforma }
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                generates:
+                  - name: invoice-from-proforma
+                    from: Proforma
+                    to: Invoice
+                    forEntity: Proforma
+                    event: { onTransition: Proforma, when: "Status == APPROVED" }
+                    map: { Proforma: id }
+                    sourceStatus: INVOICED
+                    sourceStatusOnRetire: APPROVED
+                seeds:
+                  - name: proforma-statuses
+                    entity: ProformaStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: APPROVED }
+                      - { id: 3, name: INVOICED }
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT,     stage: draft }
+                      - { id: 2, name: ISSUED,    stage: live }
+                      - { id: 3, name: CANCELLED, stage: cancelled }
+                      - { id: 4, name: VOIDED,    stage: void }
+                """;
+        writeIntent(genYaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        generateFromModel("template-application-events-java/template/template.js", "reissue.glue");
+        String reopen = codeOf("gen/events/reissue/InvoiceFromProformaGenerateReopen.java");
+        // It listens on the TARGET's -transitioned topic - the channel every routed status write
+        // publishes, so a void performed by a transitions button, a workflow setter or another
+        // completion hook is seen the same way.
+        assertTrue(reopen.contains("implements MessageHandler"), "the reopen must be a self-describing message handler");
+        assertTrue(reopen.contains("return \"" + PROJECT + "-Invoice-Invoice-transitioned\""),
+                "the reopen must bind the TARGET's -transitioned topic, got: " + reopen);
+        // What counts as retired is the seeds' `stage:` classification and nothing else - both retiring
+        // stages, in seed order, and NOT the draft/live ones. Same resolution as the guard's own, which
+        // is why the two cannot disagree.
+        assertTrue(reopen.contains("!(target.Status == 3 || target.Status == 4)"),
+                "only a cancelled/void target may reopen the source, got: " + reopen);
+        // It finds the source through the very back-reference the guard reads.
+        assertTrue(reopen.contains("findById(target.Proforma)"), "the reopen must reach the source through the back-reference");
+        // ...and acts only while the source still stands where THIS create-from's hook left it: that is
+        // what makes it idempotent under redelivery, with no marker column to keep in step.
+        assertTrue(reopen.contains("source.Status != 3"),
+                "the reopen must act only while the source stands at the completion status, got: " + reopen);
+        // ...and only while the slot is genuinely free - the create-from's own guard asked from this end,
+        // over the SAME retiring classification. Delivery is at-least-once, so a REDELIVERED retirement
+        // arrives after the replacement already exists; without this the source would be re-opened with a
+        // live Invoice standing against it.
+        assertTrue(
+                reopen.contains("InvoiceEntity candidate :") && reopen.contains(".eq(\"Proforma\", target.Proforma)")
+                        && reopen.contains("!(candidate.Status == 3 || candidate.Status == 4)"),
+                "the reopen must refuse while any target of the source still counts, got: " + reopen);
+        // ONE targeted status write, with the source's "-transitioned" notice riding it into the outbox -
+        // flip and announcement commit together, so the create-from's own listener cannot miss the moment
+        // that frees it. Anchored on the call, since the comments name the topic too.
+        assertTrue(reopen.contains("java.util.Map.of(\"Status\", 2),"), "the reopen must write only the status column, got: " + reopen);
+        assertTrue(reopen.contains("\"" + PROJECT + "-Proforma-Proforma-transitioned\");"),
+                "the write must carry the SOURCE's -transitioned topic, or the trigger can never re-fire");
+        assertFalse(reopen.contains("Producer.sendToTopic"),
+                "the reopen must not publish beside its write - a broker outage would lose the announcement");
+
+        // The event-driven create-from itself is unchanged: it still delegates to the same create(), and
+        // its guard still steps over the retired document - which is what mints the replacement once the
+        // reopen has re-published the source's transition.
+        String onEvent = codeOf("gen/events/reissue/InvoiceFromProformaGenerateOnEvent.java");
+        assertTrue(onEvent.contains("source.Status != 2"), "the trigger still qualifies on the status the source is returned to");
+        String generate = codeOf("gen/events/reissue/InvoiceFromProformaGenerate.java");
+        assertTrue(generate.contains("if (candidate.Status == null || !(candidate.Status == 3 || candidate.Status == 4)) {"),
+                "the at-most-once guard must step over the retired target the reopen reacts to");
+    }
+
+    @Test
     void multilingual_entity_generates_the_translation_stack() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()

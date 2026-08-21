@@ -218,6 +218,29 @@ class GlueGeneratesTest {
                   - { id: 4, name: VOIDED,    stage: void }
             """;
 
+    /**
+     * The same retiring model with the reopen declared (issue #6868): the fine flips to DECLARED once
+     * the declaration exists, and returns to POSTED - the status its own trigger qualifies on - the
+     * moment that declaration is cancelled or voided.
+     */
+    private static final String REOPEN_YAML = RETIRING_YAML.replace("""
+                  - { id: 2, name: POSTED }
+            """, """
+                  - { id: 2, name: POSTED }
+                  - { id: 3, name: DECLARED }
+            """)
+                                                           .replace("""
+                                                                       map:
+                                                                         Fine: id
+                                                                         Note: note
+                                                                   """, """
+                                                                       map:
+                                                                         Fine: id
+                                                                         Note: note
+                                                                       sourceStatus: 3
+                                                                       sourceStatusOnRetire: 2
+                                                                   """);
+
     @SuppressWarnings("unchecked")
     @Test
     void rendersHeaderAssignmentsItemsAndKeys() {
@@ -982,5 +1005,44 @@ class GlueGeneratesTest {
         assertTrue(context.getIssues()
                           .isEmpty(),
                 "an appending create-from must not be warned about: " + context.getIssues());
+    }
+
+    /**
+     * The SAME classification read from the other end (issue #6868): the guard asks whether the
+     * document that exists is retired, the declared reopen asks whether the transition it just saw is
+     * what retired it - so the two can never disagree about what "retired" means, and the reopen adds
+     * no vocabulary of its own to say it. What it does add is the status the SOURCE returns to, which
+     * is what lets the ordinary trigger re-fire and mint the replacement.
+     */
+    @Test
+    void aDeclaredReopenEmitsTheInverseOfTheCompletionHook() {
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(REOPEN_YAML))
+                                                   .get(0);
+
+        // The completion hook forward...
+        assertEquals("Status", g.get("sourceStatusProperty"));
+        assertEquals("3", g.get("sourceStatusValue"));
+        // ...and its inverse, fired by the target's retirement.
+        assertEquals(true, g.get("hasReopen"));
+        assertEquals("2", g.get("reopenStatusValue"));
+        // The retiring test rendered against the reopen listener's own local - the same ids, in seed
+        // order, as the guard's `candidate` form.
+        assertEquals("target.State == 3 || target.State == 4", g.get("reopenRetiredCondition"));
+        assertEquals("candidate.State == 3 || candidate.State == 4", g.get("retiredStatusCondition"));
+    }
+
+    /**
+     * The key is opt-in: the same model without it keeps exactly the descriptor it had, so a
+     * create-from written before the key existed regenerates byte-identical output and contributes no
+     * listener.
+     */
+    @Test
+    void withoutTheKeyNoReopenIsEmitted() {
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(RETIRING_YAML))
+                                                   .get(0);
+
+        assertEquals(false, g.get("hasReopen"));
+        assertEquals("", g.get("reopenStatusValue"));
+        assertEquals("", g.get("reopenRetiredCondition"));
     }
 }

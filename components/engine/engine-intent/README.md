@@ -404,6 +404,7 @@ generates:
     defaults: { InvoiceDate: now }
     items: { from: ProjectTimesheetItem, to: SalesInvoiceItem, map: { Description: Description } }
     sourceStatus: 3                   # optional completion hook: the SOURCE's EntityStatus after creation
+    sourceStatusOnRetire: 2           # optional INVERSE: where the SOURCE returns when the target is retired
 ```
 
 `items:` has two mutually-exclusive shapes. As an OBJECT (above) it MIRRORS each source child row
@@ -425,6 +426,18 @@ Adds a button on the source view; the clone saves through the target's repositor
 status init and calculated fields fire. `sourceStatus:` flips the SOURCE to the given EntityStatus
 seed id once the target exists (proforma -> INVOICED) - a system write: no `-updated` re-fire, but
 the source's `-transitioned` topic is published.
+
+`event: { onTransition: <Source>, when: "Status == <status>" }` (or `onCreate`, or a process step)
+mints the target with nobody clicking; the `map:` entry copying the source's key is then the
+**at-most-once guard**, and a target retired into a `cancelled`/`void` `stage:` stops blocking, so the
+source may be generated from again. `sourceStatusOnRetire:` is the INVERSE of the completion hook and
+what makes that reissue automatic: retiring the target returns the source to the named status - one
+targeted write carrying the source's `-transitioned` - so the ordinary trigger re-fires and mints the
+replacement. It fires only while the source still stands at `sourceStatus` and no target of it still
+counts, so a redelivered retirement is a no-op. Without it, a source flipped by `sourceStatus:` can never re-qualify and only a shared
+`button: true` can reissue. It needs an `event:` to re-fire, `sourceStatus:` (a different
+status), a local target whose nomenclature classifies a retiring stage, `mode: once`, and - when the
+source declares a `lifecycle:` - the edge back.
 
 `prompt:` (#6685) declares a small input form shown before the target is created - the values the
 source cannot derive (which payment, how much). Entries name fields / to-one relations of the

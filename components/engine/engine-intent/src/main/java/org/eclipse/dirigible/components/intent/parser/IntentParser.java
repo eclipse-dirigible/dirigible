@@ -5623,6 +5623,96 @@ public final class IntentParser {
             }
             validateGeneratesItemLines(g, name, source, byName, crossModel, issues);
             validateGeneratesPrompt(g, name, byName, crossModel, issues);
+            validateGeneratesReopen(g, name, byName, crossModel, model, issues);
+        }
+    }
+
+    /**
+     * Validate the declared reopen of a create-from (issue #6868): {@code sourceStatusOnRetire}, the
+     * INVERSE of the {@code sourceStatus} completion hook - the status the SOURCE returns to when the
+     * target generated from it is retired, which is what makes "void and reissue" reachable without a
+     * click.
+     *
+     * <p>
+     * Everything here refuses a combination in which the reopen could never fire, because a reopen that
+     * cannot fire is exactly the silence this feature exists to remove: the at-most-once guard steps
+     * over a retired target (issue #6814) and frees the source's slot, and if nothing can refill it the
+     * author is left with a model that reads as automatic and is not. So the hook must exist to be
+     * inverted, the inverse must be a different status, the target must be one whose retirement is
+     * recognisable HERE (a local target whose nomenclature classifies a retiring {@code stage:}), and
+     * an appending create-from - which keeps no guard and no slot - is refused outright.
+     *
+     * <p>
+     * The remaining check is the source's own state machine, and it lives with the other status writes
+     * in {@link #validateStatusWritesAgainstLifecycle}: the source stands at {@code sourceStatus} when
+     * the retirement arrives, so the graph must declare that exact edge back.
+     */
+    private static void validateGeneratesReopen(GeneratesIntent g, String name, Map<String, EntityIntent> byName, boolean crossModel,
+            IntentModel model, List<String> issues) {
+        if (!g.hasReopen()) {
+            return;
+        }
+        String subject = "generates [" + name + "]";
+        if (g.getSourceStatus() == null) {
+            issues.add(subject + " declares sourceStatusOnRetire but no sourceStatus - the reopen is the INVERSE of the completion"
+                    + " hook, and with no flip forward the source never leaves the status its own trigger qualifies on, so there is"
+                    + " nothing to return it from");
+            return;
+        }
+        if (g.getSourceStatusOnRetire()
+             .equals(g.getSourceStatus())) {
+            issues.add(subject + " returns the source to [" + g.getSourceStatus()
+                    + "], the very status sourceStatus flips it to - a write that leaves the status where it stands is no transition,"
+                    + " so nothing would be published and nothing would re-fire; name the status the source qualified on before the"
+                    + " target existed");
+            return;
+        }
+        if (g.isAppendMode()) {
+            issues.add(subject + " declares sourceStatusOnRetire with mode: append - an appending create-from keeps no at-most-once"
+                    + " guard, so no slot is ever consumed for a retired target to free, and returning the source would simply append"
+                    + " another " + g.getTo() + "; drop the reopen, or use mode: once");
+            return;
+        }
+        if (!g.isEventDriven()) {
+            // A create-from with no event carries no guard at all, so nothing ever blocks a second
+            // creation: the button IS the reissue. There is no slot to free and no trigger to re-fire,
+            // which is why the glue emits no reopen listener for this shape - and an authored key that
+            // generates nothing is the silence this whole construct exists to refuse.
+            issues.add(subject + " declares sourceStatusOnRetire but has no event: - a create-from triggered only by a button carries"
+                    + " no at-most-once guard, so nothing blocks a replacement and the button already reissues. The reopen exists to"
+                    + " re-fire an EVENT trigger; declare event: or drop the key");
+            return;
+        }
+        if (crossModel) {
+            issues.add(subject + " cannot reopen for a cross-model target (uses [" + g.getUses() + "]) - what RETIRES a [" + g.getTo()
+                    + "] is the `stage:` classification of its status nomenclature, seeded in the owner model and not resolvable here;"
+                    + " author the create-from in [" + g.getUses() + "], or keep a button (button: true) to reissue by hand");
+            return;
+        }
+        EntityIntent target = g.getTo() == null ? null : byName.get(g.getTo());
+        if (target == null) {
+            return; // an unknown target is already reported
+        }
+        RelationIntent status = LifecycleStages.statusRelation(target);
+        if (status == null || status.getTo() == null) {
+            issues.add(subject + " declares sourceStatusOnRetire but its target [" + g.getTo()
+                    + "] declares no function: EntityStatus relation - it can never be retired, so the reopen could never fire");
+            return;
+        }
+        if (status.isCrossModel()) {
+            issues.add(subject + " target [" + g.getTo() + "] takes its lifecycle from [" + status.getModel() + ":" + status.getTo()
+                    + "], a nomenclature seeded in another model, so no `stage:` classification is resolvable here - the retirement"
+                    + " that would trigger the reopen cannot be recognised");
+            return;
+        }
+        Map<String, List<Integer>> stages = LifecycleStages.stagesOf(model, status.getTo());
+        if (stages.getOrDefault(LifecycleStages.CANCELLED, List.of())
+                  .isEmpty()
+                && stages.getOrDefault(LifecycleStages.VOID, List.of())
+                         .isEmpty()) {
+            issues.add(subject + " declares sourceStatusOnRetire but no seed row of [" + status.getTo()
+                    + "] is classified `stage: cancelled` or `stage: void` - that classification is what makes a [" + g.getTo()
+                    + "] retired, so classify the seed rows of [" + status.getTo() + "] with `stage:` (draft/live/cancelled/void)");
         }
     }
 
@@ -5985,7 +6075,7 @@ public final class IntentParser {
                 reachable.addAll(targets);
             }
             validateTransitionsAgainstLifecycle(model, entity, edges, statuses, issues);
-            validateStatusWritesAgainstLifecycle(model, entity, status, reachable, statuses, issues);
+            validateStatusWritesAgainstLifecycle(model, entity, status, edges, reachable, statuses, issues);
         }
     }
 
@@ -6076,9 +6166,14 @@ public final class IntentParser {
      * repository at run time. Checking them here is what turns an unmodeled move from a runtime
      * {@code ValidationException} into a message the author reads - and for {@code sourceStatus} that
      * matters twice over, because its flip runs AFTER the target document has already been committed.
+     *
+     * <p>
+     * One of them CAN be pinned to an exact edge: a create-from's {@code sourceStatusOnRetire} (issue
+     * #6868) runs while the source stands at the {@code sourceStatus} the same rule flipped it to, so
+     * the graph is asked for that one edge rather than for reachability.
      */
     private static void validateStatusWritesAgainstLifecycle(IntentModel model, EntityIntent entity, RelationIntent status,
-            Set<Integer> reachable, Map<Integer, String> statuses, List<String> issues) {
+            Map<Integer, Set<Integer>> edges, Set<Integer> reachable, Map<Integer, String> statuses, List<String> issues) {
         for (ProcessIntent process : model.getProcesses()) {
             if (!entity.getName()
                        .equals(triggerEntityName(process))) {
@@ -6110,6 +6205,18 @@ public final class IntentParser {
                         + "], which no edge of the [" + entity.getName()
                         + "] lifecycle reaches - add the edge or set a status the graph can enter (the flip runs AFTER the target"
                         + " document is created, so a rejected one leaves the document behind)");
+            }
+            Integer reopened = generates.getSourceStatusOnRetire();
+            if (flipped == null || reopened == null || reopened.equals(flipped)) {
+                continue; // the reopen's own validation owns both of those
+            }
+            if (!edges.getOrDefault(flipped, Set.of())
+                      .contains(reopened)) {
+                issues.add("generates [" + generates.getName() + "] returns the source to [" + statusLabel(reopened, statuses)
+                        + "] when its target is retired, but the [" + entity.getName() + "] lifecycle declares no edge from ["
+                        + statusLabel(flipped, statuses) + "] to it - that is exactly where the source stands when the retirement"
+                        + " arrives, so the reopen would be rejected the moment it ran; add the edge, or return to a status ["
+                        + statusLabel(flipped, statuses) + "] reaches");
             }
         }
         for (ResolveIntent resolve : model.getResolves()) {
