@@ -91,7 +91,7 @@
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
 #if($property.widgetLabel)#set($label = $property.widgetLabel)#else#set($label = $property.name)#end
 #if($property.widgetSize)#set($span = $property.widgetSize)#else#set($span = "6")#end
-#if($property.widgetType == "TEXTAREA" || $property.widgetType == "CHECKBOX")#set($span = "12")#end
+#if($property.widgetType == "TEXTAREA" || $property.widgetType == "CHECKBOX" || $property.widgetType == "MULTISELECT")#set($span = "12")#end
 #if($lookup)#set($span = "12")#end
       <div x-h-field#if($span == "12") class="col-span-full"#else style="grid-column: span ${span};"#end#visibleGate($property) :data-invalid="!!errors.${property.name}">
 #if($property.widgetType == "CHECKBOX")
@@ -133,6 +133,25 @@
           </div>
         </div>
 #end
+#elseif($property.widgetType == "MULTISELECT")
+        <!-- Subset (intent `kind: subset`): the record holds a SUBSET of the lookup's rows
+             as one csv ("1,3"). Multiple mode comes from the bound model being an ARRAY (split on
+             load, joined on save); Refresh reloads the options - deliberately no "New" button, the
+             add-dialog return path writes a single value. -->
+        <div class="hbox gap-1 items-center">
+          <div x-h-select data-filter="contains" class="grow">
+            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
+            <div x-h-select-content>
+              <div x-h-select-search></div>
+              <div x-h-select-list>
+                <template x-for="opt in options${property.name}" :key="opt.value">
+                  <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+                </template>
+              </div>
+            </div>
+          </div>
+          <button type="button" x-h-button data-variant="transparent" class="shrink-0" data-size="icon" x-show="!isPreview" aria-label="Refresh" @click="loadOptions()"><svg x-h-lucide data-lucide="refresh-cw"></svg></button>
+        </div>
 #elseif($property.widgetType == "NUMBER")
         <!-- step="any": without it the browser default step=1 rejects fractional input on DECIMAL fields. -->
         <div x-h-input-number><input type="number" step="any" id="f_${property.name}" x-model.number="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end /></div>
@@ -666,6 +685,22 @@
                   </div>
                 </div>
               </template>
+              <template x-if="!col.readonly && col.widget === 'MULTISELECT'">
+                <!-- Subset line column: multiple mode comes from the ARRAY draft value (openDraft
+                     splits the stored csv; draftPayload joins it back). dialogOptionsFor honours a
+                     static `where:` filter; a subset relation carries no Depends-On cascade. -->
+                <div x-h-select data-filter="contains">
+                  <input x-h-select-input x-model="draft[col.name]" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select...', { name: '' })" />
+                  <div x-h-select-content>
+                    <div x-h-select-search></div>
+                    <div x-h-select-list>
+                      <template x-for="opt in dialogOptionsFor(col.name)" :key="opt.value">
+                        <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+              </template>
               <template x-if="!col.readonly && col.widget === 'NUMBER'">
                 <div x-h-input-number><input type="number" step="any" x-model.number="draft[col.name]" :readonly="col.readonly" @input="recalcDraft()" /></div>
               </template>
@@ -694,7 +729,7 @@
                   <div x-h-datetime-picker-popup x-model="draft[col.name]"></div>
                 </div>
               </template>
-              <template x-if="!col.readonly && !['DROPDOWN','NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget)">
+              <template x-if="!col.readonly && !['DROPDOWN','MULTISELECT','NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget)">
                 <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" />
               </template>
               <!-- A read-only column (calculated / intent readOnly) is a VALUE, not a control: the

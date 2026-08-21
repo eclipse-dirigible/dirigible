@@ -27,6 +27,10 @@
  * Returns: { errors: { field: 'msg' }, valid: boolean }. First failing rule wins.
  */
 (function (root) {
+  // The String coercion is what makes `required` correct for ARRAY-modelled controls too (a
+  // multiselect's model): String([]) === '' fails the rule, a non-empty array stringifies to its
+  // joined values and passes. Keep the coercion - an emptiness check written any other way must
+  // still hold for arrays.
   const trim = v => (v == null ? '' : String(v).trim());
 
   function applyRule(rule, value, cfg) {

@@ -63,6 +63,45 @@ class CsvimIntentGeneratorTest {
     }
 
     /**
+     * A seed row may set a {@code subset} relation's value by its authored name - the literal
+     * comma-separated key list. The cell carries the field delimiter, so it must be quoted (CSVIM's
+     * enclosing-quote parsing handles it). A seed omitting the relation emits no column.
+     */
+    @Test
+    void seedRowsMaySetASubsetValueAsAQuotedKeyList() {
+        IntentModel model = IntentParser.parse("""
+                name: schedules
+                entities:
+                  - name: PayerType
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Schedule
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: title, type: string }
+                    relations:
+                      - { name: payerTypes, kind: subset, to: PayerType }
+                seeds:
+                  - name: schedules
+                    entity: Schedule
+                    rows:
+                      - { id: 1, title: Morning, payerTypes: "1,3" }
+                      - { id: 2, title: Evening }
+                """);
+        String csv = CsvimIntentGenerator.renderCsvForTest(model.getEntities()
+                                                                .get(1),
+                model.getSeeds()
+                     .get(0));
+        assertEquals("""
+                SCHEDULE_ID,SCHEDULE_TITLE,SCHEDULE_PAYER_TYPES
+                1,Morning,"1,3"
+                2,Evening,
+                """, csv, "the subset value column rides the same <ENTITY>_<RELATION> formula, quoted because of the delimiter");
+    }
+
+    /**
      * A status row's {@code stage:} marker classifies the lifecycle (dirigible #6645); it is metadata,
      * not data, so it must never reach the imported table as a column.
      */

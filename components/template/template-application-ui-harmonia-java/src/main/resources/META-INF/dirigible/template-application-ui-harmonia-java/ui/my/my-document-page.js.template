@@ -29,7 +29,7 @@ document.addEventListener('alpine:init', () => {
     form: {
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name")
-      ${property.name}: #if($property.widgetType == "CHECKBOX")false#{else}''#end,
+      ${property.name}: #if($property.widgetType == "CHECKBOX")false#elseif($property.widgetType == "MULTISELECT")[]#{else}''#end,
 #end
 #end
     },
@@ -128,6 +128,11 @@ document.addEventListener('alpine:init', () => {
 #if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS") && !$property.sensitiveProperty)
           if (this.form.${property.name} != null && this.form.${property.name} !== '') this.form.${property.name} = String(this.form.${property.name});
 #end
+#if($property.widgetType == "MULTISELECT" && !$property.sensitiveProperty)
+          // MULTISELECT: split the stored csv into the ARRAY the multiple-mode select binds.
+          this.form.${property.name} = (this.form.${property.name} == null || this.form.${property.name} === '')
+              ? [] : String(this.form.${property.name}).split(',').map(v => v.trim());
+#end
 #end
           this.itemsEnabled = true;
           await this.loadItems();
@@ -138,7 +143,9 @@ document.addEventListener('alpine:init', () => {
           this.state = 'error';
         }
       } else {
+        // A MULTISELECT field (an ARRAY - what keeps the select in multiple mode) takes no prefill.
         for (const key of Object.keys(this.form)) {
+          if (Array.isArray(this.form[key])) continue;
           const v = this.queryParam(key);
           if (v !== null) this.form[key] = v;
         }
@@ -163,7 +170,7 @@ document.addEventListener('alpine:init', () => {
     async loadOptions() {
       const loaded = {};
 #foreach($property in $properties)
-#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS") && !$property.sensitiveProperty)
+#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && !$property.sensitiveProperty)
       try {
         const rows = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
         loaded['${property.name}'] = (rows || []).map(r => ({ value: r.${property.widgetDropDownKey}, text: r.${property.widgetDropDownValue} }));
@@ -182,6 +189,14 @@ document.addEventListener('alpine:init', () => {
 #foreach($property in $properties)
 #if(($property.widgetType == "DATE" || $property.widgetType == "DATETIME-LOCAL") && !$property.sensitiveProperty)
       if (payload.${property.name} != null) payload.${property.name} = window.HarmoniaFormat.toPayload(payload.${property.name}, '${property.widgetType}');
+#end
+#if($property.widgetType == "MULTISELECT" && !$property.sensitiveProperty)
+      // MULTISELECT: join the array back to the normative csv (de-duplicated, ascending); empty -> null.
+      payload.${property.name} = Array.isArray(payload.${property.name}) && payload.${property.name}.length
+          ? [...new Set(payload.${property.name}.map(String))]
+              .sort((a, b) => (Number(a) - Number(b)) || String(a).localeCompare(String(b)))
+              .join(',')
+          : null;
 #end
 #end
       return payload;
@@ -308,6 +323,14 @@ document.addEventListener('alpine:init', () => {
     displayItem(row, col) {
       const v = row[col.name];
       if (v == null || v === '') return '—';
+      if (col.multi) {
+        // A subset cell holds a key LIST ("1,3"): resolve each key and join the labels.
+        const opts = this.itemOptions[col.name] || [];
+        return String(v).split(',').map(k => {
+          const opt = opts.find(o => String(o.value) === k.trim());
+          return opt ? opt.text : k.trim();
+        }).join(', ');
+      }
       if (col.lookup && this.itemOptions[col.name]) {
         const opt = (this.itemOptions[col.name] || []).find((o) => String(o.value) === String(v));
         if (opt) return opt.text;
@@ -325,6 +348,13 @@ document.addEventListener('alpine:init', () => {
       await this.ensureItemOptions();
       this.itemMode = row ? 'edit' : 'create';
       this.draft = row ? { ...row } : {};
+      // MULTISELECT columns bind an ARRAY draft (that is what puts the dialog's select in multiple
+      // mode): split the stored csv on edit, start empty on create.
+      for (const col of this.itemColumns()) {
+        if (col.widget !== 'MULTISELECT') continue;
+        const v = this.draft[col.name];
+        this.draft[col.name] = (v == null || v === '') ? [] : String(v).split(',').map(s => s.trim());
+      }
       this.draft[d.masterEntityId] = String(this.id);
       if (preset) {
         Object.keys(preset)
@@ -352,6 +382,14 @@ document.addEventListener('alpine:init', () => {
       const d = this.def();
       const body = { ...this.draft };
       for (const key of Object.keys(body)) { if (body[key] === '') body[key] = null; }
+      // MULTISELECT: join the array back to the normative csv (de-duplicated, ascending); empty -> null.
+      for (const col of this.itemColumns()) {
+        if (col.widget !== 'MULTISELECT') continue;
+        const v = body[col.name];
+        body[col.name] = Array.isArray(v) && v.length
+            ? [...new Set(v.map(String))].sort((a, b) => (Number(a) - Number(b)) || String(a).localeCompare(String(b))).join(',')
+            : null;
+      }
       body[d.masterEntityId] = this.id;
       try {
         const pk = d.primaryKey;

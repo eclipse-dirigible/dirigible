@@ -44,17 +44,17 @@ function detailPanel(def, masterId) {
     def,
     masterId,
     rows: [],
-    state: 'loading',     // loading | error | empty | default
+    state: "loading", // loading | error | empty | default
     error: null,
     deleteOpen: false,
     deleteTarget: null,
     deleteBusy: false,
-    uploading: false,     // files defs only
+    uploading: false, // files defs only
     fileError: null,
     // Reactive config for the embedded x-h-calendar (calendar defs only); rebuilt on every load.
-    calCfg: { view: (def.calendar && def.calendar.view) || 'month', events: [] },
+    calCfg: { view: (def.calendar && def.calendar.view) || "month", events: [] },
 
-    lookups: {},   // relationship column name -> { fkValue: referencedRow }
+    lookups: {}, // relationship column name -> { fkValue: referencedRow }
 
     async init() {
       // Role-scoped columns (intent `visibleTo:`): the def says whether this child has any, and its
@@ -63,7 +63,7 @@ function detailPanel(def, masterId) {
       // shared registry, so the pruned copy is local to this panel.
       if (this.def.restrictedFields) {
         await this.loadRestrictedFields(this.def.apiPath);
-        this.def = { ...this.def, columns: (this.def.columns || []).filter(c => this.canSee(c.name)) };
+        this.def = { ...this.def, columns: (this.def.columns || []).filter((c) => this.canSee(c.name)) };
       }
       await this.load();
       this.loadLookups();
@@ -73,17 +73,19 @@ function detailPanel(def, masterId) {
     // the display label AND any `via` extra columns resolve off the same fetched record).
     async loadLookups() {
       const all = {};
-      for (const col of (this.def.columns || [])) {
+      for (const col of this.def.columns || []) {
         if (!col.lookup) continue;
         try {
           // getAll (paged), NOT get: get returns only the controller's first page (default 20), so a
           // referenced row beyond it would leave the FK unresolved and the cell would show the raw id.
-          const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: '' });
+          const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: "" });
           const m = {};
-          (rows || []).forEach(e => { m[e[col.lookup.key]] = e; });
+          (rows || []).forEach((e) => {
+            m[e[col.lookup.key]] = e;
+          });
           all[col.name] = m;
         } catch (e) {
-          console.error('detailPanel: failed to load lookup for ' + col.name, e);
+          console.error("detailPanel: failed to load lookup for " + col.name, e);
         }
       }
       this.lookups = all;
@@ -93,8 +95,11 @@ function detailPanel(def, masterId) {
       this.refreshIcons();
     },
 
-    // Resolve a cell: a relationship column shows its referenced label; a `via` column shows a field of
-    // that same referenced row (relation `show`); a date column is formatted.
+    // Resolve a cell:
+    // - a relationship column shows its referenced label
+    // - a `via` column shows a field of that same referenced row (relation `show`)
+    // - a `multi` column resolves EACH key of its list
+    // - a date column is formatted.
     cellValue(col, row) {
       // A `via` column reads a field off another (lookup) column's referenced row.
       if (col.via) {
@@ -103,11 +108,25 @@ function detailPanel(def, masterId) {
         return this.displayValue(ref ? ref[col.via.field] : undefined, col.date);
       }
       const v = row[col.name];
+      // A subset column holds a key LIST ("1,3"): resolve each key through the lookup map and
+      // join the labels. Routed by the explicit `multi` flag, never by sniffing the value for commas.
+      if (col.multi && col.lookup) {
+        if (v === undefined || v === null || v === "") return this.displayValue(v, false);
+        const m = this.lookups[col.name] || {};
+        return String(v)
+          .split(",")
+          .map((k) => {
+            const ref = m[k.trim()];
+            const t = ref ? ref[col.lookup.text] : undefined;
+            return t !== undefined && t !== null && t !== "" ? t : k.trim();
+          })
+          .join(", ");
+      }
       if (col.lookup) {
         const m = this.lookups[col.name];
         const ref = m ? m[v] : undefined;
         const t = ref ? ref[col.lookup.text] : undefined;
-        if (t !== undefined && t !== null && t !== '') return t;
+        if (t !== undefined && t !== null && t !== "") return t;
       }
       if (col.float) return this.formatNumber(v, col.pattern);
       return this.displayValue(v, col.date);
@@ -120,28 +139,32 @@ function detailPanel(def, masterId) {
 
     async load() {
       // No master selected yet — don't fetch (avoids a ?<fk>=null call).
-      if (this.masterId == null) { this.rows = []; this.state = 'empty'; return; }
-      this.state = 'loading';
+      if (this.masterId == null) {
+        this.rows = [];
+        this.state = "empty";
+        return;
+      }
+      this.state = "loading";
       this.error = null;
       try {
         // The detail controller filters by the master FK query param (apiPath is relative to restBase).
         // getAll (paged), NOT get: get returns only the controller's first page (default 20), which
         // would silently cap a detail with more rows and hide the ones past the first page.
-        const q = '?' + encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId);
+        const q = "?" + encodeURIComponent(this.def.masterEntityId) + "=" + encodeURIComponent(this.masterId);
         this.rows = await App.services.api.getAll(this.def.apiPath + q);
         if (this.def.calendar) {
-          this.calCfg = { view: this.def.calendar.view || 'month', events: this.buildEvents() };
-          this.state = 'default';
+          this.calCfg = { view: this.def.calendar.view || "month", events: this.buildEvents() };
+          this.state = "default";
         } else if (this.def.files) {
           // A files panel always renders (its empty state carries the upload prompt / "generated on
           // issue" note), so it never falls back to the shared "no records" line.
-          this.state = 'default';
+          this.state = "default";
         } else {
-          this.state = this.rows.length === 0 ? 'empty' : 'default';
+          this.state = this.rows.length === 0 ? "empty" : "default";
         }
       } catch (e) {
-        this.error = App.services.apiErrors.messageFor(e, 'Could not load ' + this.def.label + '.');
-        this.state = 'error';
+        this.error = App.services.apiErrors.messageFor(e, "Could not load " + this.def.label + ".");
+        this.state = "error";
       }
       this.refreshIcons();
     },
@@ -153,29 +176,24 @@ function detailPanel(def, masterId) {
     // (dialog=1 - save/cancel post messages to the opener instead of navigating); on save the
     // panel reloads its rows while the parent form keeps its state.
     openForm(route, title) {
-      Alpine.store('related').create(window.location.pathname + '?embedded=1#' + route, title, () => this.load());
+      Alpine.store("related").create(window.location.pathname + "?embedded=1#" + route, title, () => this.load());
     },
     // The master FK as a query param. On create it PRESETS the value; on edit/preview it carries the
     // navigation context, which is what makes the form render the parent control locked (the record
     // is being worked on from inside its master, so re-pointing it here is never the intent).
     masterQuery() {
-      return encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId);
+      return encodeURIComponent(this.def.masterEntityId) + "=" + encodeURIComponent(this.masterId);
     },
     addRow() {
-      const q = '?' + this.masterQuery() + '&embedded=1&dialog=1';
-      this.openForm('/' + this.def.entity + '/create' + q,
-          (window.T ? T('application-core:shell.related.addNew', 'Add new') : 'Add new'));
+      const q = "?" + this.masterQuery() + "&embedded=1&dialog=1";
+      this.openForm("/" + this.def.entity + "/create" + q, window.T ? T("application-core:shell.related.addNew", "Add new") : "Add new");
     },
     editRow(row) {
-      this.openForm('/' + this.def.entity + '/' + encodeURIComponent(row[this.def.primaryKey])
-              + '/edit?' + this.masterQuery() + '&embedded=1&dialog=1',
-          (window.T ? T(this.def.tkey, this.def.label) : this.def.label));
+      this.openForm("/" + this.def.entity + "/" + encodeURIComponent(row[this.def.primaryKey]) + "/edit?" + this.masterQuery() + "&embedded=1&dialog=1", window.T ? T(this.def.tkey, this.def.label) : this.def.label);
     },
     // Read-only view of the detail record (the routed form page in preview mode).
     previewRow(row) {
-      this.openForm('/' + this.def.entity + '/' + encodeURIComponent(row[this.def.primaryKey])
-              + '/preview?' + this.masterQuery() + '&embedded=1&dialog=1',
-          (window.T ? T(this.def.tkey, this.def.label) : this.def.label));
+      this.openForm("/" + this.def.entity + "/" + encodeURIComponent(row[this.def.primaryKey]) + "/preview?" + this.masterQuery() + "&embedded=1&dialog=1", window.T ? T(this.def.tkey, this.def.label) : this.def.label);
     },
 
     // --- embedded calendar (calendar defs only) -------------------------------------------------
@@ -183,22 +201,24 @@ function detailPanel(def, masterId) {
     // arrays / epoch seconds / ISO strings normalize via toISO; rows with no start are skipped.
     buildEvents() {
       const cal = this.def.calendar;
-      return (this.rows || []).map(row => {
-        const start = this.toISO(row[cal.start]);
-        if (!start) return null;
-        const ev = {
-          id: String(row[this.def.primaryKey]),
-          title: this.eventTitle(row),
-          start: start,
-          allDay: cal.range ? true : this.isDateOnly(row[cal.start]),
-        };
-        if (cal.end) {
-          const end = this.toISO(row[cal.end]);
-          if (end) ev.end = end;
-        }
-        if (cal.color) ev.color = this.colorFor(row[cal.color]);
-        return ev;
-      }).filter(Boolean);
+      return (this.rows || [])
+        .map((row) => {
+          const start = this.toISO(row[cal.start]);
+          if (!start) return null;
+          const ev = {
+            id: String(row[this.def.primaryKey]),
+            title: this.eventTitle(row),
+            start: start,
+            allDay: cal.range ? true : this.isDateOnly(row[cal.start]),
+          };
+          if (cal.end) {
+            const end = this.toISO(row[cal.end]);
+            if (end) ev.end = end;
+          }
+          if (cal.color) ev.color = this.colorFor(row[cal.color]);
+          return ev;
+        })
+        .filter(Boolean);
     },
     eventTitle(row) {
       const cal = this.def.calendar;
@@ -206,39 +226,43 @@ function detailPanel(def, masterId) {
         const v = row[cal.title];
         // A title naming a RELATION column resolves to its referenced label, exactly like the
         // table cell does; the raw value stays the fallback for dangling FKs / unloaded maps.
-        const col = (this.def.columns || []).find(c => c.name === cal.title && c.lookup);
+        const col = (this.def.columns || []).find((c) => c.name === cal.title && c.lookup);
         if (col) {
           const m = this.lookups[cal.title];
           const ref = m ? m[v] : undefined;
           const t = ref ? ref[col.lookup.text] : undefined;
-          if (t !== undefined && t !== null && String(t) !== '') return String(t);
+          if (t !== undefined && t !== null && String(t) !== "") return String(t);
         }
-        if (v !== undefined && v !== null && String(v) !== '') return String(v);
+        if (v !== undefined && v !== null && String(v) !== "") return String(v);
       }
-      return this.def.label + ' #' + row[this.def.primaryKey];
+      return this.def.label + " #" + row[this.def.primaryKey];
     },
     toISO(v) {
-      if (v === undefined || v === null || v === '') return '';
+      if (v === undefined || v === null || v === "") return "";
       if (Array.isArray(v)) {
-        const p = n => String(n).padStart(2, '0');
-        const date = v[0] + '-' + p(v[1]) + '-' + p(v[2]);
+        const p = (n) => String(n).padStart(2, "0");
+        const date = v[0] + "-" + p(v[1]) + "-" + p(v[2]);
         if (v.length <= 3) return date;
-        return date + 'T' + p(v[3] || 0) + ':' + p(v[4] || 0) + ':' + p(v[5] || 0);
+        return date + "T" + p(v[3] || 0) + ":" + p(v[4] || 0) + ":" + p(v[5] || 0);
       }
-      if (typeof v === 'number') {
+      if (typeof v === "number") {
         // Jackson serializes Instant/Timestamp as epoch SECONDS; JS Date wants millis.
         const ms = v < 1e12 ? v * 1000 : v;
-        try { return new Date(ms).toISOString(); } catch (e) { return ''; }
+        try {
+          return new Date(ms).toISOString();
+        } catch (e) {
+          return "";
+        }
       }
       return String(v);
     },
     isDateOnly(v) {
-      return Array.isArray(v) ? v.length <= 3 : (typeof v === 'string' && v.length <= 10);
+      return Array.isArray(v) ? v.length <= 3 : typeof v === "string" && v.length <= 10;
     },
     // Deterministic categorical colour from the Harmonia calendar palette.
     colorFor(v) {
-      const palette = ['blue', 'green', 'purple', 'orange', 'teal', 'pink', 'indigo', 'yellow', 'red', 'gray'];
-      const key = (v === undefined || v === null) ? '' : String(v);
+      const palette = ["blue", "green", "purple", "orange", "teal", "pink", "indigo", "yellow", "red", "gray"];
+      const key = v === undefined || v === null ? "" : String(v);
       let h = 0;
       for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
       return palette[h % palette.length];
@@ -249,50 +273,53 @@ function detailPanel(def, masterId) {
     onEventClick(e) {
       const id = e && e.detail && e.detail.event ? e.detail.event.id : null;
       if (!id) return;
-      this.openForm('/' + this.def.entity + '/' + encodeURIComponent(id) + '/edit?' + this.masterQuery()
-              + '&embedded=1&dialog=1',
-          (window.T ? T(this.def.tkey, this.def.label) : this.def.label));
+      this.openForm("/" + this.def.entity + "/" + encodeURIComponent(id) + "/edit?" + this.masterQuery() + "&embedded=1&dialog=1", window.T ? T(this.def.tkey, this.def.label) : this.def.label);
     },
     onDateClick(e) {
       const cal = this.def.calendar;
-      let q = '?' + this.masterQuery() + '&embedded=1&dialog=1';
+      let q = "?" + this.masterQuery() + "&embedded=1&dialog=1";
       const d = e && e.detail ? e.detail.date : null;
       if (d instanceof Date && !isNaN(d.getTime())) {
-        const p = n => String(n).padStart(2, '0');
-        let val = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
-        if (e.detail.time) val += 'T' + e.detail.time;
-        q += '&' + encodeURIComponent(cal.start) + '=' + encodeURIComponent(val);
+        const p = (n) => String(n).padStart(2, "0");
+        let val = d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+        if (e.detail.time) val += "T" + e.detail.time;
+        q += "&" + encodeURIComponent(cal.start) + "=" + encodeURIComponent(val);
       }
-      this.openForm('/' + this.def.entity + '/create' + q,
-          (window.T ? T('application-core:shell.related.addNew', 'Add new') : 'Add new'));
+      this.openForm("/" + this.def.entity + "/create" + q, window.T ? T("application-core:shell.related.addNew", "Add new") : "Add new");
     },
 
     // --- files panel (files defs only) ----------------------------------------------------------
     // Read-only (Snapshot): per-version Open + Download. Editable (Attachment): upload + remove.
-    get filesReadOnly() { return !!(this.def.files && this.def.files.readOnly); },
+    get filesReadOnly() {
+      return !!(this.def.files && this.def.files.readOnly);
+    },
 
     // Absolute URL of the controller's download route (a plain browser GET, not the fetch client):
     // apiPath is relative to restBase, so prepend it once. The row's own id keys the file.
     downloadHref(row) {
-      const base = (App.config && App.config.restBase) || '';
-      return base + this.def.apiPath + '/' + encodeURIComponent(row[this.def.primaryKey]) + '/download';
+      const base = (App.config && App.config.restBase) || "";
+      return base + this.def.apiPath + "/" + encodeURIComponent(row[this.def.primaryKey]) + "/download";
     },
 
     // The same route with inline disposition: the file opens in a new tab (view/print) instead of
     // downloading. This is how a stored Snapshot version is opened/printed - the bytes ARE the
     // record, nothing is re-rendered.
     openHref(row) {
-      return this.downloadHref(row) + '?disposition=inline';
+      return this.downloadHref(row) + "?disposition=inline";
     },
 
     // Human-readable size from the injected FileSize column (bytes).
     fileSizeText(row) {
       const n = Number(row.FileSize);
-      if (!isFinite(n) || n <= 0) return '';
-      const units = ['B', 'KB', 'MB', 'GB'];
-      let v = n, i = 0;
-      while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-      return (i === 0 ? v : v.toFixed(1)) + ' ' + units[i];
+      if (!isFinite(n) || n <= 0) return "";
+      const units = ["B", "KB", "MB", "GB"];
+      let v = n,
+        i = 0;
+      while (v >= 1024 && i < units.length - 1) {
+        v /= 1024;
+        i++;
+      }
+      return (i === 0 ? v : v.toFixed(1)) + " " + units[i];
     },
 
     // Multipart upload of the picked files to the controller's /upload route (master FK query),
@@ -304,32 +331,35 @@ function detailPanel(def, masterId) {
       this.fileError = null;
       try {
         const fd = new FormData();
-        files.forEach(f => fd.append('file', f, f.name));
-        const q = '?' + encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId);
-        await App.services.api.post(this.def.apiPath + '/upload' + q, fd);
+        files.forEach((f) => fd.append("file", f, f.name));
+        const q = "?" + encodeURIComponent(this.def.masterEntityId) + "=" + encodeURIComponent(this.masterId);
+        await App.services.api.post(this.def.apiPath + "/upload" + q, fd);
         await this.load();
       } catch (e) {
-        this.fileError = App.services.apiErrors.messageFor(e, 'Upload failed.');
+        this.fileError = App.services.apiErrors.messageFor(e, "Upload failed.");
       } finally {
         this.uploading = false;
       }
     },
     onFilePick(e) {
       this.uploadFiles(e.target.files);
-      e.target.value = ''; // allow re-picking the same file
+      e.target.value = ""; // allow re-picking the same file
     },
 
-    askDelete(row) { this.deleteTarget = row; this.deleteOpen = true; },
+    askDelete(row) {
+      this.deleteTarget = row;
+      this.deleteOpen = true;
+    },
     async confirmDelete() {
       if (!this.deleteTarget) return;
       this.deleteBusy = true;
       try {
-        await App.services.api.delete(this.def.apiPath + '/' + encodeURIComponent(this.deleteTarget[this.def.primaryKey]));
+        await App.services.api.delete(this.def.apiPath + "/" + encodeURIComponent(this.deleteTarget[this.def.primaryKey]));
         this.deleteOpen = false;
         this.deleteTarget = null;
         await this.load();
       } catch (e) {
-        this.error = App.services.apiErrors.messageFor(e, 'Could not delete.');
+        this.error = App.services.apiErrors.messageFor(e, "Could not delete.");
       } finally {
         this.deleteBusy = false;
       }
