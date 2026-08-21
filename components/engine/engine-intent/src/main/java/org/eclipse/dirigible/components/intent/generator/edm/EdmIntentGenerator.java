@@ -502,10 +502,22 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             List<Map<String, Object>> relations = new ArrayList<>();
             boolean compositionAssigned = false;
             for (RelationIntent relation : entity.getRelations()) {
-                if (!"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
+                if (!"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())
+                        && !"subset".equals(relation.getKind())) {
                     continue;
                 }
                 if (relation.getName() == null || relation.getTo() == null) {
+                    continue;
+                }
+                // A subset relation lowers to ONE plain VARCHAR property on the declaring entity - the
+                // MULTISELECT widget over the target's rows - never an FK: no relationship* attributes
+                // (the schema template emits a foreign key gated solely on relationshipEntityName) and
+                // no <relation> element, so no diagram edge and no FK constraint can appear. The where:
+                // option filter rides the same optionsFilter scalars the to-one dropdowns use.
+                if ("subset".equals(relation.getKind())) {
+                    Map<String, Object> subsetProperty = subsetProperty(name, relation, byName.get(relation.getTo()));
+                    putOptionsFilter(subsetProperty, relation, null);
+                    properties.add(subsetProperty);
                     continue;
                 }
                 // A cross-model relation references an entity owned by another intent model: emit a
@@ -1319,6 +1331,49 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * Plain value property added to the owning entity for a {@code subset} relation: the record holds a
+     * subset of the target's rows as ONE comma-separated key list ({@code "1,3"}, ascending,
+     * de-duplicated; empty selection = null), rendered as a MULTISELECT over the target's rows. It is
+     * deliberately NOT an FK property: it carries no {@code relationship*} attributes (the schema
+     * template emits a foreign key gated solely on {@code relationshipEntityName}) and no
+     * {@code <relation>} element - the option source is the dedicated {@code widgetOptionsEntityName}
+     * plus the same {@code widgetDropDownKey}/{@code widgetDropDownValue} pair every option-loading
+     * template block already reads. {@code widgetPattern} is the server-side shape guard - the only
+     * one, since no FK constrains the column; ascending order and de-duplication stay the client's
+     * normalization.
+     */
+    private static Map<String, Object> subsetProperty(String ownerEntity, RelationIntent relation, EntityIntent target) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("name", IntentNaming.pascalCase(relation.getName()));
+        p.put("description", relation.getDescription() == null ? "" : relation.getDescription());
+        p.put("tooltip", "");
+        p.put("dataName", IntentNaming.upperSnake(ownerEntity) + "_" + IntentNaming.upperSnake(relation.getName()));
+        p.put("dataType", "VARCHAR");
+        // The length is deliberately not authorable (the value shape is normative), so headroom is the
+        // only safety valve: 512 holds ~100 four-digit keys - a "small lookup" by any measure - while
+        // an overflow would fail at the DB with nothing at authoring time to warn.
+        p.put("dataLength", "512");
+        boolean notNull = relation.isRequired();
+        p.put("dataNullable", notNull ? "false" : "true");
+        if (notNull) {
+            // "At least one selected": an empty selection stores null, so NOT NULL is the whole rule.
+            p.put("isRequiredProperty", "true");
+        }
+        p.put("auditType", "NONE");
+        p.put("widgetType", "MULTISELECT");
+        p.put("widgetSize", relation.getSize() == null ? ""
+                : relation.getSize()
+                          .toString());
+        p.put("widgetLength", "20");
+        p.put("widgetIsMajor", relation.isMajor() ? "true" : "false");
+        p.put("widgetOptionsEntityName", relation.getTo());
+        p.put("widgetDropDownKey", keyFieldName(target));
+        p.put("widgetDropDownValue", labelFieldName(target));
+        p.put("widgetPattern", "^\\d+(,\\d+)*$");
+        return p;
+    }
+
+    /**
      * FK property for a cross-model {@code manyToOne}/{@code oneToOne} relation. Like
      * {@link #relationProperty} but the target lives in another model: the dropdown is sourced from the
      * owner's REST service (via the sibling {@code PROJECTION} entity, matched by
@@ -1926,7 +1981,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /** The property keys a related register's column carries into the {@code .model}. */
     private static final List<String> RELATED_COLUMN_KEYS = List.of("name", "widgetLabel", "dataName", "dataType", "dataScale",
             "widgetType", "widgetPattern", "widgetDropDownKey", "widgetDropDownValue", "relationshipEntityName",
-            "relationshipEntityPerspectiveName", "sensitiveProperty", "referencedModel");
+            "relationshipEntityPerspectiveName", "widgetOptionsEntityName", "sensitiveProperty", "referencedModel");
 
     /**
      * Emits each entity's {@code related:} declarations as the {@code relatedEntities} model attribute

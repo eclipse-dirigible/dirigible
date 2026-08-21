@@ -187,16 +187,19 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The entity's to-one relations referenced by at least one seed row (by authored relation name), in
-     * declaration order. Each becomes an FK column {@code <ENTITY>_<RELATION>} - the same
-     * {@code dataName} the EDM generator gives the FK property.
+     * The entity's to-one and subset relations referenced by at least one seed row (by authored
+     * relation name), in declaration order. Each becomes a column {@code <ENTITY>_<RELATION>} - the
+     * same {@code dataName} the EDM generator gives the FK / value property. A subset cell is the
+     * literal comma-separated key list ({@code "1,3"}); {@code formatCell} quotes it, which CSVIM's
+     * enclosing-quote parsing handles.
      */
     private static List<String> referencedRelationColumns(EntityIntent entity, SeedIntent seed) {
         List<String> columns = new ArrayList<>();
         for (RelationIntent relation : entity.getRelations()) {
             String name = relation.getName();
-            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
-            if (name == null || !toOne) {
+            boolean hasColumn =
+                    "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()) || "subset".equals(relation.getKind());
+            if (name == null || !hasColumn) {
                 continue;
             }
             for (Map<String, Object> row : seed.getRows()) {

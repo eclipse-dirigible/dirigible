@@ -305,6 +305,7 @@ final class ModelParameterProcessor {
         collectMasterProperties(property, entity);
         collectReferencedProjections(property, entity, entities);
         resolveDropdown(property, entity, parameters);
+        resolveMultiselect(property, entity, entities, parameters);
     }
 
     /**
@@ -482,6 +483,59 @@ final class ModelParameterProcessor {
         // folder name while the controllers live under the sanitized one, so this must be built from
         // the raw folder rather than by rewriting the controller URL.
         property.put("widgetDropdownAppUrl", "/services/web/" + targetProject + "/gen/" + targetGenFolder + "/index.html");
+    }
+
+    /**
+     * Builds the option-source lookup URLs for a MULTISELECT property - a plain value column holding a
+     * subset of a lookup entity's keys, whose widget offers that entity's rows. Deliberately a sibling
+     * of {@link #resolveDropdown}, never a widened gate: a multiselect is not a relation, so none of
+     * the relation-only concerns there (projections, personal/partner identity, the add-new dialog, the
+     * target repository) apply, and the two differ on exactly the inputs the whole method keys on -
+     * where the target's name and its perspective come from. An unresolvable target leaves the URLs
+     * unset, so the widget degrades to an empty select (the option-loading blocks gate on
+     * {@code widgetDropdownControllerUrl}), matching {@code resolveDropdown}'s convention.
+     *
+     * @param property the property
+     * @param entity the owning entity
+     * @param entities every entity in the model
+     * @param parameters the generation parameters
+     */
+    private static void resolveMultiselect(Map<String, Object> property, Map<String, Object> entity, List<Map<String, Object>> entities,
+            Map<String, Object> parameters) {
+        if (!"MULTISELECT".equals(str(property, "widgetType"))) {
+            return;
+        }
+        String optionsEntity = str(property, "widgetOptionsEntityName");
+        if (optionsEntity == null || optionsEntity.isEmpty()) {
+            return;
+        }
+        Map<String, Object> target = findEntity(entities, optionsEntity);
+        if (target == null) {
+            return;
+        }
+        // The SETTING perspective rewrite happens in ModelGenerator at render time - AFTER this
+        // processor - so a settings target's raw perspectiveName would bake a URL the target never
+        // publishes under.
+        String perspective = "SETTING".equals(str(target, "type")) ? "Settings" : str(target, "perspectiveName");
+        if (perspective == null || perspective.isEmpty()) {
+            return;
+        }
+        entity.put("hasDropdowns", Boolean.TRUE);
+        String targetProject = str(parameters, "projectName");
+        String targetGenFolder = str(parameters, "genFolderName");
+        if (!truthy(parameters, "javaRuntime")) {
+            property.put("widgetDropdownUrl", "/services/ts/" + targetProject + "/gen/" + targetGenFolder + "/api/" + perspective + "/"
+                    + optionsEntity + "Service.ts");
+            property.put("widgetDropdownControllerUrl", "/services/ts/" + targetProject + "/gen/" + targetGenFolder + "/api/" + perspective
+                    + "/" + optionsEntity + "Controller.ts");
+            return;
+        }
+        String javaGen = NamingHelper.sanitizeJavaIdentifier(targetGenFolder);
+        String javaPerspective = NamingHelper.sanitizeJavaIdentifier(perspective);
+        String javaUrl =
+                "/services/java/" + targetProject + "/gen/" + javaGen + "/api/" + javaPerspective + "/" + optionsEntity + "Controller";
+        property.put("widgetDropdownUrl", javaUrl);
+        property.put("widgetDropdownControllerUrl", javaUrl);
     }
 
     /**

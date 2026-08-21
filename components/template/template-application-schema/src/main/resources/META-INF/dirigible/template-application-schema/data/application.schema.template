@@ -95,7 +95,9 @@
                         "name": "Id"
                     },
 #foreach ($property in $model.properties)
-#if(($property.dataType == "VARCHAR" || $property.dataType == "CHAR" || $property.dataType == "CLOB") && !$property.dataPrimaryKey && !$property.relationshipEntityName && $property.isCalculatedProperty != "true" && (!$property.auditType || $property.auditType == "NONE"))
+## A MULTISELECT column is a VARCHAR, but its value is a key list ("1,3") - translating it would
+## hand the Translator an id list to overlay, so it is excluded from the language table.
+#if(($property.dataType == "VARCHAR" || $property.dataType == "CHAR" || $property.dataType == "CLOB") && !$property.dataPrimaryKey && !$property.relationshipEntityName && $property.widgetType != "MULTISELECT" && $property.isCalculatedProperty != "true" && (!$property.auditType || $property.auditType == "NONE"))
                     {
                         "type": "${property.dataType}",
 #if($property.dataLength)

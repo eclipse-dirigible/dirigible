@@ -291,6 +291,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: name, type: string, required: true, length: 100 }
                 relations:
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                  # subset (#6878): a VALUE set over a small lookup - one csv column ("1,3"),
+                  # never a link entity, never an FK. Campaign carries the unseeded REST round-trip
+                  # (it is POSTed by the lock tests, so seeding it would collide with the identity
+                  # sequence); the seeded carrier is Bulletin below.
+                  - { name: channels, kind: subset, to: Channel }
+
+              # The subset relation's lookup: a plain settings nomenclature the widget offers.
+              - name: Channel
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 60 }
+
+              # The SEEDED subset carrier, never POSTed: proves the seed's relation key lands as
+              # the quoted csv column and CSVIM imports it (the silent-zero failure this IT exists for).
+              - name: Bulletin
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: title, type: string, required: true, length: 100 }
+                relations:
+                  - { name: channels, kind: subset, to: Channel }
 
               # locksWithMaster: false - the deliberate post-lock collection (#6700). It is the
               # negative control for the inherited lock below: notes keep their writes after the
@@ -1280,6 +1301,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { id: 1, name: DRAFT,     stage: draft }
                   - { id: 2, name: POSTED,    stage: live }
                   - { id: 3, name: CANCELLED, stage: cancelled }
+              - name: channels
+                entity: Channel
+                rows:
+                  - { id: 1, name: Email }
+                  - { id: 2, name: Social }
+                  - { id: 3, name: Print }
+              # The subset value is seeded by the relation's authored name, in the normative
+              # shape - a quoted csv cell ("1,3"); the second row proves an omitted set stays null.
+              - name: bulletins
+                entity: Bulletin
+                rows:
+                  - { id: 1, title: Welcome, channels: "1,3" }
+                  - { id: 2, title: Plain }
               - name: zones
                 entity: Zone
                 rows:
@@ -1682,6 +1716,26 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // unknown/mis-cased key is dropped silently and CSVIM then skips the rows.
         String accountsCsv = contentOf("accounts.csv");
         assertTrue(accountsCsv.contains("ACCOUNT_PARENT"), "a seed row's relation key must emit the FK column into the seed CSV");
+
+        // subset (#6878): ONE plain VARCHAR column carrying the selected keys as a csv - the
+        // schema gets the column and must NOT grow a foreign key over it (the schema's FK gate keys
+        // on relationshipEntityName alone, which a subset relation deliberately never carries).
+        assertTrue(schema.contains("CAMPAIGN_CHANNELS") && schema.contains("BULLETIN_CHANNELS"),
+                "a subset relation must emit its value column into the schema");
+        assertFalse(schema.contains("Campaign_Channel") || schema.contains("Bulletin_Channel"),
+                "a subset relation must not emit an FK structure - its column is a value list, not a reference");
+        String subsetFormPage = contentOf("gen/emission/js/components/pages/Campaign/CampaignFormPage.js");
+        assertTrue(subsetFormPage.contains("Channels: [],"),
+                "the form model must initialize a subset value as an ARRAY - that is what puts the select in multiple mode");
+        assertTrue(subsetFormPage.contains("/api/settings/ChannelController"),
+                "the multiselect options must load from the lookup's controller under the Settings perspective");
+        assertTrue(subsetFormPage.contains(".split(',')") && subsetFormPage.contains(".join(',')"),
+                "the form must split the stored csv on load and join it back to the normative shape on save");
+        // The seeded value column: the relation-name key emits the quoted csv cell (the cell carries
+        // the field delimiter, so an unquoted emission would shear the row apart).
+        String bulletinsCsv = contentOf("bulletins.csv");
+        assertTrue(bulletinsCsv.contains("BULLETIN_CHANNELS"), "a seed row's subset key must emit the value column into the seed CSV");
+        assertTrue(bulletinsCsv.contains("\"1,3\""), "the subset seed cell must be quoted - it carries the field delimiter");
         assertTrue(entryRepository.contains("EntryLineRepository"),
                 "aggregate: true must make the master repository recompute totals from its items child");
 
@@ -2694,6 +2748,40 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("$", hasSize(2)),
                 30);
+
+        // subset (#6878): the seeded value survived CSVIM - both bulletin rows imported, row 1
+        // carrying the csv VERBATIM (a plain column round-trips untouched) and row 2's omitted set
+        // null - and a REST write round-trips the normative shape unchanged.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/bulletin/BulletinController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(2))
+                                                 .body("find { it.Id == 1 }.Channels", equalTo("1,3"))
+                                                 .body("find { it.Id == 2 }.Channels", nullValue()),
+                30);
+        AtomicInteger multiCampaign = new AtomicInteger();
+        restAssuredExecutor.execute(() -> multiCampaign.set(given().contentType("application/json")
+                                                                   .body("{\"Name\":\"Multi\",\"Channels\":\"1,3\"}")
+                                                                   .when()
+                                                                   .post(API + "/campaign/CampaignController")
+                                                                   .then()
+                                                                   .statusCode(200)
+                                                                   .extract()
+                                                                   .path("Id")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/campaign/CampaignController/" + multiCampaign.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Channels", equalTo("1,3")));
+        // The emitted widgetPattern is the ONLY server-side shape guard (no FK constrains the
+        // column), so an API write that is not a comma-separated id list must be refused.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\"BadMulti\",\"Channels\":\"Email,Print\"}")
+                                                 .when()
+                                                 .post(API + "/campaign/CampaignController")
+                                                 .then()
+                                                 .statusCode(400));
 
         // multilingual read-time overlay: the bg translation replaces the seeded name.
         restAssuredExecutor.execute(() -> given().header("Accept-Language", "bg")

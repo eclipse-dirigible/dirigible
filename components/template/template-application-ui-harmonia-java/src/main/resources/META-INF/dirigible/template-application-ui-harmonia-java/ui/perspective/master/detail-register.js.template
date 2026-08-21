@@ -81,6 +81,10 @@ App.registerDetail('${masterEntity}', {
 #if($property.lookupColumns)#foreach($lc in $property.lookupColumns)
     { name: '${property.name}_${lc.name}', label: '${lc.label}', via: { column: '${property.name}', field: '${lc.name}' } },
 #end#end
+#elseif($property.widgetType == "MULTISELECT")
+## A subset column: the cell is a key LIST ("1,3"), so the consumer resolves EACH key through
+## the lookup and joins the labels - the `multi` flag is what routes it there (never comma-sniffing).
+    { name: '${property.name}', label: '${clabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', multi: true, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}' }#sensitiveMeta($property) },
 #elseif($property.isDateType)
     { name: '${property.name}', label: '${clabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', date: true#sensitiveMeta($property) },
 #elseif($property.isFloatType)
@@ -107,6 +111,11 @@ App.registerDetail('${masterEntity}', {
 #set($ereadonly = (($property.isCalculatedProperty == "true" && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate || $property.calculatedActionOnUpdate)) || $property.isReadOnlyProperty == "true"))
 #if($property.widgetType == "DROPDOWN")
     { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: 'DROPDOWN', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}', entity: '${property.relationshipEntityName}', creatable: #if($property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings")true#{else}false#end }#dependsOnMeta($property)#optionsFilterMeta($property)#hierMeta($property)#sensitiveMeta($property)#defaultMeta($property) },
+#elseif($property.widgetType == "MULTISELECT")
+## No `creatable` add-new (the return path writes a single value) and no dependsOn/hier metadata -
+## a subset relation carries none of those. The static `where:` filter travels so the dialog chooser
+## can honour it.
+    { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: 'MULTISELECT', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, multi: true, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}', entity: '${property.widgetOptionsEntityName}', creatable: false }#optionsFilterMeta($property)#sensitiveMeta($property) },
 #else
     { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: '${property.widgetType}', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, date: #if($property.isDateType)true#{else}false#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end#calcMeta($property)#dependsOnMeta($property)#patternMeta($property)#sensitiveMeta($property)#defaultMeta($property) },
 #end

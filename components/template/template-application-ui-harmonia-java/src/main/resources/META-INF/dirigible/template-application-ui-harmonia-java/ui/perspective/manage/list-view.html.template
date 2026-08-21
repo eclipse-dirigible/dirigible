@@ -194,7 +194,9 @@
                 <th x-h-table-head scope="col"></th>
               </tr>
               <!-- Per-column filter row: server-side (POST /search). String columns match LIKE,
-                   FK columns are a dropdown (EQ by id), numbers/dates match EQ. -->
+                   FK columns are a dropdown (EQ by id), numbers/dates match EQ. A MULTISELECT column
+                   (type 'none') keeps its header cell but offers no filter - its value is a key list,
+                   which neither EQ nor LIKE can match honestly. -->
               <tr x-h-table-row>
                 <template x-for="col in filterColumns" :key="col.name">
                   <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''">
@@ -205,7 +207,7 @@
                         <option :value="opt.value" x-text="opt.text"></option>
                       </template>
                     </select>
-                    <input x-show="col.type !== 'fk'" x-model="columnFilters[col.name]"
+                    <input x-show="col.type !== 'fk' && col.type !== 'none'" x-model="columnFilters[col.name]"
                            :type="col.type === 'date' ? 'date' : 'text'"
                            @input.debounce.400ms="applyServerFilter()"
                            :placeholder="T('$projectName:${tprefix}.defaults.filter', 'Filter…')"
@@ -233,6 +235,8 @@
                   <td x-h-table-cell#visibleGate($property)><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}))" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>
 #elseif($property.widgetType == "DROPDOWN")
                   <td x-h-table-cell#visibleGate($property) x-text="lookupText('${property.name}', row.${property.name})"></td>
+#elseif($property.widgetType == "MULTISELECT")
+                  <td x-h-table-cell#visibleGate($property) x-text="multiLookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.isDateType)
                   <td x-h-table-cell#visibleGate($property) x-text="displayValue(row.${property.name}, true)"></td>
 #elseif($property.isFloatType)
@@ -340,6 +344,8 @@
             <span><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', selected?.${property.name}))" x-show="lookupText('${property.name}', selected?.${property.name})" x-text="lookupText('${property.name}', selected?.${property.name})"></span></span>
 #elseif($property.widgetType == "DROPDOWN")
             <span x-text="lookupText('${property.name}', selected?.${property.name})"></span>
+#elseif($property.widgetType == "MULTISELECT")
+            <span x-text="multiLookupText('${property.name}', selected?.${property.name})"></span>
 #elseif($property.isFloatType)
             <span x-text="formatNumber(selected?.${property.name}, '${property.formatPattern}')"></span>
 #else

@@ -758,6 +758,46 @@ carrying its partial `amount`:
       - { name: CustomerPayment, kind: manyToOne, to: CustomerPayment, model: customer-payments, required: true }
 ```
 
+### Subset (subset) - a value set, not a row set
+
+A record often holds a SUBSET of a small lookup's rows - which payment methods a schedule accepts,
+which channels a campaign runs on, which weekdays a rule applies to - with no data on the pairing,
+no navigation from the lookup back, and nothing consuming the pairs as rows. That is a
+`kind: subset` relation, NOT a `manyToMany` (whose link entity would be pure overhead here):
+
+```yaml
+  - name: Schedule
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+    relations:
+      - { name: payerTypes, kind: subset, to: PayerType, required: true }
+```
+
+The record stores the selected target keys as ONE value - comma-separated, ascending,
+de-duplicated (`"1,3"`); an empty selection is null. That shape is normative and never authorable:
+no type, no length, no pattern, no delimiter (the generated column is a VARCHAR(512) with the
+`^\d+(,\d+)*$` server-side guard). The generated UI renders a searchable multi-select over the
+target's rows on every editable surface, and every list/register/export resolves the keys to their
+labels. A seed row sets the value by the relation's authored name in the same shape
+(`payerTypes: "1,3"`).
+
+**Attributes:** `to` (mandatory, an entity of THIS model - a cross-model `model:` is rejected: the
+stored keys belong to the owner model's seeds), `required` (means "at least one selected" - the
+column is NOT NULL and an empty selection is refused), `where` (the same single static option
+filter a to-one accepts), `major` (list-column visibility), `size` is accepted but the control
+always spans the full row, `description`.
+
+**Rejected on this kind** (each a parse error): `composition`, `init`, `function`, `dependsOn`,
+`through`, `personal`/`partner`, calculated actions, `show`, `leafOnly`, `model:`. A report
+dimension or filter over a subset relation is rejected too - the stored value is one column, so it
+cannot group, join or compare; and an entity-level `unique:` key cannot span it.
+
+**When to choose which:** `subset` when the pairing carries no data and nothing consumes rows;
+the moment it needs bridge fields (an amount, a valid-from), reverse navigation (`related:`), a
+`forEach` fan-out, roll-ups or reporting, it has outgrown a value - use `kind: manyToMany` or
+author the intermediate entity. With `history: true` the change trail records the raw key list
+(ids, not labels) - correct by construction.
+
 ### function - the entity's presentation role (explicit template selection)
 
 **Use when:** you want to state *explicitly* how an entity (or a field / relation) is presented, instead
@@ -2654,7 +2694,7 @@ or a seeded name.
 |---|---|
 | field `type` | `string`, `text`, `integer`, `int`, `long`, `decimal`, `double`, `boolean`, `date`, `timestamp`, `uuid`, `month` (a `YYYY-MM` string, month picker), `week` (a `YYYY-Www` ISO-week string, week picker) |
 | primary-key `type` | `integer`, `int`, `long` (integer only) |
-| relation `kind` | `oneToMany`, `manyToOne`, `oneToOne`, `manyToMany` |
+| relation `kind` | `oneToMany`, `manyToOne`, `oneToOne`, `manyToMany`, `subset` |
 | step `kind` | `userTask`, `serviceTask`, `decision`, `script`, `wait`, `end` |
 | wait event | `onCreate`, `onUpdate`, `onTransition` (never `onDelete`) |
 | userTask timers | `timeout: { after: <ISO-8601 duration>, then: <step> }`, `expire: { until: <date/timestamp field>, then: <step> }` |
@@ -2719,6 +2759,7 @@ or a seeded name.
 - "reference a Customer/Country/Currency/UoM owned by another app" -> **uses + cross-model relation**
 - "show the invoices / timesheet lines / journal entries that reference THIS record, on its own page" -> **`related:`** on the referenced entity (read-only; a composition child is a detail instead)
 - "many-to-many between X and Y" -> **`kind: manyToMany`** (materializes the intermediate entity); **with extra fields on the link** -> author the **intermediate entity** (composition + manyToOne)
+- "pick several of a lookup on one record - tags, categories, supported channels, weekdays (no data on the pairing)" -> **`kind: subset`** (a multi-select over the lookup's rows, stored as one comma-separated key list - never a link entity)
 
 ### expansions - generate child rows from a date span
 

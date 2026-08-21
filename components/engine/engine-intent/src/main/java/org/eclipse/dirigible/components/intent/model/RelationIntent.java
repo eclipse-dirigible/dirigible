@@ -14,7 +14,11 @@ import java.util.Map;
 
 /**
  * Relationship between two {@link EntityIntent}s. {@link #kind} is one of {@code oneToMany},
- * {@code manyToOne}, {@code oneToOne}, {@code manyToMany}.
+ * {@code manyToOne}, {@code oneToOne}, {@code manyToMany}, {@code subset}. A {@code subset} is a
+ * set-valued reference to a small lookup entity: the record holds a subset of the target's rows as
+ * a single value (the selected keys, comma-separated, ascending, de-duplicated; empty selection =
+ * null), never as rows - no FK, no link entity, no reverse navigation. For rows (bridge data,
+ * forEach/related/rollups/reports), use {@code manyToMany} or author the intermediate entity.
  */
 public class RelationIntent {
 

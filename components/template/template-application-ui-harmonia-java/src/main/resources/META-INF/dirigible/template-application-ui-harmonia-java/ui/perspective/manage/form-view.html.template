@@ -109,7 +109,7 @@
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
 #if($property.widgetLabel)#set($label = $property.widgetLabel)#else#set($label = $property.name)#end
 #if($property.widgetSize)#set($span = $property.widgetSize)#else#set($span = "6")#end
-#if($property.widgetType == "TEXTAREA" || $property.widgetType == "CHECKBOX")#set($span = "12")#end
+#if($property.widgetType == "TEXTAREA" || $property.widgetType == "CHECKBOX" || $property.widgetType == "MULTISELECT")#set($span = "12")#end
 #if($lookup)#set($span = "12")#end
       <!-- ${property.name} (${property.widgetType}) -->
       <div x-h-field#if($span == "12") class="col-span-full"#else style="grid-column: span ${span};"#end#visibleGate($property) :data-invalid="!!errors.${property.name}">
@@ -174,6 +174,27 @@
         </div>
 #end
         </template>
+#elseif($property.widgetType == "MULTISELECT")
+        <!-- Subset (intent `kind: subset`): the record holds a SUBSET of the lookup's rows
+             as one csv ("1,3"). The same x-h-select contract as a dropdown - Harmonia switches into
+             multiple mode because the bound model is an ARRAY (split on load, joined on save), the
+             trigger shows the selected labels comma-joined. Refresh reloads the option set; there is
+             deliberately no "New" button - the add-dialog return path writes a single value, and a
+             lookup this widget targets is curated, not grown mid-form. -->
+        <div class="hbox gap-1 items-center">
+          <div x-h-select data-filter="contains" class="grow">
+            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
+            <div x-h-select-content>
+              <div x-h-select-search></div>
+              <div x-h-select-list>
+                <template x-for="opt in options${property.name}" :key="opt.value">
+                  <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+                </template>
+              </div>
+            </div>
+          </div>
+          <button type="button" x-h-button data-variant="transparent" class="shrink-0" data-size="icon" x-show="!isPreview" aria-label="Refresh" @click="loadOptions()"><svg x-h-lucide data-lucide="refresh-cw"></svg></button>
+        </div>
 #elseif($property.widgetType == "NUMBER")
         <!-- step="any": without it the browser default step=1 rejects fractional input on DECIMAL fields. -->
         <div x-h-input-number>
@@ -480,6 +501,8 @@
               <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${rolabel}')"></span>
 #if($property.widgetType == "DROPDOWN")
               <span class="text-sm break-all" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></span>
+#elseif($property.widgetType == "MULTISELECT")
+              <span class="text-sm break-all" x-text="(Array.isArray(form.${property.name}) ? form.${property.name} : String(form.${property.name} || '').split(',')).filter(v => v !== '').map(v => (options${property.name}.find(o => String(o.value) === String(v).trim()) || {}).text || v).join(', ')"></span>
 #else
               <span class="text-sm break-all" x-text="form.${property.name}"></span>
 #end

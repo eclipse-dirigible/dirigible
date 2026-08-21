@@ -34,7 +34,7 @@ document.addEventListener('alpine:init', () => {
     form: {
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name")
-      ${property.name}: #if($property.widgetType == "CHECKBOX")false#{else}''#end,
+      ${property.name}: #if($property.widgetType == "CHECKBOX")false#elseif($property.widgetType == "MULTISELECT")[]#{else}''#end,
 #end
 #end
     },
@@ -83,6 +83,11 @@ document.addEventListener('alpine:init', () => {
 #if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS") && !$property.sensitiveProperty)
           if (this.form.${property.name} != null && this.form.${property.name} !== '') this.form.${property.name} = String(this.form.${property.name});
 #end
+#if($property.widgetType == "MULTISELECT" && !$property.sensitiveProperty)
+          // MULTISELECT: split the stored csv into the ARRAY the multiple-mode select binds.
+          this.form.${property.name} = (this.form.${property.name} == null || this.form.${property.name} === '')
+              ? [] : String(this.form.${property.name}).split(',').map(v => v.trim());
+#end
 #end
           this.state = 'default';
         } catch (e) {
@@ -93,8 +98,10 @@ document.addEventListener('alpine:init', () => {
         this.loadChildren();
 #end
       } else {
-        // Prefill from query params - a parent panel presets its FK (and a clicked date).
+        // Prefill from query params - a parent panel presets its FK (and a clicked date). A
+        // MULTISELECT field (an ARRAY - that is what keeps the select in multiple mode) is skipped.
         for (const key of Object.keys(this.form)) {
+          if (Array.isArray(this.form[key])) continue;
           const v = this.queryParam(key);
           if (v !== null) this.form[key] = v;
         }
@@ -111,7 +118,7 @@ document.addEventListener('alpine:init', () => {
     async loadOptions() {
       const loaded = {};
 #foreach($property in $properties)
-#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS") && !$property.sensitiveProperty && $property.name != $skipOwnerFk && $property.name != $skipParentFk)
+#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && !$property.sensitiveProperty && $property.name != $skipOwnerFk && $property.name != $skipParentFk)
       try {
         const rows = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
         loaded['${property.name}'] = (rows || []).map(r => ({ value: r.${property.widgetDropDownKey}, text: r.${property.widgetDropDownValue} }));
@@ -148,6 +155,14 @@ document.addEventListener('alpine:init', () => {
 #foreach($property in $properties)
 #if(($property.widgetType == "DATE" || $property.widgetType == "DATETIME-LOCAL") && !$property.sensitiveProperty)
       if (payload.${property.name} != null) payload.${property.name} = window.HarmoniaFormat.toPayload(payload.${property.name}, '${property.widgetType}');
+#end
+#if($property.widgetType == "MULTISELECT" && !$property.sensitiveProperty)
+      // MULTISELECT: join the array back to the normative csv (de-duplicated, ascending); empty -> null.
+      payload.${property.name} = Array.isArray(payload.${property.name}) && payload.${property.name}.length
+          ? [...new Set(payload.${property.name}.map(String))]
+              .sort((a, b) => (Number(a) - Number(b)) || String(a).localeCompare(String(b)))
+              .join(',')
+          : null;
 #end
 #end
       return payload;

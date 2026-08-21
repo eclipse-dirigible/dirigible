@@ -114,7 +114,7 @@ public final class IntentParser {
     private static final Set<String> INTEGER_PK_TYPES = Set.of("integer", "int", "long");
     /** Numeric field types a sum roll-up (its field / {@code of} / capacity / balance) may use. */
     private static final Set<String> NUMERIC_TYPES = Set.of("integer", "int", "long", "decimal", "double");
-    private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany");
+    private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany", "subset");
     /** Implemented entity {@code function} values (lower-cased), selecting the entity's UI template. */
     private static final Set<String> ENTITY_FUNCTIONS =
             Set.of("document", "documentitem", "master", "detail", "list", "setting", "calendar", "attachment", "snapshot");
@@ -2537,6 +2537,13 @@ public final class IntentParser {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] has unknown kind ["
                             + relation.getKind() + "]");
                 }
+                // A subset relation holds the selected target keys as ONE value - neither a to-one FK
+                // nor a row set - so it gets its own validation block and none of the association-shaped
+                // checks below (composition, cross-model, dependsOn, leafOnly, personal/partner).
+                if ("subset".equals(relation.getKind())) {
+                    validateSubset(entity, relation, entityNames, byName, issues);
+                    continue;
+                }
                 // ManyToManyExpander consumed every n:m before this ran, so a surviving manyToMany is one
                 // it already refused, with a message naming what the author wrote. The association-shaped
                 // checks below would only pile contradictory advice (a composition kind, a target FK, a
@@ -2667,6 +2674,80 @@ public final class IntentParser {
     }
 
     /**
+     * A {@code subset} relation is a set-valued reference to a small lookup entity: the record holds a
+     * subset of the target's rows as a single value (the selected keys, comma-separated, ascending,
+     * de-duplicated; empty selection = null), never as rows. It lowers to a plain column plus a
+     * multi-select widget - no FK, no link entity - so everything that describes a to-one FK or
+     * consumes rows is rejected here rather than carried nowhere. The target must be an entity of this
+     * model: the stored value is the target's seed keys, which belong to the owner model's seeds, so a
+     * cross-model target is refused naming the limit (the same locality rule status stages follow).
+     *
+     * @param entity the declaring entity
+     * @param relation the subset relation
+     * @param entityNames the declared entity names of this model
+     * @param byName the declared entities of this model, by name
+     * @param issues the collecting issue list
+     */
+    private static void validateSubset(EntityIntent entity, RelationIntent relation, Set<String> entityNames,
+            Map<String, EntityIntent> byName, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        if (relation.isCrossModel()) {
+            issues.add(subject + " is a subset relation so it cannot be cross-model (model: " + relation.getModel()
+                    + ") - the stored value is the target's seed keys, which belong to the owner model. A subset relation"
+                    + " resolves against this model only. Seed the lookup here, or author an explicit intermediate entity"
+                    + " (manyToMany supports a cross-model target)");
+        } else if (isBlank(relation.getTo())) {
+            issues.add(subject + " has no target");
+        } else if (!entityNames.contains(relation.getTo())) {
+            issues.add(subject + " points to unknown entity [" + relation.getTo() + "]");
+        }
+        List<String> unsupported = new ArrayList<>();
+        if (relation.isComposition()) {
+            unsupported.add("composition");
+        }
+        if (!isBlank(relation.getInit())) {
+            unsupported.add("init");
+        }
+        if (!isBlank(relation.getFunction())) {
+            unsupported.add("function");
+        }
+        if (relation.getDependsOn() != null) {
+            unsupported.add("dependsOn");
+        }
+        if (!isBlank(relation.getThrough())) {
+            unsupported.add("through");
+        }
+        if (relation.isPersonal() || relation.isPersonalReadOnly()) {
+            unsupported.add("personal");
+        }
+        if (relation.isPartner()) {
+            unsupported.add("partner");
+        }
+        if (relation.isCalculated()) {
+            unsupported.add("calculatedAction");
+        }
+        if (relation.getShow() != null && !relation.getShow()
+                                                   .isEmpty()) {
+            unsupported.add("show");
+        }
+        if (relation.isLeafOnly()) {
+            unsupported.add("leafOnly");
+        }
+        if (!unsupported.isEmpty()) {
+            issues.add(subject + " is a subset relation so it cannot declare " + unsupported
+                    + " - a subset relation holds the selected target keys as ONE value; those describe a to-one FK or a"
+                    + " row set. For rows (bridge data, reverse navigation, forEach/related/rollups/reports), use manyToMany"
+                    + " or author the intermediate entity");
+        }
+        if (relation.getSize() != null && (relation.getSize() < 1 || relation.getSize() > 12)) {
+            issues.add(subject + " size [" + relation.getSize() + "] must be a 12-column grid span between 1 and 12 (typically 3/4/6/12)");
+        }
+        if (relation.getWhere() != null) {
+            validateWhere(entity, relation, byName, issues);
+        }
+    }
+
+    /**
      * {@code unique:} declares the business keys spanning more than one column - what a row IS when no
      * single field says it. Every name must resolve to an own field or an own <b>to-one</b> relation of
      * the entity: a to-one contributes its foreign-key column, which is what a pair like
@@ -2718,7 +2799,11 @@ public final class IntentParser {
                 }
                 RelationIntent relation = relations.get(name);
                 if (relation != null) {
-                    if (!("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                    if ("subset".equals(relation.getKind())) {
+                        issues.add(subject + " names the subset relation [" + name
+                                + "] - its column holds a normalized set of the target's keys, not an identity. A uniqueness key over it"
+                                + " is not supported");
+                    } else if (!("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
                         issues.add(subject + " names [" + name + "], which is a " + relation.getKind()
                                 + " relation - only a field or a to-one relation has a column on this entity to constrain");
                     } else if (relation.isCrossModel()) {
@@ -3433,9 +3518,10 @@ public final class IntentParser {
     private static void validateWhere(EntityIntent entity, RelationIntent relation, java.util.Map<String, EntityIntent> byName,
             List<String> issues) {
         String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
-        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
-        if (!toOne) {
-            issues.add(subject + " declares where but only a manyToOne/oneToOne relation has a dropdown to filter");
+        boolean optionList =
+                "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()) || "subset".equals(relation.getKind());
+        if (!optionList) {
+            issues.add(subject + " declares where but only a manyToOne/oneToOne/subset relation has an option list to filter");
             return;
         }
         if (relation.isComposition()) {
@@ -6554,7 +6640,83 @@ public final class IntentParser {
             validateAgeingDimensions(model, report, issues);
             validateBalanceReport(model, report, issues);
             validateReportScope(model, report, issues);
+            validateSubsetReportReferences(model, report, issues);
         }
+    }
+
+    /**
+     * A report cannot reference a {@code subset} relation of its source: the stored value is the
+     * selected keys as ONE column ({@code "1,3"}), so a dimension over it would {@code GROUP BY} the
+     * literal list and a filter over it would compare against it - both well-formed SQL computing the
+     * wrong thing, with nothing at runtime to say so. Rejected at parse instead, naming the row-shaped
+     * alternative.
+     */
+    private static void validateSubsetReportReferences(IntentModel model, ReportIntent report, List<String> issues) {
+        EntityIntent source = null;
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null && entity.getName()
+                                                  .equals(report.getSource())) {
+                source = entity;
+            }
+        }
+        if (source == null) {
+            return; // a missing / unknown source is reported separately
+        }
+        Set<String> subsets = new HashSet<>();
+        for (RelationIntent relation : source.getRelations()) {
+            if ("subset".equals(relation.getKind()) && !isBlank(relation.getName())) {
+                subsets.add(relation.getName()
+                                    .toLowerCase(Locale.ROOT));
+            }
+        }
+        if (subsets.isEmpty()) {
+            return;
+        }
+        String rowAlternative = " - the stored value is the selected keys as one column, so it cannot group, join or compare;"
+                + " author an explicit intermediate entity (manyToMany) when the set must be reported on";
+        for (String dimension : report.getDimensions()) {
+            if (dimension == null || dimension.isBlank()) {
+                continue;
+            }
+            // A dimension is `field`, `relation`, `relation.field` or a function form (`month(x)`,
+            // `year(x)`, `ageing(x, [...])`) - the referenced property's FIRST segment is what may
+            // name a subset relation.
+            String token = dimension.trim();
+            int open = token.indexOf('(');
+            if (open >= 0) {
+                token = token.substring(open + 1);
+            }
+            int cut = indexOfAny(token, '.', ',', ')');
+            String first = (cut >= 0 ? token.substring(0, cut) : token).trim();
+            if (subsets.contains(first.toLowerCase(Locale.ROOT))) {
+                issues.add("report [" + report.getName() + "] dimension [" + dimension.trim() + "] is a subset relation" + rowAlternative);
+            }
+        }
+        if (report.getFilter() != null && !report.getFilter()
+                                                 .isBlank()) {
+            // Identifier tokens not preceded by a dot are the first segments the generator rewrites.
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(?<![.\\w])([A-Za-z_][A-Za-z0-9_]*)")
+                                                                     .matcher(report.getFilter());
+            while (matcher.find()) {
+                if (subsets.contains(matcher.group(1)
+                                            .toLowerCase(Locale.ROOT))) {
+                    issues.add("report [" + report.getName() + "] filter references the subset relation [" + matcher.group(1) + "]"
+                            + rowAlternative);
+                }
+            }
+        }
+    }
+
+    /** The first index of any of the given characters, or -1 when none occurs. */
+    private static int indexOfAny(String value, char... chars) {
+        for (int i = 0; i < value.length(); i++) {
+            for (char c : chars) {
+                if (value.charAt(i) == c) {
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 
     /**
@@ -7014,13 +7176,16 @@ public final class IntentParser {
     }
 
     /**
-     * A seed row's keys are the entity's own declared names: a field, or a to-one relation carrying the
-     * FK. The CSV generator emits a column per declared field plus one per referenced to-one relation
-     * and reads each cell by that exact name, so a key matching neither - a typo, a case slip
-     * ({@code contributionScheme} for the relation {@code ContributionScheme}), a collection relation
-     * that has no column - contributes nothing. That drop used to be silent, and when the missing
-     * column was a NOT NULL FK the import then skipped EVERY row, leaving an empty nomenclature behind
-     * a fully green pipeline. It is an error naming the key, the entity and the nearest declared name.
+     * A seed row's keys are the entity's own declared names: a field, a to-one relation carrying the
+     * FK, or a subset relation carrying its value column. The CSV generator emits a column per declared
+     * field plus one per referenced relation and reads each cell by that exact name, so a key matching
+     * neither - a typo, a case slip ({@code contributionScheme} for the relation
+     * {@code ContributionScheme}), a collection relation that has no column - contributes nothing. That
+     * drop used to be silent, and when the missing column was a NOT NULL FK the import then skipped
+     * EVERY row, leaving an empty nomenclature behind a fully green pipeline. It is an error naming the
+     * key, the entity and the nearest declared name. A subset relation's value is additionally checked
+     * against the normative shape (comma-separated ids) - CSVIM imports bypass the REST controller, so
+     * the generated pattern guard never sees a seed.
      */
     private static void validateSeedRowKeys(SeedIntent seed, EntityIntent entity, List<String> issues) {
         if (entity == null) {
@@ -7032,20 +7197,35 @@ public final class IntentParser {
                 declared.add(field.getName());
             }
         }
+        Set<String> subsets = new HashSet<>();
         for (RelationIntent relation : entity.getRelations()) {
             boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
-            if (relation.getName() != null && toOne) {
+            boolean subset = "subset".equals(relation.getKind());
+            if (relation.getName() != null && (toOne || subset)) {
                 declared.add(relation.getName());
+                if (subset) {
+                    subsets.add(relation.getName());
+                }
             }
         }
         for (Map<String, Object> row : seed.getRows()) {
             for (String key : row.keySet()) {
                 // `stage` is the lifecycle classification marker - metadata about the row, never a column.
-                if (declared.contains(key) || LifecycleStages.STAGE_KEY.equals(key)) {
+                if (LifecycleStages.STAGE_KEY.equals(key)) {
                     continue;
                 }
-                issues.add("seed [" + seed.getName() + "] row references [" + key + "] which is not a field or a to-one relation of ["
-                        + entity.getName() + "]" + UnknownKeyValidator.suggestion(key, declared));
+                if (!declared.contains(key)) {
+                    issues.add("seed [" + seed.getName() + "] row references [" + key + "] which is not a field or a to-one relation of ["
+                            + entity.getName() + "]" + UnknownKeyValidator.suggestion(key, declared));
+                    continue;
+                }
+                Object value = row.get(key);
+                if (subsets.contains(key) && value != null && !String.valueOf(value)
+                                                                     .matches("\\d+(,\\d+)*")) {
+                    issues.add("seed [" + seed.getName() + "] row sets the subset relation [" + key + "] to [" + value
+                            + "] - the value is the selected target ids, comma-separated (e.g. \"1,3\"). Selecting by seeded name"
+                            + " is not supported yet");
+                }
             }
         }
     }

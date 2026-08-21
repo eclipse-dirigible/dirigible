@@ -2367,6 +2367,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (target != null && target.propertyWidgets() != null) {
             for (Map.Entry<String, String> widget : target.propertyWidgets()
                                                           .entrySet()) {
+                // MULTISELECT is deliberately excluded: this set identifies FK relation properties, and
+                // a subset relation's property is a plain VARCHAR value list, never an FK.
                 if ("DROPDOWN".equals(widget.getValue()) || "DOCUMENT_STATUS".equals(widget.getValue())) {
                     names.add(widget.getKey());
                 }
