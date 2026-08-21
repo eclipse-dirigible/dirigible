@@ -54,6 +54,59 @@ class GeneratesIntentTest {
             """;
 
     /**
+     * The void-and-reissue shape of issue #6868: the source carries a lifecycle, and so does the target
+     * - with its statuses CLASSIFIED, since what retires a document is the {@code stage:}
+     * classification and nothing else. Ends at the {@code generates} entry's own keys, as the heads
+     * above do.
+     */
+    private static final String GENERATES_REOPEN_HEAD = """
+            name: fines
+            entities:
+              - name: FineStatus
+                function: Setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: DeclarationState
+                function: Setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Fine
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string }
+                relations:
+                  - { name: Status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+              - name: Declaration
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string }
+                relations:
+                  - { name: Fine,  kind: manyToOne, to: Fine }
+                  - { name: State, kind: manyToOne, to: DeclarationState, function: EntityStatus, init: 1 }
+            seeds:
+              - name: fine-statuses
+                entity: FineStatus
+                rows:
+                  - { id: 1, name: DRAFT }
+                  - { id: 2, name: IDENTIFIED }
+                  - { id: 3, name: DECLARED }
+              - name: declaration-states
+                entity: DeclarationState
+                rows:
+                  - { id: 1, name: NEW,       stage: draft }
+                  - { id: 2, name: FILED,     stage: live }
+                  - { id: 3, name: CANCELLED, stage: cancelled }
+                  - { id: 4, name: VOIDED,    stage: void }
+            generates:
+              - name: declaration-from-fine
+                from: Fine
+                to: Declaration
+                forEntity: Fine
+            """;
+
+    /**
      * The step-axis shape of issue #6800: a process that runs ON the create-from's source, and a log
      * entity to append rows to. Ends at the {@code generates} entry's own keys, as the head above does.
      */
@@ -1025,6 +1078,261 @@ class GeneratesIntentTest {
                      .stream()
                      .anyMatch(i -> i.contains("prompt")),
                 "got: " + ex.getIssues());
+    }
+
+    /**
+     * The whole point of the key (issue #6868): the source's completion flip is INVERTED when the
+     * target it produced is retired, so the ordinary trigger re-fires and mints the replacement. Both
+     * statuses are named, not numbered - the resolver turns them into seed ids before the typed
+     * mapping.
+     */
+    @Test
+    void aDeclaredReopenParses() {
+        IntentModel model = IntentParser.parse(GENERATES_REOPEN_HEAD + """
+                    event: { onTransition: Fine, when: "Status == IDENTIFIED" }
+                    map: { Fine: id }
+                    sourceStatus: DECLARED
+                    sourceStatusOnRetire: IDENTIFIED
+                """);
+        GeneratesIntent g = model.getGenerates()
+                                 .get(0);
+        assertEquals(3, g.getSourceStatus());
+        assertEquals(2, g.getSourceStatusOnRetire());
+        assertTrue(g.hasReopen());
+    }
+
+    /** A create-from that declares no reopen is unchanged - the key is opt-in. */
+    @Test
+    void withoutTheKeyThereIsNoReopen() {
+        IntentModel model = IntentParser.parse(GENERATES_REOPEN_HEAD + """
+                    event: { onTransition: Fine, when: "Status == IDENTIFIED" }
+                    map: { Fine: id }
+                    sourceStatus: DECLARED
+                """);
+        GeneratesIntent g = model.getGenerates()
+                                 .get(0);
+        assertFalse(g.hasReopen());
+        assertEquals(null, g.getSourceStatusOnRetire());
+    }
+
+    /**
+     * The reopen is the INVERSE of the completion hook, so without the hook there is nothing to invert:
+     * the source never left the status its trigger qualifies on.
+     */
+    @Test
+    void rejectsAReopenWithoutACompletionHook() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_REOPEN_HEAD + """
+                    event: { onTransition: Fine, when: "Status == IDENTIFIED" }
+                    map: { Fine: id }
+                    sourceStatusOnRetire: IDENTIFIED
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("sourceStatusOnRetire") && i.contains("no sourceStatus")),
+                "got: " + ex.getIssues());
+    }
+
+    /** A write that leaves the status where it stands is no transition, so nothing would re-fire. */
+    @Test
+    void rejectsAReopenToTheCompletionStatus() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_REOPEN_HEAD + """
+                    event: { onTransition: Fine, when: "Status == IDENTIFIED" }
+                    map: { Fine: id }
+                    sourceStatus: DECLARED
+                    sourceStatusOnRetire: DECLARED
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("the very status sourceStatus flips it to")),
+                "got: " + ex.getIssues());
+    }
+
+    /**
+     * {@code mode: append} is the ABSENCE of the guard, so no slot is ever consumed for a retired
+     * target to free - and returning the source would simply append another document.
+     */
+    @Test
+    void rejectsAReopenOnAnAppendingCreateFrom() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_REOPEN_HEAD + """
+                    event: { onTransition: Fine, when: "Status == IDENTIFIED", mode: append }
+                    map: { Fine: id }
+                    sourceStatus: DECLARED
+                    sourceStatusOnRetire: IDENTIFIED
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("mode: append")),
+                "got: " + ex.getIssues());
+    }
+
+    /**
+     * A button-only create-from carries no guard at all, so nothing blocks a replacement - the button
+     * IS the reissue, and there is no trigger for a reopen to re-fire. The glue emits no listener for
+     * that shape, so accepting the key would authorise something that generates nothing.
+     */
+    @Test
+    void rejectsAReopenWithoutAnEventTrigger() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_REOPEN_HEAD + """
+                    sourceStatus: DECLARED
+                    sourceStatusOnRetire: IDENTIFIED
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("no event:") && i.contains("the button already reissues")),
+                "got: " + ex.getIssues());
+    }
+
+    /**
+     * What retires a target is the {@code stage:} classification of its nomenclature. Leave the seed
+     * rows unclassified and nothing can ever be recognised as retired, so the reopen would never fire -
+     * which is the exact silence this key exists to remove.
+     */
+    @Test
+    void rejectsAReopenWhoseTargetNomenclatureIsUnclassified() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(GENERATES_REOPEN_HEAD.replaceAll(",\\s+stage: \\w+", "") + """
+                            event: { onTransition: Fine, when: "Status == IDENTIFIED" }
+                            map: { Fine: id }
+                            sourceStatus: DECLARED
+                            sourceStatusOnRetire: IDENTIFIED
+                        """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("DeclarationState") && i.contains("stage:")),
+                "got: " + ex.getIssues());
+    }
+
+    /** A target with no lifecycle at all can never be retired. */
+    @Test
+    void rejectsAReopenWhoseTargetCarriesNoLifecycle() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_EVENT_HEAD + """
+                    event: { onTransition: Fine, when: "Status == 2" }
+                    map: { Fine: id }
+                    sourceStatus: 3
+                    sourceStatusOnRetire: 2
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("no function: EntityStatus relation") && i.contains("never be retired")),
+                "got: " + ex.getIssues());
+    }
+
+    /**
+     * A cross-model target is seeded in its owner model, so no {@code stage:} classification is
+     * resolvable at the consumer - the same limit a report {@code scope:} has, and the guard's own.
+     */
+    @Test
+    void rejectsAReopenForACrossModelTarget() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse("""
+                name: timesheets
+                uses:
+                  - { model: sales }
+                entities:
+                  - name: TimesheetStatus
+                    function: Setting
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Timesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: TimesheetStatus, function: EntityStatus, init: 1 }
+                seeds:
+                  - name: timesheet-statuses
+                    entity: TimesheetStatus
+                    rows:
+                      - { id: 1, name: OPEN }
+                      - { id: 2, name: APPROVED }
+                      - { id: 3, name: INVOICED }
+                generates:
+                  - name: invoice-from-timesheet
+                    from: Timesheet
+                    to: SalesInvoice
+                    uses: sales
+                    forEntity: Timesheet
+                    event: { onTransition: Timesheet, when: "Status == APPROVED" }
+                    map: { Timesheet: id }
+                    sourceStatus: INVOICED
+                    sourceStatusOnRetire: APPROVED
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("cross-model target") && i.contains("stage:")),
+                "got: " + ex.getIssues());
+    }
+
+    /**
+     * The source stands at the completion status when the retirement arrives, so the graph is asked for
+     * that ONE edge - not for reachability. Without it the generated repository would reject the flip
+     * the moment it ran, and the author would learn about it from a runtime log.
+     */
+    @Test
+    void rejectsAReopenTheSourceLifecycleHasNoEdgeFor() {
+        IntentValidationException ex =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_REOPEN_HEAD.replace("""
+                          - name: Fine
+                            fields:
+                              - { name: id,   type: integer, primaryKey: true, generated: true }
+                              - { name: note, type: string }
+                            relations:
+                              - { name: Status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+                        """, """
+                          - name: Fine
+                            fields:
+                              - { name: id,   type: integer, primaryKey: true, generated: true }
+                              - { name: note, type: string }
+                            relations:
+                              - { name: Status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+                            lifecycle:
+                              edges:
+                                - { from: DRAFT,      to: [IDENTIFIED] }
+                                - { from: IDENTIFIED, to: [DECLARED] }
+                        """) + """
+                            event: { onTransition: Fine, when: "Status == IDENTIFIED" }
+                            map: { Fine: id }
+                            sourceStatus: DECLARED
+                            sourceStatusOnRetire: IDENTIFIED
+                        """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("declares no edge from [DECLARED]")),
+                "got: " + ex.getIssues());
+    }
+
+    /**
+     * With the edge back declared, the same model parses - the graph states that the source may return.
+     */
+    @Test
+    void aReopenTheSourceLifecycleDeclaresParses() {
+        IntentModel model = IntentParser.parse(GENERATES_REOPEN_HEAD.replace("""
+                  - name: Fine
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+                """, """
+                  - name: Fine
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+                    lifecycle:
+                      edges:
+                        - { from: DRAFT,      to: [IDENTIFIED] }
+                        - { from: IDENTIFIED, to: [DECLARED] }
+                        - { from: DECLARED,   to: [IDENTIFIED] }
+                """) + """
+                    event: { onTransition: Fine, when: "Status == IDENTIFIED" }
+                    map: { Fine: id }
+                    sourceStatus: DECLARED
+                    sourceStatusOnRetire: IDENTIFIED
+                """);
+        assertEquals(2, model.getGenerates()
+                             .get(0)
+                             .getSourceStatusOnRetire());
     }
 
 }

@@ -170,6 +170,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("generateEvents", generates.stream()
                                             .filter(entry -> Boolean.TRUE.equals(entry.get("hasEvent")))
                                             .toList());
+        // The declared-reopen subset (issue #6868), filtered from the same descriptors for the same
+        // reason: the listener that returns the source when its target is retired must agree with the
+        // create-from's own guard about what "retired" means, and a create-from that declares no reopen
+        // must contribute no listener at all.
+        glue.put("generateReopens", generates.stream()
+                                             .filter(entry -> Boolean.TRUE.equals(entry.get("hasReopen")))
+                                             .toList());
         glue.put("transitions", transitions);
         glue.put("sends", sends);
         glue.put("postings", postings);
@@ -714,7 +721,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * <p>
      * An entry declaring an {@code event} (issue #6711) additionally lands in the
      * {@code generateEvents} collection, whose template renders the listener that calls the same
-     * create-from - see {@link #putGeneratesEvent}.
+     * create-from - see {@link #putGeneratesEvent}. One declaring a {@code sourceStatusOnRetire} (issue
+     * #6868) lands in {@code generateReopens} as well, whose template renders the listener that returns
+     * the source when the target it made is retired - see {@link #putSupersededTarget}.
      */
     private static List<Map<String, Object>> buildGenerates(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
@@ -835,6 +844,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("sourceStatusProperty", sourceStatusProperty);
             e.put("sourceStatusValue",
                     g.getSourceStatus() == null || sourceStatusProperty.isEmpty() ? "" : String.valueOf(g.getSourceStatus()));
+            if (sourceStatusProperty.isEmpty()) {
+                // No status FK resolved on the source, so there is no completion hook and nothing for a
+                // retired target to return the source to. Emitting the reopen listener anyway would give
+                // it a column to write that does not exist - a failure visible only at run time. Cleared
+                // whole, so the .glue never records a reopen that cannot be generated.
+                e.put("hasReopen", false);
+                e.put("reopenStatusValue", "");
+                e.put("reopenRetiredCondition", "");
+            }
 
             GeneratesItemsIntent items = g.getItems();
             boolean hasItems = items != null && items.getFrom() != null && !items.getFrom()
@@ -1036,6 +1054,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * carry a lifecycle whose nomenclature nobody classified gets the warning - that combination is the
      * silent one, where the guard looks state-aware and is not.
      *
+     * <p>
+     * The SAME resolution also drives the declared reopen (issue #6868), which reads the classification
+     * from the other end: the guard asks whether the target that already exists is retired, the reopen
+     * listener asks whether the transition it just saw is what retired it. Emitting both from one
+     * resolution is what stops them disagreeing about what "retired" means - and the reason the reopen
+     * introduces no vocabulary of its own to say it.
+     *
      * @param g the create-from
      * @param e the glue entry being built
      * @param model the model being generated
@@ -1047,9 +1072,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         e.put("hasRetiredStatus", false);
         e.put("retiredStatusProperty", "");
         e.put("retiredStatusCondition", "");
+        e.put("hasReopen", false);
+        e.put("reopenStatusValue", "");
+        e.put("reopenRetiredCondition", "");
         // An appending create-from (issue #6800) keeps no guard at all, so there is nothing for a
         // retired target to release - and warning about an unclassified nomenclature there would be
-        // noise about a guard that does not exist.
+        // noise about a guard that does not exist. A reopen is refused on that shape by the parser, so
+        // there is nothing to emit for it here either.
         if (!g.isEventDriven() || g.isAppendMode()) {
             return;
         }
@@ -1077,17 +1106,41 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         e.put("retiredStatusProperty", property);
         // Rendered against the template's loop variable: a retired candidate is stepped over, the first
         // one that is not is this source's document.
+        e.put("retiredStatusCondition", retiredCondition("candidate", property, retired));
+        // The declared reopen (issue #6868) reads the SAME classification from the other end: the guard
+        // asks "is the document that exists retired?", the reopen listener asks "did this transition
+        // retire it?". One resolution, so the two can never disagree about what retired means - which
+        // is the whole reason the reopen adds no vocabulary of its own for it.
+        if (!g.hasReopen()) {
+            return;
+        }
+        e.put("hasReopen", true);
+        e.put("reopenStatusValue", String.valueOf(g.getSourceStatusOnRetire()));
+        e.put("reopenRetiredCondition", retiredCondition("target", property, retired));
+    }
+
+    /**
+     * The retiring-status test as a Java disjunction over a named local - {@code cancelled} and
+     * {@code void} ids in seed order.
+     *
+     * @param local the Java local the status is read off
+     * @param property the status FK property
+     * @param retired the retiring seed ids
+     * @return the rendered condition
+     */
+    private static String retiredCondition(String local, String property, List<Integer> retired) {
         StringBuilder condition = new StringBuilder();
         for (Integer id : retired) {
             if (condition.length() > 0) {
                 condition.append(" || ");
             }
-            condition.append("candidate.")
+            condition.append(local)
+                     .append('.')
                      .append(property)
                      .append(" == ")
                      .append(id);
         }
-        e.put("retiredStatusCondition", condition.toString());
+        return condition.toString();
     }
 
     /**

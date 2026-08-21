@@ -1449,6 +1449,8 @@ generates:
         Amount: Amount
     sourceStatus: 3                # optional completion hook: the SOURCE's EntityStatus seed id
                                    # after the target is created (e.g. proforma -> INVOICED)
+    sourceStatusOnRetire: 2        # optional INVERSE of that hook: where the SOURCE returns when the
+                                   # target is retired (cancelled/void) - see "void and reissue"
 ```
 
 **A `map:` source may hop one relation - and that is how you SNAPSHOT a value.** A value is `map`ped
@@ -1651,13 +1653,51 @@ generates:
 - **`append` is the ABSENCE of a guard, not a state-aware one.** Every qualifying event appends a row,
   including a redelivery (the step topic is published after commit and is not transactional with the
   step - the same at-least-once contract the event axis states for `outbound`). It is therefore the wrong
-  answer to "I voided the document and cannot regenerate it": that needs a state-aware guard on
-  `mode: once`, not a cardinality that would also mint a document on every later event. Anything that
-  must exist at most once keeps `mode: once`.
+  answer to "I voided the document and cannot regenerate it": that is what the retiring-`stage:`
+  guard below does, on `mode: once` - not a cardinality that would also mint a document on every
+  later event. Anything that must exist at most once keeps `mode: once`.
 - **The button is dropped by default** (declaring an event is how you say nobody has to click). Add
   `button: true` to keep both triggers; the button then shares the cardinality of the event.
 - `sourceStatus:` composes normally (the flip happens after the target exists, and cannot re-trigger the
   create-from because the guard has already claimed the source).
+- **A RETIRED target stops blocking - and `sourceStatusOnRetire:` is what lets the replacement be minted
+  without a click.** The at-most-once guard reads the target's `stage:` classification: a target whose
+  status is classified `cancelled` or `void` is retired, so the guard steps over it and the source may
+  be generated from again - void and reissue. A `draft` or `live` target still blocks, so redelivery
+  idempotence is untouched, and the retired document is kept, never edited or re-pointed. That frees the
+  slot; but where `sourceStatus:` is declared nothing could refill it. The completion hook moved the
+  source OFF the status its own trigger qualifies on - deliberately - and the ordinary lifecycle graph
+  declares no edge back, so no qualifying event is ever published again: an event-only create-from had
+  no reissue path at all, and only a shared `button: true` could raise the replacement.
+  `sourceStatusOnRetire:` declares the move back, so the reissue becomes the ORDINARY path:
+
+  ```yaml
+  generates:
+    - name: invoice-from-proforma
+      from: Proforma
+      to: Invoice
+      event: { onTransition: Proforma, when: "Status == APPROVED" }
+      map: { Proforma: id }
+      sourceStatus: INVOICED           # forward: the proforma is done once the invoice exists
+      sourceStatusOnRetire: APPROVED   # back: voiding the invoice returns it - and the trigger re-fires
+  ```
+
+  Retiring the invoice returns the proforma to APPROVED through one targeted status write that carries
+  the source's `-transitioned` with it; the trigger re-fires, the guard steps over the retired invoice,
+  and the replacement is minted. It acts only while the source still stands where this rule's own hook
+  left it AND no target of that source still counts - the create-from's own guard asked from the other
+  end, which is what makes it idempotent with no marker column: a redelivered retirement arriving after
+  the replacement exists finds a live target and does nothing.
+
+  It requires an `event:` to re-fire (a button-only create-from carries no guard, so nothing blocks a
+  replacement - the button already reissues) and `sourceStatus:` to invert, and must name a DIFFERENT
+  status; the target must be local, with a nomenclature that classifies a retiring `stage:` (a
+  cross-model target is seeded in its owner model, so nothing here can recognise its retirement - keep
+  `button: true` and reissue by hand); `mode: append` is refused (no guard, so no slot to free); and
+  when the source declares a `lifecycle:`, the graph must declare the edge from `sourceStatus` back to
+  it - that is exactly where the source stands when the retirement arrives. Return to a status a PERSON must move on (a `DRAFT`
+  for correction) when the reissue should be reviewed rather than immediate: the reopen only publishes
+  the transition, and the trigger's own `when:` decides whether anything fires.
 - Use this over `posts` when the result is a **document with line items**: `posts` writes flat mapped
   rows and cannot reference the freshly created header. Use it over a `generates` button plus a `wait`
   step when the step would be waiting for a human to remember to click - an unclicked record parks its
@@ -2400,6 +2440,7 @@ so before binding a reaction, check what the thing you care about publishes.
 | `setField` / `setRelationField` on a step | `-transitioned` | `postings:`, `generates` `event: { onTransition }`, `abortOn:` |
 | A `transitions:` button (void / cancel / reopen) | `-transitioned` | the same three |
 | `generates` `sourceStatus:` flipping the source | `-transitioned` | the same three |
+| `generates` `sourceStatusOnRetire:` returning the source | `-transitioned` | the same three (this is how the reissue re-fires) |
 | A `userTask` / `serviceTask` being reached or completed | a per-step topic | `onStepReached` / `onStepCompleted` |
 
 **Deliberately silent, and correct** - each of these would re-trigger its own handler if it published:
