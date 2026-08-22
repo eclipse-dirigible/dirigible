@@ -159,6 +159,21 @@ row per element, and inside a row a bare path (`quantity`) resolves against the 
 the enclosing document context; `if` keeps or drops its children by the truthiness of `source`.
 Unresolved placeholders render as **empty strings** — a printout never shows raw braces.
 
+**Alternative operands** — a placeholder may list several paths separated by `|`, and the first one
+resolving to a **non-blank** value wins, left to right:
+
+```xml
+<field label="Customer">{{document.Customer.NameLocal|document.Customer.Name}}</field>
+```
+
+"Blank" is null, missing, or whitespace-only; every operand obeys the same `document.` / `items.`
+path and row-scope rules as a single path; and the **last** operand is rendered whatever it holds,
+so all-blank renders empty exactly as a lone unresolved path does (which is what keeps every
+existing template byte-identical). That is the whole grammar addition — no literals, no
+expressions. It exists because an optional twin field is the normal shape of business data: reading
+a locally registered name beside the canonical one must not leave a hole in a legal document when
+only one of the two is filled.
+
 **Row filtering** stays declarative — a value match, not an expression language: a `table`/`for`
 with `filter="kind"` keeps only the elements whose `kind` resolves truthy (in the row's scope),
 and adding `match="CONTRIBUTION | TAX"` narrows that to the listed `|`-separated literals. The

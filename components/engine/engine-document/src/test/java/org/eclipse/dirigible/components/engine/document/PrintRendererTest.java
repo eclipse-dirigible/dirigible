@@ -64,6 +64,49 @@ class PrintRendererTest {
         assertFalse(fo.contains("{{"), "unresolved placeholders must render empty, not as raw braces");
     }
 
+    /**
+     * The alternative-operand placeholder, rendered through the whole pipeline: a filled first operand
+     * wins, a blank one falls through to the next, and all-blank renders empty exactly as a single
+     * unresolved path does. The twin-field case this exists for - an optional locally registered name
+     * beside the canonical one - must never leave a hole in the printed document.
+     */
+    @Test
+    void alternativePlaceholderOperandsRenderTheFirstNonBlankValue() {
+        String fo = PrintRenderer.renderFo(FALLBACK_TEMPLATE,
+                Map.of("document", Map.of("NameLocal", "Metafor OOD", "Name", "Metaphor Ltd."), "items", List.of()));
+
+        assertTrue(fo.contains("Metafor OOD"), "the filled first operand should win");
+        assertFalse(fo.contains("Metaphor Ltd."), "the fallback must not be rendered when the first operand is filled");
+    }
+
+    @Test
+    void aBlankFirstOperandFallsThroughToTheNext() {
+        String fo = PrintRenderer.renderFo(FALLBACK_TEMPLATE,
+                Map.of("document", Map.of("Name", "Metaphor Ltd.", "Spaces", "   ", "Note", "the note"), "items", List.of()));
+
+        assertTrue(fo.contains("Metaphor Ltd."), "an absent first operand should fall through to the canonical name");
+        assertTrue(fo.contains("the note"), "a whitespace-only first operand should fall through as well");
+    }
+
+    @Test
+    void allBlankOperandsRenderEmpty() {
+        String fo = PrintRenderer.renderFo(FALLBACK_TEMPLATE, Map.of("items", List.of()));
+
+        assertFalse(fo.contains("{{"), "all-blank alternatives must render empty, not as raw braces");
+        assertFalse(fo.contains("NameLocal"), "no operand path may leak into the output");
+    }
+
+    private static final String FALLBACK_TEMPLATE = """
+            <document id="sales-invoice">
+                <page>
+                    <section>
+                        <field label="Customer">{{document.NameLocal|document.Name}}</field>
+                        <field label="Note">{{document.Spaces|document.Note}}</field>
+                    </section>
+                </page>
+            </document>
+            """;
+
     private static Map<String, Object> data() {
         return Map.of("document", Map.of("number", "INV-001", "customer", "ACME Ltd.", "total", "123.45"), "items",
                 List.of(Map.of("name", "Widget", "amount", "100.00"), Map.of("name", "Gadget", "amount", "23.45")));
