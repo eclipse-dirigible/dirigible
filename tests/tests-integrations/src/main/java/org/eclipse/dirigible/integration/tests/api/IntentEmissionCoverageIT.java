@@ -1326,12 +1326,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { id: 1, name: Email,  active: true }
                   - { id: 2, name: Social, active: true }
                   - { id: 3, name: Print,  active: true }
-              # The subset value is seeded by the relation's authored name, in the normative
+              # The subset value is seeded by the relation's authored name and lands in the normative
               # shape - a quoted csv cell ("1,3"); the second row proves an omitted set stays null.
+              # Authored out of order and with a repeat on purpose: a seed reaches the table through
+              # neither the form nor the repository (CSVIM inserts straight into the database), so the
+              # ordering and de-duplication have to happen when the CSV is written (#6897).
               - name: bulletins
                 entity: Bulletin
                 rows:
-                  - { id: 1, title: Welcome, channels: "1,3" }
+                  - { id: 1, title: Welcome, channels: "3,1,3" }
                   - { id: 2, title: Plain }
               - name: zones
                 entity: Zone
@@ -1758,7 +1761,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // the field delimiter, so an unquoted emission would shear the row apart).
         String bulletinsCsv = contentOf("bulletins.csv");
         assertTrue(bulletinsCsv.contains("BULLETIN_CHANNELS"), "a seed row's subset key must emit the value column into the seed CSV");
-        assertTrue(bulletinsCsv.contains("\"1,3\""), "the subset seed cell must be quoted - it carries the field delimiter");
+        assertTrue(bulletinsCsv.contains("\"1,3\""),
+                "the subset seed cell must be quoted (it carries the field delimiter) and normalized - authored \"3,1,3\"");
         // ... and the register of the records referencing Campaign renders that same value as LABELS:
         // the column carries the `multi` flag beside the options lookup, which is what routes the cell
         // through the lookup per key instead of printing the raw list (#6896).
@@ -1767,6 +1771,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a register column over a subset must carry the multi flag, got: " + campaignRegister);
         assertTrue(campaignRegister.contains("lookup: { url: '" + API + "/settings/ChannelController'"),
                 "a register column over a subset must carry the options entity's lookup, got: " + campaignRegister);
+        // The shape is normative, so the REPOSITORY holds it - on the create path, the user update path
+        // and the system write alike. The generated form normalizes too; that is the belt, not the rule
+        // (#6897).
+        String campaignRepository = contentOf("gen/emission/data/campaign/CampaignRepository.java");
+        assertEquals(3, campaignRepository.split("normalizeKeySet\\(\"Channels\"", -1).length - 1,
+                "every write path of the repository must normalize the subset value, got: " + campaignRepository);
         assertTrue(entryRepository.contains("EntryLineRepository"),
                 "aggregate: true must make the master repository recompute totals from its items child");
 
@@ -2806,13 +2816,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("find { it.Id == 1 }.Channels", equalTo("1,3"))
                                                  .body("find { it.Id == 2 }.Channels", nullValue()),
                 30);
+        // A write posts a SET, so the caller may send it in any order and with a repeat; the stored value
+        // is the normative shape (ascending, de-duplicated) because the REPOSITORY normalizes it - not
+        // only the generated form. Before that, "3,1,1" persisted verbatim and was silently rewritten
+        // the first time a person opened the record and saved it (dirigible #6897).
         AtomicInteger multiCampaign = new AtomicInteger();
         restAssuredExecutor.execute(() -> multiCampaign.set(given().contentType("application/json")
-                                                                   .body("{\"Name\":\"Multi\",\"Channels\":\"1,3\"}")
+                                                                   .body("{\"Name\":\"Multi\",\"Channels\":\"3,1,1\"}")
                                                                    .when()
                                                                    .post(API + "/campaign/CampaignController")
                                                                    .then()
                                                                    .statusCode(200)
+                                                                   .body("Channels", equalTo("1,3"))
                                                                    .extract()
                                                                    .path("Id")));
         restAssuredExecutor.execute(() -> given().when()
@@ -2820,6 +2835,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Channels", equalTo("1,3")));
+
         // The emitted widgetPattern is the ONLY server-side shape guard (no FK constrains the
         // column), so an API write that is not a comma-separated id list must be refused.
         restAssuredExecutor.execute(() -> given().contentType("application/json")

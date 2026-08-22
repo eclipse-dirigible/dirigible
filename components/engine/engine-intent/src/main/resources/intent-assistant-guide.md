@@ -778,8 +778,16 @@ de-duplicated (`"1,3"`); an empty selection is null. That shape is normative and
 no type, no length, no pattern, no delimiter (the generated column is a VARCHAR(512) with the
 `^\d+(,\d+)*$` server-side guard). The generated UI renders a searchable multi-select over the
 target's rows on every editable surface, and every list/register/export resolves the keys to their
-labels. A seed row sets the value by the relation's authored name in the same shape
-(`payerTypes: "1,3"`).
+labels. A seed row sets the value by the relation's authored name (`payerTypes: "1,3"`) - authored in
+any order, since the shape is settled for you.
+
+The shape is enforced, not merely documented: the generated repository normalizes the value on every
+write it performs (create, user update and system write alike), and a seed's cell is normalized when
+its CSV is generated - the one write that reaches the table through neither the form nor the
+repository. So `"3,1"` and `"1,1"` from a REST caller, a client-Java writer or a seed all land as
+`"1,3"` and `"1"`, and a value that is not a key list at all is refused rather than repaired. What
+the keys REFERENCE is not checked: an id the lookup does not have is stored and renders as the raw
+key, the same trust a business-layer reference gets everywhere else on the platform.
 
 **Attributes:** `to` (mandatory, an entity of THIS model - a cross-model `model:` is rejected: the
 stored keys belong to the owner model's seeds), `required` (means "at least one selected" - the
