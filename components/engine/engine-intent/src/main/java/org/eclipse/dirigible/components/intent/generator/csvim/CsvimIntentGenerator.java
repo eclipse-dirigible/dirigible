@@ -13,9 +13,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
@@ -152,6 +155,7 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
         // `Country: 34` on a City row). Only relations actually referenced by a row become columns, so
         // relation-free seeds keep their exact previous shape.
         List<String> relationColumns = referencedRelationColumns(entity, seed);
+        Set<String> subsetRelations = subsetRelationNames(entity);
         for (int i = 0; i < fields.size(); i++) {
             if (i > 0) {
                 sb.append(FIELD_DELIM);
@@ -178,8 +182,9 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
                 sb.append(formatCell(value));
             }
             for (String relation : relationColumns) {
+                Object value = row.get(relation);
                 sb.append(FIELD_DELIM)
-                  .append(formatCell(row.get(relation)));
+                  .append(formatCell(subsetRelations.contains(relation) ? normalizeKeySet(value) : value));
             }
             sb.append('\n');
         }
@@ -210,6 +215,58 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
             }
         }
         return columns;
+    }
+
+    /** The entity's subset relations by authored name - the cells whose value shape is normative. */
+    private static Set<String> subsetRelationNames(EntityIntent entity) {
+        Set<String> names = new LinkedHashSet<>();
+        for (RelationIntent relation : entity.getRelations()) {
+            if ("subset".equals(relation.getKind()) && relation.getName() != null) {
+                names.add(relation.getName());
+            }
+        }
+        return names;
+    }
+
+    /**
+     * A subset cell in its normative shape: the selected keys ascending and de-duplicated, an empty
+     * selection empty. A seed is the one write that reaches the table through neither the generated
+     * form nor the repository - CSVIM inserts straight into the database - so an authored {@code "3,1"}
+     * used to be the one non-canonical row in the column, which the first save of that record then
+     * silently rewrote (dirigible #6897). A value that is not the documented shape at all is emitted
+     * verbatim: the parser already rejects it by name, and repairing it here would only hide that.
+     *
+     * @param value the authored cell value
+     * @return the normalized value
+     */
+    private static Object normalizeKeySet(Object value) {
+        if (value == null) {
+            return null;
+        }
+        SortedSet<Long> keys = new TreeSet<>();
+        for (String token : value.toString()
+                                 .split(",")) {
+            String key = token.trim();
+            if (key.isEmpty()) {
+                continue;
+            }
+            try {
+                keys.add(Long.valueOf(key));
+            } catch (NumberFormatException e) {
+                return value;
+            }
+        }
+        if (keys.isEmpty()) {
+            return null;
+        }
+        StringBuilder normalized = new StringBuilder();
+        for (Long key : keys) {
+            if (normalized.length() > 0) {
+                normalized.append(',');
+            }
+            normalized.append(key);
+        }
+        return normalized.toString();
     }
 
     /**

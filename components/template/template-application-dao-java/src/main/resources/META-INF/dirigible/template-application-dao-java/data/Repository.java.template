@@ -17,6 +17,9 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
     #if($property.isCalculatedProperty && ($property.calculatedActionOnCreate || $property.calculatedActionOnUpdate))
         #set($haveCalculatedPropertyAction = "true")
     #end
+    #if($property.widgetType == "MULTISELECT")
+        #set($haveSubsets = "true")
+    #end
 ## The comments below start at column 0 on purpose: Velocity gobbles the indentation of a line that
 ## holds only a directive, but NOT of a line that holds only a ## comment - it emits the leading
 ## whitespace and swallows the rest. Indented inside this loop they contributed 28 characters per
@@ -87,6 +90,19 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
         }
 #end
 #end
+## Subset columns (intent `kind: subset`): bring the value to its normative shape on the way in - the
+## selected keys ascending and de-duplicated, an empty selection null. The generated form does the same
+## on save, which is exactly the problem it solves: a value written by anything else (a REST caller, a
+## client-Java writer, a workflow) used to persist as authored and then be silently REWRITTEN the first
+## time a person opened that record and saved it - recording, with `history: true`, a change nobody made
+## (#6897).
+#macro(normalizeSubsets)
+#foreach($property in $properties)
+#if($property.widgetType == "MULTISELECT")
+        entity.${property.name} = normalizeKeySet("${property.name}", entity.${property.name});
+#end
+#end
+#end
 ## Aggregate guard (intent `checks: kind: guard`): reject a create/update whose post-state would drop
 ## a keyed aggregate sum below its minimum (negative stock, credit limit). Recomputed synchronously from
 ## THIS entity's store for the incoming row's key-tuple (race-free, not the async-maintained target),
@@ -139,7 +155,7 @@ import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.eclipse.dirigible.sdk.utils.Json;
 #end
-#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges)
+#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges || $haveSubsets)
 import org.eclipse.dirigible.sdk.db.ValidationException;
 #end
 #if($multilingual == "true")
@@ -217,6 +233,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
+#normalizeSubsets()
 #if($lifecycleInitialStatus)
         enforceLifecycleStart(entity.${lifecycleStatusProperty});
 #end
@@ -285,6 +302,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public ${name}Entity update(${name}Entity entity) {
+#normalizeSubsets()
 #if($lifecycleEdges)
         enforceLifecycle(entity);
 #end
@@ -389,6 +407,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * re-fire onUpdate reactions (notifications, roll-ups, integrations) for a change the user never made.
      */
     public ${name}Entity updateWithoutEvent(${name}Entity entity) {
+#normalizeSubsets()
 #if($lifecycleEdges)
         // A system write is still a status write: the state machine is the ONE place the legal moves
         // are declared, so a workflow setter or glue action gets the same answer a user form gets.
@@ -630,6 +649,56 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // connection, before its commit, and recorded in the event outbox alongside it.
         return updateProperties(id, values, "${projectName}-${perspectiveName}-${name}-updated");
     }
+#if($haveSubsets)
+
+    /**
+     * The normative shape of a subset column (intent {@code kind: subset}): the selected keys of the
+     * lookup entity, comma-separated, ASCENDING and DE-DUPLICATED, an empty selection {@code null}.
+     *
+     * <p>
+     * Applied on every write that goes through this repository, which is the only place that can hold
+     * the shape for all of them: the generated form normalizes on save, so a value written by anything
+     * else - a REST caller posting {@code "3,1"}, a client-Java writer, a workflow - persisted as it
+     * came and was then silently rewritten the first time a person opened that record and saved it
+     * (recording, with {@code history: true}, a change nobody made). The delimiter, the order and the
+     * de-duplication are not authorable, so nothing here is configurable either.
+     *
+     * @param property the property being written, for the rejection message
+     * @param value the incoming value
+     * @return the value in its normative shape, or null for an empty selection
+     */
+    private static String normalizeKeySet(String property, String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        java.util.SortedSet<Long> keys = new java.util.TreeSet<>();
+        for (String token : value.split(",")) {
+            String key = token.trim();
+            if (key.isEmpty()) {
+                continue;
+            }
+            try {
+                keys.add(Long.valueOf(key));
+            } catch (NumberFormatException e) {
+                // Not the documented shape at all. Rejected rather than repaired: dropping the offending
+                // key would persist a DIFFERENT selection than the caller asked for, silently.
+                throw new ValidationException("The '" + property + "' selection must be the chosen ids, comma-separated"
+                        + " (e.g. \"1,3\"), got \"" + value + "\"");
+            }
+        }
+        if (keys.isEmpty()) {
+            return null;
+        }
+        StringBuilder normalized = new StringBuilder();
+        for (Long key : keys) {
+            if (normalized.length() > 0) {
+                normalized.append(',');
+            }
+            normalized.append(key);
+        }
+        return normalized.toString();
+    }
+#end
 #if($lifecycleEdges)
 
     /**
