@@ -49,6 +49,31 @@ class SubsetIntentTest {
                   - { id: 3, name: Corporate client }
             """;
 
+    /**
+     * The subset owner joined FROM a second entity - the one-hop {@code relation.field} reach a report
+     * dimension, filter or measure may take.
+     */
+    private static final String VISITS = """
+            name: schedules
+            entities:
+              - name: PayerType
+                kind: setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true }
+              - name: Schedule
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: title, type: string, required: true }
+                relations:
+                  - { name: payerTypes, kind: subset, to: PayerType, required: true }
+              - name: Visit
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: schedule, kind: manyToOne, to: Schedule, required: true }
+            """;
+
     @Test
     void aMinimalSubsetParsesAndSurvivesUnexpanded() {
         IntentModel model = IntentParser.parse(SCHEDULES);
@@ -308,6 +333,68 @@ class SubsetIntentTest {
         assertTrue(ex.getMessage()
                      .contains("report [CorporateSchedules] filter references the subset relation [payerTypes]"),
                 ex.getMessage());
+    }
+
+    @Test
+    void aMeasureOverItIsRejected() {
+        String yaml = SCHEDULES + """
+                reports:
+                  - name: PayerTypeSpread
+                    source: Schedule
+                    dimensions: [title]
+                    measures: ["count(payerTypes)"]
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getMessage()
+                     .contains("report [PayerTypeSpread] measure [count(payerTypes)] references the subset relation [payerTypes]"),
+                ex.getMessage());
+    }
+
+    @Test
+    void aOneHopDimensionOverItIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(VISITS + """
+                reports:
+                  - name: VisitsByPayerType
+                    source: Visit
+                    dimensions: [schedule.payerTypes]
+                    measures: ["count(*)"]
+                """));
+        assertTrue(ex.getMessage()
+                     .contains("report [VisitsByPayerType] dimension [schedule.payerTypes] references the subset relation"
+                             + " [payerTypes] on [Schedule]"),
+                ex.getMessage());
+        assertTrue(ex.getMessage()
+                     .contains("manyToMany"),
+                ex.getMessage());
+    }
+
+    @Test
+    void aOneHopFilterOverItIsRejected() {
+        String yaml = VISITS + """
+                reports:
+                  - name: CorporateVisits
+                    source: Visit
+                    dimensions: [id]
+                    measures: ["count(*)"]
+                    filter: "schedule.payerTypes == 3"
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getMessage()
+                     .contains("report [CorporateVisits] filter references the subset relation [payerTypes] on [Schedule]"),
+                ex.getMessage());
+    }
+
+    @Test
+    void aOneHopFieldOfTheJoinedEntityStaysAccepted() {
+        String yaml = VISITS + """
+                reports:
+                  - name: VisitsBySchedule
+                    source: Visit
+                    dimensions: [schedule.title]
+                    measures: ["count(*)"]
+                    filter: "schedule.title == 'Morning'"
+                """;
+        assertNotNull(IntentParser.parse(yaml), "a plain one-hop path to a joined field is what the generator resolves");
     }
 
     @Test
