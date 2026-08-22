@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.generator.edm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -1942,5 +1943,63 @@ class EdmIntentGeneratorTest {
         // The document's own line items keep freezing with it - that is what immutability is for.
         assertNull(entityByName(entities, "InvoiceItem").get("locksWithMaster"));
         assertNull(entityByName(entities, "Invoice").get("locksWithMaster"));
+    }
+
+    /**
+     * A trigger-target entity carries TWO process columns, and they answer different questions.
+     *
+     * <p>
+     * {@code ProcessId} is the most recent instance - what the UI correlates the record's actionable
+     * tasks on, and all there was. Reading it as "has this process already run for this record" made
+     * every process indistinguishable from every other, so a record an earlier flow had stamped
+     * silently skipped its follow-up - the composition an {@code onTransition} trigger invites. The
+     * per-process answer, and the instance each process was started with (what a wait or an abort has
+     * to correlate on), lives in {@code ProcessIds}.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void aTriggerTargetCarriesThePerProcessStampBesideProcessId() {
+        String yaml = """
+                name: fines
+                entities:
+                  - name: Fine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                  - name: Driver
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                processes:
+                  - name: Identify
+                    trigger: { onCreate: Fine }
+                    steps:
+                      - { name: done, kind: end }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "fines");
+        List<Map<String, Object>> entities = entities(model);
+
+        Map<String, Object> fine = entityByName(entities, "Fine");
+        Map<String, Object> processId = propertyByName(fine, "ProcessId");
+        Map<String, Object> stamps = propertyByName(fine, "ProcessIds");
+        assertNotNull(processId, "the trigger target keeps its ProcessId back-reference");
+        assertNotNull(stamps, "the trigger target must also carry the per-process stamps");
+        assertEquals("VARCHAR", stamps.get("dataType"));
+        assertEquals("FINE_PROCESS_IDS", stamps.get("dataName"));
+        assertEquals("true", stamps.get("dataNullable"));
+        // Several ids, so wider than the single one - and system-managed the same way: never editable,
+        // never a major column, and excluded from the generated forms and lists.
+        assertEquals("1000", stamps.get("dataLength"));
+        assertEquals("true", stamps.get("isReadOnlyProperty"));
+        assertEquals("false", stamps.get("widgetIsMajor"));
+        assertEquals("NONE", stamps.get("auditType"));
+
+        // Only the entity a process starts on: nothing else pays for the column.
+        Map<String, Object> driver = entityByName(entities, "Driver");
+        List<String> driverProperties = ((List<Map<String, Object>>) driver.get("properties")).stream()
+                                                                                              .map(p -> String.valueOf(p.get("name")))
+                                                                                              .toList();
+        assertFalse(driverProperties.contains("ProcessIds"), "an entity no process triggers on must not carry the stamps");
+        assertFalse(driverProperties.contains("ProcessId"));
     }
 }

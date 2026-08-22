@@ -720,11 +720,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     /**
      * Platform-owned columns: the system writes them on the record's behalf and nothing a person or a
-     * workflow authors ever lands in them. The process trigger's {@code ProcessId} is the one that
-     * matters here - it records WHICH process handles the record, and it is written after the instance
-     * has already started.
+     * workflow authors ever lands in them. The process trigger's columns are the ones that matter here -
+     * {@code ProcessIds} records WHICH processes handle the record (and with which instance) and
+     * {@code ProcessId} the most recent of them, both written after an instance has already started.
      */
-    private static final java.util.List<String> SYSTEM_PROPERTIES = java.util.List.of("ProcessId");
+    private static final java.util.List<String> SYSTEM_PROPERTIES = java.util.List.of("ProcessId", "ProcessIds");
 
     /**
      * Whether a targeted write is about a column somebody authored, as opposed to only the platform's own

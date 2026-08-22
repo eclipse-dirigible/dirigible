@@ -1351,6 +1351,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return aborts;
     }
 
+    /** Test hook: build the {@code triggers} glue collection without a repository. */
+    static List<Map<String, Object>> buildTriggersForTest(IntentModel model) {
+        IntentGenerationContext context =
+                new IntentGenerationContext(model, "/" + model.getName(), model.getName(), "workspace", model.getName(), null);
+        return buildTriggers(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                context);
+    }
+
     /** Test hook: build the {@code aborts} glue collection without a repository. */
     static List<Map<String, Object>> buildAbortsForTest(IntentModel model) {
         return buildAborts(model, IntentSettings.parse("{}"));

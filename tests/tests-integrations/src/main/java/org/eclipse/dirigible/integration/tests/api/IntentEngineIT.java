@@ -1335,8 +1335,10 @@ class IntentEngineIT extends IntegrationTest {
                 "the when guard should gate the correlation on the event record");
         assertTrue(wait.contains("new CaseRepository().findById(entity.Case)"),
                 "the listener should resolve the ProcessId-carrying record through the via FK");
-        assertTrue(wait.contains("Process.correlateMessageEvent(carrier.ProcessId, \"CaseHandlingAwaitReply\""),
-                "the listener should correlate the catch event's message on the stamped ProcessId");
+        assertTrue(
+                wait.contains("ProcessStamps.idFor(carrier.ProcessIds, \"CaseHandling\")")
+                        && wait.contains("Process.correlateMessageEvent(instance, \"CaseHandlingAwaitReply\""),
+                "the listener should correlate the catch event's message on THIS process's stamped instance (#6862)");
         assertTrue(wait.contains("catch (RuntimeException"),
                 "correlation must be fail-soft - an instance not parked on the message is a no-op");
         String loader = codeOf("gen/events/services/LoadCaseHandlingWorkExpire.java");
@@ -1662,8 +1664,10 @@ class IntentEngineIT extends IntegrationTest {
                 "the abort listener should bind the trigger entity's -transitioned topic");
         assertTrue(abort.contains("entity.Status == 4") && abort.contains("entity.Status == 5"),
                 "the abort listener should match the declared abort statuses");
-        assertTrue(abort.contains("Process.correlateMessageEvent(entity.ProcessId, \"OrderApprovalAbort\""),
-                "the abort listener should correlate the abort message on the stamped ProcessId");
+        assertTrue(
+                abort.contains("ProcessStamps.idFor(entity.ProcessIds, \"OrderApproval\")")
+                        && abort.contains("Process.correlateMessageEvent(instance, \"OrderApprovalAbort\""),
+                "the abort listener should abort ITS OWN instance, not whichever flow stamped the record last (#6862)");
         assertTrue(abort.contains("catch (RuntimeException"), "correlation must be fail-soft");
     }
 
@@ -2240,9 +2244,11 @@ class IntentEngineIT extends IntegrationTest {
 
     @Test
     void process_trigger_records_the_process_id_first_and_cancels_the_instance_when_it_cannot() {
-        // The guard against starting a second instance IS the stamped ProcessId, so the write-back is the
-        // only step allowed to follow the start - and if it does not land, the instance is cancelled
-        // rather than left running with nothing pointing at it (issue #6815).
+        // The guard against starting a second instance IS the stamp, so the write-back is the only step
+        // allowed to follow the start - and if it does not land, the instance is cancelled rather than
+        // left running with nothing pointing at it (issue #6815). The stamp is PER PROCESS (issue
+        // #6862): one ProcessId cannot say WHICH process ran, and reading it as "some process ran"
+        // silently skipped every follow-up flow on a record an earlier flow had already stamped.
         String yaml = """
                 name: orders
                 entities:
@@ -2285,8 +2291,18 @@ class IntentEngineIT extends IntegrationTest {
         // The write-back is a TARGETED single-column write, so it keeps the entity's bookkeeping (the
         // change trail, the stored label) while touching nothing else on the row. It is the generated
         // repository that must not be able to REFUSE it - asserted where those gates are emitted.
-        assertTrue(trigger.contains("repository.updateProperty(entity.Id, \"ProcessId\", processId)"),
-                "ProcessId must be persisted through the targeted single-column write");
+        assertTrue(trigger.contains("ProcessStamps.has(entity.ProcessIds, \"Approve\")"),
+                "the at-most-once guard must ask whether THIS process ran for the record, not whether any did");
+        // Both columns in ONE targeted write: the per-process stamp is the guard, ProcessId is what the
+        // UI correlates tasks on, and a record carrying one without the other is either invisible to the
+        // UI or blocked from ever starting the flow again. Two writes could leave exactly that behind.
+        assertTrue(
+                trigger.contains("stamped.put(\"ProcessIds\", ProcessStamps.with(")
+                        && trigger.contains("stamped.put(\"ProcessId\", processId)")
+                        && trigger.contains("repository.updateProperties(entity.Id, stamped)"),
+                "both process columns must be persisted through one targeted write");
+        assertFalse(trigger.contains("repository.updateProperty(entity.Id, \"ProcessId\", processId)"),
+                "the two process columns must not be written one at a time");
         // A swallowed start (the platform logs and returns null) must not be recorded as a ProcessId.
         assertTrue(trigger.contains("if (processId == null)"), "a failed start must be reported, not written back as a null ProcessId");
         // Nothing points at the instance in either failure mode - the row is gone, or the write threw.

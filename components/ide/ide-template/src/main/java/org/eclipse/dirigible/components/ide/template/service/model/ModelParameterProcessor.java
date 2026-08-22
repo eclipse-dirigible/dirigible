@@ -812,7 +812,7 @@ final class ModelParameterProcessor {
             // against the string "false" never excludes anything - kept as it is so the generated
             // panels do not change shape.
             boolean excluded = truthy(property, "sensitiveProperty") || Boolean.TRUE.equals(property.get("dataAutoIncrement"))
-                    || (name != null && name.equals(fkProperty)) || "ProcessId".equals(name)
+                    || (name != null && name.equals(fkProperty)) || "ProcessId".equals(name) || "ProcessIds".equals(name)
                     || (auditType != null && !"NONE".equals(auditType)) || "false".equals(property.get("widgetIsMajor"));
             if (excluded) {
                 continue;

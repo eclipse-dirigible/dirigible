@@ -206,6 +206,16 @@ final class StatusSymbolResolver {
             if (abortOn != null) {
                 putResolvedList(abortOn, "status", statusOf(triggerEntity), subject + " abortOn status");
             }
+            // The trigger's own `when` guard. The status axis makes a status name the norm here rather
+            // than the exception - "start this process when the record reaches IDENTIFIED" is what an
+            // onTransition trigger is FOR - and this was the one `when` in the DSL left unresolved: the
+            // name survived into the generated listener as a string compared against the integer FK, so
+            // the guard could never hold and the process silently never started (#6862).
+            Map<?, ?> trigger = asMap(process.get("trigger"));
+            if (trigger != null && trigger.get("when") != null) {
+                put(trigger, "when", rewriteExpression(text(trigger, "when"), statusRelationName(triggerEntity), statusOf(triggerEntity),
+                        subject + " trigger when"));
+            }
             // `setRelationField: <Relation>` + `value:` writes an id of THAT relation's target - the
             // status in the canonical case, but the same shape serves any nomenclature FK.
             for (Object stepNode : asList(process.get("steps"))) {
