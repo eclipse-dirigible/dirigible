@@ -515,7 +515,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // no <relation> element, so no diagram edge and no FK constraint can appear. The where:
                 // option filter rides the same optionsFilter scalars the to-one dropdowns use.
                 if ("subset".equals(relation.getKind())) {
-                    Map<String, Object> subsetProperty = subsetProperty(name, relation, byName.get(relation.getTo()));
+                    Map<String, Object> subsetProperty = subsetProperty(name, relation, byName.get(relation.getTo()),
+                            perspectiveFor(relation.getTo(), compositionParents, settingEntities));
                     putOptionsFilter(subsetProperty, relation, null);
                     properties.add(subsetProperty);
                     continue;
@@ -1341,8 +1342,16 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * template block already reads. {@code widgetPattern} is the server-side shape guard - the only
      * one, since no FK constrains the column; ascending order and de-duplication stay the client's
      * normalization.
+     *
+     * <p>
+     * {@code widgetOptionsEntityPerspectiveName} completes the option source the way
+     * {@code relationshipEntityPerspectiveName} completes a dropdown's: a consumer that cannot resolve
+     * the target itself - a {@code related:} register whose source entity is owned by ANOTHER model -
+     * needs the perspective to build the options controller's URL, and the target's own model is the
+     * only place that knows it (dirigible #6896).
      */
-    private static Map<String, Object> subsetProperty(String ownerEntity, RelationIntent relation, EntityIntent target) {
+    private static Map<String, Object> subsetProperty(String ownerEntity, RelationIntent relation, EntityIntent target,
+            String targetPerspective) {
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("name", IntentNaming.pascalCase(relation.getName()));
         p.put("description", relation.getDescription() == null ? "" : relation.getDescription());
@@ -1367,6 +1376,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetLength", "20");
         p.put("widgetIsMajor", relation.isMajor() ? "true" : "false");
         p.put("widgetOptionsEntityName", relation.getTo());
+        p.put("widgetOptionsEntityPerspectiveName", targetPerspective);
         p.put("widgetDropDownKey", keyFieldName(target));
         p.put("widgetDropDownValue", labelFieldName(target));
         p.put("widgetPattern", "^\\d+(,\\d+)*$");
@@ -1979,9 +1989,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /** The property keys a related register's column carries into the {@code .model}. */
-    private static final List<String> RELATED_COLUMN_KEYS = List.of("name", "widgetLabel", "dataName", "dataType", "dataScale",
-            "widgetType", "widgetPattern", "widgetDropDownKey", "widgetDropDownValue", "relationshipEntityName",
-            "relationshipEntityPerspectiveName", "widgetOptionsEntityName", "sensitiveProperty", "referencedModel");
+    private static final List<String> RELATED_COLUMN_KEYS =
+            List.of("name", "widgetLabel", "dataName", "dataType", "dataScale", "widgetType", "widgetPattern", "widgetDropDownKey",
+                    "widgetDropDownValue", "relationshipEntityName", "relationshipEntityPerspectiveName", "widgetOptionsEntityName",
+                    "widgetOptionsEntityPerspectiveName", "sensitiveProperty", "referencedModel");
 
     /**
      * Emits each entity's {@code related:} declarations as the {@code relatedEntities} model attribute

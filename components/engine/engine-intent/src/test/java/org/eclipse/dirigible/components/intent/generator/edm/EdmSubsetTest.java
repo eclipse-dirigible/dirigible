@@ -55,6 +55,8 @@ class EdmSubsetTest {
         assertEquals("512", property.get("dataLength"), "the length is not authorable, so headroom is the only safety valve");
         assertEquals("MULTISELECT", property.get("widgetType"));
         assertEquals("PayerType", property.get("widgetOptionsEntityName"), "the option source is the dedicated attribute");
+        assertEquals("PayerType", property.get("widgetOptionsEntityPerspectiveName"),
+                "a consumer that cannot resolve the target itself needs its perspective to reach the options controller");
         assertEquals("Id", property.get("widgetDropDownKey"));
         assertEquals("Name", property.get("widgetDropDownValue"));
         assertEquals("^\\d+(,\\d+)*$", property.get("widgetPattern"), "the server-side shape guard - the only one, no FK constrains it");
@@ -77,6 +79,33 @@ class EdmSubsetTest {
         assertFalse(edm.contains("<relation "), "a <relation> element would draw an FK edge and emit an FK constraint");
         assertTrue(edm.contains("widgetOptionsEntityName=\"PayerType\""), "the scalar attributes reach the .edm twin");
         assertTrue(edm.contains("widgetPattern=\"^\\d+(,\\d+)*$\""), "the regex survives into the XML verbatim");
+    }
+
+    /**
+     * The option source travels COMPLETE - entity plus perspective - the way a dropdown's does: a
+     * {@code related:} register whose source entity is owned by another model cannot resolve the target
+     * itself, and a settings lookup publishes under the shared Settings perspective rather than its own
+     * name (dirigible #6896).
+     */
+    @Test
+    void aSettingsLookupCarriesTheSharedSettingsPerspective() {
+        String yaml = """
+                name: schedules
+                entities:
+                  - name: PayerType
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Schedule
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: payerTypes, kind: subset, to: PayerType }
+                """;
+        Map<String, Object> property = propertyByName(entityByName(yaml, "Schedule"), "PayerTypes");
+
+        assertEquals("Settings", property.get("widgetOptionsEntityPerspectiveName"));
     }
 
     @Test
