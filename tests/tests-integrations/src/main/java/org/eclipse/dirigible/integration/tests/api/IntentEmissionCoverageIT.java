@@ -286,6 +286,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # the table column and the detail pane, exactly like the list layout does.
               - name: Campaign
                 immutableWhen: "Status == 2"
+                # related over a source that carries a SUBSET column: the register's cell is a key
+                # list, so its lookup must resolve EACH key (the `multi` flag) - without it the
+                # register is the one surface that shows the raw "1,3" (#6896).
+                related:
+                  - entity: Bulletin
+                    label: Bulletins
+                    show: [title, channels]
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 100 }
@@ -295,7 +302,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # never a link entity, never an FK. Campaign carries the unseeded REST round-trip
                   # (it is POSTed by the lock tests, so seeding it would collide with the identity
                   # sequence); the seeded carrier is Bulletin below.
-                  - { name: channels, kind: subset, to: Channel }
+                  # where: narrows the chooser to the active channels, which is also what makes a
+                  # STORED key that later fell outside the filter unresolvable - the form must splice
+                  # each such key back in for label resolution (#6896).
+                  - { name: channels, kind: subset, to: Channel, where: { active: true } }
 
               # The subset relation's lookup: a plain settings nomenclature the widget offers.
               - name: Channel
@@ -303,6 +313,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 60 }
+                  - { name: active, type: boolean }
 
               # The SEEDED subset carrier, never POSTed: proves the seed's relation key lands as
               # the quoted csv column and CSVIM imports it (the silent-zero failure this IT exists for).
@@ -312,6 +323,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: title, type: string, required: true, length: 100 }
                 relations:
                   - { name: channels, kind: subset, to: Channel }
+                  # The incoming association Campaign's register filters by (optional, so the seeded
+                  # rows stay valid without naming a campaign).
+                  - { name: campaign, kind: manyToOne, to: Campaign }
 
               # locksWithMaster: false - the deliberate post-lock collection (#6700). It is the
               # negative control for the inherited lock below: notes keep their writes after the
@@ -1304,9 +1318,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - name: channels
                 entity: Channel
                 rows:
-                  - { id: 1, name: Email }
-                  - { id: 2, name: Social }
-                  - { id: 3, name: Print }
+                  - { id: 1, name: Email,  active: true }
+                  - { id: 2, name: Social, active: true }
+                  - { id: 3, name: Print,  active: true }
               # The subset value is seeded by the relation's authored name, in the normative
               # shape - a quoted csv cell ("1,3"); the second row proves an omitted set stays null.
               - name: bulletins
@@ -1731,11 +1745,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the multiselect options must load from the lookup's controller under the Settings perspective");
         assertTrue(subsetFormPage.contains(".split(',')") && subsetFormPage.contains(".join(',')"),
                 "the form must split the stored csv on load and join it back to the normative shape on save");
+        // where: on a subset - a stored key that later fell outside the filter has no option, so its
+        // label would silently drop out of the trigger's list while the record still stores it (#6896).
+        assertTrue(subsetFormPage.contains("ensureFilteredCurrent('Channels'"),
+                "a filtered subset must splice its stored out-of-filter keys back in for label resolution");
         // The seeded value column: the relation-name key emits the quoted csv cell (the cell carries
         // the field delimiter, so an unquoted emission would shear the row apart).
         String bulletinsCsv = contentOf("bulletins.csv");
         assertTrue(bulletinsCsv.contains("BULLETIN_CHANNELS"), "a seed row's subset key must emit the value column into the seed CSV");
         assertTrue(bulletinsCsv.contains("\"1,3\""), "the subset seed cell must be quoted - it carries the field delimiter");
+        // ... and the register of the records referencing Campaign renders that same value as LABELS:
+        // the column carries the `multi` flag beside the options lookup, which is what routes the cell
+        // through the lookup per key instead of printing the raw list (#6896).
+        String campaignRegister = contentOf("gen/emission/js/components/pages/Campaign/Campaign.related.js");
+        assertTrue(campaignRegister.contains("name: 'Channels'") && campaignRegister.contains("multi: true"),
+                "a register column over a subset must carry the multi flag, got: " + campaignRegister);
+        assertTrue(campaignRegister.contains("lookup: { url: '" + API + "/settings/ChannelController'"),
+                "a register column over a subset must carry the options entity's lookup, got: " + campaignRegister);
         assertTrue(entryRepository.contains("EntryLineRepository"),
                 "aggregate: true must make the master repository recompute totals from its items child");
 

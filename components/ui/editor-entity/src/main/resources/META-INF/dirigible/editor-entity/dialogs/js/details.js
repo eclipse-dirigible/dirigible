@@ -150,7 +150,24 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
             if (type === 'SETTING') return 'Settings';
             return 'Reports';
         }
+        // A multi-select's option source is the ONE thing the widget cannot work without: without it the
+        // generation has no controller to load the options from, and the widget would render as an empty
+        // select with a Refresh button that resolves nothing. Refused here rather than left to fail at
+        // generation time, where the model file is already written (#6896).
+        function optionsEntityMissing() {
+            return $scope.dialogType === 'property' && $scope.dataParameters.widgetType === 'MULTISELECT'
+                && !$scope.dataParameters.widgetOptionsEntityName;
+        }
         $scope.save = () => {
+            if (optionsEntityMissing()) {
+                Dialogs.showAlert({
+                    title: 'Options entity is required',
+                    message: 'A Multi Select property must name the lookup entity whose rows it offers.',
+                    type: AlertTypes.Error,
+                    preformatted: false,
+                });
+                return;
+            }
             if (!$scope.state.error) {
                 $scope.state.busyText = 'Saving';
                 $scope.state.isBusy = true;
