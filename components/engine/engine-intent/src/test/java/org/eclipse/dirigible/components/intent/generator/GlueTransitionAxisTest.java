@@ -80,6 +80,14 @@ class GlueTransitionAxisTest {
                 to: { topic: "codbex.fines" }
             """;
 
+    /** The follow-up flow, started by the transition the first flow produces. */
+    private static final String DUNNING = """
+              - name: Dunning
+                trigger: { onTransition: Fine, when: "Status == IDENTIFIED" }
+                steps:
+                  - { name: remind, kind: end }
+            """;
+
     private static Map<String, Object> only(java.util.List<Map<String, Object>> entries) {
         assertEquals(1, entries.size(), "expected exactly one entry, got: " + entries);
         return entries.get(0);
@@ -114,8 +122,8 @@ class GlueTransitionAxisTest {
 
     /**
      * A process may also START on a transition - "when the fine is identified, run the dunning flow".
-     * The trigger's own at-most-once guard (a stamped ProcessId) is unchanged, so a later transition
-     * does not restart it.
+     * The trigger keeps an at-most-once guard, but a PER-PROCESS one (the record's {@code ProcessIds}
+     * stamps), so a later transition does not restart it - and does not block the OTHER flow either.
      */
     @Test
     void aProcessTriggerCanStartOnATransition() {
@@ -124,5 +132,37 @@ class GlueTransitionAxisTest {
                                                                      .get(0)));
         assertEquals("-transitioned", EventBinding.topicSuffix(TriggerSupport.triggerKind(model.getProcesses()
                                                                                                .get(0))));
+    }
+
+    /**
+     * The composition the axis invites, and the one that could not work: the create-triggered flow sets
+     * the status, and the transition that status produces starts a SECOND flow on the same record.
+     *
+     * <p>
+     * Both listeners are emitted, each on its own channel and carrying its own process name - which is
+     * what the generated guard scopes its at-most-once check to (the record's {@code ProcessIds}
+     * stamps). While that check read the record's single {@code ProcessId}, the second flow was skipped
+     * for every record the first had already stamped, silently: no log line, no visible symptom.
+     */
+    @Test
+    void twoProcessesCanTriggerOnTheSameRecordOnDifferentChannels() {
+        IntentModel model = IntentParser.parse(YAML.replace("notifications:", DUNNING + "notifications:"));
+
+        java.util.List<Map<String, Object>> triggers = GlueIntentGenerator.buildTriggersForTest(model);
+
+        assertEquals(2, triggers.size(), "both the create-triggered and the transition-triggered flow must get a listener");
+        Map<String, Object> identify = triggers.get(0);
+        Map<String, Object> dunning = triggers.get(1);
+        assertEquals("Identify", identify.get("process"));
+        assertEquals("", identify.get("topicSuffix"), "the create channel is the unsuffixed base topic");
+        assertEquals("Dunning", dunning.get("process"));
+        assertEquals("-transitioned", dunning.get("topicSuffix"));
+        assertEquals(identify.get("entity"), dunning.get("entity"), "both flows are about the same record");
+        // ...and the status the second flow waits for resolves to its seed ID. A trigger's `when` was
+        // the one guard in the DSL whose status NAME was never resolved, so it reached the generated
+        // listener as a string compared against the integer FK: never true, and an onTransition trigger
+        // - which is exactly the one that needs a status guard - could not start at all.
+        assertEquals("java.util.Objects.equals(entity.Status, 2)", dunning.get("guardExpression"),
+                "the trigger's status guard must compare against the seed id, not against the name as a string");
     }
 }

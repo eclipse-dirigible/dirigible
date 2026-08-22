@@ -1,6 +1,7 @@
 package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.sdk.bpm.Process;
+import org.eclipse.dirigible.sdk.bpm.ProcessStamps;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.log.Logger;
 import org.eclipse.dirigible.sdk.log.Logging;
@@ -16,15 +17,21 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  *
  * Generated from the intent process trigger - do not edit; it is re-generated with the application.
  * The ${entity} repository publishes the event to the topic this listener binds to; the started
- * process-instance id is written back to ProcessId (so the process is started at most once).
+ * process-instance id is written back to ProcessIds against THIS process's name (so this process is
+ * started at most once) and to ProcessId (the most recent instance, which the UI correlates the
+ * record's tasks on).
  *
- * The guard against a second instance IS that stamped ProcessId, so recording it is the one thing
- * that may not fail silently: the start and the write-back commit separately, and an instance no
- * record points at is invisible to the application while its user tasks still reach an inbox. Hence
- * the shape below - everything that CAN happen before the start does (the minted correlation key,
- * every process variable rides the start payload), the write-back is the only post-start step and no
- * document gate can refuse it, and if it still does not land the instance is cancelled instead of
- * left running untracked.
+ * At most once PER PROCESS, not per record: a ${entity} can legitimately be the subject of several
+ * processes - "on create identify it; when identified, run dunning" - and a guard that only asked
+ * whether the record carried A ProcessId skipped the second flow silently, because the first flow
+ * had already stamped it. ProcessIds answers the question this listener actually has.
+ *
+ * That per-process stamp IS the guard, so recording it is the one thing that may not fail silently:
+ * the start and the write-back commit separately, and an instance no record points at is invisible to
+ * the application while its user tasks still reach an inbox. Hence the shape below - everything that
+ * CAN happen before the start does (the minted correlation key, every process variable rides the start
+ * payload), the write-back is the only post-start step and no document gate can refuse it, and if it
+ * still does not land the instance is cancelled instead of left running untracked.
  *
  * Self-describing MessageHandler (strong-interface style): the destination/kind come from the
  * interface, not an annotation; @Component makes it a managed bean with constructor injection.
@@ -58,10 +65,24 @@ public class ${process}Trigger implements MessageHandler {
             return;
         }
         ${entity}Entity entity = repository.findById(created.${keyProperty});
-        // Start at most once. Treat a blank ProcessId as "not started yet": some clients send an
-        // empty string for an untouched system field rather than null, and "" != null would
-        // otherwise trip this guard and the process would never start.
-        if (entity == null || (entity.ProcessId != null && !entity.ProcessId.isBlank())) {
+        if (entity == null) {
+            return;
+        }
+        // Start THIS process at most once - the record's other flows are none of this listener's
+        // business. A blank id inside the stamp counts as "not started yet": some clients send an
+        // empty string for an untouched system field rather than null, and "" != null would otherwise
+        // trip the guard and the process would never start.
+        if (ProcessStamps.has(entity.ProcessIds, "${process}")) {
+            return;
+        }
+        // Records stamped before ProcessIds existed carry only the single ProcessId, which cannot say
+        // WHICH process wrote it. Treat any such record as already handled: that is exactly today's
+        // behaviour, so an upgrade cannot start a second instance of a flow that is already running or
+        // done. Records created from here on carry the per-process stamp and compose freely.
+        if ((entity.ProcessIds == null || entity.ProcessIds.isBlank()) && entity.ProcessId != null
+                && !entity.ProcessId.isBlank()) {
+            LOG.debug("{} [{}] carries a legacy ProcessId with no per-process stamp - not starting {}", "${entity}",
+                    entity.${keyProperty}, "${process}");
             return;
         }
 #if(${guardExpression} != "true")
@@ -113,21 +134,37 @@ public class ${process}Trigger implements MessageHandler {
 #end
         String processId = Process.start("${process}", businessKey, Json.stringify(variables));
         if (processId == null) {
-            // The platform already logged why the start failed. ProcessId stays unset, so the next
+            // The platform already logged why the start failed. Nothing is stamped, so the next
             // qualifying event retries instead of the record silently never having a process.
             LOG.error("Starting the {} process for {} [{}] failed - the record carries no process", "${process}", "${entity}",
                     entity.${keyProperty});
             return;
         }
-        // Persist ONLY the column this trigger owns - a targeted single-column write, never a full-row
-        // update: the entity snapshot loaded above is stale the moment line items or workflow steps
-        // write the same row (a document's recalculated totals, a start-step status), and merging the
-        // snapshot back would silently revert those concurrent writes. No event either: a system write,
-        // not a user edit, so onUpdate reactions must not re-fire. ProcessId is a platform-owned column,
-        // so the entity's declarative gates deliberately do not apply to this write - a document check
-        // has no opinion about which process handles the document and must not be able to refuse it.
+        // Persist ONLY the two columns this trigger owns - a targeted write, never a full-row update:
+        // the entity snapshot loaded above is stale the moment line items or workflow steps write the
+        // same row (a document's recalculated totals, a start-step status), and merging the snapshot back
+        // would silently revert those concurrent writes. No event either: a system write, not a user
+        // edit, so onUpdate reactions must not re-fire. Both are platform-owned columns, so the entity's
+        // declarative gates deliberately do not apply to this write - a document check has no opinion
+        // about which process handles the document and must not be able to refuse it.
         try {
-            if (repository.updateProperty(entity.${keyProperty}, "ProcessId", processId) == 0) {
+            // Both columns in ONE write. ProcessIds is the guard - this process's own at-most-once stamp -
+            // and ProcessId is the most recent instance, which the UI correlates the record's actionable
+            // tasks on; a second process taking that one over is the intended reading, and everything
+            // that needs ITS OWN instance (a wait, an abort) reads ProcessIds instead. Written together
+            // because a record carrying one without the other is a record whose process is either
+            // invisible to the UI or, worse, blocked from ever starting again after this instance was
+            // cancelled - and one statement cannot leave that state behind.
+            //
+            // The stamps are re-read immediately before the write so a process that stamped this record
+            // while this one was starting is not erased. (Read-modify-write, so not airtight; the same
+            // small window already exists between the guard above and the start, and losing it costs a
+            // duplicate start rather than a flow that never runs.)
+            ${entity}Entity fresh = repository.findById(entity.${keyProperty});
+            java.util.Map<String, Object> stamped = new java.util.LinkedHashMap<>();
+            stamped.put("ProcessIds", ProcessStamps.with(fresh == null ? entity.ProcessIds : fresh.ProcessIds, "${process}", processId));
+            stamped.put("ProcessId", processId);
+            if (repository.updateProperties(entity.${keyProperty}, stamped) == 0) {
                 // The record is gone - deleted between the start and this write. Nothing will ever point
                 // at the instance, so cancel it rather than leave it running with no record behind it.
                 LOG.warn("{} [{}] disappeared while the {} process was starting - cancelling instance [{}]", "${entity}",

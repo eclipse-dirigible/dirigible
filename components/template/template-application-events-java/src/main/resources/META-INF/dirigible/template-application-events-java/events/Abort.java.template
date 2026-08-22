@@ -1,6 +1,7 @@
 package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.sdk.bpm.Process;
+import org.eclipse.dirigible.sdk.bpm.ProcessStamps;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.log.Logger;
 import org.eclipse.dirigible.sdk.log.Logging;
@@ -15,11 +16,13 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
  *
  * Generated from the intent abortOn block - do not edit; it is re-generated with the application.
  * Bound to the ${entity} -transitioned topic (the channel every transition and workflow setter
- * publishes on): when the transitioned record carries a matching status and a stamped ProcessId,
+ * publishes on): when the transitioned record carries a matching status and a stamp for this process,
  * it fires the "${messageName}" message, whose interrupting event subprocess cancels the whole
  * instance - its pending user tasks, parked waits and armed boundary timers. Correlation rides the
- * ProcessId the trigger listener already writes back; fail-soft: no ProcessId, no matching parked
- * instance, or an instance already past the abort scope is a no-op, never an error.
+ * ProcessIds stamp the trigger listener writes back for THIS process - not the record's single
+ * ProcessId, which holds whichever process started last and would abort a stranger's instance once a
+ * record is the subject of several flows. Fail-soft: no stamp, no matching parked instance, or an
+ * instance already past the abort scope is a no-op, never an error.
  *
  * Self-describing MessageHandler (strong-interface style): the destination/kind come from the
  * interface, not an annotation; @Component makes it a managed bean.
@@ -42,14 +45,24 @@ public class ${process}Abort implements MessageHandler {
     @Override
     public void onMessage(String message) {
         ${entity}Entity entity = Json.parse(message, ${entity}Entity.class);
-        if (entity == null || entity.ProcessId == null || entity.ProcessId.isBlank()) {
+        if (entity == null) {
+            return;
+        }
+        // This process's own instance. The ProcessId fallback covers records stamped before ProcessIds
+        // existed, where the single column is all there is - for them the old reading was also the only
+        // possible one.
+        String instance = ProcessStamps.idFor(entity.ProcessIds, "${process}");
+        if (instance == null && (entity.ProcessIds == null || entity.ProcessIds.isBlank())) {
+            instance = entity.ProcessId;
+        }
+        if (instance == null || instance.isBlank()) {
             return;
         }
         if (!(${statusMatchExpression})) {
             return;
         }
         try {
-            Process.correlateMessageEvent(entity.ProcessId, "${messageName}", java.util.Map.of());
+            Process.correlateMessageEvent(instance, "${messageName}", java.util.Map.of());
         } catch (RuntimeException notAborting) {
             // The instance is not in the abort scope (already ended or never reached it) - a no-op by
             // the fail-soft glue convention, never an error.

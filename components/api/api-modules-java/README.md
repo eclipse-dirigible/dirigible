@@ -28,6 +28,7 @@ log.info("file size: {}", Files.size("/users/admin/workspace/proj/foo.txt"));
 |--------------------------------------|----------------------------------------------------------------|-------|
 | `bpm/deployer`                       | `sdk.bpm.Deployer`                                             |       |
 | `bpm/process`                        | `sdk.bpm.Process`                                              | Exposes the raw Flowable `BpmProviderFlowable` via `getEngine()` for advanced cases. |
+| _(none)_                             | `sdk.bpm.ProcessStamps`                                        | Java-only: reads and writes a trigger-target record's `ProcessIds` column (which processes it has started, and with which instance). No TS counterpart - the generated glue is Java. |
 | `bpm/tasks`                          | `sdk.bpm.Tasks`                                                |       |
 | `cache`                              | `sdk.cache.Cache`                                              |       |
 | `cms/cmis`                           | `sdk.cms.Cmis`                                                 | Returns the raw Apache Chemistry `Session`. |

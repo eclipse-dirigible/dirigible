@@ -953,6 +953,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: confirm, kind: userTask, args: { assignee: approver } }
                   - { name: end, kind: end }
 
+              # TWO flows on ONE record (#6862): ApprovalFlow above starts on create and stamps the
+              # record; this one starts when that record is voided. While the at-most-once guard read
+              # the single ProcessId, this second flow never started for any record the first had
+              # already stamped - silently, with no log line and no visible symptom.
+              - name: VoidedFollowUp
+                trigger: { onTransition: Approval, when: "Status == CANCELLED" }
+                steps:
+                  - { name: filed, kind: end }
+
               # step resilience (#6762): the flaky call succeeds on its LAST declared attempt (the
               # delegate counts invocations, so GeneratedKey == KEY-3 pins the R<count+1> cycle),
               # the produced secret flows through `uses` into the writer and is cleared once it
@@ -1674,7 +1683,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // write-back arrives on this very path, after its process instance has already started, so a gate
         // that refused it left the instance running with nothing pointing at it (#6815).
         assertTrue(
-                entryRepository.contains("SYSTEM_PROPERTIES = java.util.List.of(\"ProcessId\")")
+                entryRepository.contains("SYSTEM_PROPERTIES = java.util.List.of(\"ProcessId\", \"ProcessIds\")")
                         && entryRepository.contains("boolean authoredWrite = touchesAuthoredColumn(values)")
                         && entryRepository.contains("if (authoredWrite) {"),
                 "the document gate must run only for a write that touches an authored column, got: " + entryRepository);
@@ -2053,9 +2062,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // The write-back is the only post-start step, and an instance nothing points at is cancelled
         // rather than left running untracked (#6815).
         assertTrue(
-                claimTrigger.contains("repository.updateProperty(entity.Id, \"ProcessId\", processId)")
+                claimTrigger.contains("repository.updateProperties(entity.Id, stamped)")
                         && claimTrigger.contains("Process.cancel(processId,"),
-                "the ProcessId write-back must be the targeted write, with the instance cancelled when it does not land");
+                "the write-back must be the targeted write, with the instance cancelled when it does not land");
+        // ...and the guard it writes is PER PROCESS (#6862): a record can be the subject of several
+        // flows, so "has a process run for this record" is the wrong question - a create-triggered flow
+        // that stamped the record silently skipped every follow-up flow bound to its transition.
+        assertTrue(claimTrigger.contains("ProcessStamps.has(entity.ProcessIds, \"ClaimConfirm\")"),
+                "the at-most-once guard must ask about THIS process, not about any stamped ProcessId");
+        assertTrue(claimTrigger.contains("stamped.put(\"ProcessIds\", ProcessStamps.with(")
+                && claimTrigger.contains("\"ClaimConfirm\", processId))") && claimTrigger.contains("stamped.put(\"ProcessId\", processId)"),
+                "the per-process stamp must be written back with ProcessId - it is what the guard reads");
 
         // wait + boundary timers (BPM events wave 1): the catch event, the two boundary timers and
         // the loader/correlating glue must all be present - a missing piece degrades silently into a
@@ -2070,8 +2087,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         && rfqBpmn.contains("<timeDate>${__reviewExpireDate}</timeDate>"),
                 "expire must emit a cancelling boundary timer armed from the loader variable");
         String waitHandler = contentOf("gen/events/emission/RfqFlowAwaitReplyWait.java");
-        assertTrue(waitHandler.contains("Process.correlateMessageEvent(carrier.ProcessId, \"RfqFlowAwaitReply\""),
-                "the wait listener must correlate the message on the stamped ProcessId");
+        // On THIS process's instance, read from the record's per-process stamps - not on its single
+        // ProcessId, which holds whichever flow started last and would resume a stranger's wait once a
+        // record carries more than one (#6862). The ProcessId fallback covers pre-stamp records.
+        assertTrue(
+                waitHandler.contains("ProcessStamps.idFor(carrier.ProcessIds, \"RfqFlow\")")
+                        && waitHandler.contains("instance = carrier.ProcessId;")
+                        && waitHandler.contains("Process.correlateMessageEvent(instance, \"RfqFlowAwaitReply\""),
+                "the wait listener must correlate the message on its own process's stamped instance");
         assertTrue(waitHandler.contains("new RfqRepository().findById(entity.Rfq)"),
                 "the wait listener must resolve the parked record through the via back-reference");
         String timerLoader = contentOf("gen/events/emission/LoadRfqFlowReviewExpire.java");
@@ -2162,8 +2185,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String abortHandler = contentOf("gen/events/emission/ApprovalFlowAbort.java");
         assertTrue(
                 abortHandler.contains("-transitioned") && abortHandler.contains("entity.Status == 3")
-                        && abortHandler.contains("Process.correlateMessageEvent(entity.ProcessId, \"ApprovalFlowAbort\""),
-                "the abort listener must match the status on -transitioned and correlate on the ProcessId");
+                        && abortHandler.contains("ProcessStamps.idFor(entity.ProcessIds, \"ApprovalFlow\")")
+                        && abortHandler.contains("Process.correlateMessageEvent(instance, \"ApprovalFlowAbort\""),
+                "the abort listener must match the status on -transitioned and abort ITS OWN instance, not whichever flow stamped last");
+
+        // ...and the follow-up flow on the same record (#6862) is a listener of its own, on the status
+        // channel, guarding on ITS OWN name. Reading the record's single ProcessId here is what made the
+        // two flows indistinguishable: ApprovalFlow stamps every Approval on create, so the guard was
+        // always already tripped by the time a transition arrived.
+        String followUp = contentOf("gen/events/emission/VoidedFollowUpTrigger.java");
+        assertTrue(followUp.contains("-transitioned") && followUp.contains("ProcessStamps.has(entity.ProcessIds, \"VoidedFollowUp\")"),
+                "the transition-triggered flow must guard on its own stamp, not on any ProcessId the record carries");
+        assertFalse(followUp.contains("if (entity == null || (entity.ProcessId != null && !entity.ProcessId.isBlank()))"),
+                "the record-wide guard is what skipped this flow - it must be gone");
+        // The technical column stays out of every generated surface: the form model never carries it (a
+        // form that did would post a stale copy back over a stamp written while the record was open) and
+        // no view renders it. ProcessId, which names the flow the record is in, is still shown.
+        String approvalFormPage = contentOf("gen/emission/js/components/pages/Approval/ApprovalFormPage.js");
+        assertFalse(approvalFormPage.contains("ProcessIds"), "the per-process stamps must not reach the form model");
+        assertTrue(approvalFormPage.contains("ProcessId"), "...while ProcessId keeps its place");
+        assertFalse(contentOf("gen/emission/views/Approval/Approval-form.html").contains("ProcessIds"),
+                "the per-process stamps must not be rendered on a form");
 
         // personal UI (phase B): the my pages exist, the form never mentions the sensitive field,
         // and the SPA routes + sidebar carry the personal surface.
@@ -4659,6 +4701,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                        .anyMatch(task -> "Confirm".equals(task.get("name")));
             assertTrue(!confirmLeft, "abortOn must cancel the confirm task when the approval is voided, got: " + tasks);
         }, 90);
+        // The composition, end to end (#6862): this record was stamped by the create-triggered
+        // ApprovalFlow, and the void transition then started the SECOND flow bound to that status. Both
+        // stamps are on the record, each against its own process name. With one ProcessId to read, the
+        // follow-up never started at all - the record was already stamped, so the guard skipped it.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(approvalApi + "/" + approval.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("ProcessIds", org.hamcrest.Matchers.containsString("ApprovalFlow="))
+                                                 .body("ProcessIds", org.hamcrest.Matchers.containsString("VoidedFollowUp=")),
+                90);
     }
 
     private static void sleep(long millis) {

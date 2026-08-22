@@ -194,8 +194,8 @@ field may declare:
   line items is shown under the items table). Use it on money / quantity columns of a `DocumentItem`.
 - `readOnly: true` - the field is not editable in generated forms; it renders in the read-only details
   block (Label: Value) above the action buttons. Use it for system/workflow-managed fields like a
-  `status` driven by the process. (`ProcessId`, the audit columns and `uuid` fields are flagged
-  read-only automatically — you don't need this on them.)
+  `status` driven by the process. (`ProcessId`, `ProcessIds`, the audit columns and `uuid` fields are
+  flagged read-only automatically — you don't need this on them.)
 - `function: DocumentTitle` (on a field) / `function: EntityStatus` (on a to-one relation). The
   `DocumentTitle` field shows in a document's form title (e.g. `SALES INVOICE 00001231` = the document
   name + the number). `EntityStatus` marks the entity's **system-managed status** on ANY entity (not
@@ -559,7 +559,7 @@ fields and relations for a better form layout:
 
 Names match the field / relation names (case-insensitive). A **partial** order is fine - any property
 not listed keeps its default position and is appended after the listed ones. System properties
-(`ProcessId`, audit columns) need not be listed. Every listed name must be a real field or relation of
+(`ProcessId`, `ProcessIds`, audit columns) need not be listed. Every listed name must be a real field or relation of
 the entity.
 
 **Display labels (`label:` on an entity):** `label: "{number} - {date|yyyy MMMM} - {Customer.name}"`
@@ -991,8 +991,11 @@ a declared step or the literal `end` (or, inside a parallel branch, `join` - see
 entity - `onCreate`, `onUpdate` or `onDelete` - and may carry a `when` guard so the process starts only
 when the guard holds, e.g. `trigger: { onUpdate: Loan, when: "status == 'OVERDUE'" }`. A trigger may
 also start on a status change - `trigger: { onTransition: Invoice }` - which is what to use when the
-starting condition is a workflow status rather than a person's edit; the stamped `ProcessId` still
-makes it start at most once.
+starting condition is a workflow status rather than a person's edit. It still starts at most once,
+but at most once **per process**: a record that already carries another flow's stamp still starts this
+one, which is what makes "on create, identify it; when identified, run the dunning flow" work. (Until
+that guard was scoped to the process, the follow-up flow silently never started - the create-triggered
+flow had already stamped every record.)
 
 **Parallel branches (`kind: parallel`).** When two steps should run **concurrently** and rejoin before
 the next step - e.g. a technical and a commercial review of the same order - use a `parallel` step. It
@@ -1227,8 +1230,8 @@ processes:
   entity IS the trigger entity itself; required otherwise. Same-model relations only.
 - `when:` - optional guard over the **event record** (`field == literal` / `!=`), so e.g. an internal
   note does not resume the wait.
-- The process must have a `trigger:` entity - its stamped `ProcessId` is how the resuming event finds
-  the parked instance. No parked instance (or a guard miss) is simply a no-op.
+- The process must have a `trigger:` entity - the instance THIS process stamped on that record is how
+  the resuming event finds the parked instance. No parked instance (or a guard miss) is simply a no-op.
 
 **Boundary timers on a user task: `timeout:` and `expire:`.** Generated flows can react to time
 passing while a task sits in the Inbox. Both are optional attributes of a `userTask`'s args, and both
@@ -1282,7 +1285,7 @@ processes:
 - `then:` - optional. Omitted or `end` = terminate the instance immediately. A declared
   `serviceTask` (a `setField`/`setRelationField` cleanup) runs on the abort path before terminating;
   that step is **abort-only** - route the main flow around it (`next:`) so nothing else reaches it.
-- Correlation rides the stamped `ProcessId`, like `wait` - fail-soft (nothing parked = no-op).
+- Correlation rides this process's own stamp in `ProcessIds`, like `wait` - fail-soft (nothing parked = no-op).
 
 Use `abortOn` whenever a document has a manual `transitions:` void/cancel AND a create-time process:
 the transition and the abort together retire the record cleanly. A cancelling `expire:` timer that

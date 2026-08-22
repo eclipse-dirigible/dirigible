@@ -145,7 +145,10 @@ document.addEventListener('alpine:init', () => {
     // totals (those are server-calculated, shown read-only in the footer) and the auto-increment PK.
     form: {
 #foreach($property in $properties)
-#if(!$property.dataAutoIncrement && $property.aggregate != "true")
+## ProcessIds stays OUT of the form model: it is the per-process at-most-once bookkeeping the
+## trigger listener writes, and a form that carried it would post a stale copy back over a stamp
+## written while the document was open.
+#if(!$property.dataAutoIncrement && $property.aggregate != "true" && $property.name != "ProcessIds")
 #if($property.widgetType == "CHECKBOX")
       ${property.name}: false,
 #elseif($property.widgetType == "NUMBER")
@@ -656,7 +659,7 @@ document.addEventListener('alpine:init', () => {
         const src = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
         const header = { ...src };
         [
-          '${primaryKeysString}', 'ProcessId', 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'Uuid',
+          '${primaryKeysString}', 'ProcessId', 'ProcessIds', 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'Uuid',
 #foreach($property in $properties)
 #if($property.isReadOnlyProperty == "true" || $property.aggregate == "true")
           '${property.name}',

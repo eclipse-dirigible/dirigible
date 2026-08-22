@@ -481,6 +481,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // listener/handler writes the started process-instance id here). See TriggerSupport.
             if (triggerTargets.contains(name)) {
                 properties.add(processIdProperty(name));
+                properties.add(processIdsProperty(name));
             }
             // A file-child (function: Attachment or Snapshot) gets the standard file-metadata columns
             // injected (like audit:) - the author never hand-writes plumbing; the upload (attachment) or
@@ -1242,9 +1243,45 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The {@code ProcessIds} bookkeeping property added next to {@code ProcessId}: which processes this
+     * record has already started, and with which instance, as {@code Process=instanceId} pairs (see
+     * {@code org.eclipse.dirigible.sdk.bpm.ProcessStamps}).
+     *
+     * <p>
+     * {@code ProcessId} cannot answer that question. It holds ONE instance - the most recent, which is
+     * what the UI correlates a record's tasks on - so reading it as "has this process run" makes every
+     * process indistinguishable from every other, and a record stamped by an earlier flow silently
+     * skipped its follow-up: exactly what an {@code onTransition} trigger composes ("on create
+     * identify; when identified, run dunning"). A wait and an abort have the same need, for their own
+     * instance rather than whichever process stamped last.
+     *
+     * <p>
+     * Wider than {@code ProcessId} because it holds several of them, and system-managed the same way:
+     * read-only, never a major widget, and excluded from the generated forms and lists.
+     */
+    private static Map<String, Object> processIdsProperty(String entityName) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("name", "ProcessIds");
+        p.put("description", "Processes started for this record, as Process=instanceId pairs");
+        p.put("tooltip", "");
+        p.put("dataName", IntentNaming.upperSnake(entityName) + "_" + IntentNaming.upperSnake("ProcessIds"));
+        p.put("dataType", "VARCHAR");
+        p.put("dataNullable", "true");
+        p.put("dataLength", "1000");
+        p.put("auditType", "NONE");
+        p.put("isReadOnlyProperty", "true");
+        p.put("widgetType", "TEXTBOX");
+        p.put("widgetSize", "");
+        p.put("widgetLength", "1000");
+        p.put("widgetIsMajor", "false");
+        return p;
+    }
+
+    /**
      * The {@code ProcessId} back-reference property added to an entity that a process starts on create.
      * A plain VARCHAR holding the started process-instance id; the runtime trigger handler writes it.
-     * Not a major widget - it is system-managed, not user input.
+     * Not a major widget - it is system-managed, not user input. The per-process bookkeeping lives in
+     * the sibling {@code ProcessIds} column ({@link #processIdsProperty(String)}).
      */
     private static Map<String, Object> processIdProperty(String entityName) {
         Map<String, Object> p = new LinkedHashMap<>();
@@ -2161,9 +2198,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         for (Map<String, Object> property : properties) {
             String name = str(property.get("name"));
             String auditType = str(property.get("auditType"));
-            boolean excluded = "true".equals(String.valueOf(property.get("dataAutoIncrement"))) || name.equals(fkProperty)
-                    || "ProcessId".equals(name) || "false".equals(String.valueOf(property.get("widgetIsMajor")))
-                    || (auditType != null && !auditType.isEmpty() && !"NONE".equals(auditType));
+            boolean excluded =
+                    "true".equals(String.valueOf(property.get("dataAutoIncrement"))) || name.equals(fkProperty) || "ProcessId".equals(name)
+                            || "ProcessIds".equals(name) || "false".equals(String.valueOf(property.get("widgetIsMajor")))
+                            || (auditType != null && !auditType.isEmpty() && !"NONE".equals(auditType));
             if (!excluded) {
                 columns.add(relatedColumn(property));
             }
