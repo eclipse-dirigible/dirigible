@@ -1140,6 +1140,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   attach: print
                   # languageFrom: the counterparty decides the language the attached print renders in.
                   languageFrom: Person.locale
+                  # fileName (#6899): a self-describing name instead of the bare document number. The
+                  # {A|B} fallback covers the optional note (blank on most bills, and then the
+                  # counterparty names the file), and the hop adds a relation the message text - a
+                  # LITERAL recipient - never mentions, so the pattern's own load must be declared.
+                  fileName: "BILL_{note|Person.name}"
 
             # postings + reverses (red storno): a POSTED Doc posts one balanced Entry (debit +
             # credit); a VOIDED Doc posts the reversal - the SAME lines negated on the SAME sides,
@@ -2416,6 +2421,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(sendBill.contains("attachLanguageSource.Locale"), "the language must be read off the person's locale");
         assertTrue(sendBill.contains("org.eclipse.dirigible.sdk.print.Print.defaultLanguage()"),
                 "a null/blank locale must fall back to the application language set at send time");
+        // fileName (#6899): the attachment's name is the authored pattern, not a hardcoded expression.
+        // Every interpolated value is sanitized by the SDK (business data must not be able to produce
+        // a name a file system or mail client rejects), the {A|B} operands become a first-non-blank
+        // call, and the hop's own relation load is declared even though the recipient is a literal and
+        // the message text never mentions it.
+        assertTrue(sendBill.contains("document.put(\"fileName\", \"BILL_\" + org.eclipse.dirigible.sdk.print.FileNames.first("),
+                "the attachment name must be the authored pattern, got: " + sendBill);
+        assertTrue(
+                sendBill.contains("FileNames.part(entity.Note)")
+                        && sendBill.contains("FileNames.part((Person == null ? null : Person.Name))"),
+                "both operands must be sanitized reads, got: " + sendBill);
+        assertTrue(sendBill.contains("PersonEntity Person ="),
+                "the pattern's relation must be declared as a load of its own, got: " + sendBill);
+        assertFalse(sendBill.contains("document.put(\"fileName\", \"Bill \" + entity.Id"),
+                "the pattern must replace the entity-name-plus-id default, got: " + sendBill);
 
         // The feeder resolves the LINE-ITEM to-one relations per row - an items-table column renders
         // {{Unit}} (the target's label, through the repository so the translation overlay applies) or

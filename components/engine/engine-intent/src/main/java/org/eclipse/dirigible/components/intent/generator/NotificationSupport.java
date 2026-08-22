@@ -107,6 +107,33 @@ public final class NotificationSupport {
     }
 
     /**
+     * The glue projection of a set of relation loads - the shape every consuming template iterates
+     * ({@code local} / {@code targetEntity} / {@code targetPerspective} / {@code fkProperty} plus the
+     * cross-model coordinates the generation pipeline turns into the OWNER-package import). Kept beside
+     * the record so the two cannot drift.
+     *
+     * @param resolved the loads, in first-use order
+     * @return one map per load
+     */
+    public static List<Map<String, Object>> loadFields(List<RelationLoad> resolved) {
+        List<Map<String, Object>> loads = new ArrayList<>();
+        for (RelationLoad load : resolved) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("local", load.local());
+            entry.put("targetEntity", load.targetEntity());
+            entry.put("targetPerspective", load.targetPerspective());
+            entry.put("fkProperty", load.fkProperty());
+            // Cross-model recipient/placeholder: the owner's model alias + project drive the OWNER-package
+            // import in the generated listener/job (the generation pipeline picks the gen folder from these).
+            entry.put("crossModel", load.crossModel());
+            entry.put("targetModel", load.targetModel());
+            entry.put("targetProject", load.targetProject());
+            loads.add(entry);
+        }
+        return loads;
+    }
+
+    /**
      * Resolves a cross-model to-one relation's target facts so a {@code relation.field} recipient or
      * placeholder can reference an entity owned by another model. The lookup performs the IO (reads the
      * owner's {@code .model} via {@code CrossModelSupport}); {@code NotificationSupport} stays free of

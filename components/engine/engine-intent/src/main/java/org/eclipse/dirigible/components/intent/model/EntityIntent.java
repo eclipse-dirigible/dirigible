@@ -241,6 +241,16 @@ public class EntityIntent {
      * with {@link #language}; a blank resolved value falls back like an absent knob.
      */
     private String languageFrom;
+    /**
+     * On a {@code function: Snapshot} child only: the name its minted copies are stored under - a
+     * pattern of literals and {@code {token}} interpolations over the DOCUMENT MASTER
+     * ({@code {Number}_{Date:yyyyMMdd}_{Company.ShortName|Company.Name}}), with {@code _v<version>} and
+     * {@code .pdf} appended (the version suffix is skipped when the pattern places {@code {Version}}
+     * itself). Absent, the name is the document's own number, or the master's name plus the record id
+     * when it has none, plus the version - the same expression the mailed copy uses, so the archive and
+     * the customer's inbox no longer disagree about what the document is called.
+     */
+    private String fileName;
 
 
     public String getName() {
@@ -617,5 +627,13 @@ public class EntityIntent {
 
     public void setLanguageFrom(String languageFrom) {
         this.languageFrom = languageFrom;
+    }
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
     }
 }

@@ -127,9 +127,12 @@ class IntentEngineIT extends IntegrationTest {
               # function: Snapshot - the immutable, versioned copy generated at issue. Served by the
               # read-only files panel (per-version Open + Download); Print always renders live.
               # languageFrom: the customer decides which print-template language the copy is minted in.
+              # fileName: a self-describing archive name instead of "Order 42 v1.pdf" - a date rendered
+              # in an authored pattern and a one-hop relation read off the document's customer.
               - name: OrderCopy
                 function: Snapshot
                 languageFrom: customer.locale
+                fileName: "{orderDate:yyyyMMdd}_{customer.name}"
                 relations:
                   - { name: order, kind: manyToOne, to: Order, composition: true }
 
@@ -2396,6 +2399,21 @@ class IntentEngineIT extends IntegrationTest {
                 "a null/blank locale must fall back to the application language set at mint time");
         assertTrue(snapshotGenerator.contains("Print.render(\"Order\", language,"),
                 "the render must use the resolved language, not a literal");
+
+        // The declarative fileName pattern (#6899): a date rendered in the authored format and a
+        // one-hop relation read off the document, every interpolated value sanitized by the SDK so
+        // business data can never produce a name the CMS would reject - and the version appended,
+        // because two copies of the same document must not share a name.
+        assertTrue(snapshotGenerator.contains("new CustomerRepository().findById(document.Customer)"),
+                "the fileName's relation hop must be loaded off the document, got: " + snapshotGenerator);
+        assertTrue(snapshotGenerator.contains("org.eclipse.dirigible.sdk.print.FileNames.part(document.OrderDate, \"yyyyMMdd\")"),
+                "the :pattern modifier must reach the SDK date formatter, got: " + snapshotGenerator);
+        assertTrue(snapshotGenerator.contains("FileNames.part((customer == null ? null : customer.Name))"),
+                "the relation hop must read the loaded local, got: " + snapshotGenerator);
+        assertTrue(snapshotGenerator.contains("+ \"_v\" + version + \".pdf\""),
+                "a pattern that does not place {Version} itself must get the version suffix, got: " + snapshotGenerator);
+        assertFalse(snapshotGenerator.contains("\"Order \" + id + \" v\""),
+                "the old hardcoded primary-key name must be gone, got: " + snapshotGenerator);
     }
 
     @Test
