@@ -6752,66 +6752,142 @@ public final class IntentParser {
     }
 
     /**
-     * A report cannot reference a {@code subset} relation of its source: the stored value is the
-     * selected keys as ONE column ({@code "1,3"}), so a dimension over it would {@code GROUP BY} the
-     * literal list and a filter over it would compare against it - both well-formed SQL computing the
-     * wrong thing, with nothing at runtime to say so. Rejected at parse instead, naming the row-shaped
-     * alternative.
+     * A report cannot reference a {@code subset} relation: the stored value is the selected keys as ONE
+     * column ({@code "1,3"}), so a dimension over it would {@code GROUP BY} the literal list, a filter
+     * over it would compare against it and an aggregate over it would fold a comma-separated string -
+     * all well-formed SQL computing the wrong thing, with nothing at runtime to say so. Rejected at
+     * parse instead, naming the row-shaped alternative.
+     *
+     * <p>
+     * The reach matches the generator's: a {@code dimension}, a {@code measure} and every
+     * {@code filter} token resolve against the source's own relations AND, for a one-hop
+     * {@code relation.field} path, against the relations of the entity that relation points at
+     * (dirigible #6895). A cross-model target's relations live in the owner model, so such a path is
+     * left alone.
      */
     private static void validateSubsetReportReferences(IntentModel model, ReportIntent report, List<String> issues) {
-        EntityIntent source = null;
-        for (EntityIntent entity : model.getEntities()) {
-            if (entity.getName() != null && entity.getName()
-                                                  .equals(report.getSource())) {
-                source = entity;
-            }
-        }
+        EntityIntent source = isBlank(report.getSource()) ? null : entityByName(model, report.getSource());
         if (source == null) {
             return; // a missing / unknown source is reported separately
-        }
-        Set<String> subsets = new HashSet<>();
-        for (RelationIntent relation : source.getRelations()) {
-            if ("subset".equals(relation.getKind()) && !isBlank(relation.getName())) {
-                subsets.add(relation.getName()
-                                    .toLowerCase(Locale.ROOT));
-            }
-        }
-        if (subsets.isEmpty()) {
-            return;
         }
         String rowAlternative = " - the stored value is the selected keys as one column, so it cannot group, join or compare;"
                 + " author an explicit intermediate entity (manyToMany) when the set must be reported on";
         for (String dimension : report.getDimensions()) {
-            if (dimension == null || dimension.isBlank()) {
+            if (isBlank(dimension)) {
                 continue;
             }
-            // A dimension is `field`, `relation`, `relation.field` or a function form (`month(x)`,
-            // `year(x)`, `ageing(x, [...])`) - the referenced property's FIRST segment is what may
-            // name a subset relation.
-            String token = dimension.trim();
-            int open = token.indexOf('(');
-            if (open >= 0) {
-                token = token.substring(open + 1);
-            }
-            int cut = indexOfAny(token, '.', ',', ')');
-            String first = (cut >= 0 ? token.substring(0, cut) : token).trim();
-            if (subsets.contains(first.toLowerCase(Locale.ROOT))) {
-                issues.add("report [" + report.getName() + "] dimension [" + dimension.trim() + "] is a subset relation" + rowAlternative);
+            SubsetReference reference = subsetReferenced(model, source, referencedPath(dimension));
+            if (reference != null) {
+                issues.add("report [" + report.getName() + "] dimension [" + dimension.trim() + "] "
+                        + (reference.joinedEntity() == null ? "is a subset relation"
+                                : "references the subset relation [" + reference.name() + "]" + reference.on())
+                        + rowAlternative);
             }
         }
-        if (report.getFilter() != null && !report.getFilter()
-                                                 .isBlank()) {
-            // Identifier tokens not preceded by a dot are the first segments the generator rewrites.
-            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(?<![.\\w])([A-Za-z_][A-Za-z0-9_]*)")
-                                                                     .matcher(report.getFilter());
+        for (String measure : report.getMeasures()) {
+            if (isBlank(measure)) {
+                continue;
+            }
+            SubsetReference reference = subsetReferenced(model, source, referencedPath(measure));
+            if (reference != null) {
+                issues.add("report [" + report.getName() + "] measure [" + measure.trim() + "] references the subset relation ["
+                        + reference.name() + "]" + reference.on() + rowAlternative);
+            }
+        }
+        if (!isBlank(report.getFilter())) {
+            // Identifier tokens not preceded by a dot are the first segments the generator rewrites; the
+            // optional second segment is the one-hop path it resolves against the joined entity.
+            java.util.regex.Matcher matcher =
+                    java.util.regex.Pattern.compile("(?<![.\\w])([A-Za-z_][A-Za-z0-9_]*)(?:\\.([A-Za-z_][A-Za-z0-9_]*))?")
+                                           .matcher(report.getFilter());
             while (matcher.find()) {
-                if (subsets.contains(matcher.group(1)
-                                            .toLowerCase(Locale.ROOT))) {
-                    issues.add("report [" + report.getName() + "] filter references the subset relation [" + matcher.group(1) + "]"
-                            + rowAlternative);
+                String path = matcher.group(2) == null ? matcher.group(1) : matcher.group(1) + "." + matcher.group(2);
+                SubsetReference reference = subsetReferenced(model, source, path);
+                if (reference != null) {
+                    issues.add("report [" + report.getName() + "] filter references the subset relation [" + reference.name() + "]"
+                            + reference.on() + rowAlternative);
                 }
             }
         }
+    }
+
+    /**
+     * A subset relation a report expression reaches: its name, and the joined entity it lives on -
+     * {@code null} when it is the report source's own relation.
+     */
+    private record SubsetReference(String name, String joinedEntity) {
+
+        /** The {@code on [Entity]} suffix naming where the relation lives, empty for the source's own. */
+        String on() {
+            return joinedEntity == null ? "" : " on [" + joinedEntity + "]";
+        }
+    }
+
+    /**
+     * The property path a report dimension or measure references: a function form ({@code month(x)},
+     * {@code ageing(x, [...])}, {@code sum(x)}) unwraps to its first argument, anything else is the
+     * expression itself.
+     */
+    private static String referencedPath(String expression) {
+        String token = expression.trim();
+        int open = token.indexOf('(');
+        if (open >= 0) {
+            token = token.substring(open + 1);
+        }
+        int cut = indexOfAny(token, ',', ')');
+        return (cut >= 0 ? token.substring(0, cut) : token).trim();
+    }
+
+    /**
+     * The subset relation a property path names, or {@code null} when it names none: the first segment
+     * against {@code source}'s own relations, then - for a {@code relation.field} path - the second
+     * segment against the relations of the entity {@code relation} points at.
+     */
+    private static SubsetReference subsetReferenced(IntentModel model, EntityIntent source, String path) {
+        if (isBlank(path)) {
+            return null;
+        }
+        int dot = path.indexOf('.');
+        String first = (dot > 0 ? path.substring(0, dot) : path).trim();
+        if (isSubsetRelation(source, first)) {
+            return new SubsetReference(first, null);
+        }
+        if (dot <= 0) {
+            return null;
+        }
+        RelationIntent hop = relationByName(source, first);
+        if (hop == null || isBlank(hop.getTo())) {
+            return null;
+        }
+        EntityIntent target = entityByName(model, hop.getTo());
+        if (target == null) {
+            return null; // a cross-model target's relations live in the owner model
+        }
+        String leaf = path.substring(dot + 1)
+                          .trim();
+        int next = leaf.indexOf('.');
+        String field = (next > 0 ? leaf.substring(0, next) : leaf).trim();
+        return isSubsetRelation(target, field) ? new SubsetReference(field, target.getName()) : null;
+    }
+
+    /** Whether the entity declares a {@code subset} relation under that name. */
+    private static boolean isSubsetRelation(EntityIntent entity, String name) {
+        RelationIntent relation = relationByName(entity, name);
+        return relation != null && "subset".equals(relation.getKind());
+    }
+
+    /** The entity's relation with that name, case-insensitively, or {@code null}. */
+    private static RelationIntent relationByName(EntityIntent entity, String name) {
+        if (entity.getRelations() == null || isBlank(name)) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.getName() != null && relation.getName()
+                                                      .equalsIgnoreCase(name.trim())) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     /** The first index of any of the given characters, or -1 when none occurs. */
