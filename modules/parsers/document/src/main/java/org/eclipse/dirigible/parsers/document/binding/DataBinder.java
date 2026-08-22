@@ -48,6 +48,15 @@ import org.eclipse.dirigible.parsers.document.parser.TagRegistry;
  * entity). Paths walk nested maps ({@code customer.name}); inside a row scope a bare path
  * ({@code quantity}) resolves against the row first, then the enclosing document context. An
  * unresolved placeholder renders as an empty string — a printout must never show raw braces.
+ *
+ * <p>
+ * A placeholder may list <b>alternative</b> paths separated by {@code |} — the first one resolving
+ * to a non-blank value wins, left to right, and the last one is rendered whatever it holds. That is
+ * the only fallback syntax (no literals, no expressions), and it exists because an optional twin
+ * field is the normal shape of business data: a locally registered
+ * {@code &#123;&#123;document.Customer.NameLocal|document.Customer.Name&#125;&#125;} prints the
+ * local name when the record has one and the canonical name when it does not, instead of leaving a
+ * hole in a legal document.
  */
 public final class DataBinder {
 
@@ -227,13 +236,30 @@ public final class DataBinder {
                 return result.toString();
             }
             result.append(value, cursor, open);
-            Object resolved = scope.resolve(value.substring(open + 2, close)
-                                                 .trim());
-            if (resolved != null) {
-                result.append(stringify(resolved));
-            }
+            result.append(resolvePlaceholder(value.substring(open + 2, close), scope));
             cursor = close + 2;
         }
+    }
+
+    /**
+     * One placeholder body: a single path, or {@code |}-separated <b>alternative</b> paths of which the
+     * first one resolving to a non-blank value wins, left to right ({@code
+     * &#123;&#123;document.Customer.NameLocal|document.Customer.Name&#125;&#125;} - print the locally
+     * registered name when there is one, else the canonical name). "Blank" is null, missing, or
+     * whitespace-only. The LAST operand is always rendered, whatever it resolves to, so a lone path
+     * behaves exactly as it always has (all operands blank renders empty) and only the alternatives
+     * before it can be skipped.
+     */
+    private static String resolvePlaceholder(String body, Scope scope) {
+        String[] operands = body.split("\\|");
+        for (int i = 0; i < operands.length; i++) {
+            Object resolved = scope.resolve(operands[i].trim());
+            String rendered = resolved == null ? "" : stringify(resolved);
+            if (i == operands.length - 1 || !rendered.isBlank()) {
+                return rendered;
+            }
+        }
+        return "";
     }
 
     /**

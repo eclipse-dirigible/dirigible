@@ -308,4 +308,69 @@ public class DataBinderTest {
                                 .get(0)
                                 .text());
     }
+
+    @Test
+    public void alternativePathsRenderTheFirstNonBlankOperand() {
+        Node root = parser.parse("<document><text>{{document.NameLocal|document.Name}}</text></document>");
+        Node bound = binder.bind(root, Map.of("document", Map.of("NameLocal", "Metafor OOD", "Name", "Metaphor Ltd.")));
+        assertEquals("Metafor OOD", bound.children()
+                                         .get(0)
+                                         .text());
+    }
+
+    @Test
+    public void alternativePathsFallThroughMissingBlankAndWhitespaceOnlyOperands() {
+        Node root = parser.parse("<document><text>{{document.Missing|document.Empty|document.Spaces|document.Name}}</text></document>");
+        // The three skipped shapes of "blank": absent from the context, the empty string, and
+        // whitespace only - each one leaves the hole this fallback exists to close.
+        Node bound = binder.bind(root, Map.of("document", Map.of("Empty", "", "Spaces", "   ", "Name", "Metaphor Ltd.")));
+        assertEquals("Metaphor Ltd.", bound.children()
+                                           .get(0)
+                                           .text());
+    }
+
+    @Test
+    public void allBlankAlternativesRenderEmptyExactlyAsASinglePathDoes() {
+        Node root = parser.parse("<document><text>[{{document.NameLocal|document.Name}}][{{document.Name}}]</text></document>");
+        Node bound = binder.bind(root, Map.of("document", Map.of()));
+        assertEquals("[][]", bound.children()
+                                  .get(0)
+                                  .text());
+    }
+
+    @Test
+    public void alternativePathsResolveInTheRowScopeAndAreTrimmed() {
+        Node root = parser.parse("""
+                <document>
+                    <table source="items">
+                        <column width="*">{{nameLocal | name}}</column>
+                    </table>
+                </document>
+                """);
+        // Every operand obeys the same scope rules as a single path: the row first, then the document.
+        Node bound = binder.bind(root, Map.of("items", List.of(Map.of("nameLocal", "Widget-BG"), Map.of("name", "Gadget"))));
+        TableNode table = (TableNode) bound.children()
+                                           .get(0);
+        assertEquals("Widget-BG", table.children()
+                                       .get(1)
+                                       .children()
+                                       .get(0)
+                                       .text());
+        assertEquals("Gadget", table.children()
+                                    .get(2)
+                                    .children()
+                                    .get(0)
+                                    .text());
+    }
+
+    @Test
+    public void aSingleWhitespaceOnlyPathStillRendersItsValue() {
+        // No alternative to fall through to, so nothing changes for a lone path - the last operand is
+        // always rendered as-is, which is what keeps every existing template byte-identical.
+        Node root = parser.parse("<document><text>[{{document.Spaces}}]</text></document>");
+        Node bound = binder.bind(root, Map.of("document", Map.of("Spaces", "  ")));
+        assertEquals("[  ]", bound.children()
+                                  .get(0)
+                                  .text());
+    }
 }

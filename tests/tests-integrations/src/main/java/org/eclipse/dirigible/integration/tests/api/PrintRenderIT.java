@@ -125,7 +125,9 @@ class PrintRenderIT extends IntegrationTest {
                 <page>
                     <section>
                         <field label="Number">{{document.number}}</field>
-                        <field label="Customer">{{document.customer}}</field>
+                        <!-- Alternative operands: the local twin is absent from the payload, so the
+                             render must fall through to the canonical field and still produce a PDF. -->
+                        <field label="Customer">{{document.customerLocal|document.customer}}</field>
                     </section>
                     <table source="items">
                         <column width="2*">{{name}}</column>
