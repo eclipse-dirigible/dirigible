@@ -6,11 +6,15 @@ import org.flowable.engine.delegate.JavaDelegate;
 
 import gen.${javaGenFolderName}.data.${snapshotJavaPerspective}.${snapshotEntity}Entity;
 import gen.${javaGenFolderName}.data.${snapshotJavaPerspective}.${snapshotEntity}Repository;
-#if($languageFkProperty != "")
 import gen.${javaGenFolderName}.data.${masterJavaPerspective}.${master}Entity;
 import gen.${javaGenFolderName}.data.${masterJavaPerspective}.${master}Repository;
+#if($languageFkProperty != "")
 import gen.${languageTargetJavaGenFolder}.data.${languageTargetJavaPerspective}.${languageTargetEntity}Entity;
 import gen.${languageTargetJavaGenFolder}.data.${languageTargetJavaPerspective}.${languageTargetEntity}Repository;
+#end
+#foreach($load in $fileNameLoads)
+import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity;
+import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository;
 #end
 
 /**
@@ -34,13 +38,21 @@ public class ${master}SnapshotGenerator implements JavaDelegate {
         }
         int id = ((Number) key).intValue();
 
+        // The document itself: both the file name (its number, or whatever the intent's fileName
+        // pattern reads off it) and the render language are properties of the DOCUMENT, not of the copy.
+        ${master}Entity document = new ${master}Repository().findById(id);
+        if (document == null) {
+            return;
+        }
 #if($languageFkProperty != "")
         // The render language comes off the document's ${languageFkProperty} (the intent's languageFrom
         // knob): load the related record and read it, falling back to the first entry of the
         // tenant-resolved application language set when the chain is null or blank.
-        ${master}Entity document = new ${master}Repository().findById(id);
-        ${languageTargetEntity}Entity languageSource = document == null || document.${languageFkProperty} == null ? null
+        ${languageTargetEntity}Entity languageSource = document.${languageFkProperty} == null ? null
                 : new ${languageTargetEntity}Repository().findById(document.${languageFkProperty});
+#end
+#foreach($load in $fileNameLoads)
+        ${load.targetEntity}Entity ${load.local} = document.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(document.${load.fkProperty});
 #end
         String language = ${languageExpression};
 
@@ -59,7 +71,9 @@ public class ${master}SnapshotGenerator implements JavaDelegate {
             }
         }
 
-        String fileName = "${master} " + id + " v" + version + ".pdf";
+        // Pre-rendered by the intent's snapshots glue (the expansions convention - this template stays
+        // shape-only): the authored fileName pattern, or the document's own number plus the version.
+        String fileName = ${fileNameExpression};
         org.eclipse.dirigible.sdk.cms.Attachments.Attachment stored =
                 org.eclipse.dirigible.sdk.cms.Attachments.store("${snapshotEntity}", fileName, "application/pdf", pdf);
 

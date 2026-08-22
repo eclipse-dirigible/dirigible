@@ -50,6 +50,12 @@ final class SnapshotSupport {
     /** The run-time fallback: the first entry of the tenant-resolved application language set. */
     private static final String DEFAULT_LANGUAGE_EXPRESSION = NotifySupport.DEFAULT_LANGUAGE_EXPRESSION;
 
+    /**
+     * The Java local the generated delegate holds the DOCUMENT MASTER in - the record a snapshot's
+     * paths resolve against, since the copy itself carries only the stored file's coordinates.
+     */
+    private static final String MASTER_LOCAL = "document";
+
     private SnapshotSupport() {}
 
     /**
@@ -86,6 +92,7 @@ final class SnapshotSupport {
             snapshot.put("masterPk", IntentEntities.keyFieldName(master));
             snapshot.put("masterPerspective", IntentEntities.resolvePerspective(master.getName(), compositionParents, model));
             putLanguage(snapshot, entity, master, byName, compositionParents, crossModel);
+            putFileName(snapshot, entity, master, byName, compositionParents, crossModel);
             snapshot.put("snapshotEntity", entity.getName());
             snapshot.put("snapshotPerspective", IntentEntities.resolvePerspective(entity.getName(), compositionParents, model));
             snapshot.put("snapshotMasterFk", IntentNaming.pascalCase(masterRelation.getName()));
@@ -159,6 +166,41 @@ final class SnapshotSupport {
         snapshot.put("languageTargetEntity", relation.getTo());
         snapshot.put("languageExpression", "languageSource == null || languageSource." + pascalField + " == null || languageSource."
                 + pascalField + ".isBlank() ? " + DEFAULT_LANGUAGE_EXPRESSION + " : languageSource." + pascalField + ".trim()");
+    }
+
+    /**
+     * The file-name keys: {@code fileNameExpression} is the Java expression the delegate names the
+     * stored PDF with, and {@code fileNameLoads} carries the one-hop relation loads a pattern reads off
+     * the master (the delegate declares one local per load, exactly as a notify listener does).
+     *
+     * <p>
+     * Absent a pattern the name is the master's own document number - or its name plus the record id
+     * when it declares no {@code number:} field - plus the copy's version. That is the SAME expression
+     * a mailed copy uses, which is the point: the mint used to name the file after the numeric primary
+     * key while the mail already used the document number, so one document reached the archive and the
+     * customer under two different names.
+     */
+    private static void putFileName(Map<String, Object> snapshot, EntityIntent entity, EntityIntent master,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
+        FileNameSupport.Site site = new FileNameSupport.Site(master, MASTER_LOCAL, true, true);
+        FileNameSupport.Resolved resolved;
+        try {
+            resolved = FileNameSupport.resolve(entity.getFileName(), site, byName, compositionParents, crossModel);
+        } catch (IllegalArgumentException ex) {
+            // The parser validates the pattern; an unresolvable path here means the intent changed
+            // underneath the knob - fail the pass loudly rather than minting indistinguishable copies.
+            throw new IllegalStateException("snapshot [" + entity.getName() + "]: " + ex.getMessage(), ex);
+        }
+        String version = " + \"_v\" + " + FileNameSupport.VERSION_LOCAL;
+        if (resolved == null) {
+            snapshot.put("fileNameExpression", FileNameSupport.numberOrId(master, MASTER_LOCAL) + version + " + \".pdf\"");
+            snapshot.put("fileNameLoads", List.of());
+            return;
+        }
+        // A pattern that placed {Version} itself owns where the version goes; only a pattern without one
+        // gets the suffix appended, because two versions of a copy must never share a name.
+        snapshot.put("fileNameExpression", resolved.expression() + (resolved.usesVersion() ? "" : version) + " + \".pdf\"");
+        snapshot.put("fileNameLoads", NotificationSupport.loadFields(resolved.loads()));
     }
 
     private static RelationIntent toOneRelation(EntityIntent entity, String name) {

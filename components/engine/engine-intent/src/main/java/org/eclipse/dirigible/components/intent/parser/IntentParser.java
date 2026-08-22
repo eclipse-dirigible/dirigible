@@ -23,6 +23,7 @@ import java.util.TreeSet;
 import org.eclipse.dirigible.components.intent.generator.ArrivalSupport;
 import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
+import org.eclipse.dirigible.components.intent.generator.FileNameSupport;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
@@ -188,6 +189,13 @@ public final class IntentParser {
     /** The {@code {record.<path>}} placeholders of a subject / body. */
     private static final java.util.regex.Pattern RECORD_PLACEHOLDER =
             java.util.regex.Pattern.compile("\\{(" + RECORD_SCOPE + "\\.[A-Za-z0-9_.]*)\\}");
+    /** One {@code {...}} interpolation of a {@code fileName:} pattern. */
+    private static final java.util.regex.Pattern FILE_NAME_TOKEN = java.util.regex.Pattern.compile("\\{([^{}]*)\\}");
+    /** A one-hop path inside a {@code fileName:} token: a field, or a to-one relation and one field. */
+    private static final java.util.regex.Pattern FILE_NAME_PATH =
+            java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?");
+    /** The field types a {@code fileName:} token may carry a {@code :pattern} date format on. */
+    private static final Set<String> FILE_NAME_DATE_TYPES = Set.of("date", "timestamp");
     /** Comparison operators a schedule's {@code where} condition may use. */
     private static final Set<String> SCHEDULE_OPERATORS = Set.of("eq", "ne", "gt", "ge", "lt", "le", "like");
     /** HTTP methods an outbound integration may use. */
@@ -354,6 +362,7 @@ public final class IntentParser {
                 }
             }
             validateSnapshotLanguage(entity, model, compositionParent, issues);
+            validateSnapshotFileName(entity, model, compositionParent, issues);
             validateLocksWithMaster(entity, model, compositionParent, issues);
             for (FieldIntent field : entity.getFields()) {
                 String ff = field.getFunction();
@@ -2141,9 +2150,15 @@ public final class IntentParser {
                                                                      .isBlank();
         boolean hasLanguageFrom = notify.getLanguageFrom() != null && !notify.getLanguageFrom()
                                                                              .isBlank();
+        boolean hasFileName = notify.getFileName() != null && !notify.getFileName()
+                                                                     .isBlank();
         if (attach == null || attach.isBlank()) {
             if (hasLanguage || hasLanguageFrom) {
                 issues.add(subject + " declares language/languageFrom without attach: print - they select the attached render's language");
+            }
+            if (hasFileName) {
+                issues.add(subject + " declares fileName without attach: print - it names the attached render, and a plain-text"
+                        + " message has no file to name");
             }
             return;
         }
@@ -2166,6 +2181,13 @@ public final class IntentParser {
         } else if (hasLanguageFrom && documentEntity != null) {
             // The language belongs to whatever is rendered, so a recordPrint reads it off the anchor.
             validateLanguageFromPath(notify.getLanguageFrom(), documentEntity, subject + " languageFrom", model, issues);
+        }
+        if (hasFileName && documentEntity != null) {
+            // The name belongs to whatever is rendered, like the language. A recordPrint renders the
+            // anchor ONCE, before the per-row loop, where the block's relation locals do not exist yet -
+            // so only fields of the anchor itself are readable there, exactly as the `record.` scope is
+            // limited to one field of it.
+            validateFileNamePattern(notify.getFileName(), documentEntity, subject + " fileName", model, issues, !recordPrint, false);
         }
     }
 
@@ -2296,6 +2318,181 @@ public final class IntentParser {
                 return;
             }
             validateLanguageFromPath(entity.getLanguageFrom(), master, "entity [" + name + "] languageFrom", model, issues);
+        }
+    }
+
+    /**
+     * The {@code fileName:} knob of a {@code function: Snapshot} child: the name its minted copies are
+     * stored under, a pattern resolved on the snapshot's composition MASTER (the document whose copy is
+     * minted - the copy row itself carries only the stored file's coordinates). Meaningless anywhere
+     * else. Absent, the name is the document's own number plus the version.
+     */
+    private static void validateSnapshotFileName(EntityIntent entity, IntentModel model, Map<String, String> compositionParent,
+            List<String> issues) {
+        String pattern = entity.getFileName();
+        if (pattern == null || pattern.isBlank()) {
+            return;
+        }
+        String name = entity.getName();
+        if (!entity.isSnapshot()) {
+            issues.add("entity [" + name + "] declares fileName, which applies to function: Snapshot children only");
+            return;
+        }
+        String master = compositionParent.get(name);
+        if (master == null) {
+            issues.add("entity [" + name + "] fileName needs a composition master (the document) to resolve against");
+            return;
+        }
+        validateFileNamePattern(pattern, master, "entity [" + name + "] fileName", model, issues, true, true);
+    }
+
+    /**
+     * A {@code fileName:} pattern is literals plus {@code {token}} interpolations - the smallest
+     * grammar a self-describing archive name needs, and no expression language. Each token is one path,
+     * or {@code |}-separated alternative paths of which the first non-blank one wins; a path is a field
+     * or a one-hop {@code relation.field} of the rendered entity; and a {@code date}/{@code timestamp}
+     * field may carry a {@code :pattern} date format.
+     *
+     * <p>
+     * Every part of it is checked here rather than left to render time: a token that resolved to
+     * nothing would produce a name indistinguishable from every other copy's, which is the exact
+     * failure the knob exists to fix.
+     *
+     * @param relationsAllowed whether a one-hop hop may be used at this call site
+     * @param versionAllowed whether the reserved {@code Version} token is addressable (a snapshot only)
+     */
+    private static void validateFileNamePattern(String pattern, String aboutEntity, String subject, IntentModel model, List<String> issues,
+            boolean relationsAllowed, boolean versionAllowed) {
+        String authored = pattern.trim();
+        if (authored.indexOf('{') < 0 || authored.indexOf('}') < 0) {
+            issues.add(subject + " [" + pattern + "] interpolates nothing - it would name every copy alike");
+            return;
+        }
+        // Balance first: an unmatched or nested brace makes every position below meaningless, and the
+        // token scan would silently skip the malformed part instead of reporting it.
+        int depth = 0;
+        for (char character : authored.toCharArray()) {
+            if (character == '{') {
+                depth++;
+            } else if (character == '}') {
+                depth--;
+            }
+            if (depth < 0 || depth > 1) {
+                issues.add(subject + " [" + pattern + "] has unbalanced or nested braces");
+                return;
+            }
+        }
+        if (depth != 0) {
+            issues.add(subject + " [" + pattern + "] has an unclosed { token");
+            return;
+        }
+        EntityIntent about = entityByName(model, aboutEntity);
+        if (about == null) {
+            return; // the dangling entity is reported by the structural checks
+        }
+        java.util.regex.Matcher matcher = FILE_NAME_TOKEN.matcher(authored);
+        while (matcher.find()) {
+            validateFileNameToken(matcher.group(1), pattern, about, subject, model, issues, relationsAllowed, versionAllowed);
+        }
+    }
+
+    /** One {@code {...}} body: the reserved version token, or one or more alternative operands. */
+    private static void validateFileNameToken(String body, String pattern, EntityIntent about, String subject, IntentModel model,
+            List<String> issues, boolean relationsAllowed, boolean versionAllowed) {
+        if (FileNameSupport.VERSION_TOKEN.equals(body.trim())) {
+            if (!versionAllowed) {
+                issues.add(subject + " [" + pattern + "] uses {" + FileNameSupport.VERSION_TOKEN
+                        + "}, which only a snapshot copy has - a sent document carries no version");
+            }
+            return;
+        }
+        String[] operands = body.split("\\|");
+        if (operands.length == 0) {
+            issues.add(subject + " [" + pattern + "] has an empty {} token");
+            return;
+        }
+        for (String operand : operands) {
+            validateFileNameOperand(operand.trim(), pattern, about, subject, model, issues, relationsAllowed);
+        }
+    }
+
+    /** One operand: {@code Path} or {@code Path:dateFormat}. */
+    private static void validateFileNameOperand(String operand, String pattern, EntityIntent about, String subject, IntentModel model,
+            List<String> issues, boolean relationsAllowed) {
+        int colon = operand.indexOf(':');
+        String path = colon < 0 ? operand
+                : operand.substring(0, colon)
+                         .trim();
+        String format = colon < 0 ? null
+                : operand.substring(colon + 1)
+                         .trim();
+        if (path.isEmpty() || !FILE_NAME_PATH.matcher(path)
+                                             .matches()) {
+            issues.add(subject + " [" + pattern + "]: [" + operand + "] is not a field or a one-hop relation.field path on ["
+                    + about.getName() + "]");
+            return;
+        }
+        int dot = path.indexOf('.');
+        FieldIntent field;
+        if (dot < 0) {
+            field = fieldByName(about, path);
+            if (field == null) {
+                issues.add(subject + " [" + pattern + "]: [" + path + "] is not a field of [" + about.getName() + "]");
+                return;
+            }
+        } else {
+            if (!relationsAllowed) {
+                issues.add(subject + " [" + pattern + "]: [" + path + "] is a relation hop, and this document is rendered once for the"
+                        + " whole fan-out - only fields of [" + about.getName() + "] itself are readable here");
+                return;
+            }
+            String relationName = path.substring(0, dot);
+            String fieldName = path.substring(dot + 1);
+            RelationIntent relation = toOneRelationNamed(about, relationName);
+            if (relation == null) {
+                issues.add(subject + " [" + pattern + "]: [" + relationName + "] is not a to-one relation of [" + about.getName() + "]");
+                return;
+            }
+            if (relation.getModel() != null && !relation.getModel()
+                                                        .isBlank()) {
+                return; // cross-model target: field checked at generation against the owner's model
+            }
+            EntityIntent target = entityByName(model, relation.getTo() == null ? "" : relation.getTo());
+            if (target == null) {
+                return; // the dangling relation target is reported by the relations check
+            }
+            field = fieldByName(target, fieldName);
+            if (field == null) {
+                issues.add(subject + " [" + pattern + "]: [" + fieldName + "] is not a field of [" + relation.getTo() + "]");
+                return;
+            }
+        }
+        validateFileNameDateFormat(format, field, path, pattern, subject, issues);
+    }
+
+    /**
+     * The optional {@code :pattern} date format: only on a date-typed field (formatting anything else
+     * is a no-op the author would never see), and only a pattern {@code DateTimeFormatter} accepts.
+     */
+    private static void validateFileNameDateFormat(String format, FieldIntent field, String path, String pattern, String subject,
+            List<String> issues) {
+        if (format == null) {
+            return;
+        }
+        if (format.isEmpty()) {
+            issues.add(subject + " [" + pattern + "]: [" + path + "] declares an empty date pattern after the colon");
+            return;
+        }
+        String type = field.getType() == null ? "string" : field.getType();
+        if (!FILE_NAME_DATE_TYPES.contains(type)) {
+            issues.add(subject + " [" + pattern + "]: the [" + format + "] format applies to a date or timestamp field, and [" + path
+                    + "] is of type [" + type + "]");
+            return;
+        }
+        try {
+            java.time.format.DateTimeFormatter.ofPattern(format);
+        } catch (IllegalArgumentException ex) {
+            issues.add(subject + " [" + pattern + "]: [" + format + "] is not a valid date format - " + ex.getMessage());
         }
     }
 

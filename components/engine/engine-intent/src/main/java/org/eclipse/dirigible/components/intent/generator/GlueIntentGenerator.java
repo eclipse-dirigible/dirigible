@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.intent.generator;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -466,7 +467,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // engine IT keys "no trigger was generated" on trigger-only keys being absent.
             entry.put("attachKeyProperty", IntentEntities.keyFieldName(byName.get(entity)));
             entry.put("topicSuffix", StepEventSupport.topicSuffix(notification.getEvent()));
-            entry.put("relationLoads", relationLoads(plan));
+            entry.put("relationLoads", relationLoads(plan, attachment));
             entry.put("guardExpression", plan.guardExpression());
             entry.put("toExpression", plan.toExpression());
             entry.put("subjectExpression", plan.subjectExpression());
@@ -1305,7 +1306,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 plan == null ? null : printAttachment(notify, document, model, byName, compositionParents, context, subject);
         boolean send = plan != null && (attachment != null || !NotifySupport.attachesPrint(notify));
         fields.put("notify", String.valueOf(send));
-        fields.put("notifyRelationLoads", send ? relationLoads(plan) : new ArrayList<>());
+        fields.put("notifyRelationLoads", send ? relationLoads(plan, attachment) : new ArrayList<>());
         fields.put("notifyToExpression", send ? plan.toExpression() : "null");
         fields.put("notifySubjectExpression", send ? plan.subjectExpression() : "\"\"");
         fields.put("notifyBodyExpression", send ? plan.bodyExpression() : "\"\"");
@@ -3448,7 +3449,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     continue; // asked for the document but it cannot be rendered - reported above
                 }
                 entry.put("action", "notify");
-                entry.put("relationLoads", relationLoads(plan));
+                entry.put("relationLoads", relationLoads(plan, attachment));
                 entry.put("toExpression", plan.toExpression());
                 entry.put("subjectExpression", plan.subjectExpression());
                 entry.put("bodyExpression", plan.bodyExpression());
@@ -3701,26 +3702,34 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return attachment;
     }
 
-    private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan) {
-        return relationLoads(plan.loads());
+    /**
+     * The relation loads a notify-bearing handler must declare: the ones the message text needs, plus
+     * the ones an authored {@code fileName:} pattern reads on top of them. Both sides name their local
+     * after the relation, so a relation referenced by both is loaded ONCE - declaring it twice would
+     * not compile.
+     *
+     * @param plan the translated notify block
+     * @param attachment the resolved print attachment, or {@code null} for a plain-text message
+     * @return the merged loads, message-text ones first
+     */
+    private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan, NotifySupport.PrintAttachment attachment) {
+        List<NotificationSupport.RelationLoad> merged = new ArrayList<>(plan.loads());
+        if (attachment != null) {
+            Set<String> declared = new LinkedHashSet<>();
+            for (NotificationSupport.RelationLoad load : merged) {
+                declared.add(load.local());
+            }
+            for (NotificationSupport.RelationLoad load : attachment.fileNameLoads()) {
+                if (declared.add(load.local())) {
+                    merged.add(load);
+                }
+            }
+        }
+        return relationLoads(merged);
     }
 
     private static List<Map<String, Object>> relationLoads(List<NotificationSupport.RelationLoad> resolved) {
-        List<Map<String, Object>> loads = new ArrayList<>();
-        for (NotificationSupport.RelationLoad load : resolved) {
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("local", load.local());
-            entry.put("targetEntity", load.targetEntity());
-            entry.put("targetPerspective", load.targetPerspective());
-            entry.put("fkProperty", load.fkProperty());
-            // Cross-model recipient/placeholder: the owner's model alias + project drive the OWNER-package
-            // import in the generated listener/job (the generation pipeline picks the gen folder from these).
-            entry.put("crossModel", load.crossModel());
-            entry.put("targetModel", load.targetModel());
-            entry.put("targetProject", load.targetProject());
-            loads.add(entry);
-        }
-        return loads;
+        return NotificationSupport.loadFields(resolved);
     }
 
     private static List<Map<String, Object>> buildFieldLoaders(IntentModel model, IntentSettings settings) {

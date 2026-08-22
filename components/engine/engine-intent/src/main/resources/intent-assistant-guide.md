@@ -825,10 +825,16 @@ string field holds the language code (`languageFrom: customer.language` - the cu
 invoice's language). The two are mutually exclusive; absent both, the mint uses the first entry of the
 tenant's application language set. A null/blank `languageFrom` value falls back the same way.
 
+It may also declare the **name** its copies are stored under - `fileName:`, a pattern of literals and
+`{token}` interpolations resolved on the same document MASTER (see "naming a rendered document" below).
+Absent one, the name is the document's own number, or `<Entity> <id>` when it has none, plus the
+version.
+
 ```yaml
   - name: SalesInvoiceCopy
     function: Snapshot
     languageFrom: customer.language      # the master's relation . a string field of its target
+    fileName: "{number}_{date:yyyyMMdd}_{company.shortName|company.name}"
     relations:
       - { name: salesInvoice, kind: manyToOne, to: SalesInvoice, composition: true }
 ```
@@ -2127,12 +2133,43 @@ absent both, the first entry of the tenant's application language set is used at
   assembles the `{document, items}` payload through the repositories (so translations and validations
   apply) and the print engine renders it. No hand-written listener around the print engine.
 - **The file name is the document's number** when the entity declares a `number:` field
-  (`INV0000042.pdf`), else `<Entity> <id>.pdf`.
+  (`INV0000042.pdf`), else `<Entity> <id>.pdf` - unless the block declares a `fileName:` pattern (see
+  below).
 - **A missing recipient is a no-op**, logged and skipped - a record with nobody to mail must not stall
   a flow (the same rule a schedule's notify has always had).
 - **A transition's mail is fail-soft**: the status flip is the endpoint's contract and has already
   committed, so an SMTP problem is logged and the transition still returns success. A `serviceTask`
   send, whose whole purpose IS the message, fails the task instead so the engine retries.
+
+### naming a rendered document - `fileName:`
+
+Both server-side renders - the snapshot copy a document mints on issue and the PDF a notify block
+attaches - accept a **`fileName:`** pattern instead of the default name. A real archive wants a
+self-describing name (`SI0000042_20260822_MyCompany_AcmeLtd.pdf`), not `Order 42 v1.pdf`.
+
+```yaml
+    fileName: "{number}_{date:yyyyMMdd}_{customer.shortName|customer.name}"
+```
+
+- **`{field}`** and one-hop **`{relation.field}`** - the SAME path vocabulary a notify subject or body
+  uses, resolved against the same record, and named with the AUTHORED field/relation names.
+- **`{field:pattern}`** - a `date` or `timestamp` field rendered through a `DateTimeFormatter` pattern.
+- **`{A|B}`** - alternative operands, first non-blank wins (an optional short name beside the legal
+  name is filled for some records and not for others).
+- **`{Version}`** - a snapshot only. A pattern that does not place it gets `_v<version>` appended, so
+  two versions of a copy never share a name.
+- `.pdf` is appended automatically.
+
+Interpolated **values** are sanitized: trimmed, internal whitespace becomes one `_`, and path/control
+characters (`/ \ : * ? " < > |`) are removed. Non-ASCII is deliberately kept - a document in a local
+language legitimately carries a non-Latin name. The literal separators between tokens are yours and
+are emitted verbatim.
+
+An unknown field or relation is a **validation error**, not an empty rendering: a pattern that
+silently dropped a token would produce archive names nobody can tell apart, which is what the knob
+exists to fix. On a notify block, `fileName:` requires `attach:` (a plain-text message has no file to
+name), and with `attach: recordPrint` only fields of the anchor itself are readable - that document is
+rendered once, before the per-row loop.
 - Per-tenant SMTP comes from the platform mail configuration; the sender address is
   `DIRIGIBLE_MAIL_SENDER`.
 

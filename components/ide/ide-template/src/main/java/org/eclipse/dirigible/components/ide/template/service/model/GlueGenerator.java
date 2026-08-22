@@ -801,8 +801,11 @@ class GlueGenerator {
      */
     private static void bindSnapshot(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "master", "masterPk", "languageExpression", "languageFkProperty", "languageTargetEntity", "snapshotEntity",
-                "snapshotMasterFk");
+                "snapshotMasterFk", "fileNameExpression");
         context.put("masterJavaPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "masterPerspective", "")));
+        // The one-hop loads a fileName pattern reads off the master - the same shape (and the same
+        // cross-model package resolution) a notify listener's relation loads have.
+        context.put("fileNameLoads", relationLoads(item.get("fileNameLoads"), parameters));
         context.put("languageTargetJavaPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "languageTargetPerspective", "")));
         context.put("languageTargetJavaGenFolder",
                 truthy(item, "languageTargetModel") ? sanitize(item, "languageTargetModel") : str(parameters, "javaGenFolderName"));

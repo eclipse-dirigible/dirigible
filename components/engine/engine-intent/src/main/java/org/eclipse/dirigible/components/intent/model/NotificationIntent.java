@@ -68,6 +68,14 @@ public class NotificationIntent {
      * ROW's own document.
      */
     private String forEach;
+    /**
+     * The name the {@link #attach}ed PDF arrives under - a pattern of literals and {@code {token}}
+     * interpolations over the rendered record ({@code {Number}_{Date:yyyyMMdd}_{Customer.Name}}), with
+     * {@code .pdf} appended. Absent, the name is the document's own number, or the entity name plus the
+     * record id when it has none. A real archive wants a self-describing name; the fixed one is only
+     * the default.
+     */
+    private String fileName;
 
     /**
      * The keys {@link #fromMap} reads - the whole vocabulary of an embedded notify block. Published so
@@ -76,7 +84,7 @@ public class NotificationIntent {
      * not to this set would go straight back to being unauthorable.
      */
     public static final Set<String> BLOCK_KEYS =
-            Set.of("to", "subject", "body", "attach", "language", "languageFrom", "forEach", "channel");
+            Set.of("to", "subject", "body", "attach", "language", "languageFrom", "fileName", "forEach", "channel");
 
     /**
      * Read an <b>embedded</b> notify block off a free-form map - a process step's {@code args.notify},
@@ -97,6 +105,7 @@ public class NotificationIntent {
         notify.setAttach(string(map.get("attach")));
         notify.setLanguage(string(map.get("language")));
         notify.setLanguageFrom(string(map.get("languageFrom")));
+        notify.setFileName(string(map.get("fileName")));
         notify.setForEach(string(map.get("forEach")));
         String channel = string(map.get("channel"));
         if (channel != null) {
@@ -179,6 +188,14 @@ public class NotificationIntent {
 
     public void setLanguageFrom(String languageFrom) {
         this.languageFrom = languageFrom;
+    }
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
     }
 
     public String getForEach() {

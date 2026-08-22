@@ -206,15 +206,19 @@ public final class NotifySupport {
      *        literal ({@code language:}), a null-safe read off the {@link #languageLoad} local
      *        ({@code languageFrom:}), or the run-time application-language fallback
      * @param fileNameExpression a Java expression for the attachment file name, evaluated against the
-     *        loaded record (the document number when the entity has one, else the entity name + id)
+     *        loaded record - the authored {@code fileName:} pattern, or, absent one, the document
+     *        number when the entity has one, else the entity name + id
+     * @param fileNameLoads the one-hop relation loads a {@code fileName:} pattern reads, on top of the
+     *        ones the message text already needs - the caller merges them into the block's relation
+     *        loads (they share the local named after the relation, so one load serves both)
      * @param languageLoad the {@code languageFrom} relation load backing the expression, or
      *        {@code null} when the language needs no related record
      * @param anchorScoped whether the rendered record is a fan-out's anchor ({@code recordPrint})
      *        instead of the record the block is about - the expressions then read the
      *        {@link #RECORD_LOCAL} local and the render happens once, outside the per-row loop
      */
-    public record PrintAttachment(String entity, String languageExpression, String fileNameExpression, LanguageLoad languageLoad,
-            boolean anchorScoped) {
+    public record PrintAttachment(String entity, String languageExpression, String fileNameExpression,
+            List<NotificationSupport.RelationLoad> fileNameLoads, LanguageLoad languageLoad, boolean anchorScoped) {
 
         /** @return the authored {@code attach} value this attachment came from. */
         public String kind() {
@@ -378,17 +382,43 @@ public final class NotifySupport {
         // so every expression below is rendered against that local instead of the per-row one.
         boolean anchorScoped = attachesRecordPrint(notify);
         String local = anchorScoped ? RECORD_LOCAL : ENTITY_LOCAL;
+        // The file name is resolved once, whatever the language knob turns out to be: it reads the same
+        // record through the same local, and an unresolvable pattern must be reported before any of the
+        // language shapes below can return an attachment.
+        FileName fileName = fileName(notify, entity, local, anchorScoped, byName, compositionParents, crossModel);
         String literal = notify.getLanguage();
         if (literal != null && !literal.isBlank()) {
-            return new PrintAttachment(entity.getName(), "\"" + literal.trim() + "\"", fileNameExpression(entity, local), null,
+            return new PrintAttachment(entity.getName(), "\"" + literal.trim() + "\"", fileName.expression(), fileName.loads(), null,
                     anchorScoped);
         }
         String path = notify.getLanguageFrom();
         if (path == null || path.isBlank()) {
-            return new PrintAttachment(entity.getName(), DEFAULT_LANGUAGE_EXPRESSION, fileNameExpression(entity, local), null,
+            return new PrintAttachment(entity.getName(), DEFAULT_LANGUAGE_EXPRESSION, fileName.expression(), fileName.loads(), null,
                     anchorScoped);
         }
-        return languageFromAttachment(path.trim(), entity, byName, compositionParents, crossModel, anchorScoped, local);
+        return languageFromAttachment(path.trim(), entity, byName, compositionParents, crossModel, anchorScoped, local, fileName);
+    }
+
+    /**
+     * The resolved attachment file name: the Java expression plus the relation loads it reads.
+     */
+    private record FileName(String expression, List<NotificationSupport.RelationLoad> loads) {
+    }
+
+    /**
+     * The authored {@code fileName:} pattern, or the default (the document number, else the entity name
+     * plus the record id) when the block declares none. A {@code recordPrint} renders the fan-out's
+     * anchor ONCE, in its own method, where the per-row relation locals do not exist - so a relation
+     * hop is refused there rather than emitting a read of an undeclared local.
+     */
+    private static FileName fileName(NotificationIntent notify, EntityIntent entity, String local, boolean anchorScoped,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
+        FileNameSupport.Site site = new FileNameSupport.Site(entity, local, !anchorScoped, false);
+        FileNameSupport.Resolved resolved = FileNameSupport.resolve(notify.getFileName(), site, byName, compositionParents, crossModel);
+        if (resolved == null) {
+            return new FileName(FileNameSupport.numberOrId(entity, local) + " + \".pdf\"", List.of());
+        }
+        return new FileName(resolved.expression() + " + \".pdf\"", resolved.loads());
     }
 
     /**
@@ -397,7 +427,8 @@ public final class NotifySupport {
      * application language set when the chain is null/blank.
      */
     private static PrintAttachment languageFromAttachment(String path, EntityIntent entity, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel, boolean anchorScoped, String local) {
+            Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel, boolean anchorScoped, String local,
+            FileName fileName) {
         int dot = path.indexOf('.');
         if (dot < 0) {
             throw new IllegalArgumentException(
@@ -443,7 +474,7 @@ public final class NotifySupport {
         }
         String expression = "attachLanguageSource == null || attachLanguageSource." + pascalField + " == null || attachLanguageSource."
                 + pascalField + ".isBlank() ? " + DEFAULT_LANGUAGE_EXPRESSION + " : attachLanguageSource." + pascalField + ".trim()";
-        return new PrintAttachment(entity.getName(), expression, fileNameExpression(entity, local), load, anchorScoped);
+        return new PrintAttachment(entity.getName(), expression, fileName.expression(), fileName.loads(), load, anchorScoped);
     }
 
     private static FieldIntent fieldOf(EntityIntent entity, String name) {
@@ -453,24 +484,6 @@ public final class NotifySupport {
             }
         }
         return null;
-    }
-
-    /**
-     * The attachment file name: the document's own number when the entity declares a {@code number:}
-     * field (so the customer receives {@code SI00000042.pdf}, not {@code SalesInvoice 42.pdf}), falling
-     * back to the entity name plus the record id. Rendered as a Java expression over the {@code local}
-     * the generated code loaded the rendered record into.
-     */
-    private static String fileNameExpression(EntityIntent entity, String local) {
-        String keyProperty = IntentEntities.keyFieldName(entity);
-        for (FieldIntent field : entity.getFields()) {
-            if (field.getNumber() != null && field.getName() != null) {
-                String number = local + "." + IntentNaming.pascalCase(field.getName());
-                return "(" + number + " == null || " + number + ".isBlank() ? \"" + entity.getName() + " \" + " + local + "." + keyProperty
-                        + " : " + number + ") + \".pdf\"";
-            }
-        }
-        return "\"" + entity.getName() + " \" + " + local + "." + keyProperty + " + \".pdf\"";
     }
 
     /**
