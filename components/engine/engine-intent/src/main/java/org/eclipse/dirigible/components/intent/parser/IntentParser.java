@@ -23,6 +23,7 @@ import java.util.TreeSet;
 import org.eclipse.dirigible.components.intent.generator.ArrivalSupport;
 import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
+import org.eclipse.dirigible.components.intent.generator.FileNameSupport;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
@@ -114,7 +115,7 @@ public final class IntentParser {
     private static final Set<String> INTEGER_PK_TYPES = Set.of("integer", "int", "long");
     /** Numeric field types a sum roll-up (its field / {@code of} / capacity / balance) may use. */
     private static final Set<String> NUMERIC_TYPES = Set.of("integer", "int", "long", "decimal", "double");
-    private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany");
+    private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany", "subset");
     /** Implemented entity {@code function} values (lower-cased), selecting the entity's UI template. */
     private static final Set<String> ENTITY_FUNCTIONS =
             Set.of("document", "documentitem", "master", "detail", "list", "setting", "calendar", "attachment", "snapshot");
@@ -188,6 +189,13 @@ public final class IntentParser {
     /** The {@code {record.<path>}} placeholders of a subject / body. */
     private static final java.util.regex.Pattern RECORD_PLACEHOLDER =
             java.util.regex.Pattern.compile("\\{(" + RECORD_SCOPE + "\\.[A-Za-z0-9_.]*)\\}");
+    /** One {@code {...}} interpolation of a {@code fileName:} pattern. */
+    private static final java.util.regex.Pattern FILE_NAME_TOKEN = java.util.regex.Pattern.compile("\\{([^{}]*)\\}");
+    /** A one-hop path inside a {@code fileName:} token: a field, or a to-one relation and one field. */
+    private static final java.util.regex.Pattern FILE_NAME_PATH =
+            java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?");
+    /** The field types a {@code fileName:} token may carry a {@code :pattern} date format on. */
+    private static final Set<String> FILE_NAME_DATE_TYPES = Set.of("date", "timestamp");
     /** Comparison operators a schedule's {@code where} condition may use. */
     private static final Set<String> SCHEDULE_OPERATORS = Set.of("eq", "ne", "gt", "ge", "lt", "le", "like");
     /** HTTP methods an outbound integration may use. */
@@ -354,6 +362,7 @@ public final class IntentParser {
                 }
             }
             validateSnapshotLanguage(entity, model, compositionParent, issues);
+            validateSnapshotFileName(entity, model, compositionParent, issues);
             validateLocksWithMaster(entity, model, compositionParent, issues);
             for (FieldIntent field : entity.getFields()) {
                 String ff = field.getFunction();
@@ -855,7 +864,7 @@ public final class IntentParser {
                     validateNotifyBlock(schedule.getNotify(), "schedule [" + name + "] notify", schedule.getEntity(), model, false, issues);
                 }
             } else {
-                validateScheduleGenerate(schedule, source, entityNames, usesAliases, issues);
+                validateScheduleGenerate(schedule, source, byName, entityNames, usesAliases, issues);
             }
         }
     }
@@ -863,12 +872,13 @@ public final class IntentParser {
     /**
      * A schedule's {@code generate} action creates one target record per matching row. The row is the
      * source, so {@code from} is implicit (the schedule's {@code entity}); the author declares
-     * {@code to} (this model, or another via {@code uses:}), a {@code map} (target property -> a field
-     * or to-one relation of the row) and {@code defaults}. Composition-item cloning is out of scope
-     * here - it needs a selected document, so it belongs to an on-demand {@code generates} action.
+     * {@code to} (this model, or another via {@code uses:}), a {@code map} (target property -> a field,
+     * a to-one relation, or a one-hop {@code relation.field} of the row) and {@code defaults}.
+     * Composition-item cloning is out of scope here - it needs a selected document, so it belongs to an
+     * on-demand {@code generates} action.
      */
-    private static void validateScheduleGenerate(ScheduleIntent schedule, EntityIntent source, Set<String> entityNames,
-            Set<String> usesAliases, List<String> issues) {
+    private static void validateScheduleGenerate(ScheduleIntent schedule, EntityIntent source, Map<String, EntityIntent> byName,
+            Set<String> entityNames, Set<String> usesAliases, List<String> issues) {
         String name = schedule.getName();
         GeneratesIntent g = schedule.getGenerate();
         if (g.getTo() == null || g.getTo()
@@ -888,7 +898,7 @@ public final class IntentParser {
             issues.add("schedule [" + name + "] generate to references unknown entity [" + g.getTo()
                     + "] (add a uses: alias if the target lives in another model)");
         }
-        validateMapSource(source, g.getMap(), "schedule [" + name + "]", "generate map", issues);
+        validateMapSource(source, byName, g.getMap(), "schedule [" + name + "]", "generate map", true, issues);
         if (g.getItems() != null || (g.getItemLines() != null && !g.getItemLines()
                                                                    .isEmpty())) {
             issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
@@ -2140,9 +2150,15 @@ public final class IntentParser {
                                                                      .isBlank();
         boolean hasLanguageFrom = notify.getLanguageFrom() != null && !notify.getLanguageFrom()
                                                                              .isBlank();
+        boolean hasFileName = notify.getFileName() != null && !notify.getFileName()
+                                                                     .isBlank();
         if (attach == null || attach.isBlank()) {
             if (hasLanguage || hasLanguageFrom) {
                 issues.add(subject + " declares language/languageFrom without attach: print - they select the attached render's language");
+            }
+            if (hasFileName) {
+                issues.add(subject + " declares fileName without attach: print - it names the attached render, and a plain-text"
+                        + " message has no file to name");
             }
             return;
         }
@@ -2165,6 +2181,13 @@ public final class IntentParser {
         } else if (hasLanguageFrom && documentEntity != null) {
             // The language belongs to whatever is rendered, so a recordPrint reads it off the anchor.
             validateLanguageFromPath(notify.getLanguageFrom(), documentEntity, subject + " languageFrom", model, issues);
+        }
+        if (hasFileName && documentEntity != null) {
+            // The name belongs to whatever is rendered, like the language. A recordPrint renders the
+            // anchor ONCE, before the per-row loop, where the block's relation locals do not exist yet -
+            // so only fields of the anchor itself are readable there, exactly as the `record.` scope is
+            // limited to one field of it.
+            validateFileNamePattern(notify.getFileName(), documentEntity, subject + " fileName", model, issues, !recordPrint, false);
         }
     }
 
@@ -2295,6 +2318,181 @@ public final class IntentParser {
                 return;
             }
             validateLanguageFromPath(entity.getLanguageFrom(), master, "entity [" + name + "] languageFrom", model, issues);
+        }
+    }
+
+    /**
+     * The {@code fileName:} knob of a {@code function: Snapshot} child: the name its minted copies are
+     * stored under, a pattern resolved on the snapshot's composition MASTER (the document whose copy is
+     * minted - the copy row itself carries only the stored file's coordinates). Meaningless anywhere
+     * else. Absent, the name is the document's own number plus the version.
+     */
+    private static void validateSnapshotFileName(EntityIntent entity, IntentModel model, Map<String, String> compositionParent,
+            List<String> issues) {
+        String pattern = entity.getFileName();
+        if (pattern == null || pattern.isBlank()) {
+            return;
+        }
+        String name = entity.getName();
+        if (!entity.isSnapshot()) {
+            issues.add("entity [" + name + "] declares fileName, which applies to function: Snapshot children only");
+            return;
+        }
+        String master = compositionParent.get(name);
+        if (master == null) {
+            issues.add("entity [" + name + "] fileName needs a composition master (the document) to resolve against");
+            return;
+        }
+        validateFileNamePattern(pattern, master, "entity [" + name + "] fileName", model, issues, true, true);
+    }
+
+    /**
+     * A {@code fileName:} pattern is literals plus {@code {token}} interpolations - the smallest
+     * grammar a self-describing archive name needs, and no expression language. Each token is one path,
+     * or {@code |}-separated alternative paths of which the first non-blank one wins; a path is a field
+     * or a one-hop {@code relation.field} of the rendered entity; and a {@code date}/{@code timestamp}
+     * field may carry a {@code :pattern} date format.
+     *
+     * <p>
+     * Every part of it is checked here rather than left to render time: a token that resolved to
+     * nothing would produce a name indistinguishable from every other copy's, which is the exact
+     * failure the knob exists to fix.
+     *
+     * @param relationsAllowed whether a one-hop hop may be used at this call site
+     * @param versionAllowed whether the reserved {@code Version} token is addressable (a snapshot only)
+     */
+    private static void validateFileNamePattern(String pattern, String aboutEntity, String subject, IntentModel model, List<String> issues,
+            boolean relationsAllowed, boolean versionAllowed) {
+        String authored = pattern.trim();
+        if (authored.indexOf('{') < 0 || authored.indexOf('}') < 0) {
+            issues.add(subject + " [" + pattern + "] interpolates nothing - it would name every copy alike");
+            return;
+        }
+        // Balance first: an unmatched or nested brace makes every position below meaningless, and the
+        // token scan would silently skip the malformed part instead of reporting it.
+        int depth = 0;
+        for (char character : authored.toCharArray()) {
+            if (character == '{') {
+                depth++;
+            } else if (character == '}') {
+                depth--;
+            }
+            if (depth < 0 || depth > 1) {
+                issues.add(subject + " [" + pattern + "] has unbalanced or nested braces");
+                return;
+            }
+        }
+        if (depth != 0) {
+            issues.add(subject + " [" + pattern + "] has an unclosed { token");
+            return;
+        }
+        EntityIntent about = entityByName(model, aboutEntity);
+        if (about == null) {
+            return; // the dangling entity is reported by the structural checks
+        }
+        java.util.regex.Matcher matcher = FILE_NAME_TOKEN.matcher(authored);
+        while (matcher.find()) {
+            validateFileNameToken(matcher.group(1), pattern, about, subject, model, issues, relationsAllowed, versionAllowed);
+        }
+    }
+
+    /** One {@code {...}} body: the reserved version token, or one or more alternative operands. */
+    private static void validateFileNameToken(String body, String pattern, EntityIntent about, String subject, IntentModel model,
+            List<String> issues, boolean relationsAllowed, boolean versionAllowed) {
+        if (FileNameSupport.VERSION_TOKEN.equals(body.trim())) {
+            if (!versionAllowed) {
+                issues.add(subject + " [" + pattern + "] uses {" + FileNameSupport.VERSION_TOKEN
+                        + "}, which only a snapshot copy has - a sent document carries no version");
+            }
+            return;
+        }
+        String[] operands = body.split("\\|");
+        if (operands.length == 0) {
+            issues.add(subject + " [" + pattern + "] has an empty {} token");
+            return;
+        }
+        for (String operand : operands) {
+            validateFileNameOperand(operand.trim(), pattern, about, subject, model, issues, relationsAllowed);
+        }
+    }
+
+    /** One operand: {@code Path} or {@code Path:dateFormat}. */
+    private static void validateFileNameOperand(String operand, String pattern, EntityIntent about, String subject, IntentModel model,
+            List<String> issues, boolean relationsAllowed) {
+        int colon = operand.indexOf(':');
+        String path = colon < 0 ? operand
+                : operand.substring(0, colon)
+                         .trim();
+        String format = colon < 0 ? null
+                : operand.substring(colon + 1)
+                         .trim();
+        if (path.isEmpty() || !FILE_NAME_PATH.matcher(path)
+                                             .matches()) {
+            issues.add(subject + " [" + pattern + "]: [" + operand + "] is not a field or a one-hop relation.field path on ["
+                    + about.getName() + "]");
+            return;
+        }
+        int dot = path.indexOf('.');
+        FieldIntent field;
+        if (dot < 0) {
+            field = fieldByName(about, path);
+            if (field == null) {
+                issues.add(subject + " [" + pattern + "]: [" + path + "] is not a field of [" + about.getName() + "]");
+                return;
+            }
+        } else {
+            if (!relationsAllowed) {
+                issues.add(subject + " [" + pattern + "]: [" + path + "] is a relation hop, and this document is rendered once for the"
+                        + " whole fan-out - only fields of [" + about.getName() + "] itself are readable here");
+                return;
+            }
+            String relationName = path.substring(0, dot);
+            String fieldName = path.substring(dot + 1);
+            RelationIntent relation = toOneRelationNamed(about, relationName);
+            if (relation == null) {
+                issues.add(subject + " [" + pattern + "]: [" + relationName + "] is not a to-one relation of [" + about.getName() + "]");
+                return;
+            }
+            if (relation.getModel() != null && !relation.getModel()
+                                                        .isBlank()) {
+                return; // cross-model target: field checked at generation against the owner's model
+            }
+            EntityIntent target = entityByName(model, relation.getTo() == null ? "" : relation.getTo());
+            if (target == null) {
+                return; // the dangling relation target is reported by the relations check
+            }
+            field = fieldByName(target, fieldName);
+            if (field == null) {
+                issues.add(subject + " [" + pattern + "]: [" + fieldName + "] is not a field of [" + relation.getTo() + "]");
+                return;
+            }
+        }
+        validateFileNameDateFormat(format, field, path, pattern, subject, issues);
+    }
+
+    /**
+     * The optional {@code :pattern} date format: only on a date-typed field (formatting anything else
+     * is a no-op the author would never see), and only a pattern {@code DateTimeFormatter} accepts.
+     */
+    private static void validateFileNameDateFormat(String format, FieldIntent field, String path, String pattern, String subject,
+            List<String> issues) {
+        if (format == null) {
+            return;
+        }
+        if (format.isEmpty()) {
+            issues.add(subject + " [" + pattern + "]: [" + path + "] declares an empty date pattern after the colon");
+            return;
+        }
+        String type = field.getType() == null ? "string" : field.getType();
+        if (!FILE_NAME_DATE_TYPES.contains(type)) {
+            issues.add(subject + " [" + pattern + "]: the [" + format + "] format applies to a date or timestamp field, and [" + path
+                    + "] is of type [" + type + "]");
+            return;
+        }
+        try {
+            java.time.format.DateTimeFormatter.ofPattern(format);
+        } catch (IllegalArgumentException ex) {
+            issues.add(subject + " [" + pattern + "]: [" + format + "] is not a valid date format - " + ex.getMessage());
         }
     }
 
@@ -2536,6 +2734,13 @@ public final class IntentParser {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] has unknown kind ["
                             + relation.getKind() + "]");
                 }
+                // A subset relation holds the selected target keys as ONE value - neither a to-one FK
+                // nor a row set - so it gets its own validation block and none of the association-shaped
+                // checks below (composition, cross-model, dependsOn, leafOnly, personal/partner).
+                if ("subset".equals(relation.getKind())) {
+                    validateSubset(entity, relation, entityNames, byName, issues);
+                    continue;
+                }
                 // ManyToManyExpander consumed every n:m before this ran, so a surviving manyToMany is one
                 // it already refused, with a message naming what the author wrote. The association-shaped
                 // checks below would only pile contradictory advice (a composition kind, a target FK, a
@@ -2666,6 +2871,80 @@ public final class IntentParser {
     }
 
     /**
+     * A {@code subset} relation is a set-valued reference to a small lookup entity: the record holds a
+     * subset of the target's rows as a single value (the selected keys, comma-separated, ascending,
+     * de-duplicated; empty selection = null), never as rows. It lowers to a plain column plus a
+     * multi-select widget - no FK, no link entity - so everything that describes a to-one FK or
+     * consumes rows is rejected here rather than carried nowhere. The target must be an entity of this
+     * model: the stored value is the target's seed keys, which belong to the owner model's seeds, so a
+     * cross-model target is refused naming the limit (the same locality rule status stages follow).
+     *
+     * @param entity the declaring entity
+     * @param relation the subset relation
+     * @param entityNames the declared entity names of this model
+     * @param byName the declared entities of this model, by name
+     * @param issues the collecting issue list
+     */
+    private static void validateSubset(EntityIntent entity, RelationIntent relation, Set<String> entityNames,
+            Map<String, EntityIntent> byName, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        if (relation.isCrossModel()) {
+            issues.add(subject + " is a subset relation so it cannot be cross-model (model: " + relation.getModel()
+                    + ") - the stored value is the target's seed keys, which belong to the owner model. A subset relation"
+                    + " resolves against this model only. Seed the lookup here, or author an explicit intermediate entity"
+                    + " (manyToMany supports a cross-model target)");
+        } else if (isBlank(relation.getTo())) {
+            issues.add(subject + " has no target");
+        } else if (!entityNames.contains(relation.getTo())) {
+            issues.add(subject + " points to unknown entity [" + relation.getTo() + "]");
+        }
+        List<String> unsupported = new ArrayList<>();
+        if (relation.isComposition()) {
+            unsupported.add("composition");
+        }
+        if (!isBlank(relation.getInit())) {
+            unsupported.add("init");
+        }
+        if (!isBlank(relation.getFunction())) {
+            unsupported.add("function");
+        }
+        if (relation.getDependsOn() != null) {
+            unsupported.add("dependsOn");
+        }
+        if (!isBlank(relation.getThrough())) {
+            unsupported.add("through");
+        }
+        if (relation.isPersonal() || relation.isPersonalReadOnly()) {
+            unsupported.add("personal");
+        }
+        if (relation.isPartner()) {
+            unsupported.add("partner");
+        }
+        if (relation.isCalculated()) {
+            unsupported.add("calculatedAction");
+        }
+        if (relation.getShow() != null && !relation.getShow()
+                                                   .isEmpty()) {
+            unsupported.add("show");
+        }
+        if (relation.isLeafOnly()) {
+            unsupported.add("leafOnly");
+        }
+        if (!unsupported.isEmpty()) {
+            issues.add(subject + " is a subset relation so it cannot declare " + unsupported
+                    + " - a subset relation holds the selected target keys as ONE value; those describe a to-one FK or a"
+                    + " row set. For rows (bridge data, reverse navigation, forEach/related/rollups/reports), use manyToMany"
+                    + " or author the intermediate entity");
+        }
+        if (relation.getSize() != null && (relation.getSize() < 1 || relation.getSize() > 12)) {
+            issues.add(subject + " size [" + relation.getSize() + "] must be a 12-column grid span between 1 and 12 (typically 3/4/6/12)");
+        }
+        if (relation.getWhere() != null) {
+            validateWhere(entity, relation, byName, issues);
+        }
+    }
+
+    /**
      * {@code unique:} declares the business keys spanning more than one column - what a row IS when no
      * single field says it. Every name must resolve to an own field or an own <b>to-one</b> relation of
      * the entity: a to-one contributes its foreign-key column, which is what a pair like
@@ -2717,7 +2996,11 @@ public final class IntentParser {
                 }
                 RelationIntent relation = relations.get(name);
                 if (relation != null) {
-                    if (!("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                    if ("subset".equals(relation.getKind())) {
+                        issues.add(subject + " names the subset relation [" + name
+                                + "] - its column holds a normalized set of the target's keys, not an identity. A uniqueness key over it"
+                                + " is not supported");
+                    } else if (!("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
                         issues.add(subject + " names [" + name + "], which is a " + relation.getKind()
                                 + " relation - only a field or a to-one relation has a column on this entity to constrain");
                     } else if (relation.isCrossModel()) {
@@ -3432,9 +3715,10 @@ public final class IntentParser {
     private static void validateWhere(EntityIntent entity, RelationIntent relation, java.util.Map<String, EntityIntent> byName,
             List<String> issues) {
         String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
-        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
-        if (!toOne) {
-            issues.add(subject + " declares where but only a manyToOne/oneToOne relation has a dropdown to filter");
+        boolean optionList =
+                "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()) || "subset".equals(relation.getKind());
+        if (!optionList) {
+            issues.add(subject + " declares where but only a manyToOne/oneToOne/subset relation has an option list to filter");
             return;
         }
         if (relation.isComposition()) {
@@ -5599,7 +5883,7 @@ public final class IntentParser {
                 issues.add("generates [" + name + "] has invalid scope [" + scope + "] (expected 'entity' or 'page')");
             }
             validateGeneratesEvent(g, name, source, crossModelSource, model, issues);
-            validateMapSource(source, g.getMap(), "generates [" + name + "]", "map", issues);
+            validateMapSource(source, byName, g.getMap(), "generates [" + name + "]", "map", true, issues);
             if (g.getItems() != null) {
                 GeneratesItemsIntent items = g.getItems();
                 EntityIntent itemSource = null;
@@ -5618,10 +5902,100 @@ public final class IntentParser {
                                                   .isBlank()) {
                     issues.add("generates [" + name + "] items has no to entity");
                 }
-                validateMapSource(itemSource, items.getMap(), "generates [" + name + "]", "items map", issues);
+                validateMapSource(itemSource, byName, items.getMap(), "generates [" + name + "]", "items map", false, issues);
             }
             validateGeneratesItemLines(g, name, source, byName, crossModel, issues);
             validateGeneratesPrompt(g, name, byName, crossModel, issues);
+            validateGeneratesReopen(g, name, byName, crossModel, model, issues);
+        }
+    }
+
+    /**
+     * Validate the declared reopen of a create-from (issue #6868): {@code sourceStatusOnRetire}, the
+     * INVERSE of the {@code sourceStatus} completion hook - the status the SOURCE returns to when the
+     * target generated from it is retired, which is what makes "void and reissue" reachable without a
+     * click.
+     *
+     * <p>
+     * Everything here refuses a combination in which the reopen could never fire, because a reopen that
+     * cannot fire is exactly the silence this feature exists to remove: the at-most-once guard steps
+     * over a retired target (issue #6814) and frees the source's slot, and if nothing can refill it the
+     * author is left with a model that reads as automatic and is not. So the hook must exist to be
+     * inverted, the inverse must be a different status, the target must be one whose retirement is
+     * recognisable HERE (a local target whose nomenclature classifies a retiring {@code stage:}), and
+     * an appending create-from - which keeps no guard and no slot - is refused outright.
+     *
+     * <p>
+     * The remaining check is the source's own state machine, and it lives with the other status writes
+     * in {@link #validateStatusWritesAgainstLifecycle}: the source stands at {@code sourceStatus} when
+     * the retirement arrives, so the graph must declare that exact edge back.
+     */
+    private static void validateGeneratesReopen(GeneratesIntent g, String name, Map<String, EntityIntent> byName, boolean crossModel,
+            IntentModel model, List<String> issues) {
+        if (!g.hasReopen()) {
+            return;
+        }
+        String subject = "generates [" + name + "]";
+        if (g.getSourceStatus() == null) {
+            issues.add(subject + " declares sourceStatusOnRetire but no sourceStatus - the reopen is the INVERSE of the completion"
+                    + " hook, and with no flip forward the source never leaves the status its own trigger qualifies on, so there is"
+                    + " nothing to return it from");
+            return;
+        }
+        if (g.getSourceStatusOnRetire()
+             .equals(g.getSourceStatus())) {
+            issues.add(subject + " returns the source to [" + g.getSourceStatus()
+                    + "], the very status sourceStatus flips it to - a write that leaves the status where it stands is no transition,"
+                    + " so nothing would be published and nothing would re-fire; name the status the source qualified on before the"
+                    + " target existed");
+            return;
+        }
+        if (g.isAppendMode()) {
+            issues.add(subject + " declares sourceStatusOnRetire with mode: append - an appending create-from keeps no at-most-once"
+                    + " guard, so no slot is ever consumed for a retired target to free, and returning the source would simply append"
+                    + " another " + g.getTo() + "; drop the reopen, or use mode: once");
+            return;
+        }
+        if (!g.isEventDriven()) {
+            // A create-from with no event carries no guard at all, so nothing ever blocks a second
+            // creation: the button IS the reissue. There is no slot to free and no trigger to re-fire,
+            // which is why the glue emits no reopen listener for this shape - and an authored key that
+            // generates nothing is the silence this whole construct exists to refuse.
+            issues.add(subject + " declares sourceStatusOnRetire but has no event: - a create-from triggered only by a button carries"
+                    + " no at-most-once guard, so nothing blocks a replacement and the button already reissues. The reopen exists to"
+                    + " re-fire an EVENT trigger; declare event: or drop the key");
+            return;
+        }
+        if (crossModel) {
+            issues.add(subject + " cannot reopen for a cross-model target (uses [" + g.getUses() + "]) - what RETIRES a [" + g.getTo()
+                    + "] is the `stage:` classification of its status nomenclature, seeded in the owner model and not resolvable here;"
+                    + " author the create-from in [" + g.getUses() + "], or keep a button (button: true) to reissue by hand");
+            return;
+        }
+        EntityIntent target = g.getTo() == null ? null : byName.get(g.getTo());
+        if (target == null) {
+            return; // an unknown target is already reported
+        }
+        RelationIntent status = LifecycleStages.statusRelation(target);
+        if (status == null || status.getTo() == null) {
+            issues.add(subject + " declares sourceStatusOnRetire but its target [" + g.getTo()
+                    + "] declares no function: EntityStatus relation - it can never be retired, so the reopen could never fire");
+            return;
+        }
+        if (status.isCrossModel()) {
+            issues.add(subject + " target [" + g.getTo() + "] takes its lifecycle from [" + status.getModel() + ":" + status.getTo()
+                    + "], a nomenclature seeded in another model, so no `stage:` classification is resolvable here - the retirement"
+                    + " that would trigger the reopen cannot be recognised");
+            return;
+        }
+        Map<String, List<Integer>> stages = LifecycleStages.stagesOf(model, status.getTo());
+        if (stages.getOrDefault(LifecycleStages.CANCELLED, List.of())
+                  .isEmpty()
+                && stages.getOrDefault(LifecycleStages.VOID, List.of())
+                         .isEmpty()) {
+            issues.add(subject + " declares sourceStatusOnRetire but no seed row of [" + status.getTo()
+                    + "] is classified `stage: cancelled` or `stage: void` - that classification is what makes a [" + g.getTo()
+                    + "] retired, so classify the seed rows of [" + status.getTo() + "] with `stage:` (draft/live/cancelled/void)");
         }
     }
 
@@ -5984,7 +6358,7 @@ public final class IntentParser {
                 reachable.addAll(targets);
             }
             validateTransitionsAgainstLifecycle(model, entity, edges, statuses, issues);
-            validateStatusWritesAgainstLifecycle(model, entity, status, reachable, statuses, issues);
+            validateStatusWritesAgainstLifecycle(model, entity, status, edges, reachable, statuses, issues);
         }
     }
 
@@ -6075,9 +6449,14 @@ public final class IntentParser {
      * repository at run time. Checking them here is what turns an unmodeled move from a runtime
      * {@code ValidationException} into a message the author reads - and for {@code sourceStatus} that
      * matters twice over, because its flip runs AFTER the target document has already been committed.
+     *
+     * <p>
+     * One of them CAN be pinned to an exact edge: a create-from's {@code sourceStatusOnRetire} (issue
+     * #6868) runs while the source stands at the {@code sourceStatus} the same rule flipped it to, so
+     * the graph is asked for that one edge rather than for reachability.
      */
     private static void validateStatusWritesAgainstLifecycle(IntentModel model, EntityIntent entity, RelationIntent status,
-            Set<Integer> reachable, Map<Integer, String> statuses, List<String> issues) {
+            Map<Integer, Set<Integer>> edges, Set<Integer> reachable, Map<Integer, String> statuses, List<String> issues) {
         for (ProcessIntent process : model.getProcesses()) {
             if (!entity.getName()
                        .equals(triggerEntityName(process))) {
@@ -6109,6 +6488,18 @@ public final class IntentParser {
                         + "], which no edge of the [" + entity.getName()
                         + "] lifecycle reaches - add the edge or set a status the graph can enter (the flip runs AFTER the target"
                         + " document is created, so a rejected one leaves the document behind)");
+            }
+            Integer reopened = generates.getSourceStatusOnRetire();
+            if (flipped == null || reopened == null || reopened.equals(flipped)) {
+                continue; // the reopen's own validation owns both of those
+            }
+            if (!edges.getOrDefault(flipped, Set.of())
+                      .contains(reopened)) {
+                issues.add("generates [" + generates.getName() + "] returns the source to [" + statusLabel(reopened, statuses)
+                        + "] when its target is retired, but the [" + entity.getName() + "] lifecycle declares no edge from ["
+                        + statusLabel(flipped, statuses) + "] to it - that is exactly where the source stands when the retirement"
+                        + " arrives, so the reopen would be rejected the moment it ran; add the edge, or return to a status ["
+                        + statusLabel(flipped, statuses) + "] reaches");
             }
         }
         for (ResolveIntent resolve : model.getResolves()) {
@@ -6287,11 +6678,30 @@ public final class IntentParser {
     }
 
     /**
-     * Each {@code map} value must name a field or a to-one relation of the source entity; a one-hop
-     * {@code relation.field} path is rejected (not yet supported). Skipped when the source is unknown -
-     * that error is already reported.
+     * Each {@code map} value names a field or a to-one relation of the source entity, or - where the
+     * call site supports it - a one-hop {@code relation.field} path: one to-one relation of the source,
+     * then a FIELD of the entity it points at. The generated create-from loads that related row by its
+     * foreign key exactly as a notification's {@code relation.field} recipient does, and reads the
+     * field off it, so the mapped value is a <b>snapshot</b> taken when the target was created. That is
+     * the whole reason to map it rather than hold the relation and display through it: a log or an
+     * invoice line must keep the value that was true at the time, not follow the related record when it
+     * is later corrected.
+     *
+     * <p>
+     * Two limits are deliberate. The last step must be a field, never a second relation: copying a
+     * foreign key one hop out would land a key from a DIFFERENT entity's numbering space in a column
+     * whose relation points somewhere else, which no target can read back. And the hop is refused for
+     * an {@code items} map, whose source is the ITEM row being cloned - the load would have to happen
+     * once per row inside the clone loop, a different shape from the one-load-per-create-from the
+     * generator emits.
+     *
+     * <p>
+     * Skipped when the source is unknown - that error is already reported. A hop off a CROSS-MODEL
+     * relation is not checked here (the target's fields live in the owner's {@code .model}); the glue
+     * generator resolves it and fails loudly, the convention every cross-model reference follows.
      */
-    private static void validateMapSource(EntityIntent source, Map<String, String> map, String subject, String role, List<String> issues) {
+    private static void validateMapSource(EntityIntent source, Map<String, EntityIntent> byName, Map<String, String> map, String subject,
+            String role, boolean oneHopSupported, List<String> issues) {
         if (source == null || map == null) {
             return;
         }
@@ -6301,16 +6711,72 @@ public final class IntentParser {
                 issues.add(subject + " " + role + " [" + entry.getKey() + "] has no source property");
                 continue;
             }
-            if (sourceProp.indexOf('.') >= 0) {
-                issues.add(subject + " " + role + " [" + entry.getKey() + "] maps a relation.field path [" + sourceProp
-                        + "] which is not yet supported - map a direct field or to-one relation of [" + source.getName() + "]");
+            int dot = sourceProp.indexOf('.');
+            if (dot < 0) {
+                if (fieldByName(source, sourceProp) == null && toOneRelationByName(source, sourceProp) == null) {
+                    issues.add(subject + " " + role + " source [" + sourceProp + "] is not a field or to-one relation of ["
+                            + source.getName() + "]");
+                }
                 continue;
             }
-            if (fieldByName(source, sourceProp) == null && toOneRelationByName(source, sourceProp) == null) {
-                issues.add(subject + " " + role + " source [" + sourceProp + "] is not a field or to-one relation of [" + source.getName()
-                        + "]");
+            if (!oneHopSupported) {
+                issues.add(subject + " " + role + " [" + entry.getKey() + "] maps a relation.field path [" + sourceProp + "] - an " + role
+                        + " does not support a hop, because its source is the row being cloned; map a direct field or to-one relation of ["
+                        + source.getName() + "]");
+                continue;
             }
+            validateMapHop(source, byName, sourceProp, dot, subject + " " + role + " [" + entry.getKey() + "]", issues);
         }
+    }
+
+    /**
+     * One {@code relation.field} map source: the head must be a to-one relation of the mapping source,
+     * the tail a field of the entity that relation points at. Anything deeper, or a tail that is itself
+     * a relation, is refused with the reason rather than the rule.
+     *
+     * @param source the entity the path is read from
+     * @param byName all LOCAL entities by name (a cross-model hop target is not among them)
+     * @param path the authored {@code relation.field} value
+     * @param dot the index of its first dot
+     * @param subject the message prefix naming the offending map entry
+     * @param issues the collected issues
+     */
+    private static void validateMapHop(EntityIntent source, Map<String, EntityIntent> byName, String path, int dot, String subject,
+            List<String> issues) {
+        String relationName = path.substring(0, dot);
+        String fieldName = path.substring(dot + 1);
+        if (fieldName.indexOf('.') >= 0) {
+            issues.add(subject + " maps a multi-hop path [" + path + "], which is not supported - use a direct property of ["
+                    + source.getName() + "] or a one-hop relation.field of it");
+            return;
+        }
+        if (relationName.isEmpty() || fieldName.isEmpty()) {
+            issues.add(subject + " maps [" + path + "], which is not a relation.field path - both halves are required");
+            return;
+        }
+        RelationIntent relation = toOneRelationByName(source, relationName);
+        if (relation == null) {
+            issues.add(subject + " maps [" + path + "] but [" + relationName + "] is not a to-one relation of [" + source.getName() + "]");
+            return;
+        }
+        if (relation.getModel() != null && !relation.getModel()
+                                                    .isBlank()) {
+            return; // a cross-model hop: the target's fields are known only to the owner's .model
+        }
+        EntityIntent target = byName == null ? null : byName.get(relation.getTo());
+        if (target == null) {
+            return; // the unresolvable relation target is already reported
+        }
+        if (fieldByName(target, fieldName) != null) {
+            return;
+        }
+        if (toOneRelationByName(target, fieldName) != null) {
+            issues.add(subject + " maps [" + path + "] whose last step [" + fieldName + "] is a relation of [" + target.getName()
+                    + "], not a field - a hop copies a VALUE, and a foreign key out of [" + target.getName()
+                    + "] means nothing on a column of this target");
+            return;
+        }
+        issues.add(subject + " maps [" + path + "] but [" + fieldName + "] is not a field of [" + target.getName() + "]");
     }
 
     /**
@@ -6478,7 +6944,159 @@ public final class IntentParser {
             validateAgeingDimensions(model, report, issues);
             validateBalanceReport(model, report, issues);
             validateReportScope(model, report, issues);
+            validateSubsetReportReferences(model, report, issues);
         }
+    }
+
+    /**
+     * A report cannot reference a {@code subset} relation: the stored value is the selected keys as ONE
+     * column ({@code "1,3"}), so a dimension over it would {@code GROUP BY} the literal list, a filter
+     * over it would compare against it and an aggregate over it would fold a comma-separated string -
+     * all well-formed SQL computing the wrong thing, with nothing at runtime to say so. Rejected at
+     * parse instead, naming the row-shaped alternative.
+     *
+     * <p>
+     * The reach matches the generator's: a {@code dimension}, a {@code measure} and every
+     * {@code filter} token resolve against the source's own relations AND, for a one-hop
+     * {@code relation.field} path, against the relations of the entity that relation points at
+     * (dirigible #6895). A cross-model target's relations live in the owner model, so such a path is
+     * left alone.
+     */
+    private static void validateSubsetReportReferences(IntentModel model, ReportIntent report, List<String> issues) {
+        EntityIntent source = isBlank(report.getSource()) ? null : entityByName(model, report.getSource());
+        if (source == null) {
+            return; // a missing / unknown source is reported separately
+        }
+        String rowAlternative = " - the stored value is the selected keys as one column, so it cannot group, join or compare;"
+                + " author an explicit intermediate entity (manyToMany) when the set must be reported on";
+        for (String dimension : report.getDimensions()) {
+            if (isBlank(dimension)) {
+                continue;
+            }
+            SubsetReference reference = subsetReferenced(model, source, referencedPath(dimension));
+            if (reference != null) {
+                issues.add("report [" + report.getName() + "] dimension [" + dimension.trim() + "] "
+                        + (reference.joinedEntity() == null ? "is a subset relation"
+                                : "references the subset relation [" + reference.name() + "]" + reference.on())
+                        + rowAlternative);
+            }
+        }
+        for (String measure : report.getMeasures()) {
+            if (isBlank(measure)) {
+                continue;
+            }
+            SubsetReference reference = subsetReferenced(model, source, referencedPath(measure));
+            if (reference != null) {
+                issues.add("report [" + report.getName() + "] measure [" + measure.trim() + "] references the subset relation ["
+                        + reference.name() + "]" + reference.on() + rowAlternative);
+            }
+        }
+        if (!isBlank(report.getFilter())) {
+            // Identifier tokens not preceded by a dot are the first segments the generator rewrites; the
+            // optional second segment is the one-hop path it resolves against the joined entity.
+            java.util.regex.Matcher matcher =
+                    java.util.regex.Pattern.compile("(?<![.\\w])([A-Za-z_][A-Za-z0-9_]*)(?:\\.([A-Za-z_][A-Za-z0-9_]*))?")
+                                           .matcher(report.getFilter());
+            while (matcher.find()) {
+                String path = matcher.group(2) == null ? matcher.group(1) : matcher.group(1) + "." + matcher.group(2);
+                SubsetReference reference = subsetReferenced(model, source, path);
+                if (reference != null) {
+                    issues.add("report [" + report.getName() + "] filter references the subset relation [" + reference.name() + "]"
+                            + reference.on() + rowAlternative);
+                }
+            }
+        }
+    }
+
+    /**
+     * A subset relation a report expression reaches: its name, and the joined entity it lives on -
+     * {@code null} when it is the report source's own relation.
+     */
+    private record SubsetReference(String name, String joinedEntity) {
+
+        /** The {@code on [Entity]} suffix naming where the relation lives, empty for the source's own. */
+        String on() {
+            return joinedEntity == null ? "" : " on [" + joinedEntity + "]";
+        }
+    }
+
+    /**
+     * The property path a report dimension or measure references: a function form ({@code month(x)},
+     * {@code ageing(x, [...])}, {@code sum(x)}) unwraps to its first argument, anything else is the
+     * expression itself.
+     */
+    private static String referencedPath(String expression) {
+        String token = expression.trim();
+        int open = token.indexOf('(');
+        if (open >= 0) {
+            token = token.substring(open + 1);
+        }
+        int cut = indexOfAny(token, ',', ')');
+        return (cut >= 0 ? token.substring(0, cut) : token).trim();
+    }
+
+    /**
+     * The subset relation a property path names, or {@code null} when it names none: the first segment
+     * against {@code source}'s own relations, then - for a {@code relation.field} path - the second
+     * segment against the relations of the entity {@code relation} points at.
+     */
+    private static SubsetReference subsetReferenced(IntentModel model, EntityIntent source, String path) {
+        if (isBlank(path)) {
+            return null;
+        }
+        int dot = path.indexOf('.');
+        String first = (dot > 0 ? path.substring(0, dot) : path).trim();
+        if (isSubsetRelation(source, first)) {
+            return new SubsetReference(first, null);
+        }
+        if (dot <= 0) {
+            return null;
+        }
+        RelationIntent hop = relationByName(source, first);
+        if (hop == null || isBlank(hop.getTo())) {
+            return null;
+        }
+        EntityIntent target = entityByName(model, hop.getTo());
+        if (target == null) {
+            return null; // a cross-model target's relations live in the owner model
+        }
+        String leaf = path.substring(dot + 1)
+                          .trim();
+        int next = leaf.indexOf('.');
+        String field = (next > 0 ? leaf.substring(0, next) : leaf).trim();
+        return isSubsetRelation(target, field) ? new SubsetReference(field, target.getName()) : null;
+    }
+
+    /** Whether the entity declares a {@code subset} relation under that name. */
+    private static boolean isSubsetRelation(EntityIntent entity, String name) {
+        RelationIntent relation = relationByName(entity, name);
+        return relation != null && "subset".equals(relation.getKind());
+    }
+
+    /** The entity's relation with that name, case-insensitively, or {@code null}. */
+    private static RelationIntent relationByName(EntityIntent entity, String name) {
+        if (entity.getRelations() == null || isBlank(name)) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.getName() != null && relation.getName()
+                                                      .equalsIgnoreCase(name.trim())) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    /** The first index of any of the given characters, or -1 when none occurs. */
+    private static int indexOfAny(String value, char... chars) {
+        for (int i = 0; i < value.length(); i++) {
+            for (char c : chars) {
+                if (value.charAt(i) == c) {
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 
     /**
@@ -6938,13 +7556,16 @@ public final class IntentParser {
     }
 
     /**
-     * A seed row's keys are the entity's own declared names: a field, or a to-one relation carrying the
-     * FK. The CSV generator emits a column per declared field plus one per referenced to-one relation
-     * and reads each cell by that exact name, so a key matching neither - a typo, a case slip
-     * ({@code contributionScheme} for the relation {@code ContributionScheme}), a collection relation
-     * that has no column - contributes nothing. That drop used to be silent, and when the missing
-     * column was a NOT NULL FK the import then skipped EVERY row, leaving an empty nomenclature behind
-     * a fully green pipeline. It is an error naming the key, the entity and the nearest declared name.
+     * A seed row's keys are the entity's own declared names: a field, a to-one relation carrying the
+     * FK, or a subset relation carrying its value column. The CSV generator emits a column per declared
+     * field plus one per referenced relation and reads each cell by that exact name, so a key matching
+     * neither - a typo, a case slip ({@code contributionScheme} for the relation
+     * {@code ContributionScheme}), a collection relation that has no column - contributes nothing. That
+     * drop used to be silent, and when the missing column was a NOT NULL FK the import then skipped
+     * EVERY row, leaving an empty nomenclature behind a fully green pipeline. It is an error naming the
+     * key, the entity and the nearest declared name. A subset relation's value is additionally checked
+     * against the normative shape (comma-separated ids) - CSVIM imports bypass the REST controller, so
+     * the generated pattern guard never sees a seed.
      */
     private static void validateSeedRowKeys(SeedIntent seed, EntityIntent entity, List<String> issues) {
         if (entity == null) {
@@ -6956,20 +7577,35 @@ public final class IntentParser {
                 declared.add(field.getName());
             }
         }
+        Set<String> subsets = new HashSet<>();
         for (RelationIntent relation : entity.getRelations()) {
             boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
-            if (relation.getName() != null && toOne) {
+            boolean subset = "subset".equals(relation.getKind());
+            if (relation.getName() != null && (toOne || subset)) {
                 declared.add(relation.getName());
+                if (subset) {
+                    subsets.add(relation.getName());
+                }
             }
         }
         for (Map<String, Object> row : seed.getRows()) {
             for (String key : row.keySet()) {
                 // `stage` is the lifecycle classification marker - metadata about the row, never a column.
-                if (declared.contains(key) || LifecycleStages.STAGE_KEY.equals(key)) {
+                if (LifecycleStages.STAGE_KEY.equals(key)) {
                     continue;
                 }
-                issues.add("seed [" + seed.getName() + "] row references [" + key + "] which is not a field or a to-one relation of ["
-                        + entity.getName() + "]" + UnknownKeyValidator.suggestion(key, declared));
+                if (!declared.contains(key)) {
+                    issues.add("seed [" + seed.getName() + "] row references [" + key + "] which is not a field or a to-one relation of ["
+                            + entity.getName() + "]" + UnknownKeyValidator.suggestion(key, declared));
+                    continue;
+                }
+                Object value = row.get(key);
+                if (subsets.contains(key) && value != null && !String.valueOf(value)
+                                                                     .matches("\\d+(,\\d+)*")) {
+                    issues.add("seed [" + seed.getName() + "] row sets the subset relation [" + key + "] to [" + value
+                            + "] - the value is the selected target ids, comma-separated (e.g. \"1,3\"). Selecting by seeded name"
+                            + " is not supported yet");
+                }
             }
         }
     }

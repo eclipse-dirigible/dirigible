@@ -145,11 +145,16 @@ document.addEventListener('alpine:init', () => {
     // totals (those are server-calculated, shown read-only in the footer) and the auto-increment PK.
     form: {
 #foreach($property in $properties)
-#if(!$property.dataAutoIncrement && $property.aggregate != "true")
+## ProcessIds stays OUT of the form model: it is the per-process at-most-once bookkeeping the
+## trigger listener writes, and a form that carried it would post a stale copy back over a stamp
+## written while the document was open.
+#if(!$property.dataAutoIncrement && $property.aggregate != "true" && $property.name != "ProcessIds")
 #if($property.widgetType == "CHECKBOX")
       ${property.name}: false,
 #elseif($property.widgetType == "NUMBER")
       ${property.name}: null,
+#elseif($property.widgetType == "MULTISELECT")
+      ${property.name}: [],
 #else
       ${property.name}: '',
 #end
@@ -158,7 +163,7 @@ document.addEventListener('alpine:init', () => {
     },
 
 #foreach($property in $properties)
-#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS") && $property.aggregate != "true")
+#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")
     options${property.name}: [],
 #end
 #end
@@ -431,11 +436,20 @@ document.addEventListener('alpine:init', () => {
       if (this.form.${property.name} != null) this.form.${property.name} = String(this.form.${property.name});
 #end
 #end
+      // A MULTISELECT stores the selected keys as one csv ("1,3"); the select's model is an ARRAY
+      // of strings matching the options' data-values, so split on load (empty/null -> []).
 #foreach($property in $properties)
-#if($property.widgetOptionsFilterBy && $property.widgetType == "DROPDOWN" && $property.aggregate != "true")
+#if($property.widgetType == "MULTISELECT" && $property.aggregate != "true")
+      this.form.${property.name} = (this.form.${property.name} == null || this.form.${property.name} === '')
+          ? [] : String(this.form.${property.name}).split(',').map(v => v.trim());
+#end
+#end
+#foreach($property in $properties)
+#if($property.widgetOptionsFilterBy && ($property.widgetType == "DROPDOWN" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")
       // Static option filter (intent `where:`): a header value stored outside the filter is absent from
-      // the filtered chooser list, so its label would not resolve on edit. Splice in that one row by id
-      // - the filter still governs what may be newly picked.
+      // the filtered chooser list, so its label would not resolve on edit. Splice in that row by id -
+      // the filter still governs what may be newly picked. A MULTISELECT holds SEVERAL keys, each of
+      // which may have fallen outside the filter.
       await this.ensureFilteredCurrent('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.widgetDropDownKey}', '${property.widgetDropDownValue}');
 #end
 #end
@@ -444,7 +458,7 @@ document.addEventListener('alpine:init', () => {
 
     async loadOptions() {
 #foreach($property in $properties)
-#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS") && $property.aggregate != "true")
+#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")
       try {
 #if($property.widgetOptionsFilterBy)
         // Static option filter (intent `where:`): the chooser lists only matching rows.
@@ -620,6 +634,15 @@ document.addEventListener('alpine:init', () => {
 #if($property.isDateType && $property.aggregate != "true")
       payload.${property.name} = window.HarmoniaFormat.toPayload(payload.${property.name}, '${property.widgetType}');
 #end
+#if($property.widgetType == "MULTISELECT" && $property.aggregate != "true")
+      // MULTISELECT: the array joins back to the normative csv - de-duplicated, ascending (numeric
+      // where the keys are numbers), empty selection -> null (that is what NOT NULL rejects).
+      payload.${property.name} = Array.isArray(payload.${property.name}) && payload.${property.name}.length
+          ? [...new Set(payload.${property.name}.map(String))]
+              .sort((a, b) => (Number(a) - Number(b)) || String(a).localeCompare(String(b)))
+              .join(',')
+          : null;
+#end
 #end
       return payload;
     },
@@ -636,7 +659,7 @@ document.addEventListener('alpine:init', () => {
         const src = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
         const header = { ...src };
         [
-          '${primaryKeysString}', 'ProcessId', 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'Uuid',
+          '${primaryKeysString}', 'ProcessId', 'ProcessIds', 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'Uuid',
 #foreach($property in $properties)
 #if($property.isReadOnlyProperty == "true" || $property.aggregate == "true")
           '${property.name}',
@@ -807,7 +830,7 @@ document.addEventListener('alpine:init', () => {
 
     async loadItemOptions() {
       for (const col of this.editColumns) {
-        if (col.widget !== 'DROPDOWN' || !col.lookup || this.itemOptions[col.name]) continue;
+        if ((col.widget !== 'DROPDOWN' && col.widget !== 'MULTISELECT') || !col.lookup || this.itemOptions[col.name]) continue;
         try {
           const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: '' });
           this.itemOptions[col.name] = (rows || []).map(e => ({ value: e[col.lookup.key], text: e[col.lookup.text] }));
@@ -847,19 +870,25 @@ document.addEventListener('alpine:init', () => {
         .map(r => ({ value: r[opts.key], text: '\u2003'.repeat(depthOf(r)) + String(r[opts.text] ?? '') }));
     },
 
-    // Static option filter (intent `where:`) label resolution for a HEADER dropdown: fetch a single
-    // out-of-filter row by id and prepend it to the chooser list so a value stored outside the filter
-    // still shows its label on edit. The filter still governs what the user can newly pick.
+    // Static option filter (intent `where:`) label resolution for a HEADER dropdown or multi-select:
+    // fetch each out-of-filter row by id and prepend it to the chooser list so a value stored outside
+    // the filter still shows its label on edit. The filter still governs what the user can newly pick.
+    // A MULTISELECT's model is an ARRAY of keys, so every stored key is checked - one that fell outside
+    // the filter would otherwise vanish from the trigger's label list while the record still stores it.
     async ensureFilteredCurrent(prop, url, key, text) {
       const current = this.form[prop];
-      if (current == null || current === '') return;
+      const values = (Array.isArray(current) ? current : [current]).filter(v => v != null && v !== '');
+      if (!values.length) return;
       const opts = this['options' + prop];
-      if (!Array.isArray(opts) || opts.some(o => String(o.value) === String(current))) return;
-      try {
-        const row = await App.services.api.get(url + '/' + encodeURIComponent(current), { baseUrl: '' });
-        if (row && row[key] != null) opts.unshift({ value: row[key], text: row[text] });
-      } catch (e) {
-        console.error('[${name}DocumentPage] failed to resolve the filtered current option for ' + prop, e);
+      if (!Array.isArray(opts)) return;
+      for (const value of values) {
+        if (opts.some(o => String(o.value) === String(value))) continue;
+        try {
+          const row = await App.services.api.get(url + '/' + encodeURIComponent(value), { baseUrl: '' });
+          if (row && row[key] != null) opts.unshift({ value: row[key], text: row[text] });
+        } catch (e) {
+          console.error('[${name}DocumentPage] failed to resolve the filtered current option for ' + prop, e);
+        }
       }
     },
 
@@ -996,6 +1025,14 @@ document.addEventListener('alpine:init', () => {
         const opt = this.optionsFor(col.name).find(o => String(o.value) === String(v));
         if (opt) return opt.text;
       }
+      if (col.widget === 'MULTISELECT') {
+        // The cell holds a key LIST ("1,3"): resolve each key against the full option set.
+        const opts = this.optionsFor(col.name);
+        return String(v).split(',').map(k => {
+          const opt = opts.find(o => String(o.value) === k.trim());
+          return opt ? opt.text : k.trim();
+        }).join(', ');
+      }
       if (col.date) return this.displayDate(v);
       if (col.float) return this.displayNumber(v, col.pattern);
       if (col.widget === 'CHECKBOX') return v ? 'Yes' : 'No';
@@ -1062,13 +1099,16 @@ document.addEventListener('alpine:init', () => {
         let v = row ? row[col.name] : null;
         if (row && v != null) {
           if (col.widget === 'DROPDOWN') v = String(v);
+          // A MULTISELECT draft is an ARRAY (that is what puts the dialog's select in multiple
+          // mode): split the stored csv on edit.
+          else if (col.widget === 'MULTISELECT') v = String(v).split(',').map(s => s.trim());
           else if (col.date) v = this.toDateInput(v, col.widget);
         }
         // A NEW line takes the column's authored default (intent `defaultValue:`, emitted as col.def)
         // so the dialog opens on the standard values instead of blank ones - what makes a one-click
         // affordance like Fill Month actually one click. An EXISTING row keeps what is stored,
         // including a value the user deliberately cleared: re-defaulting that would silently undo it.
-        const blank = col.widget === 'CHECKBOX' ? false : (col.widget === 'NUMBER' ? null : '');
+        const blank = col.widget === 'CHECKBOX' ? false : (col.widget === 'NUMBER' ? null : (col.widget === 'MULTISELECT' ? [] : ''));
         draft[col.name] = v == null ? (!row && col.def !== undefined ? col.def : blank) : v;
       }
       if (row && row[pk] != null) draft[pk] = row[pk];
@@ -1114,6 +1154,15 @@ document.addEventListener('alpine:init', () => {
         let v = this.draft[col.name];
         if (v === '') v = null;
         if (col.date && v != null) v = window.HarmoniaFormat.toPayload(v, col.widget || 'DATETIME-LOCAL');
+        // MULTISELECT: the array joins back to the normative csv - de-duplicated, ascending,
+        // empty selection -> null.
+        if (col.widget === 'MULTISELECT') {
+          v = Array.isArray(v) && v.length
+              ? [...new Set(v.map(String))]
+                  .sort((a, b) => (Number(a) - Number(b)) || String(a).localeCompare(String(b)))
+                  .join(',')
+              : null;
+        }
         payload[col.name] = v;
       }
       return payload;

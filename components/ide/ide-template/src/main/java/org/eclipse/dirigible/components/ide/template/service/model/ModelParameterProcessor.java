@@ -11,6 +11,8 @@ package org.eclipse.dirigible.components.ide.template.service.model;
 
 import org.eclipse.dirigible.commons.api.helpers.NamingHelper;
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -44,6 +46,9 @@ import static org.eclipse.dirigible.components.ide.template.service.model.ModelV
  * property pass to have completed, which is why they are separate sweeps rather than folded in.
  */
 final class ModelParameterProcessor {
+
+    /** The logger. */
+    private static final Logger LOGGER = LoggerFactory.getLogger(ModelParameterProcessor.class);
 
     /** The name of the datasource used when neither the model nor the parameters name one. */
     private static final String DEFAULT_DATASOURCE_NAME_KEY = "DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT";
@@ -305,6 +310,7 @@ final class ModelParameterProcessor {
         collectMasterProperties(property, entity);
         collectReferencedProjections(property, entity, entities);
         resolveDropdown(property, entity, parameters);
+        resolveMultiselect(property, entity, entities, parameters);
     }
 
     /**
@@ -482,6 +488,78 @@ final class ModelParameterProcessor {
         // folder name while the controllers live under the sanitized one, so this must be built from
         // the raw folder rather than by rewriting the controller URL.
         property.put("widgetDropdownAppUrl", "/services/web/" + targetProject + "/gen/" + targetGenFolder + "/index.html");
+    }
+
+    /**
+     * Builds the option-source lookup URLs for a MULTISELECT property - a plain value column holding a
+     * subset of a lookup entity's keys, whose widget offers that entity's rows. Deliberately a sibling
+     * of {@link #resolveDropdown}, never a widened gate: a multiselect is not a relation, so none of
+     * the relation-only concerns there (projections, personal/partner identity, the add-new dialog, the
+     * target repository) apply, and the two differ on exactly the inputs the whole method keys on -
+     * where the target's name and its perspective come from.
+     *
+     * <p>
+     * An unresolvable options entity FAILS the generation rather than degrading: the widget's view
+     * block is gated on the widget type while its option loading is gated on the owning entity carrying
+     * any option source at all, so a target that resolves to nothing used to emit a Refresh button
+     * calling a {@code loadOptions()} that was never generated - a dead widget with nothing anywhere to
+     * say why (dirigible #6896).
+     *
+     * @param property the property
+     * @param entity the owning entity
+     * @param entities every entity in the model
+     * @param parameters the generation parameters
+     */
+    private static void resolveMultiselect(Map<String, Object> property, Map<String, Object> entity, List<Map<String, Object>> entities,
+            Map<String, Object> parameters) {
+        if (!"MULTISELECT".equals(str(property, "widgetType"))) {
+            return;
+        }
+        String owner = str(entity, "name") + "." + str(property, "name");
+        String optionsEntity = str(property, "widgetOptionsEntityName");
+        if (optionsEntity == null || optionsEntity.isEmpty()) {
+            throw new IllegalArgumentException("Property [" + owner + "] is a multi-select but names no options entity"
+                    + " - it must name the lookup entity whose rows it offers.");
+        }
+        String perspective = multiselectPerspective(findEntity(entities, optionsEntity));
+        if (perspective == null) {
+            throw new IllegalArgumentException("Property [" + owner + "] is a multi-select over [" + optionsEntity
+                    + "], which is not an entity of this model that publishes a controller - its options could never load.");
+        }
+        entity.put("hasDropdowns", Boolean.TRUE);
+        String targetProject = str(parameters, "projectName");
+        String targetGenFolder = str(parameters, "genFolderName");
+        if (!truthy(parameters, "javaRuntime")) {
+            property.put("widgetDropdownUrl", "/services/ts/" + targetProject + "/gen/" + targetGenFolder + "/api/" + perspective + "/"
+                    + optionsEntity + "Service.ts");
+            property.put("widgetDropdownControllerUrl", "/services/ts/" + targetProject + "/gen/" + targetGenFolder + "/api/" + perspective
+                    + "/" + optionsEntity + "Controller.ts");
+            return;
+        }
+        String javaGen = NamingHelper.sanitizeJavaIdentifier(targetGenFolder);
+        String javaPerspective = NamingHelper.sanitizeJavaIdentifier(perspective);
+        String javaUrl =
+                "/services/java/" + targetProject + "/gen/" + javaGen + "/api/" + javaPerspective + "/" + optionsEntity + "Controller";
+        property.put("widgetDropdownUrl", javaUrl);
+        property.put("widgetDropdownControllerUrl", javaUrl);
+    }
+
+    /**
+     * The perspective a multi-select's options controller publishes under, or {@code null} when the
+     * target cannot serve options at all - unknown to this model, or an entity with no perspective of
+     * its own (a projection). The SETTING rewrite happens in ModelGenerator at render time - AFTER this
+     * processor - so a settings target's raw perspectiveName would bake a URL the target never
+     * publishes under.
+     *
+     * @param target the options entity, or null when it resolved to none
+     * @return the perspective, or null
+     */
+    private static String multiselectPerspective(Map<String, Object> target) {
+        if (target == null) {
+            return null;
+        }
+        String perspective = "SETTING".equals(str(target, "type")) ? "Settings" : str(target, "perspectiveName");
+        return perspective == null || perspective.isEmpty() ? null : perspective;
     }
 
     /**
@@ -758,7 +836,7 @@ final class ModelParameterProcessor {
             // against the string "false" never excludes anything - kept as it is so the generated
             // panels do not change shape.
             boolean excluded = truthy(property, "sensitiveProperty") || Boolean.TRUE.equals(property.get("dataAutoIncrement"))
-                    || (name != null && name.equals(fkProperty)) || "ProcessId".equals(name)
+                    || (name != null && name.equals(fkProperty)) || "ProcessId".equals(name) || "ProcessIds".equals(name)
                     || (auditType != null && !"NONE".equals(auditType)) || "false".equals(property.get("widgetIsMajor"));
             if (excluded) {
                 continue;
@@ -826,7 +904,8 @@ final class ModelParameterProcessor {
 
     /**
      * Describes one register column: its heading, how the cell renders (number / float pattern / date)
-     * and, for a foreign key, where to fetch the referenced rows its label comes from.
+     * and, for a foreign key or a multi-select, where to fetch the referenced rows its label comes
+     * from.
      *
      * @param property the source property's metadata, as the model declares it
      * @param entities every entity in the model, for resolving a projection owner
@@ -859,6 +938,27 @@ final class ModelParameterProcessor {
             lookup.put("key", strOr(property, "widgetDropDownKey", "Id"));
             lookup.put("text", strOr(property, "widgetDropDownValue", "Name"));
             column.put("lookup", lookup);
+        } else if ("MULTISELECT".equals(widgetType) && truthy(property, "widgetOptionsEntityName")) {
+            // A subset column holds a KEY LIST ("1,3"), so the panel resolves EACH key through the
+            // options entity's rows and joins the labels - the same lookup shape as a foreign key,
+            // routed by the explicit `multi` flag (never by sniffing the value for commas). A subset
+            // cannot be cross-model, so the options entity belongs to the register SOURCE's project;
+            // its perspective travels on the property, the only place a source owned by another model
+            // can carry it.
+            String optionsEntity = str(property, "widgetOptionsEntityName");
+            String perspective =
+                    strOr(property, "widgetOptionsEntityPerspectiveName", multiselectPerspective(findEntity(entities, optionsEntity)));
+            if (perspective == null) {
+                LOGGER.warn("Register column [{}] is a multi-select over [{}], whose perspective this model cannot resolve"
+                        + " - the column renders the raw keys", name, optionsEntity);
+            } else {
+                Map<String, Object> lookup = new LinkedHashMap<>();
+                lookup.put("url", javaControllerUrl(sourceProject, sourceGenFolder, perspective, optionsEntity));
+                lookup.put("key", strOr(property, "widgetDropDownKey", "Id"));
+                lookup.put("text", strOr(property, "widgetDropDownValue", "Name"));
+                column.put("multi", Boolean.TRUE);
+                column.put("lookup", lookup);
+            }
         } else if ("Date".equals(dataType.typescript())) {
             column.put("date", Boolean.TRUE);
         } else if ("number".equals(dataType.typescript())) {

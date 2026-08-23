@@ -158,6 +158,36 @@ public class GeneratesIntent {
      */
     private Integer sourceStatus;
 
+    /**
+     * The INVERSE of {@link #sourceStatus} (issue #6868): the seed id the SOURCE returns to when the
+     * target generated from it is RETIRED - reaches a status its nomenclature classifies {@code
+     * cancelled} or {@code void}. Void and reissue, declared.
+     *
+     * <p>
+     * Why it is needed at all: {@link #sourceStatus} moves the source off the status its own
+     * {@code event} guard qualifies on, deliberately, so the guard-claimed source stops matching. The
+     * at-most-once guard learned to step over a retired target (issue #6814), which frees the source's
+     * one-shot slot - but nothing could refill it: the source stands at its post-generation status and
+     * the ordinary lifecycle graph declares no edge back, so no qualifying {@code -transitioned} is
+     * ever published again and an event-only create-from had no reissue path at all.
+     *
+     * <p>
+     * This declares the move back. The retirement of the target flips the source to this status through
+     * the same targeted primitive the completion hook uses, publishing the source's
+     * {@code -transitioned} with the write - so the ordinary trigger re-fires, the guard steps over the
+     * retired document, and the replacement is minted. Nothing about the reissue is a special path: it
+     * is the source's own lifecycle move plus the machinery that was already there. The retired
+     * document is kept, never edited or re-pointed.
+     *
+     * <p>
+     * It is opt-in and refused where it could never fire (see
+     * {@code IntentParser.validateGeneratesReopen}): it requires an {@link #event} to re-fire and
+     * {@link #sourceStatus} to invert, must name a status other than that one, needs a LOCAL target
+     * whose nomenclature classifies a retiring {@code stage:}, and - when the source declares a
+     * {@code lifecycle:} - needs that graph to declare the edge back.
+     */
+    private Integer sourceStatusOnRetire;
+
     /** Target property -> source property (a field or to-one relation name of {@link #from}). */
     private Map<String, String> map = new LinkedHashMap<>();
 
@@ -335,6 +365,22 @@ public class GeneratesIntent {
 
     public void setSourceStatus(Integer sourceStatus) {
         this.sourceStatus = sourceStatus;
+    }
+
+    public Integer getSourceStatusOnRetire() {
+        return sourceStatusOnRetire;
+    }
+
+    public void setSourceStatusOnRetire(Integer sourceStatusOnRetire) {
+        this.sourceStatusOnRetire = sourceStatusOnRetire;
+    }
+
+    /**
+     * Whether a retired target returns the source to a status of its own (see
+     * {@link #sourceStatusOnRetire}).
+     */
+    public boolean hasReopen() {
+        return sourceStatusOnRetire != null;
     }
 
     public Map<String, String> getMap() {

@@ -22,7 +22,9 @@
  * resolution and the cell formatting are the SAME, and are inherited from it rather than restated.
  *
  * `def` shape (from App.registerRelated): { entity, label, tkey, apiPath, appUrl, local, fkProperty,
- *   primaryKey, columns: [{ name, label, tkey, number, float, pattern, date, lookup, sensitive }] }.
+ *   primaryKey, columns: [{ name, label, tkey, number, float, pattern, date, lookup, multi, sensitive }] }.
+ * A `multi` column is a subset (`kind: subset`): its cell is a key list resolved through `lookup` per
+ * key — handled by the inherited detailPanel.cellValue, so nothing here is aware of it.
  * apiPath and appUrl are ABSOLUTE (the source may live in another project), so every call passes
  * { baseUrl: '' } and the row dialog opens the source's own application.
  */

@@ -130,16 +130,16 @@ class DependsOnScenariosHarmoniaTestProject extends BaseTestProject {
     }
 
     // Open an x-h-select by its placeholder (Harmonia hides the bound input and renders a visible
-    // span[role="combobox"] trigger whose text is the placeholder) and click the option.
+    // button[role="combobox"] trigger whose text is the placeholder) and click the option.
     private void selectInCombobox(String placeholder, String optionLabel) {
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.ROLE, "combobox", placeholder);
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", placeholder);
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "option", optionLabel);
     }
 
     // A retrying assertion (Condition.exactText) - also the synchronization point that lets the async
     // cascade settle before the subsequent, non-retrying input-value assertion runs.
     private void assertComboboxShows(String value) {
-        browser.assertElementExistByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.ROLE, "combobox", value);
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", value);
     }
 
     private void assertInputValue(String inputId, String value) {

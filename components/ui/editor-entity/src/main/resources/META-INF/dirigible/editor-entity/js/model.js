@@ -93,6 +93,10 @@ Property.prototype.widgetShortLabel = null; // a short label for limited charact
 Property.prototype.widgetFormat = null; // the format for rendering
 Property.prototype.widgetDropDownKey = null; // the key property in drop down case
 Property.prototype.widgetDropDownValue = null; // the value property in drop down case
+// MULTISELECT options source: the lookup entity whose rows the multi-select offers. Deliberately NOT
+// relationshipEntityName - that attribute makes the schema layer emit a foreign key, and a multi-select
+// column is a plain value list ("1,3").
+Property.prototype.widgetOptionsEntityName = null;
 Property.prototype.widgetDependsOnProperty = null; // the property in depends on case
 Property.prototype.widgetDependsOnEntity = null; // the entity in depends on case
 Property.prototype.widgetDependsOnValueFrom = null; // the value from in depends on case

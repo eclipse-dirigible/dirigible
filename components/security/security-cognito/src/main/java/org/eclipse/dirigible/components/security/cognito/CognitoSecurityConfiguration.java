@@ -9,32 +9,22 @@
  */
 package org.eclipse.dirigible.components.security.cognito;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.http.access.HttpSecurityURIConfigurator;
-import org.eclipse.dirigible.components.base.http.roles.Roles;
-import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
 import org.eclipse.dirigible.components.security.oauth.ScopeRoleJwtAuthoritiesConverter;
 import org.eclipse.dirigible.components.security.oauth2.IdpHintAuthorizationRequestResolver;
 import org.eclipse.dirigible.components.security.oauth2.OAuth2SessionRevalidationFilter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.eclipse.dirigible.components.security.oauth2.tenant.TenantAwareAuthoritiesMapper;
+import org.eclipse.dirigible.components.security.oauth2.tenant.TenantGroupsClaim;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
-import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
@@ -49,16 +39,13 @@ import org.springframework.util.StringUtils;
 @Configuration
 public class CognitoSecurityConfiguration {
 
-    /** The Constant LOGGER. */
-    private static final Logger LOGGER = LoggerFactory.getLogger(CognitoSecurityConfiguration.class);
-
-    private final boolean trialModeEnabled;
+    /** The claim AWS Cognito puts the user groups in. */
+    private static final String COGNITO_GROUPS_CLAIM = "cognito:groups";
 
     /** The Cognito JWKS endpoint backing the resource-server (Bearer) JWT decoder. */
     private final String jwkSetUri;
 
     public CognitoSecurityConfiguration(@Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri) {
-        this.trialModeEnabled = DirigibleConfig.TRIAL_ENABLED.getBooleanValue();
         this.jwkSetUri = jwkSetUri;
     }
 
@@ -72,8 +59,8 @@ public class CognitoSecurityConfiguration {
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http, HttpSecurityURIConfigurator httpSecurityURIConfigurator,
             ScopeRoleJwtAuthoritiesConverter scopeRoleJwtAuthoritiesConverter, CognitoLogoutSuccessHandler cognitoLogoutSuccessHandler,
-            OAuth2AuthorizedClientService authorizedClientService, ClientRegistrationRepository clientRegistrationRepository)
-            throws Exception {
+            OAuth2AuthorizedClientService authorizedClientService, ClientRegistrationRepository clientRegistrationRepository,
+            GrantedAuthoritiesMapper userAuthoritiesMapper) throws Exception {
         String loginPage = DirigibleConfig.SECURITY_LOGIN_PAGE.getStringValue();
         // both oauth2Client and oauth2Login register an authorization-request redirect filter, and
         // the client one runs first - the resolver must be set on both for the hints to pass through
@@ -82,13 +69,12 @@ public class CognitoSecurityConfiguration {
         http.authorizeHttpRequests(authz -> authz.requestMatchers("/oauth2/**", "/login/**")
                                                  .permitAll())
             .csrf(csrf -> csrf.disable())
-            .addFilterBefore(new OAuth2SessionRevalidationFilter(authorizedClientService, userAuthoritiesMapper()),
-                    AuthorizationFilter.class)
+            .addFilterBefore(new OAuth2SessionRevalidationFilter(authorizedClientService, userAuthoritiesMapper), AuthorizationFilter.class)
             .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.disable()))
             .oauth2Client(oauth2Client -> oauth2Client.authorizationCodeGrant(
                     grant -> grant.authorizationRequestResolver(authorizationRequestResolver)))
             .oauth2Login(oauth2 -> {
-                oauth2.userInfoEndpoint(userInfoEndpointConfig -> userInfoEndpointConfig.userAuthoritiesMapper(userAuthoritiesMapper()));
+                oauth2.userInfoEndpoint(userInfoEndpointConfig -> userInfoEndpointConfig.userAuthoritiesMapper(userAuthoritiesMapper));
                 oauth2.authorizationEndpoint(
                         authorizationEndpoint -> authorizationEndpoint.authorizationRequestResolver(authorizationRequestResolver));
                 if (StringUtils.hasText(loginPage)) {
@@ -142,24 +128,15 @@ public class CognitoSecurityConfiguration {
                                .build();
     }
 
+    /**
+     * Maps the Cognito groups of the logged in user to authorities. What exactly is mapped depends on
+     * the tenant resolution strategy - see {@link TenantAwareAuthoritiesMapper}.
+     *
+     * @param tenantGroupsClaim the configured groups claim
+     * @return the authorities mapper
+     */
     @Bean
-    public GrantedAuthoritiesMapper userAuthoritiesMapper() {
-        return (authorities) -> {
-            Set<GrantedAuthority> grantedAuthorities = new HashSet<>();
-            if (trialModeEnabled) {
-                LOGGER.debug("Trial enabled - returning all available system roles for the current user.");
-                grantedAuthorities.addAll(AuthoritiesUtil.toAuthorities(Arrays.stream(Roles.values())
-                                                                              .map(Roles::getRoleName)
-                                                                              .collect(Collectors.toSet())));
-            } else {
-                OidcUserAuthority oidcUserAuthority = (OidcUserAuthority) new ArrayList<>(authorities).get(0);
-                List<String> cognitoGroups = (ArrayList<String>) oidcUserAuthority.getAttributes()
-                                                                                  .get("cognito:groups");
-                if (cognitoGroups != null) {
-                    grantedAuthorities.addAll(AuthoritiesUtil.toAuthorities(cognitoGroups));
-                }
-            }
-            return grantedAuthorities;
-        };
+    public GrantedAuthoritiesMapper userAuthoritiesMapper(TenantGroupsClaim tenantGroupsClaim) {
+        return new TenantAwareAuthoritiesMapper(tenantGroupsClaim, COGNITO_GROUPS_CLAIM);
     }
 }

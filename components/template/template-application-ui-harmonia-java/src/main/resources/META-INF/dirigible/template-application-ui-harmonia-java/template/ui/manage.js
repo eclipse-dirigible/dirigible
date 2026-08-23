@@ -20,10 +20,10 @@
  *   /{name}/{id}/edit   -> {name}-form.html          (same view; page reads :id)
  *
  * Collection `uiManageModels` = layoutType === "MANAGE" && type === "PRIMARY".
- * Per-entity Velocity vars additionally include, for relationship DROPDOWNs:
+ * Per-entity Velocity vars additionally include, for relationship DROPDOWNs and MULTISELECTs:
  * $property.widgetDropdownControllerUrl, $property.widgetDropDownKey,
- * $property.widgetDropDownValue, $property.widgetDropDownMultiSelect; plus the
- * form flags $property.isRequiredProperty / isCalculatedProperty / isReadOnlyProperty /
+ * $property.widgetDropDownValue (a MULTISELECT also carries $property.widgetOptionsEntityName);
+ * plus the form flags $property.isRequiredProperty / isCalculatedProperty / isReadOnlyProperty /
  * auditType / dataAutoIncrement, and the entity-level $dataName / $primaryKeysString.
  */
 export function getSources(parameters) {

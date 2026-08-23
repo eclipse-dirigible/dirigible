@@ -127,6 +127,12 @@ public class ${className}Generate {
         }
 #end
 #end
+#foreach($load in $relationLoads)
+        // A one-hop `relation.field` map source: the related row is loaded by the source's foreign key,
+        // once, and read below. Loaded AFTER the at-most-once guard so an already-generated source costs
+        // no extra query, and null-guarded because a nullable relation is a legitimate empty value.
+        gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity ${load.local} = source.${load.fkProperty} == null ? null : new gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository().findById(source.${load.fkProperty});
+#end
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity target =
                 new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity();
 #foreach($a in $fieldAssignments)

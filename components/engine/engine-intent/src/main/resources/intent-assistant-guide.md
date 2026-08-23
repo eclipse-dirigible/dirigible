@@ -194,8 +194,8 @@ field may declare:
   line items is shown under the items table). Use it on money / quantity columns of a `DocumentItem`.
 - `readOnly: true` - the field is not editable in generated forms; it renders in the read-only details
   block (Label: Value) above the action buttons. Use it for system/workflow-managed fields like a
-  `status` driven by the process. (`ProcessId`, the audit columns and `uuid` fields are flagged
-  read-only automatically — you don't need this on them.)
+  `status` driven by the process. (`ProcessId`, `ProcessIds`, the audit columns and `uuid` fields are
+  flagged read-only automatically — you don't need this on them.)
 - `function: DocumentTitle` (on a field) / `function: EntityStatus` (on a to-one relation). The
   `DocumentTitle` field shows in a document's form title (e.g. `SALES INVOICE 00001231` = the document
   name + the number). `EntityStatus` marks the entity's **system-managed status** on ANY entity (not
@@ -559,7 +559,7 @@ fields and relations for a better form layout:
 
 Names match the field / relation names (case-insensitive). A **partial** order is fine - any property
 not listed keeps its default position and is appended after the listed ones. System properties
-(`ProcessId`, audit columns) need not be listed. Every listed name must be a real field or relation of
+(`ProcessId`, `ProcessIds`, audit columns) need not be listed. Every listed name must be a real field or relation of
 the entity.
 
 **Display labels (`label:` on an entity):** `label: "{number} - {date|yyyy MMMM} - {Customer.name}"`
@@ -758,6 +758,54 @@ carrying its partial `amount`:
       - { name: CustomerPayment, kind: manyToOne, to: CustomerPayment, model: customer-payments, required: true }
 ```
 
+### Subset (subset) - a value set, not a row set
+
+A record often holds a SUBSET of a small lookup's rows - which payment methods a schedule accepts,
+which channels a campaign runs on, which weekdays a rule applies to - with no data on the pairing,
+no navigation from the lookup back, and nothing consuming the pairs as rows. That is a
+`kind: subset` relation, NOT a `manyToMany` (whose link entity would be pure overhead here):
+
+```yaml
+  - name: Schedule
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+    relations:
+      - { name: payerTypes, kind: subset, to: PayerType, required: true }
+```
+
+The record stores the selected target keys as ONE value - comma-separated, ascending,
+de-duplicated (`"1,3"`); an empty selection is null. That shape is normative and never authorable:
+no type, no length, no pattern, no delimiter (the generated column is a VARCHAR(512) with the
+`^\d+(,\d+)*$` server-side guard). The generated UI renders a searchable multi-select over the
+target's rows on every editable surface, and every list/register/export resolves the keys to their
+labels. A seed row sets the value by the relation's authored name (`payerTypes: "1,3"`) - authored in
+any order, since the shape is settled for you.
+
+The shape is enforced, not merely documented: the generated repository normalizes the value on every
+write it performs (create, user update and system write alike), and a seed's cell is normalized when
+its CSV is generated - the one write that reaches the table through neither the form nor the
+repository. So `"3,1"` and `"1,1"` from a REST caller, a client-Java writer or a seed all land as
+`"1,3"` and `"1"`, and a value that is not a key list at all is refused rather than repaired. What
+the keys REFERENCE is not checked: an id the lookup does not have is stored and renders as the raw
+key, the same trust a business-layer reference gets everywhere else on the platform.
+
+**Attributes:** `to` (mandatory, an entity of THIS model - a cross-model `model:` is rejected: the
+stored keys belong to the owner model's seeds), `required` (means "at least one selected" - the
+column is NOT NULL and an empty selection is refused), `where` (the same single static option
+filter a to-one accepts), `major` (list-column visibility), `size` is accepted but the control
+always spans the full row, `description`.
+
+**Rejected on this kind** (each a parse error): `composition`, `init`, `function`, `dependsOn`,
+`through`, `personal`/`partner`, calculated actions, `show`, `leafOnly`, `model:`. A report
+dimension or filter over a subset relation is rejected too - the stored value is one column, so it
+cannot group, join or compare; and an entity-level `unique:` key cannot span it.
+
+**When to choose which:** `subset` when the pairing carries no data and nothing consumes rows;
+the moment it needs bridge fields (an amount, a valid-from), reverse navigation (`related:`), a
+`forEach` fan-out, roll-ups or reporting, it has outgrown a value - use `kind: manyToMany` or
+author the intermediate entity. With `history: true` the change trail records the raw key list
+(ids, not labels) - correct by construction.
+
 ### function - the entity's presentation role (explicit template selection)
 
 **Use when:** you want to state *explicitly* how an entity (or a field / relation) is presented, instead
@@ -785,10 +833,16 @@ string field holds the language code (`languageFrom: customer.language` - the cu
 invoice's language). The two are mutually exclusive; absent both, the mint uses the first entry of the
 tenant's application language set. A null/blank `languageFrom` value falls back the same way.
 
+It may also declare the **name** its copies are stored under - `fileName:`, a pattern of literals and
+`{token}` interpolations resolved on the same document MASTER (see "naming a rendered document" below).
+Absent one, the name is the document's own number, or `<Entity> <id>` when it has none, plus the
+version.
+
 ```yaml
   - name: SalesInvoiceCopy
     function: Snapshot
     languageFrom: customer.language      # the master's relation . a string field of its target
+    fileName: "{number}_{date:yyyyMMdd}_{company.shortName|company.name}"
     relations:
       - { name: salesInvoice, kind: manyToOne, to: SalesInvoice, composition: true }
 ```
@@ -937,8 +991,11 @@ a declared step or the literal `end` (or, inside a parallel branch, `join` - see
 entity - `onCreate`, `onUpdate` or `onDelete` - and may carry a `when` guard so the process starts only
 when the guard holds, e.g. `trigger: { onUpdate: Loan, when: "status == 'OVERDUE'" }`. A trigger may
 also start on a status change - `trigger: { onTransition: Invoice }` - which is what to use when the
-starting condition is a workflow status rather than a person's edit; the stamped `ProcessId` still
-makes it start at most once.
+starting condition is a workflow status rather than a person's edit. It still starts at most once,
+but at most once **per process**: a record that already carries another flow's stamp still starts this
+one, which is what makes "on create, identify it; when identified, run the dunning flow" work. (Until
+that guard was scoped to the process, the follow-up flow silently never started - the create-triggered
+flow had already stamped every record.)
 
 **Parallel branches (`kind: parallel`).** When two steps should run **concurrently** and rejoin before
 the next step - e.g. a technical and a commercial review of the same order - use a `parallel` step. It
@@ -1173,8 +1230,8 @@ processes:
   entity IS the trigger entity itself; required otherwise. Same-model relations only.
 - `when:` - optional guard over the **event record** (`field == literal` / `!=`), so e.g. an internal
   note does not resume the wait.
-- The process must have a `trigger:` entity - its stamped `ProcessId` is how the resuming event finds
-  the parked instance. No parked instance (or a guard miss) is simply a no-op.
+- The process must have a `trigger:` entity - the instance THIS process stamped on that record is how
+  the resuming event finds the parked instance. No parked instance (or a guard miss) is simply a no-op.
 
 **Boundary timers on a user task: `timeout:` and `expire:`.** Generated flows can react to time
 passing while a task sits in the Inbox. Both are optional attributes of a `userTask`'s args, and both
@@ -1228,7 +1285,7 @@ processes:
 - `then:` - optional. Omitted or `end` = terminate the instance immediately. A declared
   `serviceTask` (a `setField`/`setRelationField` cleanup) runs on the abort path before terminating;
   that step is **abort-only** - route the main flow around it (`next:`) so nothing else reaches it.
-- Correlation rides the stamped `ProcessId`, like `wait` - fail-soft (nothing parked = no-op).
+- Correlation rides this process's own stamp in `ProcessIds`, like `wait` - fail-soft (nothing parked = no-op).
 
 Use `abortOn` whenever a document has a manual `transitions:` void/cancel AND a create-time process:
 the transition and the abort together retire the record cleanly. A cancelling `expire:` timer that
@@ -1394,9 +1451,10 @@ generates:
     label: Generate Invoice        # button label (defaults to a humanized name)
     icon: file-plus                # optional Lucide icon
     scope: entity                  # 'entity' (per-record, default) or 'page'
-    map:                           # target property <- source property (a field or to-one relation)
-      Customer: Customer
+    map:                           # target property <- source property: a field, a to-one relation, or a
+      Customer: Customer           #   one-hop `relation.field` (loaded by FK and copied as a SNAPSHOT)
       Currency: Currency
+      CustomerVatNumber: Customer.vatNumber
     defaults:                      # target property <- now | literal (string / integer / decimal / boolean)
       InvoiceDate: now
       Note: "Generated from timesheet"
@@ -1408,7 +1466,39 @@ generates:
         Amount: Amount
     sourceStatus: 3                # optional completion hook: the SOURCE's EntityStatus seed id
                                    # after the target is created (e.g. proforma -> INVOICED)
+    sourceStatusOnRetire: 2        # optional INVERSE of that hook: where the SOURCE returns when the
+                                   # target is retired (cancelled/void) - see "void and reissue"
 ```
+
+**A `map:` source may hop one relation - and that is how you SNAPSHOT a value.** A value is `map`ped
+rather than reached through a relation when the target must keep what was true at the moment it was
+created: an invoice keeps the customer's VAT number as it stood at invoicing, an audit log keeps the
+plate number the check was actually made against. Holding the relation and displaying
+`Customer.vatNumber` in a list is a different thing - it reads the CURRENT value, so a later
+correction silently rewrites every historical row.
+
+```yaml
+    map:
+      Customer: Customer                      # a to-one relation of the source
+      InvoiceDate: violationAt                # a field of the source
+      CustomerVatNumber: Customer.vatNumber   # one hop: loaded by FK, copied as a snapshot
+```
+
+The generated create-from loads the related row **once** by the source's foreign key (two mapped
+fields off the same relation share that one load) and reads through a null guard, so a nullable
+relation is an empty value rather than a failure. It is the same load a notification's
+`relation.field` recipient has always used.
+
+**Rules:** exactly one hop - a value two relations out belongs in a field of the entity in between.
+The last step must be a **field**, never another relation: copying a foreign key one hop out lands a
+key from a different entity's numbering space in a column that means something else, and because both
+are integers nothing downstream would catch it. Not available in an `items:` map (its source is the
+item row being cloned, so the load would have to run once per row) nor with a `fromUses:` source
+(only the owner model knows that source's relations - author the create-from there instead). A hop
+through a **cross-model** relation is fine. The two ends are not type-checked, exactly as a direct
+`map:` is not - map a string onto a string.
+
+A schedule's `generate.map` takes the same hop, off the row the cron query returned.
 
 **Cross-model SOURCE (`fromUses:`) - author the create-from on the TARGET's module.** By default the
 `from` entity is local and the target may be foreign (`uses:`). `fromUses:` mirrors that: the SOURCE is
@@ -1580,13 +1670,51 @@ generates:
 - **`append` is the ABSENCE of a guard, not a state-aware one.** Every qualifying event appends a row,
   including a redelivery (the step topic is published after commit and is not transactional with the
   step - the same at-least-once contract the event axis states for `outbound`). It is therefore the wrong
-  answer to "I voided the document and cannot regenerate it": that needs a state-aware guard on
-  `mode: once`, not a cardinality that would also mint a document on every later event. Anything that
-  must exist at most once keeps `mode: once`.
+  answer to "I voided the document and cannot regenerate it": that is what the retiring-`stage:`
+  guard below does, on `mode: once` - not a cardinality that would also mint a document on every
+  later event. Anything that must exist at most once keeps `mode: once`.
 - **The button is dropped by default** (declaring an event is how you say nobody has to click). Add
   `button: true` to keep both triggers; the button then shares the cardinality of the event.
 - `sourceStatus:` composes normally (the flip happens after the target exists, and cannot re-trigger the
   create-from because the guard has already claimed the source).
+- **A RETIRED target stops blocking - and `sourceStatusOnRetire:` is what lets the replacement be minted
+  without a click.** The at-most-once guard reads the target's `stage:` classification: a target whose
+  status is classified `cancelled` or `void` is retired, so the guard steps over it and the source may
+  be generated from again - void and reissue. A `draft` or `live` target still blocks, so redelivery
+  idempotence is untouched, and the retired document is kept, never edited or re-pointed. That frees the
+  slot; but where `sourceStatus:` is declared nothing could refill it. The completion hook moved the
+  source OFF the status its own trigger qualifies on - deliberately - and the ordinary lifecycle graph
+  declares no edge back, so no qualifying event is ever published again: an event-only create-from had
+  no reissue path at all, and only a shared `button: true` could raise the replacement.
+  `sourceStatusOnRetire:` declares the move back, so the reissue becomes the ORDINARY path:
+
+  ```yaml
+  generates:
+    - name: invoice-from-proforma
+      from: Proforma
+      to: Invoice
+      event: { onTransition: Proforma, when: "Status == APPROVED" }
+      map: { Proforma: id }
+      sourceStatus: INVOICED           # forward: the proforma is done once the invoice exists
+      sourceStatusOnRetire: APPROVED   # back: voiding the invoice returns it - and the trigger re-fires
+  ```
+
+  Retiring the invoice returns the proforma to APPROVED through one targeted status write that carries
+  the source's `-transitioned` with it; the trigger re-fires, the guard steps over the retired invoice,
+  and the replacement is minted. It acts only while the source still stands where this rule's own hook
+  left it AND no target of that source still counts - the create-from's own guard asked from the other
+  end, which is what makes it idempotent with no marker column: a redelivered retirement arriving after
+  the replacement exists finds a live target and does nothing.
+
+  It requires an `event:` to re-fire (a button-only create-from carries no guard, so nothing blocks a
+  replacement - the button already reissues) and `sourceStatus:` to invert, and must name a DIFFERENT
+  status; the target must be local, with a nomenclature that classifies a retiring `stage:` (a
+  cross-model target is seeded in its owner model, so nothing here can recognise its retirement - keep
+  `button: true` and reissue by hand); `mode: append` is refused (no guard, so no slot to free); and
+  when the source declares a `lifecycle:`, the graph must declare the edge from `sourceStatus` back to
+  it - that is exactly where the source stands when the retirement arrives. Return to a status a PERSON must move on (a `DRAFT`
+  for correction) when the reissue should be reviewed rather than immediate: the reopen only publishes
+  the transition, and the trigger's own `when:` decides whether anything fires.
 - Use this over `posts` when the result is a **document with line items**: `posts` writes flat mapped
   rows and cannot reference the freshly created header. Use it over a `generates` button plus a `wait`
   step when the step would be waiting for a human to remember to click - an unclicked record parks its
@@ -2016,12 +2144,43 @@ absent both, the first entry of the tenant's application language set is used at
   assembles the `{document, items}` payload through the repositories (so translations and validations
   apply) and the print engine renders it. No hand-written listener around the print engine.
 - **The file name is the document's number** when the entity declares a `number:` field
-  (`INV0000042.pdf`), else `<Entity> <id>.pdf`.
+  (`INV0000042.pdf`), else `<Entity> <id>.pdf` - unless the block declares a `fileName:` pattern (see
+  below).
 - **A missing recipient is a no-op**, logged and skipped - a record with nobody to mail must not stall
   a flow (the same rule a schedule's notify has always had).
 - **A transition's mail is fail-soft**: the status flip is the endpoint's contract and has already
   committed, so an SMTP problem is logged and the transition still returns success. A `serviceTask`
   send, whose whole purpose IS the message, fails the task instead so the engine retries.
+
+### naming a rendered document - `fileName:`
+
+Both server-side renders - the snapshot copy a document mints on issue and the PDF a notify block
+attaches - accept a **`fileName:`** pattern instead of the default name. A real archive wants a
+self-describing name (`SI0000042_20260822_MyCompany_AcmeLtd.pdf`), not `Order 42 v1.pdf`.
+
+```yaml
+    fileName: "{number}_{date:yyyyMMdd}_{customer.shortName|customer.name}"
+```
+
+- **`{field}`** and one-hop **`{relation.field}`** - the SAME path vocabulary a notify subject or body
+  uses, resolved against the same record, and named with the AUTHORED field/relation names.
+- **`{field:pattern}`** - a `date` or `timestamp` field rendered through a `DateTimeFormatter` pattern.
+- **`{A|B}`** - alternative operands, first non-blank wins (an optional short name beside the legal
+  name is filled for some records and not for others).
+- **`{Version}`** - a snapshot only. A pattern that does not place it gets `_v<version>` appended, so
+  two versions of a copy never share a name.
+- `.pdf` is appended automatically.
+
+Interpolated **values** are sanitized: trimmed, internal whitespace becomes one `_`, and path/control
+characters (`/ \ : * ? " < > |`) are removed. Non-ASCII is deliberately kept - a document in a local
+language legitimately carries a non-Latin name. The literal separators between tokens are yours and
+are emitted verbatim.
+
+An unknown field or relation is a **validation error**, not an empty rendering: a pattern that
+silently dropped a token would produce archive names nobody can tell apart, which is what the knob
+exists to fix. On a notify block, `fileName:` requires `attach:` (a plain-text message has no file to
+name), and with `attach: recordPrint` only fields of the anchor itself are readable - that document is
+rendered once, before the per-row loop.
 - Per-tenant SMTP comes from the platform mail configuration; the sender address is
   `DIRIGIBLE_MAIL_SENDER`.
 
@@ -2329,6 +2488,7 @@ so before binding a reaction, check what the thing you care about publishes.
 | `setField` / `setRelationField` on a step | `-transitioned` | `postings:`, `generates` `event: { onTransition }`, `abortOn:` |
 | A `transitions:` button (void / cancel / reopen) | `-transitioned` | the same three |
 | `generates` `sourceStatus:` flipping the source | `-transitioned` | the same three |
+| `generates` `sourceStatusOnRetire:` returning the source | `-transitioned` | the same three (this is how the reissue re-fires) |
 | A `userTask` / `serviceTask` being reached or completed | a per-step topic | `onStepReached` / `onStepCompleted` |
 
 **Deliberately silent, and correct** - each of these would re-trigger its own handler if it published:
@@ -2623,7 +2783,7 @@ or a seeded name.
 |---|---|
 | field `type` | `string`, `text`, `integer`, `int`, `long`, `decimal`, `double`, `boolean`, `date`, `timestamp`, `uuid`, `month` (a `YYYY-MM` string, month picker), `week` (a `YYYY-Www` ISO-week string, week picker) |
 | primary-key `type` | `integer`, `int`, `long` (integer only) |
-| relation `kind` | `oneToMany`, `manyToOne`, `oneToOne`, `manyToMany` |
+| relation `kind` | `oneToMany`, `manyToOne`, `oneToOne`, `manyToMany`, `subset` |
 | step `kind` | `userTask`, `serviceTask`, `decision`, `script`, `wait`, `end` |
 | wait event | `onCreate`, `onUpdate`, `onTransition` (never `onDelete`) |
 | userTask timers | `timeout: { after: <ISO-8601 duration>, then: <step> }`, `expire: { until: <date/timestamp field>, then: <step> }` |
@@ -2688,6 +2848,7 @@ or a seeded name.
 - "reference a Customer/Country/Currency/UoM owned by another app" -> **uses + cross-model relation**
 - "show the invoices / timesheet lines / journal entries that reference THIS record, on its own page" -> **`related:`** on the referenced entity (read-only; a composition child is a detail instead)
 - "many-to-many between X and Y" -> **`kind: manyToMany`** (materializes the intermediate entity); **with extra fields on the link** -> author the **intermediate entity** (composition + manyToOne)
+- "pick several of a lookup on one record - tags, categories, supported channels, weekdays (no data on the pairing)" -> **`kind: subset`** (a multi-select over the lookup's rows, stored as one comma-separated key list - never a link entity)
 
 ### expansions - generate child rows from a date span
 

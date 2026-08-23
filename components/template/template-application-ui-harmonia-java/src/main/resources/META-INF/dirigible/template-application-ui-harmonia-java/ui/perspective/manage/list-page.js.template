@@ -24,12 +24,15 @@ document.addEventListener('alpine:init', () => {
 
     // Per-column filter row (server-side, POST /search). string -> LIKE %v%, number/fk -> EQ, date -> EQ.
     // FK columns render a dropdown from the same lookup maps the list loads. Order + `number` mirror
-    // the table header (major, non-auto-increment properties).
+    // the table header (major, non-auto-increment properties). A MULTISELECT column is type 'none':
+    // its stored value is a key LIST ("1,3"), so an EQ can only match the exact whole list and a LIKE
+    // by id false-positives on multi-digit keys - buildConditions handles only string|number|fk|date,
+    // so 'none' contributes no condition by construction and the filter row renders an empty cell.
     columnFilters: {},
     filterColumns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', type: '#if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end'#if($property.isNumberType), number: true#end },
+      { name: '${property.name}', type: '#if($property.widgetType == "MULTISELECT")none#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end'#if($property.isNumberType), number: true#end },
 #end
 #end
     ],
@@ -135,11 +138,12 @@ document.addEventListener('alpine:init', () => {
     },
 
     lookups: {},   // relationship property name -> { fkValue: label }
-    // Fetch the referenced rows for each relationship (DROPDOWN) property once, mapping FK -> label.
+    // Fetch the referenced rows for each relationship (DROPDOWN) and MULTISELECT property once,
+    // mapping key -> label.
     async loadLookups() {
       const all = {};
 #foreach($property in $properties)
-#if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")
+#if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT")
       try {
         const opt${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
         const map${property.name} = {};
@@ -158,6 +162,18 @@ document.addEventListener('alpine:init', () => {
       const m = this.lookups[prop];
       const t = m ? m[v] : undefined;
       return (t !== undefined && t !== null && t !== '') ? t : this.displayValue(v);
+    },
+    // A MULTISELECT cell holds a key LIST ("1,3"): resolve each key through the same lookup map and
+    // join the labels. Deliberately its own resolver - lookupText must never sniff for commas, or a
+    // legitimate comma-carrying string column would be torn apart.
+    multiLookupText(prop, v) {
+      if (v === undefined || v === null || v === '') return '';
+      const m = this.lookups[prop] || {};
+      return String(v).split(',').map(k => {
+        const key = k.trim();
+        const t = m[key];
+        return (t !== undefined && t !== null && t !== '') ? t : key;
+      }).join(', ');
     },
 
     // EntityStatus badge colour, keyed by status keyword - same map as the form/document pages.
@@ -281,13 +297,16 @@ document.addEventListener('alpine:init', () => {
     exportColumns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
 #end
 #end
     ],
     exportCell(row, col) {
       const v = row[col.name];
       if (v == null || v === '') return '';
+      // A MULTISELECT exports its resolved labels, not the raw key list - fk resolution would treat
+      // the whole csv as one key and fall back to the raw ids.
+      if (col.multi) return this.multiLookupText(col.name, v);
       return col.fk ? this.lookupText(col.name, v) : this.displayValue(v, !!col.date);
     },
     exportCsv() {

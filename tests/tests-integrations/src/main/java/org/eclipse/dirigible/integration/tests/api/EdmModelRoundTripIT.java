@@ -14,8 +14,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
 
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -26,6 +32,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -50,23 +61,71 @@ import com.google.gson.JsonParser;
  * from the {@code .edm} and caught here as a missing key, and one written but not parsed back is
  * caught as a value mismatch - so a structured attribute cannot ship without {@code .edm}
  * serialization support.
+ *
+ * <p>
+ * Losslessness has a second failure mode the same round-trip exposes: not a value DROPPED, but a
+ * value written TWICE and disagreeing with itself (#6883). A to-one relation's identity used to be
+ * derived independently by the {@code <property>} element (from the TARGET entity) and by the
+ * {@code <relation>} element (from the RELATION name), and the save applied the second over the
+ * first - so an unmodified save renamed relationships and, for a cross-model target, repointed the
+ * generated lookup URL at a controller that does not exist. That divergence was invisible to this
+ * test because every relation in its intent was named after its target, which makes the two
+ * derivations produce the same string. The fixture below deliberately breaks that coincidence -
+ * relations named for their ROLE, two of them to the same target, and one cross-model target
+ * published under a perspective that is not its entity name - and asserts the {@code .edm} is
+ * internally consistent before the save is even attempted.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class EdmModelRoundTripIT extends IntegrationTest {
 
     private static final String PROJECT = "edm-roundtrip-test";
+    /** Owns the cross-model target, so its perspective is resolvable only from ITS model. */
+    private static final String OWNER_PROJECT = "edm-roundtrip-refs";
     private static final String WORKSPACE = "workspace";
-    private static final String PROJECT_PATH = IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/" + PROJECT;
-    private static final String GENERATE_URL =
-            "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
+    private static final String WORKSPACE_PATH = IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE;
+    private static final String PROJECT_PATH = WORKSPACE_PATH + "/" + PROJECT;
+    private static final String OWNER_PROJECT_PATH = WORKSPACE_PATH + "/" + OWNER_PROJECT;
     private static final String EDM_PUT_URL = "/services/ide/workspaces/" + WORKSPACE + "/" + PROJECT + "/rt.edm";
+    /** Declares every document-level value the .model root can carry. */
+    private static final String META_PROJECT = "edm-roundtrip-meta";
+    private static final String META_PROJECT_PATH = WORKSPACE_PATH + "/" + META_PROJECT;
+    private static final String META_EDM_PUT_URL = "/services/ide/workspaces/" + WORKSPACE + "/" + META_PROJECT + "/meta.edm";
 
-    // A same-model intent whose entities exercise the structured (List/Map) values #6826 was losing:
-    // labelParts + uniqueConstraints + relatedEntities on Category, lookupColumns on Product's FK,
-    // checks on Booking, and rollupGuard on Booking (the child of the capacity-bearing seat roll-up).
+    // The owner of the cross-model target. Currency is a SETTING, so its owner publishes it under the
+    // "Settings" perspective - a perspective that is not the entity's name, which is the only shape in
+    // which the perspective half of #6883 is visible. Nothing but this model can say so, which is the
+    // point: the consuming generator has to read it from here.
+    private static final String OWNER_INTENT_YAML = """
+            name: refs
+            entities:
+              - name: Currency
+                function: Setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string,  length: 3 }
+                  - { name: name, type: string,  length: 100 }
+            """;
+
+    // A mostly same-model intent whose entities exercise the structured (List/Map) values #6826 was
+    // losing: labelParts + uniqueConstraints + relatedEntities on Category, lookupColumns on Product's
+    // FK, checks on Booking, and rollupGuard on Booking (the child of the capacity-bearing seat
+    // roll-up).
+    //
+    // Product additionally carries the shapes #6883 needs, none of which existed here before: `owner`
+    // and `reviewer` are named for their ROLE rather than for their target, so the target-derived and
+    // relation-derived identities differ; they both point at the SAME target, so the target-derived
+    // form is not even unique within the entity; and `currency` reaches into another model whose
+    // perspective for the target ("Settings") is not the entity's name.
     private static final String INTENT_YAML = """
             name: rt
+            uses:
+              - { model: refs, project: edm-roundtrip-refs }
             entities:
+              - name: Employee
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string,  length: 100 }
+
               - name: Category
                 label: "{code} - {title}"
                 unique:
@@ -85,6 +144,9 @@ class EdmModelRoundTripIT extends IntegrationTest {
                   - { name: price, type: decimal }
                 relations:
                   - { name: Category, kind: manyToOne, to: Category, show: [code, title] }
+                  - { name: owner,    kind: manyToOne, to: Employee }
+                  - { name: reviewer, kind: manyToOne, to: Employee }
+                  - { name: currency, kind: manyToOne, to: Currency, model: refs }
 
               - name: Event
                 fields:
@@ -109,6 +171,66 @@ class EdmModelRoundTripIT extends IntegrationTest {
                   op: sum, of: seats, capacity: capacity, balance: seatsFree }
             """;
 
+    // Every DOCUMENT-level value the .model root can carry, in one model: `description` and `icon`
+    // directly, `title` from the humanised name, `languages` (the multilingual switch), `widgets`
+    // (the dashboard tiles), `customActionLabels` (from the transition's button) and
+    // `processTaskLabels` (from the process and its userTask steps). The two label maps and the
+    // status seeds are what make the fixture bigger than it looks - a transition needs a classified
+    // status nomenclature to name a from/to.
+    private static final String META_INTENT_YAML = """
+            name: meta
+            description: Round-trip fixture for the document-level metadata
+            icon: receipt
+            languages: [en, bg]
+
+            entities:
+              - name: ClaimStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string,  required: true, length: 40 }
+
+              - name: Claim
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: number,   type: string,  length: 40 }
+                  - { name: filedOn,  type: date }
+                relations:
+                  - { name: Status, kind: manyToOne, to: ClaimStatus, function: EntityStatus, init: DRAFT }
+
+            transitions:
+              - name: VoidClaim
+                forEntity: Claim
+                from: [FILED]
+                setStatus: VOIDED
+                label: Void
+
+            processes:
+              - name: ClaimApproval
+                trigger: { onCreate: Claim }
+                steps:
+                  - name: review
+                    kind: userTask
+                    args: { assignee: manager }
+                  - name: done
+                    kind: end
+
+            widgets:
+              - name: OpenClaims
+                kind: kpi
+                url: /services/js/meta/custom/open-claims.js
+                label: Open Claims
+                icon: activity
+
+            seeds:
+              - name: claim-statuses
+                entity: ClaimStatus
+                rows:
+                  - { id: 1, name: DRAFT,  stage: draft }
+                  - { id: 3, name: FILED,  stage: live }
+                  - { id: 9, name: VOIDED, stage: void }
+            """;
+
     @Autowired
     private IRepository repository;
 
@@ -117,13 +239,15 @@ class EdmModelRoundTripIT extends IntegrationTest {
 
     @Test
     void structured_values_survive_the_edm_to_model_round_trip() {
-        writeIntent(INTENT_YAML);
+        // The owner of the cross-model target first: its .model is what the consumer's generation reads
+        // the target's perspective from, and resolution fails loudly when it is not there.
+        writeIntent(OWNER_PROJECT_PATH, OWNER_INTENT_YAML);
+        generate(OWNER_PROJECT);
+
+        writeIntent(PROJECT_PATH, INTENT_YAML);
 
         // 1. Generate: writes rt.edm AND the complete rt.model (the oracle).
-        restAssuredExecutor.execute(() -> given().when()
-                                                 .post(GENERATE_URL)
-                                                 .then()
-                                                 .statusCode(200));
+        generate(PROJECT);
 
         String edm = contentOf("rt.edm");
         JsonObject modelFromIntent = parseModel(contentOf("rt.model"));
@@ -135,6 +259,17 @@ class EdmModelRoundTripIT extends IntegrationTest {
         for (String key : new String[] {"rollupGuard", "checks", "labelParts", "relatedEntities", "lookupColumns"}) {
             assertTrue(edm.contains(key + "=\""), "the .edm must carry the structured value [" + key + "] as an attribute");
         }
+
+        // The .edm must not contradict itself: the <relation> element restates the naming its FK
+        // <property> element carries, and a save applies the former over the latter. Structural over
+        // every relation in the file, so this holds for relation shapes no fixture here has yet (#6883).
+        assertEdmRelationsAgreeWithTheirProperties(edm);
+
+        // A relationship identity is unique within its owner - it is what the .schema emits as an FK's
+        // constraintName. The target-derived form was not: Product's `owner` and `reviewer` both point
+        // at Employee and both used to claim "Product_Employee".
+        assertRelationshipNamesAreUniquePerEntity(modelFromIntent);
+        assertRelationshipIdentityConvention(modelFromIntent);
 
         // 2. Rebuild the .model FROM the .edm the way the editor's save does: delete the oracle, then
         // PUT the .edm back through the workspace API (fires the ide-workspace-on-save transform). The
@@ -186,6 +321,162 @@ class EdmModelRoundTripIT extends IntegrationTest {
         assertEveryKeySurvives(modelFromIntent, modelFromEdm);
     }
 
+    /**
+     * The document level of the same contract (#6882): the {@code .model} rebuilt from an unmodified
+     * {@code .edm} save must still carry everything the {@code .model} said ABOVE its entities.
+     *
+     * <p>
+     * A separate fixture rather than more relations on the one above, because what it takes to make the
+     * document-level values exist at all - a classified status nomenclature for the transition to name,
+     * a process with a user task, dashboard widgets - has nothing to do with the structured entity
+     * values the other test is tuned for.
+     *
+     * <p>
+     * The assertion is the whole-document diff, not a list of the six keys the issue measured: a hand
+     * list is exactly what let the loss ship the first time.
+     */
+    @Test
+    void document_metadata_survives_the_edm_to_model_round_trip() {
+        writeIntent(META_PROJECT_PATH, META_INTENT_YAML);
+        generate(META_PROJECT);
+
+        JsonObject modelFromIntent = parseModel(contentOf(META_PROJECT_PATH, "meta.model"));
+        JsonObject document = modelFromIntent.getAsJsonObject("model");
+        // Fixture precondition: the model must actually carry each of them, or the diff proves nothing.
+        for (String key : new String[] {"title", "description", "icon", "languages", "widgets", "customActionLabels",
+                "processTaskLabels"}) {
+            assertTrue(document.has(key), "fixture precondition: the generated .model should carry document-level [" + key + "]");
+        }
+
+        byte[] edmBytes = resource(META_PROJECT_PATH, "meta.edm").getContent();
+        resource(META_PROJECT_PATH, "meta.model").delete();
+        restAssuredExecutor.execute(() -> given().contentType("application/octet-stream")
+                                                 .body(edmBytes)
+                                                 .when()
+                                                 .put(META_EDM_PUT_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        assertTrue(resource(META_PROJECT_PATH, "meta.model").exists(), "the .edm -> .model transform must have regenerated meta.model");
+        assertEveryKeySurvives(modelFromIntent, parseModel(contentOf(META_PROJECT_PATH, "meta.model")));
+    }
+
+    /**
+     * The {@code .edm} must not contradict itself. A to-one relation's identity and its lookup
+     * perspective are written twice - on the FK {@code <property>} element and again on the top-level
+     * {@code <relation>} element - and the save applies the {@code <relation>}'s copy over the
+     * property's, so a disagreement IS a silent rename on the first save (#6883). Asserted structurally
+     * over every relation in the file rather than as a list of known pairs, so a relation shape no
+     * fixture here has yet is covered too.
+     */
+    private void assertEdmRelationsAgreeWithTheirProperties(String edm) {
+        Document document = parseXml(edm);
+        NodeList relations = document.getElementsByTagName("relation");
+        assertTrue(relations.getLength() > 0, "fixture precondition: the .edm should carry <relation> elements");
+        for (int i = 0; i < relations.getLength(); i++) {
+            Element relation = (Element) relations.item(i);
+            String entityName = relation.getAttribute("entity");
+            String propertyName = relation.getAttribute("property");
+            Element property = edmProperty(document, entityName, propertyName);
+            String where = "the .edm's <relation> for [" + entityName + "." + propertyName + "] disagrees with its <property> on ";
+            // `name` is the attribute transform-edm.js reads; `relationName` is its twin, kept in step.
+            assertEquals(property.getAttribute("relationshipName"), relation.getAttribute("name"),
+                    where + "the relationship name - the save applies the <relation>'s value, renaming the relationship");
+            assertEquals(property.getAttribute("relationshipName"), relation.getAttribute("relationName"),
+                    where + "the relationship name (relationName)");
+            assertEquals(property.getAttribute("relationshipEntityPerspectiveName"),
+                    relation.getAttribute("relationshipEntityPerspectiveName"),
+                    where + "the lookup perspective - the save applies the <relation>'s value, repointing the generated lookup URL");
+            assertEquals(property.getAttribute("relationshipEntityName"), relation.getAttribute("referenced"),
+                    where + "the referenced entity");
+        }
+    }
+
+    /** The {@code <property>} element of the named entity, or a failure naming what was missing. */
+    private Element edmProperty(Document document, String entityName, String propertyName) {
+        NodeList entities = document.getElementsByTagName("entity");
+        for (int i = 0; i < entities.getLength(); i++) {
+            Element entity = (Element) entities.item(i);
+            if (!entityName.equals(entity.getAttribute("name"))) {
+                continue;
+            }
+            NodeList properties = entity.getElementsByTagName("property");
+            for (int j = 0; j < properties.getLength(); j++) {
+                Element property = (Element) properties.item(j);
+                if (propertyName.equals(property.getAttribute("name"))) {
+                    return property;
+                }
+            }
+            throw new AssertionError("the .edm's <relation> names property [" + propertyName + "] of [" + entityName
+                    + "], which that entity does not declare");
+        }
+        throw new AssertionError("the .edm's <relation> names entity [" + entityName + "], which the .edm does not declare");
+    }
+
+    /**
+     * A relationship identity is unique within its owning entity: it is what the generated
+     * {@code .schema} emits as the foreign key's {@code constraintName}. Deriving it from the TARGET
+     * collapses every relation an entity has to the same target onto one name - Product's {@code owner}
+     * and {@code reviewer} both point at Employee (#6883).
+     */
+    private void assertRelationshipNamesAreUniquePerEntity(JsonObject model) {
+        for (JsonElement e : model.getAsJsonObject("model")
+                                  .getAsJsonArray("entities")) {
+            JsonObject entity = e.getAsJsonObject();
+            JsonArray properties = entity.getAsJsonArray("properties");
+            if (properties == null) {
+                continue;
+            }
+            Set<String> seen = new HashSet<>();
+            for (JsonElement p : properties) {
+                JsonObject property = p.getAsJsonObject();
+                if (!property.has("relationshipEntityName") || !property.has("relationshipName")) {
+                    continue;
+                }
+                String name = property.get("relationshipName")
+                                      .getAsString();
+                assertTrue(seen.add(name), "[" + entity.get("name")
+                                                       .getAsString()
+                        + "] gives two relationships the same identity [" + name + "] - the .schema then emits two foreign keys"
+                        + " claiming the same constraintName");
+            }
+        }
+    }
+
+    /**
+     * The relationship identity and the cross-model lookup perspective the generator must settle on:
+     * the RELATION's name (unique within the owner, unlike the target's) and the perspective the
+     * target's OWNER model publishes it under (the only one the generated lookup URL can match). Pinned
+     * explicitly because the internal-consistency assertion above would also pass if both writers
+     * agreed on the wrong value.
+     */
+    private void assertRelationshipIdentityConvention(JsonObject model) {
+        JsonObject product = entity(model, "Product");
+        assertEquals("Product_Owner", property(product, "Owner").get("relationshipName")
+                                                                .getAsString(),
+                "a relationship is identified by its own name, not by its target");
+        assertEquals("Product_Reviewer", property(product, "Reviewer").get("relationshipName")
+                                                                      .getAsString(),
+                "a second relation to the same target gets its own identity");
+        assertEquals("Settings", property(product, "Currency").get("relationshipEntityPerspectiveName")
+                                                              .getAsString(),
+                "a cross-model target's perspective comes from its OWNER model, where Currency is a Setting");
+    }
+
+    /** External entities and DTDs off: this parses generated content, and nothing here needs them. */
+    private Document parseXml(String xml) {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setExpandEntityReferences(false);
+            return factory.newDocumentBuilder()
+                          .parse(new InputSource(new StringReader(xml)));
+        } catch (Exception ex) {
+            throw new AssertionError("the generated .edm is not well-formed XML", ex);
+        }
+    }
+
     private void assertEntityStructuredEquals(JsonObject fromIntent, JsonObject fromEdm, String entityName, String key) {
         JsonElement expected = entity(fromIntent, entityName).get(key);
         assertNotNull(expected, "fixture precondition: [" + entityName + "] should declare [" + key + "] in the intent's .model");
@@ -215,12 +506,30 @@ class EdmModelRoundTripIT extends IntegrationTest {
     private static final java.util.Set<String> ROUND_TRIP_EXCEPTIONS = java.util.Set.of("uniqueConstraints");
 
     /**
-     * Every entity/property key in the intent's .model must survive intact in the one rebuilt from the
-     * .edm.
+     * Every key the intent's .model carries must survive intact in the one rebuilt from the .edm -
+     * enumerated from the WHOLE document, not from its entities.
+     *
+     * <p>
+     * The walk used to start at {@code model.entities}, one level BELOW where the document-level
+     * metadata lives, which is exactly why #6882 shipped alongside a green round-trip test: the
+     * {@code .edm} had no representation for {@code title} / {@code description} / {@code icon} /
+     * {@code languages[]} / {@code customActionLabels} / {@code processTaskLabels}, and a save deleted
+     * all six without a single assertion noticing. Enumerating from the root means a document-level key
+     * added later cannot ship without {@code .edm} serialization either.
      */
     private void assertEveryKeySurvives(JsonObject fromIntent, JsonObject fromEdm) {
-        for (JsonElement e : fromIntent.getAsJsonObject("model")
-                                       .getAsJsonArray("entities")) {
+        JsonObject oracleDocument = fromIntent.getAsJsonObject("model");
+        JsonObject actualDocument = fromEdm.getAsJsonObject("model");
+        for (Map.Entry<String, JsonElement> member : oracleDocument.entrySet()) {
+            String key = member.getKey();
+            if ("entities".equals(key)) {
+                continue; // walked per entity below, so a mismatch names the entity and the attribute
+            }
+            assertTrue(actualDocument.has(key), "the model lost document-level [" + key + "] in the .edm -> .model round-trip");
+            assertEquals(member.getValue(), actualDocument.get(key),
+                    "the model's document-level [" + key + "] changed across the .edm -> .model round-trip");
+        }
+        for (JsonElement e : oracleDocument.getAsJsonArray("entities")) {
             JsonObject oracle = e.getAsJsonObject();
             String name = oracle.get("name")
                                 .getAsString();
@@ -291,8 +600,8 @@ class EdmModelRoundTripIT extends IntegrationTest {
                          .getAsJsonObject();
     }
 
-    private void writeIntent(String yaml) {
-        String path = PROJECT_PATH + "/app.intent";
+    private void writeIntent(String projectPath, String yaml) {
+        String path = projectPath + "/app.intent";
         IResource existing = repository.getResource(path);
         if (existing.exists()) {
             existing.setContent(yaml.getBytes(StandardCharsets.UTF_8));
@@ -301,18 +610,36 @@ class EdmModelRoundTripIT extends IntegrationTest {
         }
     }
 
+    private void generate(String project) {
+        String url = "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + project + "&path=app.intent";
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(url)
+                                                 .then()
+                                                 .statusCode(200));
+    }
+
     private IResource resource(String fileName) {
-        return repository.getResource(PROJECT_PATH + "/" + fileName);
+        return resource(PROJECT_PATH, fileName);
+    }
+
+    private IResource resource(String projectPath, String fileName) {
+        return repository.getResource(projectPath + "/" + fileName);
     }
 
     private String contentOf(String fileName) {
-        return new String(resource(fileName).getContent(), StandardCharsets.UTF_8);
+        return contentOf(PROJECT_PATH, fileName);
+    }
+
+    private String contentOf(String projectPath, String fileName) {
+        return new String(resource(projectPath, fileName).getContent(), StandardCharsets.UTF_8);
     }
 
     @AfterEach
     void cleanup() {
-        if (repository.hasCollection(PROJECT_PATH)) {
-            repository.removeCollection(PROJECT_PATH);
+        for (String path : new String[] {PROJECT_PATH, OWNER_PROJECT_PATH, META_PROJECT_PATH}) {
+            if (repository.hasCollection(path)) {
+                repository.removeCollection(path);
+            }
         }
     }
 }

@@ -76,6 +76,8 @@
                 <td x-h-table-cell#visibleGate($property)><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}))" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>
 #elseif($property.widgetType == "DROPDOWN")
                 <td x-h-table-cell#visibleGate($property) x-text="lookupText('${property.name}', row.${property.name})"></td>
+#elseif($property.widgetType == "MULTISELECT")
+                <td x-h-table-cell#visibleGate($property) x-text="multiLookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.isDateType)
                 <td x-h-table-cell#visibleGate($property) x-text="displayValue(row.${property.name}, true)"></td>
 #elseif($property.isFloatType)
@@ -170,7 +172,9 @@
           <div x-h-card-content>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
 #foreach($property in $properties)
-#if(!$property.dataAutoIncrement)
+## ProcessIds is the per-process at-most-once bookkeeping (Process=instanceId pairs) - platform
+## plumbing with nothing to say to a reader, unlike ProcessId, which names the flow the record is in.
+#if(!$property.dataAutoIncrement && $property.name != "ProcessIds")
 #if($property.widgetLabel)#set($plabel = $property.widgetLabel)#else#set($plabel = $property.name)#end
 #if($property.isDateType)#set($isDate = "true")#else#set($isDate = "false")#end
 #if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))
@@ -183,6 +187,8 @@
                 <span><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', selected?.${property.name}))" x-show="lookupText('${property.name}', selected?.${property.name})" x-text="lookupText('${property.name}', selected?.${property.name})"></span></span>
 #elseif($property.widgetType == "DROPDOWN")
                 <span x-text="lookupText('${property.name}', selected?.${property.name})"></span>
+#elseif($property.widgetType == "MULTISELECT")
+                <span x-text="multiLookupText('${property.name}', selected?.${property.name})"></span>
 #elseif($property.isFloatType)
                 <span x-text="formatNumber(selected?.${property.name}, '${property.formatPattern}')"></span>
 #else

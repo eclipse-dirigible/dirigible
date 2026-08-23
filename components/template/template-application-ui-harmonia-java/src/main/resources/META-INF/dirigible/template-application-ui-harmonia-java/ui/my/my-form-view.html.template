@@ -48,8 +48,8 @@
 #end
     <div class="grid grid-cols-12 gap-4" style="max-width: 900px">
 #foreach($property in $properties)
-#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name" && $property.name != $skipOwnerFk && $property.name != $skipParentFk && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS")
-      <div x-h-field style="grid-column: span #if($property.widgetSize && $property.widgetSize != "")${property.widgetSize}#{else}6#end"#visibleGate($property)>
+#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && $property.name != "ProcessIds" && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name" && $property.name != $skipOwnerFk && $property.name != $skipParentFk && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS")
+      <div x-h-field style="grid-column: span #if($property.widgetType == "MULTISELECT")12#elseif($property.widgetSize && $property.widgetSize != "")${property.widgetSize}#{else}6#end"#visibleGate($property)>
         <label x-h-label>
           <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end')"></span>#if($property.isRequiredProperty == "true") <span class="text-destructive">*</span>#end
         </label>
@@ -58,9 +58,25 @@
           <input x-h-select-input x-model="form.${property.name}" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select #if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end') })" />
           <div x-h-select-content>
             <div x-h-select-search></div>
-            <template x-for="opt in (options['${property.name}'] || [])" :key="opt.value">
-              <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
-            </template>
+            <div x-h-select-list>
+              <template x-for="opt in (options['${property.name}'] || [])" :key="opt.value">
+                <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+              </template>
+            </div>
+          </div>
+        </div>
+#elseif($property.widgetType == "MULTISELECT")
+        <!-- Subset (intent `kind: subset`): the bound ARRAY model puts the select in
+             multiple mode - the csv is split on load and joined back on save. -->
+        <div x-h-select data-filter="contains">
+          <input x-h-select-input x-model="form.${property.name}" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select #if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end') })" />
+          <div x-h-select-content>
+            <div x-h-select-search></div>
+            <div x-h-select-list>
+              <template x-for="opt in (options['${property.name}'] || [])" :key="opt.value">
+                <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+              </template>
+            </div>
           </div>
         </div>
 #elseif($property.widgetType == "NUMBER")
@@ -113,7 +129,7 @@
 
 #set($hasReadOnly = false)
 #foreach($property in $properties)
-#if($property.isReadOnlyProperty == "true" && !$property.sensitiveProperty && $property.name != "ProcessId" && (!$property.auditType || $property.auditType == "NONE"))
+#if($property.isReadOnlyProperty == "true" && !$property.sensitiveProperty && $property.name != "ProcessId" && $property.name != "ProcessIds" && (!$property.auditType || $property.auditType == "NONE"))
 #set($hasReadOnly = true)
 #end
 #end
@@ -122,7 +138,7 @@
     <div x-show="mode === 'edit'" x-h-card style="max-width: 900px">
       <div x-h-card-content class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
 #foreach($property in $properties)
-#if($property.isReadOnlyProperty == "true" && !$property.sensitiveProperty && $property.name != "ProcessId" && (!$property.auditType || $property.auditType == "NONE"))
+#if($property.isReadOnlyProperty == "true" && !$property.sensitiveProperty && $property.name != "ProcessId" && $property.name != "ProcessIds" && (!$property.auditType || $property.auditType == "NONE"))
         <div class="vbox gap-0" x-show="form.${property.name} != null &amp;&amp; form.${property.name} !== ''">
           <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end')"></span>
           <span class="text-sm" x-text="form.${property.name}"></span>

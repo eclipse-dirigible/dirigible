@@ -206,6 +206,16 @@ final class StatusSymbolResolver {
             if (abortOn != null) {
                 putResolvedList(abortOn, "status", statusOf(triggerEntity), subject + " abortOn status");
             }
+            // The trigger's own `when` guard. The status axis makes a status name the norm here rather
+            // than the exception - "start this process when the record reaches IDENTIFIED" is what an
+            // onTransition trigger is FOR - and this was the one `when` in the DSL left unresolved: the
+            // name survived into the generated listener as a string compared against the integer FK, so
+            // the guard could never hold and the process silently never started (#6862).
+            Map<?, ?> trigger = asMap(process.get("trigger"));
+            if (trigger != null && trigger.get("when") != null) {
+                put(trigger, "when", rewriteExpression(text(trigger, "when"), statusRelationName(triggerEntity), statusOf(triggerEntity),
+                        subject + " trigger when"));
+            }
             // `setRelationField: <Relation>` + `value:` writes an id of THAT relation's target - the
             // status in the canonical case, but the same shape serves any nomenclature FK.
             for (Object stepNode : asList(process.get("steps"))) {
@@ -242,20 +252,27 @@ final class StatusSymbolResolver {
     }
 
     /**
-     * An event-driven create-from (issue #6711) guards on the SOURCE's status exactly as a posting
-     * does; the source is {@code from:}, owned by {@code fromUses:} when it is not local.
+     * Every status a create-from names, all three on the SOURCE's nomenclature: the {@code event} guard
+     * it qualifies on (issue #6711, exactly as a posting's does), the {@code sourceStatus} completion
+     * hook it flips to once the target exists, and the {@code sourceStatusOnRetire} the retirement of
+     * that target returns it to (issue #6868). The source is {@code from:}, owned by {@code fromUses:}
+     * when it is not local.
      */
     private void rewriteGenerates(Map<?, ?> root) {
         for (Object node : asList(root.get("generates"))) {
             Map<?, ?> generate = asMap(node);
-            Map<?, ?> event = asMap(generate == null ? null : generate.get("event"));
-            if (event == null || event.get("when") == null) {
+            if (generate == null) {
                 continue;
             }
             String source = text(generate, "from");
-            String subject = "generates [" + text(generate, "name") + "] event when";
+            String subject = "generates [" + text(generate, "name") + "]";
             Target status = text(generate, "fromUses") != null ? new Target(source, text(generate, "fromUses")) : statusOf(source);
-            put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(source), status, subject));
+            Map<?, ?> event = asMap(generate.get("event"));
+            if (event != null && event.get("when") != null) {
+                put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(source), status, subject + " event when"));
+            }
+            putResolved(generate, "sourceStatus", status, subject + " sourceStatus");
+            putResolved(generate, "sourceStatusOnRetire", status, subject + " sourceStatusOnRetire");
         }
     }
 

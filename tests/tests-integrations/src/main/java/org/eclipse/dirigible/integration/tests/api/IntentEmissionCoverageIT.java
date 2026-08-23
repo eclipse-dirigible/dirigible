@@ -286,11 +286,46 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # the table column and the detail pane, exactly like the list layout does.
               - name: Campaign
                 immutableWhen: "Status == 2"
+                # related over a source that carries a SUBSET column: the register's cell is a key
+                # list, so its lookup must resolve EACH key (the `multi` flag) - without it the
+                # register is the one surface that shows the raw "1,3" (#6896).
+                related:
+                  - entity: Bulletin
+                    label: Bulletins
+                    show: [title, channels]
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 100 }
                 relations:
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                  # subset (#6878): a VALUE set over a small lookup - one csv column ("1,3"),
+                  # never a link entity, never an FK. Campaign carries the unseeded REST round-trip
+                  # (it is POSTed by the lock tests, so seeding it would collide with the identity
+                  # sequence); the seeded carrier is Bulletin below.
+                  # where: narrows the chooser to the active channels, which is also what makes a
+                  # STORED key that later fell outside the filter unresolvable - the form must splice
+                  # each such key back in for label resolution (#6896).
+                  - { name: channels, kind: subset, to: Channel, where: { active: true } }
+
+              # The subset relation's lookup: a plain settings nomenclature the widget offers.
+              - name: Channel
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 60 }
+                  - { name: active, type: boolean }
+
+              # The SEEDED subset carrier, never POSTed: proves the seed's relation key lands as
+              # the quoted csv column and CSVIM imports it (the silent-zero failure this IT exists for).
+              - name: Bulletin
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: title, type: string, required: true, length: 100 }
+                relations:
+                  - { name: channels, kind: subset, to: Channel }
+                  # The incoming association Campaign's register filters by (optional, so the seeded
+                  # rows stay valid without naming a campaign).
+                  - { name: campaign, kind: manyToOne, to: Campaign }
 
               # locksWithMaster: false - the deliberate post-lock collection (#6700). It is the
               # negative control for the inherited lock below: notes keep their writes after the
@@ -407,6 +442,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,        type: integer, primaryKey: true, generated: true }
                   - { name: refNumber, type: string, required: true, length: 50, function: DocumentTitle }
                   - { name: date,      type: date, required: true }
+                  # The one-hop map SNAPSHOT: the name of the status the Slip was in when this voucher
+                  # was minted. A relation to the Slip's status would read today's value instead.
+                  - { name: slipStatusName, type: string, length: 100 }
                 relations:
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1, required: true }
                   # The event-driven create-from's back-reference (#6711): what makes minting the
@@ -915,6 +953,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: confirm, kind: userTask, args: { assignee: approver } }
                   - { name: end, kind: end }
 
+              # TWO flows on ONE record (#6862): ApprovalFlow above starts on create and stamps the
+              # record; this one starts when that record is voided. While the at-most-once guard read
+              # the single ProcessId, this second flow never started for any record the first had
+              # already stamped - silently, with no log line and no visible symptom.
+              - name: VoidedFollowUp
+                trigger: { onTransition: Approval, when: "Status == CANCELLED" }
+                steps:
+                  - { name: filed, kind: end }
+
               # step resilience (#6762): the flaky call succeeds on its LAST declared attempt (the
               # delegate counts invocations, so GeneratedKey == KEY-3 pins the R<count+1> cycle),
               # the produced secret flows through `uses` into the writer and is cleared once it
@@ -1102,6 +1149,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   attach: print
                   # languageFrom: the counterparty decides the language the attached print renders in.
                   languageFrom: Person.locale
+                  # fileName (#6899): a self-describing name instead of the bare document number. The
+                  # {A|B} fallback covers the optional note (blank on most bills, and then the
+                  # counterparty names the file), and the hop adds a relation the message text - a
+                  # LITERAL recipient - never mentions, so the pattern's own load must be declared.
+                  fileName: "BILL_{note|Person.name}"
 
             # postings + reverses (red storno): a POSTED Doc posts one balanced Entry (debit +
             # credit); a VOIDED Doc posts the reversal - the SAME lines negated on the SAME sides,
@@ -1147,6 +1199,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 button: true
                 map:
                   Slip: id
+                  # A one-hop relation.field source: the create-from loads the Slip's EntryStatus row by
+                  # its foreign key and copies the NAME off it - the snapshot an audit trail needs, which
+                  # `map:` could not express while a source had to be a property of the row itself.
+                  slipStatusName: Status.name
                 defaults:
                   refNumber: "AUTO"
                   date: now
@@ -1273,6 +1329,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { id: 1, name: DRAFT,     stage: draft }
                   - { id: 2, name: POSTED,    stage: live }
                   - { id: 3, name: CANCELLED, stage: cancelled }
+              - name: channels
+                entity: Channel
+                rows:
+                  - { id: 1, name: Email,  active: true }
+                  - { id: 2, name: Social, active: true }
+                  - { id: 3, name: Print,  active: true }
+              # The subset value is seeded by the relation's authored name and lands in the normative
+              # shape - a quoted csv cell ("1,3"); the second row proves an omitted set stays null.
+              # Authored out of order and with a repeat on purpose: a seed reaches the table through
+              # neither the form nor the repository (CSVIM inserts straight into the database), so the
+              # ordering and de-duplication have to happen when the CSV is written (#6897).
+              - name: bulletins
+                entity: Bulletin
+                rows:
+                  - { id: 1, title: Welcome, channels: "3,1,3" }
+                  - { id: 2, title: Plain }
               - name: zones
                 entity: Zone
                 rows:
@@ -1611,7 +1683,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // write-back arrives on this very path, after its process instance has already started, so a gate
         // that refused it left the instance running with nothing pointing at it (#6815).
         assertTrue(
-                entryRepository.contains("SYSTEM_PROPERTIES = java.util.List.of(\"ProcessId\")")
+                entryRepository.contains("SYSTEM_PROPERTIES = java.util.List.of(\"ProcessId\", \"ProcessIds\")")
                         && entryRepository.contains("boolean authoredWrite = touchesAuthoredColumn(values)")
                         && entryRepository.contains("if (authoredWrite) {"),
                 "the document gate must run only for a write that touches an authored column, got: " + entryRepository);
@@ -1675,6 +1747,45 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // unknown/mis-cased key is dropped silently and CSVIM then skips the rows.
         String accountsCsv = contentOf("accounts.csv");
         assertTrue(accountsCsv.contains("ACCOUNT_PARENT"), "a seed row's relation key must emit the FK column into the seed CSV");
+
+        // subset (#6878): ONE plain VARCHAR column carrying the selected keys as a csv - the
+        // schema gets the column and must NOT grow a foreign key over it (the schema's FK gate keys
+        // on relationshipEntityName alone, which a subset relation deliberately never carries).
+        assertTrue(schema.contains("CAMPAIGN_CHANNELS") && schema.contains("BULLETIN_CHANNELS"),
+                "a subset relation must emit its value column into the schema");
+        assertFalse(schema.contains("Campaign_Channel") || schema.contains("Bulletin_Channel"),
+                "a subset relation must not emit an FK structure - its column is a value list, not a reference");
+        String subsetFormPage = contentOf("gen/emission/js/components/pages/Campaign/CampaignFormPage.js");
+        assertTrue(subsetFormPage.contains("Channels: [],"),
+                "the form model must initialize a subset value as an ARRAY - that is what puts the select in multiple mode");
+        assertTrue(subsetFormPage.contains("/api/settings/ChannelController"),
+                "the multiselect options must load from the lookup's controller under the Settings perspective");
+        assertTrue(subsetFormPage.contains(".split(',')") && subsetFormPage.contains(".join(',')"),
+                "the form must split the stored csv on load and join it back to the normative shape on save");
+        // where: on a subset - a stored key that later fell outside the filter has no option, so its
+        // label would silently drop out of the trigger's list while the record still stores it (#6896).
+        assertTrue(subsetFormPage.contains("ensureFilteredCurrent('Channels'"),
+                "a filtered subset must splice its stored out-of-filter keys back in for label resolution");
+        // The seeded value column: the relation-name key emits the quoted csv cell (the cell carries
+        // the field delimiter, so an unquoted emission would shear the row apart).
+        String bulletinsCsv = contentOf("bulletins.csv");
+        assertTrue(bulletinsCsv.contains("BULLETIN_CHANNELS"), "a seed row's subset key must emit the value column into the seed CSV");
+        assertTrue(bulletinsCsv.contains("\"1,3\""),
+                "the subset seed cell must be quoted (it carries the field delimiter) and normalized - authored \"3,1,3\"");
+        // ... and the register of the records referencing Campaign renders that same value as LABELS:
+        // the column carries the `multi` flag beside the options lookup, which is what routes the cell
+        // through the lookup per key instead of printing the raw list (#6896).
+        String campaignRegister = contentOf("gen/emission/js/components/pages/Campaign/Campaign.related.js");
+        assertTrue(campaignRegister.contains("name: 'Channels'") && campaignRegister.contains("multi: true"),
+                "a register column over a subset must carry the multi flag, got: " + campaignRegister);
+        assertTrue(campaignRegister.contains("lookup: { url: '" + API + "/settings/ChannelController'"),
+                "a register column over a subset must carry the options entity's lookup, got: " + campaignRegister);
+        // The shape is normative, so the REPOSITORY holds it - on the create path, the user update path
+        // and the system write alike. The generated form normalizes too; that is the belt, not the rule
+        // (#6897).
+        String campaignRepository = contentOf("gen/emission/data/campaign/CampaignRepository.java");
+        assertEquals(3, campaignRepository.split("normalizeKeySet\\(\"Channels\"", -1).length - 1,
+                "every write path of the repository must normalize the subset value, got: " + campaignRepository);
         assertTrue(entryRepository.contains("EntryLineRepository"),
                 "aggregate: true must make the master repository recompute totals from its items child");
 
@@ -1951,9 +2062,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // The write-back is the only post-start step, and an instance nothing points at is cancelled
         // rather than left running untracked (#6815).
         assertTrue(
-                claimTrigger.contains("repository.updateProperty(entity.Id, \"ProcessId\", processId)")
+                claimTrigger.contains("repository.updateProperties(entity.Id, stamped)")
                         && claimTrigger.contains("Process.cancel(processId,"),
-                "the ProcessId write-back must be the targeted write, with the instance cancelled when it does not land");
+                "the write-back must be the targeted write, with the instance cancelled when it does not land");
+        // ...and the guard it writes is PER PROCESS (#6862): a record can be the subject of several
+        // flows, so "has a process run for this record" is the wrong question - a create-triggered flow
+        // that stamped the record silently skipped every follow-up flow bound to its transition.
+        assertTrue(claimTrigger.contains("ProcessStamps.has(entity.ProcessIds, \"ClaimConfirm\")"),
+                "the at-most-once guard must ask about THIS process, not about any stamped ProcessId");
+        assertTrue(claimTrigger.contains("stamped.put(\"ProcessIds\", ProcessStamps.with(")
+                && claimTrigger.contains("\"ClaimConfirm\", processId))") && claimTrigger.contains("stamped.put(\"ProcessId\", processId)"),
+                "the per-process stamp must be written back with ProcessId - it is what the guard reads");
 
         // wait + boundary timers (BPM events wave 1): the catch event, the two boundary timers and
         // the loader/correlating glue must all be present - a missing piece degrades silently into a
@@ -1968,8 +2087,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         && rfqBpmn.contains("<timeDate>${__reviewExpireDate}</timeDate>"),
                 "expire must emit a cancelling boundary timer armed from the loader variable");
         String waitHandler = contentOf("gen/events/emission/RfqFlowAwaitReplyWait.java");
-        assertTrue(waitHandler.contains("Process.correlateMessageEvent(carrier.ProcessId, \"RfqFlowAwaitReply\""),
-                "the wait listener must correlate the message on the stamped ProcessId");
+        // On THIS process's instance, read from the record's per-process stamps - not on its single
+        // ProcessId, which holds whichever flow started last and would resume a stranger's wait once a
+        // record carries more than one (#6862). The ProcessId fallback covers pre-stamp records.
+        assertTrue(
+                waitHandler.contains("ProcessStamps.idFor(carrier.ProcessIds, \"RfqFlow\")")
+                        && waitHandler.contains("instance = carrier.ProcessId;")
+                        && waitHandler.contains("Process.correlateMessageEvent(instance, \"RfqFlowAwaitReply\""),
+                "the wait listener must correlate the message on its own process's stamped instance");
         assertTrue(waitHandler.contains("new RfqRepository().findById(entity.Rfq)"),
                 "the wait listener must resolve the parked record through the via back-reference");
         String timerLoader = contentOf("gen/events/emission/LoadRfqFlowReviewExpire.java");
@@ -2060,8 +2185,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String abortHandler = contentOf("gen/events/emission/ApprovalFlowAbort.java");
         assertTrue(
                 abortHandler.contains("-transitioned") && abortHandler.contains("entity.Status == 3")
-                        && abortHandler.contains("Process.correlateMessageEvent(entity.ProcessId, \"ApprovalFlowAbort\""),
-                "the abort listener must match the status on -transitioned and correlate on the ProcessId");
+                        && abortHandler.contains("ProcessStamps.idFor(entity.ProcessIds, \"ApprovalFlow\")")
+                        && abortHandler.contains("Process.correlateMessageEvent(instance, \"ApprovalFlowAbort\""),
+                "the abort listener must match the status on -transitioned and abort ITS OWN instance, not whichever flow stamped last");
+
+        // ...and the follow-up flow on the same record (#6862) is a listener of its own, on the status
+        // channel, guarding on ITS OWN name. Reading the record's single ProcessId here is what made the
+        // two flows indistinguishable: ApprovalFlow stamps every Approval on create, so the guard was
+        // always already tripped by the time a transition arrived.
+        String followUp = contentOf("gen/events/emission/VoidedFollowUpTrigger.java");
+        assertTrue(followUp.contains("-transitioned") && followUp.contains("ProcessStamps.has(entity.ProcessIds, \"VoidedFollowUp\")"),
+                "the transition-triggered flow must guard on its own stamp, not on any ProcessId the record carries");
+        assertFalse(followUp.contains("if (entity == null || (entity.ProcessId != null && !entity.ProcessId.isBlank()))"),
+                "the record-wide guard is what skipped this flow - it must be gone");
+        // The technical column stays out of every generated surface: the form model never carries it (a
+        // form that did would post a stale copy back over a stamp written while the record was open) and
+        // no view renders it. ProcessId, which names the flow the record is in, is still shown.
+        String approvalFormPage = contentOf("gen/emission/js/components/pages/Approval/ApprovalFormPage.js");
+        assertFalse(approvalFormPage.contains("ProcessIds"), "the per-process stamps must not reach the form model");
+        assertTrue(approvalFormPage.contains("ProcessId"), "...while ProcessId keeps its place");
+        assertFalse(contentOf("gen/emission/views/Approval/Approval-form.html").contains("ProcessIds"),
+                "the per-process stamps must not be rendered on a form");
 
         // personal UI (phase B): the my pages exist, the form never mentions the sensitive field,
         // and the SPA routes + sidebar carry the personal surface.
@@ -2329,6 +2473,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(sendBill.contains("attachLanguageSource.Locale"), "the language must be read off the person's locale");
         assertTrue(sendBill.contains("org.eclipse.dirigible.sdk.print.Print.defaultLanguage()"),
                 "a null/blank locale must fall back to the application language set at send time");
+        // fileName (#6899): the attachment's name is the authored pattern, not a hardcoded expression.
+        // Every interpolated value is sanitized by the SDK (business data must not be able to produce
+        // a name a file system or mail client rejects), the {A|B} operands become a first-non-blank
+        // call, and the hop's own relation load is declared even though the recipient is a literal and
+        // the message text never mentions it.
+        assertTrue(sendBill.contains("document.put(\"fileName\", \"BILL_\" + org.eclipse.dirigible.sdk.print.FileNames.first("),
+                "the attachment name must be the authored pattern, got: " + sendBill);
+        assertTrue(
+                sendBill.contains("FileNames.part(entity.Note)")
+                        && sendBill.contains("FileNames.part((Person == null ? null : Person.Name))"),
+                "both operands must be sanitized reads, got: " + sendBill);
+        assertTrue(sendBill.contains("PersonEntity Person ="),
+                "the pattern's relation must be declared as a load of its own, got: " + sendBill);
+        assertFalse(sendBill.contains("document.put(\"fileName\", \"Bill \" + entity.Id"),
+                "the pattern must replace the entity-name-plus-id default, got: " + sendBill);
 
         // The feeder resolves the LINE-ITEM to-one relations per row - an items-table column renders
         // {{Unit}} (the target's label, through the repository so the translation overlay applies) or
@@ -2508,6 +2667,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(generate.contains("VoucherLineEntity item") && generate.contains("item.Voucher = saved.Id;"),
                 "the computed line must write into the auto-resolved target items child and re-point it at the saved master");
 
+        // A one-hop `relation.field` map source: the create-from loads the Slip's status row ONCE by the
+        // foreign key and copies the NAME off it - a snapshot, where holding the relation would read
+        // today's value. Both anchors are code the explanatory comments cannot stand in for: the load
+        // call and the guarded read, rather than the field name (which the comments carry too).
+        assertTrue(generate.contains("Repository().findById(source.Status)"),
+                "a one-hop map source must load the related row by the source's own foreign key");
+        assertTrue(generate.contains("target.SlipStatusName = (Status == null ? null : Status.Name);"),
+                "the hop must be read off the loaded row through a null guard, so a null relation is an empty value");
+        // The load sits AFTER the at-most-once guard: an event redelivery that finds the voucher already
+        // minted must cost no extra query at all.
+        assertTrue(generate.indexOf("VoucherEntity candidate : existing") < generate.indexOf("Repository().findById(source.Status)"),
+                "the one-hop load must follow the at-most-once guard, not precede it");
+
         // generates event: (#6711): the create-from also runs by itself. The listener binds the SOURCE's
         // -transitioned topic (the channel every status write publishes), guards on the status, and
         // delegates to the SAME create-from the button calls - it must not carry a mapping of its own, or
@@ -2674,6 +2846,46 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("$", hasSize(2)),
                 30);
+
+        // subset (#6878): the seeded value survived CSVIM - both bulletin rows imported, row 1
+        // carrying the csv VERBATIM (a plain column round-trips untouched) and row 2's omitted set
+        // null - and a REST write round-trips the normative shape unchanged.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/bulletin/BulletinController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(2))
+                                                 .body("find { it.Id == 1 }.Channels", equalTo("1,3"))
+                                                 .body("find { it.Id == 2 }.Channels", nullValue()),
+                30);
+        // A write posts a SET, so the caller may send it in any order and with a repeat; the stored value
+        // is the normative shape (ascending, de-duplicated) because the REPOSITORY normalizes it - not
+        // only the generated form. Before that, "3,1,1" persisted verbatim and was silently rewritten
+        // the first time a person opened the record and saved it (dirigible #6897).
+        AtomicInteger multiCampaign = new AtomicInteger();
+        restAssuredExecutor.execute(() -> multiCampaign.set(given().contentType("application/json")
+                                                                   .body("{\"Name\":\"Multi\",\"Channels\":\"3,1,1\"}")
+                                                                   .when()
+                                                                   .post(API + "/campaign/CampaignController")
+                                                                   .then()
+                                                                   .statusCode(200)
+                                                                   .body("Channels", equalTo("1,3"))
+                                                                   .extract()
+                                                                   .path("Id")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/campaign/CampaignController/" + multiCampaign.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Channels", equalTo("1,3")));
+
+        // The emitted widgetPattern is the ONLY server-side shape guard (no FK constrains the
+        // column), so an API write that is not a comma-separated id list must be refused.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\"BadMulti\",\"Channels\":\"Email,Print\"}")
+                                                 .when()
+                                                 .post(API + "/campaign/CampaignController")
+                                                 .then()
+                                                 .statusCode(400));
 
         // multilingual read-time overlay: the bg translation replaces the seeded name.
         restAssuredExecutor.execute(() -> given().header("Accept-Language", "bg")
@@ -2866,6 +3078,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             assertEquals(1, vouchers.getList(matching)
                                     .size(),
                     "posting the slip must mint exactly one voucher back-referencing it");
+            // The one-hop map source at RUNTIME: the create-from loaded the Slip's EntryStatus row by the
+            // foreign key and copied its NAME onto the voucher. Asserted on the row rather than on the
+            // generated source because what the hop promises is a VALUE that landed - a load that
+            // silently resolved to null would render and compile exactly the same.
+            assertEquals("POSTED", vouchers.getString(matching + ".SlipStatusName[0]"),
+                    "the one-hop map must snapshot the name of the status the slip was in when it was minted");
             autoVoucherId.set(vouchers.getInt(matching + ".Id[0]"));
         }, 60);
         restAssuredExecutor.execute(() -> {
@@ -4483,6 +4701,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                        .anyMatch(task -> "Confirm".equals(task.get("name")));
             assertTrue(!confirmLeft, "abortOn must cancel the confirm task when the approval is voided, got: " + tasks);
         }, 90);
+        // The composition, end to end (#6862): this record was stamped by the create-triggered
+        // ApprovalFlow, and the void transition then started the SECOND flow bound to that status. Both
+        // stamps are on the record, each against its own process name. With one ProcessId to read, the
+        // follow-up never started at all - the record was already stamped, so the guard skipped it.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(approvalApi + "/" + approval.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("ProcessIds", org.hamcrest.Matchers.containsString("ApprovalFlow="))
+                                                 .body("ProcessIds", org.hamcrest.Matchers.containsString("VoidedFollowUp=")),
+                90);
     }
 
     private static void sleep(long millis) {

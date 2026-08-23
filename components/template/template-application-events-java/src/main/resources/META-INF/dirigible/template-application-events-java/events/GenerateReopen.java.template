@@ -1,0 +1,114 @@
+package gen.events.${javaGenFolderName};
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+/**
+ * Declared reopen of the create-from ${name} (intent `sourceStatusOnRetire:`): when the ${toEntity}
+ * generated from a ${fromEntity} is RETIRED - its ${retiredStatusProperty} reaches a status the seeds
+ * classify `stage: cancelled` or `stage: void` - the ${fromEntity} is returned to status
+ * ${reopenStatusValue}, where it stood before that ${toEntity} existed.
+ *
+ * Generated from the intent generates block's `sourceStatusOnRetire:` (issue #6868) - do not edit; it
+ * is re-generated with the application.
+ *
+ * Why it exists: the completion hook moved the ${fromEntity} to status ${sourceStatusValue} when the
+ * ${toEntity} was created, deliberately - so the guard-claimed source stops matching its own trigger.
+ * The at-most-once guard steps over a retired ${toEntity} (issue #6814), which FREES the ${fromEntity}'s
+ * one-shot slot, but nothing could refill it: the ${fromEntity} stands at ${sourceStatusValue} and its
+ * lifecycle declares no way back into the status the trigger qualifies on, so no qualifying event was
+ * ever published again. This is the move back, declared.
+ *
+ * Contract:
+ * - binds the TARGET's -transitioned topic - the channel every routed status write publishes (a
+ *   transitions button, a workflow setter, a create-from completion hook), so a void performed any of
+ *   those ways is seen the same;
+ * - RE-LOADS the ${toEntity} before deciding, because the payload is as-of the event and a later
+ *   transition may already have moved the document out of the retiring stage again;
+ * - acts only while the ${fromEntity} still stands where THIS create-from's completion hook left it,
+ *   so a ${fromEntity} that has since moved on down its own lifecycle is never overruled;
+ * - and only while the slot is genuinely FREE - no ${toEntity} of this ${fromEntity} still counts. That
+ *   is the create-from's own guard asked from here, and it is what makes the reopen idempotent under
+ *   redelivery: a redelivered retirement of a ${toEntity} whose replacement already exists must not
+ *   return the ${fromEntity} a second time. Idempotent by the state itself, with no marker column to
+ *   keep in step;
+ * - flips ONLY the status column, through the targeted primitive, with the "-transitioned" notice
+ *   riding that write into the outbox - so the flip and its announcement commit together and
+ *   ${className}GenerateOnEvent cannot miss the moment that frees it. The reissue itself is then the
+ *   ORDINARY path: the trigger re-fires, the guard steps over the retired document, and the
+ *   replacement is minted. The retired ${toEntity} is kept, never edited and never re-pointed.
+ */
+@Component("${javaGenFolderName}_${className}GenerateReopen")
+public class ${className}GenerateReopen implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}GenerateReopen");
+
+    @Override
+    public String destination() {
+        return "${toProjectName}-${toPerspective}-${toEntity}-transitioned";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity payload =
+                Json.parse(message, gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity.class);
+        if (payload == null || payload.${toPk} == null) {
+            return;
+        }
+        gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity target =
+                new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().findById(payload.${toPk});
+        if (target == null || target.${retiredStatusProperty} == null || !(${reopenRetiredCondition})) {
+            // Not a retirement. Every other transition of this ${toEntity} - issued, sent, paid - leaves
+            // its ${fromEntity} exactly where it is.
+            return;
+        }
+        if (target.${backRefProperty} == null) {
+            return; // this row back-references no ${fromEntity}, so there is nothing to return
+        }
+        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
+                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository();
+        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
+                sourceRepository.findById(target.${backRefProperty});
+        if (source == null || source.${sourceStatusProperty} == null
+                || source.${sourceStatusProperty} != ${sourceStatusValue}) {
+            // The ${fromEntity} is not standing where this create-from's completion hook left it: it was
+            // already returned, or it has moved on down its own lifecycle and the reissue is no longer
+            // this rule's to decide.
+            return;
+        }
+        // Is the slot actually free? The create-from's own at-most-once guard, asked from this end and
+        // over the SAME retiring classification: if any ${toEntity} of this ${fromEntity} still counts,
+        // a creation would hand that one back rather than mint a replacement, so returning the
+        // ${fromEntity} would leave it re-opened with a live ${toEntity} against it. That is precisely
+        // what a REDELIVERED retirement looks like once the replacement exists - and delivery is
+        // at-least-once.
+        for (gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity candidate :
+                new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().findAll(
+                        Criteria.create()
+                                .eq("${backRefProperty}", target.${backRefProperty}))) {
+            if (candidate.${retiredStatusProperty} == null || !(${retiredStatusCondition})) {
+                return;
+            }
+        }
+        sourceRepository.updateProperties(target.${backRefProperty},
+                java.util.Map.of("${sourceStatusProperty}", ${reopenStatusValue}),
+                "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned");
+        LOG.info("Generate ${name}: ${toEntity} [{}] was retired - ${fromEntity} [{}] returned to status ${reopenStatusValue}",
+                target.${toPk}, target.${backRefProperty});
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Generate ${name}: the reopen listener on [{}] failed - [{}]", destination(), error);
+    }
+}

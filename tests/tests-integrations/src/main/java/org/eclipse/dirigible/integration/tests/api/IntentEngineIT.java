@@ -127,9 +127,12 @@ class IntentEngineIT extends IntegrationTest {
               # function: Snapshot - the immutable, versioned copy generated at issue. Served by the
               # read-only files panel (per-version Open + Download); Print always renders live.
               # languageFrom: the customer decides which print-template language the copy is minted in.
+              # fileName: a self-describing archive name instead of "Order 42 v1.pdf" - a date rendered
+              # in an authored pattern and a one-hop relation read off the document's customer.
               - name: OrderCopy
                 function: Snapshot
                 languageFrom: customer.locale
+                fileName: "{orderDate:yyyyMMdd}_{customer.name}"
                 relations:
                   - { name: order, kind: manyToOne, to: Order, composition: true }
 
@@ -1335,8 +1338,10 @@ class IntentEngineIT extends IntegrationTest {
                 "the when guard should gate the correlation on the event record");
         assertTrue(wait.contains("new CaseRepository().findById(entity.Case)"),
                 "the listener should resolve the ProcessId-carrying record through the via FK");
-        assertTrue(wait.contains("Process.correlateMessageEvent(carrier.ProcessId, \"CaseHandlingAwaitReply\""),
-                "the listener should correlate the catch event's message on the stamped ProcessId");
+        assertTrue(
+                wait.contains("ProcessStamps.idFor(carrier.ProcessIds, \"CaseHandling\")")
+                        && wait.contains("Process.correlateMessageEvent(instance, \"CaseHandlingAwaitReply\""),
+                "the listener should correlate the catch event's message on THIS process's stamped instance (#6862)");
         assertTrue(wait.contains("catch (RuntimeException"),
                 "correlation must be fail-soft - an instance not parked on the message is a no-op");
         String loader = codeOf("gen/events/services/LoadCaseHandlingWorkExpire.java");
@@ -1662,8 +1667,10 @@ class IntentEngineIT extends IntegrationTest {
                 "the abort listener should bind the trigger entity's -transitioned topic");
         assertTrue(abort.contains("entity.Status == 4") && abort.contains("entity.Status == 5"),
                 "the abort listener should match the declared abort statuses");
-        assertTrue(abort.contains("Process.correlateMessageEvent(entity.ProcessId, \"OrderApprovalAbort\""),
-                "the abort listener should correlate the abort message on the stamped ProcessId");
+        assertTrue(
+                abort.contains("ProcessStamps.idFor(entity.ProcessIds, \"OrderApproval\")")
+                        && abort.contains("Process.correlateMessageEvent(instance, \"OrderApprovalAbort\""),
+                "the abort listener should abort ITS OWN instance, not whichever flow stamped the record last (#6862)");
         assertTrue(abort.contains("catch (RuntimeException"), "correlation must be fail-soft");
     }
 
@@ -2240,9 +2247,11 @@ class IntentEngineIT extends IntegrationTest {
 
     @Test
     void process_trigger_records_the_process_id_first_and_cancels_the_instance_when_it_cannot() {
-        // The guard against starting a second instance IS the stamped ProcessId, so the write-back is the
-        // only step allowed to follow the start - and if it does not land, the instance is cancelled
-        // rather than left running with nothing pointing at it (issue #6815).
+        // The guard against starting a second instance IS the stamp, so the write-back is the only step
+        // allowed to follow the start - and if it does not land, the instance is cancelled rather than
+        // left running with nothing pointing at it (issue #6815). The stamp is PER PROCESS (issue
+        // #6862): one ProcessId cannot say WHICH process ran, and reading it as "some process ran"
+        // silently skipped every follow-up flow on a record an earlier flow had already stamped.
         String yaml = """
                 name: orders
                 entities:
@@ -2285,8 +2294,18 @@ class IntentEngineIT extends IntegrationTest {
         // The write-back is a TARGETED single-column write, so it keeps the entity's bookkeeping (the
         // change trail, the stored label) while touching nothing else on the row. It is the generated
         // repository that must not be able to REFUSE it - asserted where those gates are emitted.
-        assertTrue(trigger.contains("repository.updateProperty(entity.Id, \"ProcessId\", processId)"),
-                "ProcessId must be persisted through the targeted single-column write");
+        assertTrue(trigger.contains("ProcessStamps.has(entity.ProcessIds, \"Approve\")"),
+                "the at-most-once guard must ask whether THIS process ran for the record, not whether any did");
+        // Both columns in ONE targeted write: the per-process stamp is the guard, ProcessId is what the
+        // UI correlates tasks on, and a record carrying one without the other is either invisible to the
+        // UI or blocked from ever starting the flow again. Two writes could leave exactly that behind.
+        assertTrue(
+                trigger.contains("stamped.put(\"ProcessIds\", ProcessStamps.with(")
+                        && trigger.contains("stamped.put(\"ProcessId\", processId)")
+                        && trigger.contains("repository.updateProperties(entity.Id, stamped)"),
+                "both process columns must be persisted through one targeted write");
+        assertFalse(trigger.contains("repository.updateProperty(entity.Id, \"ProcessId\", processId)"),
+                "the two process columns must not be written one at a time");
         // A swallowed start (the platform logs and returns null) must not be recorded as a ProcessId.
         assertTrue(trigger.contains("if (processId == null)"), "a failed start must be reported, not written back as a null ProcessId");
         // Nothing points at the instance in either failure mode - the row is gone, or the write threw.
@@ -2396,6 +2415,21 @@ class IntentEngineIT extends IntegrationTest {
                 "a null/blank locale must fall back to the application language set at mint time");
         assertTrue(snapshotGenerator.contains("Print.render(\"Order\", language,"),
                 "the render must use the resolved language, not a literal");
+
+        // The declarative fileName pattern (#6899): a date rendered in the authored format and a
+        // one-hop relation read off the document, every interpolated value sanitized by the SDK so
+        // business data can never produce a name the CMS would reject - and the version appended,
+        // because two copies of the same document must not share a name.
+        assertTrue(snapshotGenerator.contains("new CustomerRepository().findById(document.Customer)"),
+                "the fileName's relation hop must be loaded off the document, got: " + snapshotGenerator);
+        assertTrue(snapshotGenerator.contains("org.eclipse.dirigible.sdk.print.FileNames.part(document.OrderDate, \"yyyyMMdd\")"),
+                "the :pattern modifier must reach the SDK date formatter, got: " + snapshotGenerator);
+        assertTrue(snapshotGenerator.contains("FileNames.part((customer == null ? null : customer.Name))"),
+                "the relation hop must read the loaded local, got: " + snapshotGenerator);
+        assertTrue(snapshotGenerator.contains("+ \"_v\" + version + \".pdf\""),
+                "a pattern that does not place {Version} itself must get the version suffix, got: " + snapshotGenerator);
+        assertFalse(snapshotGenerator.contains("\"Order \" + id + \" v\""),
+                "the old hardcoded primary-key name must be gone, got: " + snapshotGenerator);
     }
 
     @Test
@@ -2922,6 +2956,117 @@ class IntentEngineIT extends IntegrationTest {
         String actionCatalog = contentOf("i18n/en-US/proforma.model.json");
         assertTrue(actionCatalog.contains("\"actions\"") && actionCatalog.contains("\"invoice-from-proforma\""),
                 "the action label must land in the en catalog's actions section, got: " + actionCatalog);
+    }
+
+    @Test
+    void generates_reopen_returns_the_source_when_its_target_is_retired() {
+        // The other half of the completion hook (#6868). `sourceStatus:` moves the Proforma OFF the
+        // status its own trigger qualifies on, deliberately - so the guard-claimed source stops matching.
+        // The at-most-once guard learned to step over a RETIRED target (#6814), which frees the
+        // Proforma's one-shot slot, but nothing could refill it: the Proforma stands at INVOICED and its
+        // lifecycle offers no way back to APPROVED, so no qualifying -transitioned was ever published
+        // again and this event-only create-from had no reissue path at all. `sourceStatusOnRetire:`
+        // declares the move back, and the reissue is then the ORDINARY path.
+        String genYaml = """
+                name: reissue
+                entities:
+                  - name: ProformaStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: Proforma
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: ProformaStatus, function: EntityStatus, init: 1 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                    relations:
+                      - { name: Proforma, kind: manyToOne, to: Proforma }
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                generates:
+                  - name: invoice-from-proforma
+                    from: Proforma
+                    to: Invoice
+                    forEntity: Proforma
+                    event: { onTransition: Proforma, when: "Status == APPROVED" }
+                    map: { Proforma: id }
+                    sourceStatus: INVOICED
+                    sourceStatusOnRetire: APPROVED
+                seeds:
+                  - name: proforma-statuses
+                    entity: ProformaStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: APPROVED }
+                      - { id: 3, name: INVOICED }
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT,     stage: draft }
+                      - { id: 2, name: ISSUED,    stage: live }
+                      - { id: 3, name: CANCELLED, stage: cancelled }
+                      - { id: 4, name: VOIDED,    stage: void }
+                """;
+        writeIntent(genYaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        generateFromModel("template-application-events-java/template/template.js", "reissue.glue");
+        String reopen = codeOf("gen/events/reissue/InvoiceFromProformaGenerateReopen.java");
+        // It listens on the TARGET's -transitioned topic - the channel every routed status write
+        // publishes, so a void performed by a transitions button, a workflow setter or another
+        // completion hook is seen the same way.
+        assertTrue(reopen.contains("implements MessageHandler"), "the reopen must be a self-describing message handler");
+        assertTrue(reopen.contains("return \"" + PROJECT + "-Invoice-Invoice-transitioned\""),
+                "the reopen must bind the TARGET's -transitioned topic, got: " + reopen);
+        // What counts as retired is the seeds' `stage:` classification and nothing else - both retiring
+        // stages, in seed order, and NOT the draft/live ones. Same resolution as the guard's own, which
+        // is why the two cannot disagree.
+        assertTrue(reopen.contains("!(target.Status == 3 || target.Status == 4)"),
+                "only a cancelled/void target may reopen the source, got: " + reopen);
+        // It finds the source through the very back-reference the guard reads.
+        assertTrue(reopen.contains("findById(target.Proforma)"), "the reopen must reach the source through the back-reference");
+        // ...and acts only while the source still stands where THIS create-from's hook left it: that is
+        // what makes it idempotent under redelivery, with no marker column to keep in step.
+        assertTrue(reopen.contains("source.Status != 3"),
+                "the reopen must act only while the source stands at the completion status, got: " + reopen);
+        // ...and only while the slot is genuinely free - the create-from's own guard asked from this end,
+        // over the SAME retiring classification. Delivery is at-least-once, so a REDELIVERED retirement
+        // arrives after the replacement already exists; without this the source would be re-opened with a
+        // live Invoice standing against it.
+        assertTrue(
+                reopen.contains("InvoiceEntity candidate :") && reopen.contains(".eq(\"Proforma\", target.Proforma)")
+                        && reopen.contains("!(candidate.Status == 3 || candidate.Status == 4)"),
+                "the reopen must refuse while any target of the source still counts, got: " + reopen);
+        // ONE targeted status write, with the source's "-transitioned" notice riding it into the outbox -
+        // flip and announcement commit together, so the create-from's own listener cannot miss the moment
+        // that frees it. Anchored on the call, since the comments name the topic too.
+        assertTrue(reopen.contains("java.util.Map.of(\"Status\", 2),"), "the reopen must write only the status column, got: " + reopen);
+        assertTrue(reopen.contains("\"" + PROJECT + "-Proforma-Proforma-transitioned\");"),
+                "the write must carry the SOURCE's -transitioned topic, or the trigger can never re-fire");
+        assertFalse(reopen.contains("Producer.sendToTopic"),
+                "the reopen must not publish beside its write - a broker outage would lose the announcement");
+
+        // The event-driven create-from itself is unchanged: it still delegates to the same create(), and
+        // its guard still steps over the retired document - which is what mints the replacement once the
+        // reopen has re-published the source's transition.
+        String onEvent = codeOf("gen/events/reissue/InvoiceFromProformaGenerateOnEvent.java");
+        assertTrue(onEvent.contains("source.Status != 2"), "the trigger still qualifies on the status the source is returned to");
+        String generate = codeOf("gen/events/reissue/InvoiceFromProformaGenerate.java");
+        assertTrue(generate.contains("if (candidate.Status == null || !(candidate.Status == 3 || candidate.Status == 4)) {"),
+                "the at-most-once guard must step over the retired target the reopen reacts to");
     }
 
     @Test

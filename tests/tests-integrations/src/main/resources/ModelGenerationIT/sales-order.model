@@ -210,6 +210,23 @@
                         "widgetLength": "100",
                         "widgetSize": "",
                         "widgetType": "TEXTBOX"
+                    },
+                    {
+                        "dataLength": "512",
+                        "dataName": "CUSTOMER_ALLOWED_UOMS",
+                        "dataNullable": "true",
+                        "dataType": "VARCHAR",
+                        "description": "",
+                        "name": "AllowedUoms",
+                        "tooltip": "",
+                        "widgetDropDownKey": "Id",
+                        "widgetDropDownValue": "Name",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "20",
+                        "widgetOptionsEntityName": "UoM",
+                        "widgetPattern": "^\\d+(,\\d+)*$",
+                        "widgetSize": "",
+                        "widgetType": "MULTISELECT"
                     }
                 ],
                 "caption": "Manage entity Customer",

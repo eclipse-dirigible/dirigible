@@ -18,6 +18,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -372,6 +373,172 @@ class ModelParameterProcessorTest {
         ModelParameterProcessor.process(model(master, child), javaParameters());
 
         assertNull(child.get("masterLock"));
+    }
+
+    /**
+     * A multi-select (intent {@code kind: subset}) carries its option source as the dedicated
+     * {@code widgetOptionsEntityName}, never as relationship metadata - so the lookup URLs are built
+     * from that entity's own perspective.
+     */
+    @Test
+    void aMultiselectResolvesItsOptionSourceFromTheOptionsEntity() {
+        Map<String, Object> channels = property("Channels", "VARCHAR");
+        channels.put("widgetType", "MULTISELECT");
+        channels.put("widgetOptionsEntityName", "Channel");
+        channels.put("widgetDropDownKey", "Id");
+        channels.put("widgetDropDownValue", "Name");
+        Map<String, Object> lookupEntity = entity("Channel", "Channels", property("Id", "INTEGER"));
+        lookupEntity.put("type", "SETTING");
+        Map<String, Object> campaign = entity("Campaign", "Campaigns", channels);
+
+        ModelParameterProcessor.process(model(campaign, lookupEntity), javaParameters());
+
+        // A SETTING target publishes under the shared Settings perspective, not its own name (as the
+        // sanitized Java package segment it becomes).
+        assertEquals("/services/java/bookstore/gen/sales_order/api/settings/ChannelController",
+                channels.get("widgetDropdownControllerUrl"));
+        assertEquals(Boolean.TRUE, campaign.get("hasDropdowns"));
+    }
+
+    /**
+     * The dead-widget failure the guard exists for: the view block is gated on the widget TYPE while
+     * its option loading is gated on the entity carrying any option source at all, so an unresolvable
+     * target used to generate a Refresh button calling a method that was never emitted.
+     */
+    @Test
+    void aMultiselectWithoutAnOptionsEntityFailsTheGeneration() {
+        Map<String, Object> channels = property("Channels", "VARCHAR");
+        channels.put("widgetType", "MULTISELECT");
+        Map<String, Object> model = model(entity("Campaign", "Campaigns", channels));
+
+        IllegalArgumentException ex =
+                assertThrows(IllegalArgumentException.class, () -> ModelParameterProcessor.process(model, javaParameters()));
+        assertTrue(ex.getMessage()
+                     .contains("[Campaign.Channels] is a multi-select but names no options entity"),
+                ex.getMessage());
+    }
+
+    @Test
+    void aMultiselectOverAnUnknownOptionsEntityFailsTheGeneration() {
+        Map<String, Object> channels = property("Channels", "VARCHAR");
+        channels.put("widgetType", "MULTISELECT");
+        channels.put("widgetOptionsEntityName", "Chanel");
+        Map<String, Object> model = model(entity("Campaign", "Campaigns", channels));
+
+        IllegalArgumentException ex =
+                assertThrows(IllegalArgumentException.class, () -> ModelParameterProcessor.process(model, javaParameters()));
+        assertTrue(ex.getMessage()
+                     .contains("[Campaign.Channels] is a multi-select over [Chanel]"),
+                ex.getMessage());
+    }
+
+    /**
+     * A register column over a subset resolves EACH key through the options entity's rows, so it
+     * carries the {@code multi} flag beside the same lookup a foreign key gets - without it the
+     * register renders the raw key list.
+     */
+    @Test
+    void aRegisterColumnOverASubsetCarriesTheMultiLookup() {
+        Map<String, Object> column = property("Channels", "VARCHAR");
+        column.put("widgetType", "MULTISELECT");
+        column.put("widgetOptionsEntityName", "Channel");
+        column.put("widgetOptionsEntityPerspectiveName", "Settings");
+        column.put("widgetDropDownKey", "Id");
+        column.put("widgetDropDownValue", "Name");
+        Map<String, Object> campaign = entity("Campaign", "Campaigns", property("Id", "INTEGER"));
+        campaign.put("relatedEntities", List.of(register("CampaignCost", "Costs", column)));
+
+        ModelParameterProcessor.process(model(campaign), javaParameters());
+
+        Map<String, Object> resolved = registerColumn(campaign);
+        assertEquals(Boolean.TRUE, resolved.get("multi"));
+        assertEquals("/services/java/bookstore/gen/sales_order/api/settings/ChannelController", lookup(resolved).get("url"));
+        assertEquals("Id", lookup(resolved).get("key"));
+        assertEquals("Name", lookup(resolved).get("text"));
+    }
+
+    /**
+     * A register source generated before the perspective travelled on the property: the options entity
+     * is resolved in this model instead, which is where a same-model register's target always lives.
+     */
+    @Test
+    void aRegisterColumnOverASubsetFallsBackToThisModelsPerspective() {
+        Map<String, Object> column = property("Channels", "VARCHAR");
+        column.put("widgetType", "MULTISELECT");
+        column.put("widgetOptionsEntityName", "Channel");
+        Map<String, Object> lookupEntity = entity("Channel", "Channels", property("Id", "INTEGER"));
+        lookupEntity.put("type", "SETTING");
+        Map<String, Object> campaign = entity("Campaign", "Campaigns", property("Id", "INTEGER"));
+        campaign.put("relatedEntities", List.of(register("CampaignCost", "Costs", column)));
+
+        ModelParameterProcessor.process(model(campaign, lookupEntity), javaParameters());
+
+        Map<String, Object> resolved = registerColumn(campaign);
+        assertEquals(Boolean.TRUE, resolved.get("multi"));
+        assertEquals("/services/java/bookstore/gen/sales_order/api/settings/ChannelController", lookup(resolved).get("url"));
+    }
+
+    /**
+     * An options entity this model cannot resolve at all (a register source owned by another model,
+     * generated before the perspective travelled): the column renders the raw keys rather than a URL
+     * built on a guess.
+     */
+    @Test
+    void aRegisterColumnWhoseOptionsEntityIsUnresolvableCarriesNoLookup() {
+        Map<String, Object> column = property("Channels", "VARCHAR");
+        column.put("widgetType", "MULTISELECT");
+        column.put("widgetOptionsEntityName", "Channel");
+        Map<String, Object> campaign = entity("Campaign", "Campaigns", property("Id", "INTEGER"));
+        campaign.put("relatedEntities", List.of(register("CampaignCost", "Costs", column)));
+
+        ModelParameterProcessor.process(model(campaign), javaParameters());
+
+        Map<String, Object> resolved = registerColumn(campaign);
+        assertNull(resolved.get("multi"));
+        assertNull(resolved.get("lookup"));
+    }
+
+    /**
+     * Builds a related-records register declaration, as the model carries it.
+     *
+     * @param sourceEntity the referencing entity
+     * @param perspectiveName its perspective
+     * @param columns the property metadata of the columns it shows
+     * @return the register
+     */
+    @SafeVarargs
+    private static Map<String, Object> register(String sourceEntity, String perspectiveName, Map<String, Object>... columns) {
+        Map<String, Object> register = new LinkedHashMap<>();
+        register.put("entity", sourceEntity);
+        register.put("label", sourceEntity);
+        register.put("perspectiveName", perspectiveName);
+        register.put("primaryKey", "Id");
+        register.put("fkProperty", "Campaign");
+        register.put("properties", List.of(columns));
+        return register;
+    }
+
+    /**
+     * The single column of the single register of an entity.
+     *
+     * @param entity the entity carrying the register
+     * @return the resolved column descriptor
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> registerColumn(Map<String, Object> entity) {
+        Map<String, Object> register = ((List<Map<String, Object>>) entity.get("relatedEntities")).get(0);
+        return ((List<Map<String, Object>>) register.get("columns")).get(0);
+    }
+
+    /**
+     * A resolved column's lookup descriptor.
+     *
+     * @param column the column
+     * @return the lookup
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> lookup(Map<String, Object> column) {
+        return (Map<String, Object>) column.get("lookup");
     }
 
     /**

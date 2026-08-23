@@ -30,7 +30,9 @@ App.registerRelated('${name}', {
   primaryKey: '${register.primaryKey}',
   columns: [
 #foreach($column in $register.columns)
-    { name: '${column.name}', label: '${column.label}'#if($register.local && $column.dataName), tkey: '$projectName:${tprefix}.t.${column.dataName}'#end#if($column.lookup), lookup: { url: '${column.lookup.url}', key: '${column.lookup.key}', text: '${column.lookup.text}' }#end#if($column.date), date: true#end#if($column.float), number: true, float: true, pattern: '${column.pattern}'#elseif($column.number), number: true#end#if($column.sensitive), sensitive: true#end },
+## A subset column (intent `kind: subset`) holds a key LIST ("1,3"): the `multi` flag routes the cell
+## through the same lookup PER KEY and joins the labels - without it the register shows the raw ids.
+    { name: '${column.name}', label: '${column.label}'#if($register.local && $column.dataName), tkey: '$projectName:${tprefix}.t.${column.dataName}'#end#if($column.multi), multi: true#end#if($column.lookup), lookup: { url: '${column.lookup.url}', key: '${column.lookup.key}', text: '${column.lookup.text}' }#end#if($column.date), date: true#end#if($column.float), number: true, float: true, pattern: '${column.pattern}'#elseif($column.number), number: true#end#if($column.sensitive), sensitive: true#end },
 #end
   ],
 });

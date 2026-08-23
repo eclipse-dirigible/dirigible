@@ -16,13 +16,38 @@ import { XML } from "@aerokit/sdk/utils";
 
 // Structured (List/Map) attributes the EDM generator / serializer write as JSON strings in flat attributes
 // so the .edm stays lossless; parse them back into objects so the .model matches the intent's .model (#6826).
-// These two lists MUST mirror EdmIntentGenerator.STRUCTURED_ATTRIBUTES (Java) - a key handled on one side
-// but not the other round-trips as a JSON string (caught by EdmModelRoundTripIT's structural diff).
+// The three lists below MUST together mirror EdmIntentGenerator.STRUCTURED_ATTRIBUTES (Java) - a key
+// handled on one side but not the other round-trips as a JSON string (caught by EdmModelRoundTripIT's
+// structural diff).
 // uniqueConstraints is intentionally NOT here: the composite-unique-key feature emits it as a
 // <constraints>/<uniqueKey> section that transformUniqueKey (below) rebuilds, so parsing it here too would
 // duplicate it (#6826).
 const ENTITY_STRUCTURED = ['rollupGuard', 'checks', 'labelParts', 'aggregateKeys', 'groupingKeys', 'relatedEntities'];
 const PROPERTY_STRUCTURED = ['lookupColumns'];
+// Document level (#6882): the structured values the .model carries ABOVE its entities.
+const MODEL_STRUCTURED = ['languages', 'widgets', 'customActionLabels', 'processTaskLabels'];
+
+// The document-level metadata: every ATTRIBUTE of the <model> element, generically - so a future scalar
+// (a new title-like key) needs no change here, only serialization on the Java side. Before #6882 the
+// .model root was rebuilt with entities/perspectives/navigations and nothing else, so a diagram save
+// deleted title, description, icon, languages[] and the two label maps outright - silently downgrading a
+// multilingual application to monolingual and replacing every custom-action and user-task caption with
+// its raw identifier.
+function documentMetadata(rawModel) {
+    const metadata = {};
+    if (!rawModel) {
+        return metadata;
+    }
+    for (const key in rawModel) {
+        // XML.toJson prefixes an attribute with '-'; the child ELEMENTS (entities, perspectives, ...)
+        // have their own transforms below.
+        if (key.startsWith('-')) {
+            metadata[key.substring(1)] = rawModel[key];
+        }
+    }
+    parseStructured(metadata, MODEL_STRUCTURED);
+    return metadata;
+}
 
 function parseStructured(obj, keys) {
     for (const key of keys) {
@@ -51,7 +76,8 @@ export function transform(workspaceName, projectName, filePath) {
     let raw = JSON.parse(XML.toJson(contents));
 
     let root = {};
-    root.model = {};
+    // The document-level metadata first, so the regenerated .model reads like the generated one.
+    root.model = documentMetadata(raw.model);
     root.model.entities = [];
     root.model.perspectives = [];
     root.model.navigations = [];
@@ -176,19 +202,39 @@ export function transform(workspaceName, projectName, filePath) {
         });
     }
 
+    // The <relation> element RESTATES naming that the foreign-key <property> element already carries.
+    // The property is the source of truth and its value is kept: it is what the modeler itself edits
+    // (editor.js writes the Relationship-properties dialog onto cell.source.value.relationshipName and
+    // derives the edge label from it), and it is the only one of the two that can carry a cross-model
+    // target's perspective. The <relation> element's copies are a FALLBACK - for an .edm written before
+    // the two writers were converged (#6883), or a modeler save that dropped one. Trusting them renamed
+    // every relationship whose name is not its target's, because serializer.js writes <relation name>
+    // from the source and target ENTITY names; and it repointed every cross-model lookup, because it
+    // writes the perspective off the target CELL, which for a projection is deliberately empty.
+    //
+    // relationshipEntityName is the exception and stays unconditional: no writer puts it on the
+    // <property> (serializer.js emits it on neither the explicit block nor the generic pass), so the
+    // edge's `referenced` - which the modeler keeps live when an edge is redirected - is the only value.
     function transformRelation(relation, entities) {
         entities.forEach(entity => {
             if (entity.name === relation['-entity']) {
                 entity.properties.forEach(property => {
                     if (property.name === relation['-property']) {
-                        property.relationshipName = relation['-name'];
                         property.relationshipEntityName = relation['-referenced'];
-                        property.relationshipEntityPerspectiveName = relation['-relationshipEntityPerspectiveName'];
-                        property.relationshipEntityPerspectiveLabel = relation['-relationshipEntityPerspectiveLabel'];
+                        fillIfAbsent(property, 'relationshipName', relation['-name']);
+                        fillIfAbsent(property, 'relationshipEntityPerspectiveName', relation['-relationshipEntityPerspectiveName']);
+                        fillIfAbsent(property, 'relationshipEntityPerspectiveLabel', relation['-relationshipEntityPerspectiveLabel']);
                     }
                 });
             }
         });
+    }
+
+    function fillIfAbsent(property, key, fallback) {
+        const own = property[key];
+        if (own === undefined || own === null || own === '') {
+            property[key] = fallback;
+        }
     }
 
     function transformPerspective(raw) {

@@ -359,7 +359,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 				cell.value.widgetIsMajor = data.widgetIsMajor;
 				cell.value.widgetDropDownKey = data.widgetDropDownKey;
 				cell.value.widgetDropDownValue = data.widgetDropDownValue;
-				cell.value.widgetDropDownMultiSelect = data.widgetDropDownMultiSelect;
+				cell.value.widgetOptionsEntityName = data.widgetOptionsEntityName;
 				cell.value.widgetDependsOnProperty = data.widgetDependsOnProperty;
 				cell.value.widgetDependsOnEntity = data.widgetDependsOnEntity;
 				cell.value.widgetDependsOnValueFrom = data.widgetDependsOnValueFrom;
@@ -1008,7 +1008,10 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 									widgetIsMajor: cell.value.widgetIsMajor,
 									widgetDropDownKey: cell.value.widgetDropDownKey,
 									widgetDropDownValue: cell.value.widgetDropDownValue,
-									widgetDropDownMultiSelect: cell.value.widgetDropDownMultiSelect,
+									widgetOptionsEntityName: cell.value.widgetOptionsEntityName,
+									// MULTISELECT options-entity picker: the model's own entity names, so the
+									// lookup is chosen rather than typed (a typo is a silently dead widget).
+									entityNames: collectEntitiesWithProperties($scope.graph).map(e => e.name),
 									widgetDependsOnProperty: cell.value.widgetDependsOnProperty,
 									widgetDependsOnEntity: cell.value.widgetDependsOnEntity,
 									widgetDependsOnValueFrom: cell.value.widgetDependsOnValueFrom,
@@ -1286,6 +1289,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 			codec.decode(doc.documentElement.getElementsByTagName('mxGraphModel')[0], $scope.graph.getModel());
 
 			deserializeFilter($scope.graph);
+			loadModelMetadata(doc, $scope.graph);
 			loadUniqueKeys(doc, $scope.graph);
 			loadPerspectives(doc, $scope.graph);
 			loadNavigations(doc, $scope.graph);
@@ -1430,6 +1434,27 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 							}
 							break;
 						}
+					}
+					break;
+				}
+			}
+		}
+
+		// The document-level metadata (title/description/icon, languages[], the custom-action and
+		// user-task label maps) rides on the <model> element's own attributes. Nothing in the modeler
+		// edits it, so it is stashed on the graph model verbatim and written back by serializer.js -
+		// a save that rebuilt <model> bare deleted all of it (#6882). Generic over the attributes, so
+		// a metadata key added later needs no change here.
+		function loadModelMetadata(doc, graph) {
+			if (!graph.getModel().metadata) {
+				graph.getModel().metadata = {};
+			}
+			for (let i = 0; i < doc.children.length; i++) {
+				let element = doc.children[i];
+				if (element.localName === "model") {
+					for (let j = 0; j < element.attributes.length; j++) {
+						let attribute = element.attributes[j];
+						graph.getModel().metadata[attribute.name] = attribute.value;
 					}
 					break;
 				}

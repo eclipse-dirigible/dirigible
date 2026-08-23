@@ -324,9 +324,11 @@
                       <input x-h-select-input x-model="s.promptValues[col.name]" :placeholder="T('application-core:shell.customActions.promptSelect', 'Select...')" />
                       <div x-h-select-content>
                         <div x-h-select-search></div>
-                        <template x-for="opt in s.promptOptionsFor(col.name)" :key="opt.value">
-                          <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
-                        </template>
+                        <div x-h-select-list>
+                          <template x-for="opt in s.promptOptionsFor(col.name)" :key="opt.value">
+                            <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+                          </template>
+                        </div>
                       </div>
                     </div>
                   </template>

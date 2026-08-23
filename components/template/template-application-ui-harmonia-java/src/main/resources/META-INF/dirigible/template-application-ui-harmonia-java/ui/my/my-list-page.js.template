@@ -57,7 +57,7 @@ document.addEventListener('alpine:init', () => {
     async loadLookups() {
       const all = {};
 #foreach($property in $properties)
-#if($property.widgetType == "DROPDOWN" && $property.name != "$!{personalProperty}" && !$property.sensitiveProperty && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
+#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "MULTISELECT") && $property.name != "$!{personalProperty}" && !$property.sensitiveProperty && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
       try {
         const opt${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
         const map${property.name} = {};
@@ -85,6 +85,15 @@ document.addEventListener('alpine:init', () => {
     display(row, col) {
       const v = row[col.name];
       if (v == null || v === '') return '—';
+      if (col.multi) {
+        // A subset cell holds a key LIST ("1,3"): resolve each key and join the labels.
+        const map = this.lookups[col.name] || {};
+        return String(v).split(',').map(k => {
+          const key = k.trim();
+          const text = map[key];
+          return (text !== undefined && text !== null && text !== '') ? String(text) : key;
+        }).join(', ');
+      }
       if (col.fk) {
         // a relation column shows its referenced label; a dangling/unloaded FK falls back to the id
         const map = this.lookups[col.name];
@@ -115,8 +124,8 @@ document.addEventListener('alpine:init', () => {
 
     columns: [
 #foreach($property in $properties)
-#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "$!{personalProperty}" && $property.name != "ProcessId" && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
-      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DOCUMENT_STATUS"), status: true#elseif($property.widgetType == "DROPDOWN"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
+#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "$!{personalProperty}" && $property.name != "ProcessId" && $property.name != "ProcessIds" && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DOCUMENT_STATUS"), status: true#elseif($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
 #end
 #end
     ],

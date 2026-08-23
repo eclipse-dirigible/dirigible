@@ -383,8 +383,10 @@ class ModelGenerator {
         descriptor.put("pk", Boolean.TRUE.equals(property.get("dataPrimaryKey")));
         descriptor.put("fk", property.get("relationshipEntityName"));
         // Every property carries a lookup URL key, empty unless the property is a relation, so this
-        // tests the value rather than the key's presence.
-        if (truthy(property, "widgetDropdownControllerUrl")) {
+        // tests the value rather than the key's presence. A MULTISELECT carries the same URL but is a
+        // VALUE LIST, not an FK - a single-value lookup over it would let an admin save overwrite the
+        // whole set with one id, so it renders as a plain text input showing the raw list instead.
+        if (truthy(property, "widgetDropdownControllerUrl") && property.get("relationshipEntityName") != null) {
             Map<String, Object> lookup = new LinkedHashMap<>();
             lookup.put("url", property.get("widgetDropdownControllerUrl"));
             lookup.put("key", strOr(property, "widgetDropDownKey", "Id"));

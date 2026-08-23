@@ -11,8 +11,10 @@ package org.eclipse.dirigible.components.intent.generator;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport.FieldLoad;
@@ -169,6 +171,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("generateEvents", generates.stream()
                                             .filter(entry -> Boolean.TRUE.equals(entry.get("hasEvent")))
                                             .toList());
+        // The declared-reopen subset (issue #6868), filtered from the same descriptors for the same
+        // reason: the listener that returns the source when its target is retired must agree with the
+        // create-from's own guard about what "retired" means, and a create-from that declares no reopen
+        // must contribute no listener at all.
+        glue.put("generateReopens", generates.stream()
+                                             .filter(entry -> Boolean.TRUE.equals(entry.get("hasReopen")))
+                                             .toList());
         glue.put("transitions", transitions);
         glue.put("sends", sends);
         glue.put("postings", postings);
@@ -458,7 +467,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // engine IT keys "no trigger was generated" on trigger-only keys being absent.
             entry.put("attachKeyProperty", IntentEntities.keyFieldName(byName.get(entity)));
             entry.put("topicSuffix", StepEventSupport.topicSuffix(notification.getEvent()));
-            entry.put("relationLoads", relationLoads(plan));
+            entry.put("relationLoads", relationLoads(plan, attachment));
             entry.put("guardExpression", plan.guardExpression());
             entry.put("toExpression", plan.toExpression());
             entry.put("subjectExpression", plan.subjectExpression());
@@ -713,7 +722,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * <p>
      * An entry declaring an {@code event} (issue #6711) additionally lands in the
      * {@code generateEvents} collection, whose template renders the listener that calls the same
-     * create-from - see {@link #putGeneratesEvent}.
+     * create-from - see {@link #putGeneratesEvent}. One declaring a {@code sourceStatusOnRetire} (issue
+     * #6868) lands in {@code generateReopens} as well, whose template renders the listener that returns
+     * the source when the target it made is retired - see {@link #putSupersededTarget}.
      */
     private static List<Map<String, Object>> buildGenerates(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
@@ -734,6 +745,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             EntityIntent source = crossModelSource ? null : byName.get(g.getFrom());
             if (source == null && !crossModelSource) {
                 continue; // parser already reported the bad reference
+            }
+            // A one-hop map source needs the SOURCE's relations to know what to load. With `fromUses:`
+            // they live in the owner's .model and nothing here can resolve them, so the hop is refused
+            // instead of emitting a read that walks a foreign key as if it were an object.
+            if (crossModelSource && firstHop(g.getMap()) != null) {
+                reportDroppedGlue(context,
+                        "generates [" + g.getName() + "] map [" + firstHop(g.getMap())
+                                + "] is a relation.field of a cross-model source (fromUses [" + g.getFromUses()
+                                + "]), whose relations are known only to that model - map a direct property of the source, or author the"
+                                + " create-from in [" + g.getFromUses() + "] - the create-from was NOT generated");
+                continue;
             }
             if (!settings.shouldGenerate("generates", g.getName())) {
                 LOGGER.info("Settings opt-out: keeping existing controller for generates [{}] (not generated)", g.getName());
@@ -771,8 +793,29 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("toModel", crossModel ? g.getUses() : "");
             e.put("toPerspective", toPerspective);
             e.put("toPk", toPk);
-            e.put("fieldAssignments",
-                    assignments(g.getMap(), g.getDefaults(), "source", temporalKinds(crossModel ? null : byName.get(g.getTo()), target)));
+            // A hop reads the related row, which the create-from must load first: the resolver renders the
+            // null-guarded access and accumulates one load per distinct relation, and `relationLoads`
+            // hands those to the template - the same pair a notification's relation.field recipient uses.
+            NotificationSupport.Resolver hops = crossModelSource ? null
+                    : NotificationSupport.resolver(source, byName, compositionParents, crossModelLookup(model, context));
+            List<Map<String, Object>> fieldAssignments = assignments(g.getMap(), g.getDefaults(), "source",
+                    temporalKinds(crossModel ? null : byName.get(g.getTo()), target), hops);
+            if (fieldAssignments == null) {
+                reportDroppedGlue(context, "generates [" + g.getName() + "] map [" + firstHop(g.getMap())
+                        + "] is not a resolvable one-hop relation.field of [" + g.getFrom() + "] - the create-from was NOT generated");
+                continue;
+            }
+            List<NotificationSupport.RelationLoad> hopLoads = hops == null ? List.of() : hops.loads();
+            String collision = collidingLocal(hopLoads);
+            if (collision != null) {
+                reportDroppedGlue(context,
+                        "generates [" + g.getName() + "] hops through the relation [" + collision + "] of [" + g.getFrom()
+                                + "], whose name is one the generated create-from already uses for a local of its own"
+                                + " - rename the relation, or map a direct property instead - the create-from was NOT generated");
+                continue;
+            }
+            e.put("fieldAssignments", fieldAssignments);
+            e.put("relationLoads", relationLoads(hopLoads));
             // Completion hook: the SOURCE's EntityStatus FK is set to this seed id after the target
             // is created (empty = no hook). Pre-resolved to the PascalCase FK property - locally off
             // the relation, cross-model off the owner .model's DOCUMENT_STATUS widget.
@@ -802,6 +845,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("sourceStatusProperty", sourceStatusProperty);
             e.put("sourceStatusValue",
                     g.getSourceStatus() == null || sourceStatusProperty.isEmpty() ? "" : String.valueOf(g.getSourceStatus()));
+            if (sourceStatusProperty.isEmpty()) {
+                // No status FK resolved on the source, so there is no completion hook and nothing for a
+                // retired target to return the source to. Emitting the reopen listener anyway would give
+                // it a column to write that does not exist - a failure visible only at run time. Cleared
+                // whole, so the .glue never records a reopen that cannot be generated.
+                e.put("hasReopen", false);
+                e.put("reopenStatusValue", "");
+                e.put("reopenRetiredCondition", "");
+            }
 
             GeneratesItemsIntent items = g.getItems();
             boolean hasItems = items != null && items.getFrom() != null && !items.getFrom()
@@ -1003,6 +1055,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * carry a lifecycle whose nomenclature nobody classified gets the warning - that combination is the
      * silent one, where the guard looks state-aware and is not.
      *
+     * <p>
+     * The SAME resolution also drives the declared reopen (issue #6868), which reads the classification
+     * from the other end: the guard asks whether the target that already exists is retired, the reopen
+     * listener asks whether the transition it just saw is what retired it. Emitting both from one
+     * resolution is what stops them disagreeing about what "retired" means - and the reason the reopen
+     * introduces no vocabulary of its own to say it.
+     *
      * @param g the create-from
      * @param e the glue entry being built
      * @param model the model being generated
@@ -1014,9 +1073,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         e.put("hasRetiredStatus", false);
         e.put("retiredStatusProperty", "");
         e.put("retiredStatusCondition", "");
+        e.put("hasReopen", false);
+        e.put("reopenStatusValue", "");
+        e.put("reopenRetiredCondition", "");
         // An appending create-from (issue #6800) keeps no guard at all, so there is nothing for a
         // retired target to release - and warning about an unclassified nomenclature there would be
-        // noise about a guard that does not exist.
+        // noise about a guard that does not exist. A reopen is refused on that shape by the parser, so
+        // there is nothing to emit for it here either.
         if (!g.isEventDriven() || g.isAppendMode()) {
             return;
         }
@@ -1044,17 +1107,41 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         e.put("retiredStatusProperty", property);
         // Rendered against the template's loop variable: a retired candidate is stepped over, the first
         // one that is not is this source's document.
+        e.put("retiredStatusCondition", retiredCondition("candidate", property, retired));
+        // The declared reopen (issue #6868) reads the SAME classification from the other end: the guard
+        // asks "is the document that exists retired?", the reopen listener asks "did this transition
+        // retire it?". One resolution, so the two can never disagree about what retired means - which
+        // is the whole reason the reopen adds no vocabulary of its own for it.
+        if (!g.hasReopen()) {
+            return;
+        }
+        e.put("hasReopen", true);
+        e.put("reopenStatusValue", String.valueOf(g.getSourceStatusOnRetire()));
+        e.put("reopenRetiredCondition", retiredCondition("target", property, retired));
+    }
+
+    /**
+     * The retiring-status test as a Java disjunction over a named local - {@code cancelled} and
+     * {@code void} ids in seed order.
+     *
+     * @param local the Java local the status is read off
+     * @param property the status FK property
+     * @param retired the retiring seed ids
+     * @return the rendered condition
+     */
+    private static String retiredCondition(String local, String property, List<Integer> retired) {
         StringBuilder condition = new StringBuilder();
         for (Integer id : retired) {
             if (condition.length() > 0) {
                 condition.append(" || ");
             }
-            condition.append("candidate.")
+            condition.append(local)
+                     .append('.')
                      .append(property)
                      .append(" == ")
                      .append(id);
         }
-        e.put("retiredStatusCondition", condition.toString());
+        return condition.toString();
     }
 
     /**
@@ -1219,7 +1306,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 plan == null ? null : printAttachment(notify, document, model, byName, compositionParents, context, subject);
         boolean send = plan != null && (attachment != null || !NotifySupport.attachesPrint(notify));
         fields.put("notify", String.valueOf(send));
-        fields.put("notifyRelationLoads", send ? relationLoads(plan) : new ArrayList<>());
+        fields.put("notifyRelationLoads", send ? relationLoads(plan, attachment) : new ArrayList<>());
         fields.put("notifyToExpression", send ? plan.toExpression() : "null");
         fields.put("notifySubjectExpression", send ? plan.subjectExpression() : "\"\"");
         fields.put("notifyBodyExpression", send ? plan.bodyExpression() : "\"\"");
@@ -1263,6 +1350,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             aborts.add(entry);
         }
         return aborts;
+    }
+
+    /** Test hook: build the {@code triggers} glue collection without a repository. */
+    static List<Map<String, Object>> buildTriggersForTest(IntentModel model) {
+        IntentGenerationContext context =
+                new IntentGenerationContext(model, "/" + model.getName(), model.getName(), "workspace", model.getName(), null);
+        return buildTriggers(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                context);
     }
 
     /** Test hook: build the {@code aborts} glue collection without a repository. */
@@ -2147,6 +2242,66 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return a;
     }
 
+    /**
+     * The local variable names the two create-from templates declare around a one-hop load.
+     *
+     * <p>
+     * A hop's load is declared in a local named after the RELATION - that is what the shared resolver
+     * embeds in the read it renders, and seven templates already render it that way. So a relation
+     * named like one of these would emit a second declaration of a name already in scope: a Java
+     * compile error on the generated file, loud but with nothing explaining it. Naming the collision
+     * here turns that into a message about the model.
+     *
+     * <p>
+     * The list is AUTHORED against {@code Generate.java.template} and {@code Job.java.template}, and
+     * comparison is case-SENSITIVE because Java locals are: a relation called {@code Status} does not
+     * collide with a local called {@code status}. Drift is safe in one direction only, which is the
+     * direction it can drift: a name missing here behaves exactly as it does today (the compile error),
+     * while nothing that compiles is ever refused.
+     */
+    private static final Set<String> CREATE_FROM_LOCALS = Set.of("source", "sourceId", "sourceRepository", "target", "saved", "savedTarget",
+            "existing", "candidate", "item", "raw", "values", "req", "id", "entity", "rows", "day", "monthEnd", "recordUrl", "inboxUrl",
+            "subject", "body", "document", "part", "parts", "from", "to");
+
+    /**
+     * The first one-hop load whose local would collide with a name the template already declares, or
+     * {@code null} when none does.
+     */
+    private static String collidingLocal(List<NotificationSupport.RelationLoad> loads) {
+        for (NotificationSupport.RelationLoad load : loads) {
+            if (CREATE_FROM_LOCALS.contains(load.local())) {
+                return load.local();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether a {@code map} value is a one-hop {@code relation.field} path rather than a direct
+     * property of the source. A property name never carries a dot, so the dot alone decides.
+     */
+    private static boolean isHop(String value) {
+        return value != null && value.indexOf('.') >= 0;
+    }
+
+    /**
+     * The first {@code map} entry whose source is a one-hop path, rendered for a message, or
+     * {@code null} when every source is a direct property. Used to refuse a hop where the source entity
+     * is not resolvable here at all - a cross-model source, whose relations live in the owner's
+     * {@code .model}.
+     */
+    private static String firstHop(Map<String, String> map) {
+        if (map == null) {
+            return null;
+        }
+        for (Map.Entry<String, String> entry : map.entrySet()) {
+            if (isHop(entry.getValue())) {
+                return entry.getKey() + " -> " + entry.getValue();
+            }
+        }
+        return null;
+    }
+
     /** A YAML scalar as a Java literal: numbers bare, everything else a quoted string. */
     private static String javaLiteral(Object value) {
         // A Boolean written as a String would filter a boolean column with the text "true" and match
@@ -2171,9 +2326,31 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * date, in the target field's own shape - see {@code literalExpression}) or a literal. The
      * expression is rendered here (in Java, testable) so the Velocity template only emits
      * {@code target.<prop> = <expr>;} - no expression logic in the template.
+     *
+     * <p>
+     * This overload takes no hop resolver, so a dotted {@code map} value keeps the reading it always
+     * had. It serves the item / child mappings, whose source is the row being cloned - the parser
+     * refuses a hop there, because one load per row is a different shape from the create-from's single
+     * load.
      */
     private static List<Map<String, Object>> assignments(Map<String, String> map, Map<String, String> defaults, String sourceVar,
             java.util.function.Function<String, String> temporalKinds) {
+        return assignments(map, defaults, sourceVar, temporalKinds, null);
+    }
+
+    /**
+     * The same pre-rendering, with a resolver that lets a {@code map} value be a one-hop
+     * {@code relation.field} of the source. A direct property is read off the source row the generated
+     * code already holds; a hop is read off the RELATED row, through the null-guarded access the
+     * notification resolver renders - and registering it with that resolver is what puts the
+     * load-by-foreign-key in the template's {@code relationLoads}. Both call sites therefore bind
+     * {@code relationLoads} from {@code hops.loads()} right after calling this.
+     *
+     * @return the assignments, or {@code null} when a hop cannot be resolved - the caller reports that
+     *         and skips the entry rather than emitting a read that does not compile
+     */
+    private static List<Map<String, Object>> assignments(Map<String, String> map, Map<String, String> defaults, String sourceVar,
+            java.util.function.Function<String, String> temporalKinds, NotificationSupport.Resolver hops) {
         List<Map<String, Object>> list = new ArrayList<>();
         if (map != null) {
             for (Map.Entry<String, String> entry : map.entrySet()) {
@@ -2181,7 +2358,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                      .isBlank()) {
                     continue;
                 }
-                list.add(assignment(entry.getKey(), sourceVar + "." + IntentNaming.pascalCase(entry.getValue())));
+                String value = entry.getValue()
+                                    .trim();
+                String expression =
+                        hops != null && isHop(value) ? hops.access(value, false) : sourceVar + "." + IntentNaming.pascalCase(value);
+                if (expression == null) {
+                    return null;
+                }
+                list.add(assignment(entry.getKey(), expression));
             }
         }
         if (defaults != null) {
@@ -2245,6 +2429,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (target != null && target.propertyWidgets() != null) {
             for (Map.Entry<String, String> widget : target.propertyWidgets()
                                                           .entrySet()) {
+                // MULTISELECT is deliberately excluded: this set identifies FK relation properties, and
+                // a subset relation's property is a plain VARCHAR value list, never an FK.
                 if ("DROPDOWN".equals(widget.getValue()) || "DOCUMENT_STATUS".equals(widget.getValue())) {
                     names.add(widget.getKey());
                 }
@@ -3216,8 +3402,38 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.put("genToModel", crossModel ? g.getUses() : "");
                 entry.put("genToPerspective", toPerspective);
                 entry.put("genToPk", toPk);
-                entry.put("genFieldAssignments", assignments(g.getMap(), g.getDefaults(), "entity",
-                        temporalKinds(crossModel ? null : byName.get(g.getTo()), target)));
+                // The row the job queried is the source, so a one-hop map source is loaded off it exactly
+                // as the notify action loads a relation.field recipient - and `relationLoads` is what the
+                // job template renders those loads from, for either action.
+                EntityIntent rowEntity = sourceCrossModel ? null : byName.get(entity);
+                if (rowEntity == null && firstHop(g.getMap()) != null) {
+                    reportDroppedGlue(context,
+                            "Schedule [" + schedule.getName() + "] generate map [" + firstHop(g.getMap())
+                                    + "] is a relation.field of a source this model cannot resolve (model [" + schedule.getModel()
+                                    + "]), whose relations are known only to its owner - map a direct property of the row"
+                                    + " - the schedule was NOT generated");
+                    continue;
+                }
+                NotificationSupport.Resolver hops = rowEntity == null ? null
+                        : NotificationSupport.resolver(rowEntity, byName, compositionParents, crossModelLookup(model, context));
+                List<Map<String, Object>> genFieldAssignments = assignments(g.getMap(), g.getDefaults(), "entity",
+                        temporalKinds(crossModel ? null : byName.get(g.getTo()), target), hops);
+                if (genFieldAssignments == null) {
+                    reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] generate map [" + firstHop(g.getMap())
+                            + "] is not a resolvable one-hop relation.field of [" + entity + "] - the schedule was NOT generated");
+                    continue;
+                }
+                List<NotificationSupport.RelationLoad> hopLoads = hops == null ? List.of() : hops.loads();
+                String collision = collidingLocal(hopLoads);
+                if (collision != null) {
+                    reportDroppedGlue(context,
+                            "Schedule [" + schedule.getName() + "] generate hops through the relation [" + collision + "] of [" + entity
+                                    + "], whose name is one the generated job already uses for a local of its own"
+                                    + " - rename the relation, or map a direct property instead - the schedule was NOT generated");
+                    continue;
+                }
+                entry.put("genFieldAssignments", genFieldAssignments);
+                entry.put("relationLoads", relationLoads(hopLoads));
                 if (g.getChildren() != null && !g.getChildren()
                                                  .isEmpty()) {
                     // Collection-driven children: one row per element of a source collection, saved
@@ -3241,7 +3457,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     continue; // asked for the document but it cannot be rendered - reported above
                 }
                 entry.put("action", "notify");
-                entry.put("relationLoads", relationLoads(plan));
+                entry.put("relationLoads", relationLoads(plan, attachment));
                 entry.put("toExpression", plan.toExpression());
                 entry.put("subjectExpression", plan.subjectExpression());
                 entry.put("bodyExpression", plan.bodyExpression());
@@ -3494,26 +3710,34 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return attachment;
     }
 
-    private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan) {
-        return relationLoads(plan.loads());
+    /**
+     * The relation loads a notify-bearing handler must declare: the ones the message text needs, plus
+     * the ones an authored {@code fileName:} pattern reads on top of them. Both sides name their local
+     * after the relation, so a relation referenced by both is loaded ONCE - declaring it twice would
+     * not compile.
+     *
+     * @param plan the translated notify block
+     * @param attachment the resolved print attachment, or {@code null} for a plain-text message
+     * @return the merged loads, message-text ones first
+     */
+    private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan, NotifySupport.PrintAttachment attachment) {
+        List<NotificationSupport.RelationLoad> merged = new ArrayList<>(plan.loads());
+        if (attachment != null) {
+            Set<String> declared = new LinkedHashSet<>();
+            for (NotificationSupport.RelationLoad load : merged) {
+                declared.add(load.local());
+            }
+            for (NotificationSupport.RelationLoad load : attachment.fileNameLoads()) {
+                if (declared.add(load.local())) {
+                    merged.add(load);
+                }
+            }
+        }
+        return relationLoads(merged);
     }
 
     private static List<Map<String, Object>> relationLoads(List<NotificationSupport.RelationLoad> resolved) {
-        List<Map<String, Object>> loads = new ArrayList<>();
-        for (NotificationSupport.RelationLoad load : resolved) {
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("local", load.local());
-            entry.put("targetEntity", load.targetEntity());
-            entry.put("targetPerspective", load.targetPerspective());
-            entry.put("fkProperty", load.fkProperty());
-            // Cross-model recipient/placeholder: the owner's model alias + project drive the OWNER-package
-            // import in the generated listener/job (the generation pipeline picks the gen folder from these).
-            entry.put("crossModel", load.crossModel());
-            entry.put("targetModel", load.targetModel());
-            entry.put("targetProject", load.targetProject());
-            loads.add(entry);
-        }
-        return loads;
+        return NotificationSupport.loadFields(resolved);
     }
 
     private static List<Map<String, Object>> buildFieldLoaders(IntentModel model, IntentSettings settings) {

@@ -162,7 +162,7 @@
         <apache-httpcomponents-httpmime.version>4.5.14</apache-httpcomponents-httpmime.version>
         <apache-httpcomponents-httpclient.version>4.5.14</apache-httpcomponents-httpclient.version>
         <apache-httpcomponents-httpasyncclient.version>4.1.5</apache-httpcomponents-httpasyncclient.version>
-        <okhttp.version>5.4.0</okhttp.version>
+        <okhttp.version>5.5.0</okhttp.version>
 
         <jaxb.version>2.3.1</jaxb.version>
         <jaxws-rt.version>4.0.5</jaxws-rt.version>
@@ -218,7 +218,7 @@
 
         <!-- Various -->
         <c3p0.version>0.14.1</c3p0.version>
-        <guava.version>33.6.0-jre</guava.version>
+        <guava.version>33.7.1-jre</guava.version>
         <icu4j.version>78.3</icu4j.version>
         <classgraph.version>4.8.192</classgraph.version>
         <logcaptor.version>2.12.6</logcaptor.version>
@@ -245,7 +245,7 @@
         <bpmn-visualization.version>0.47.0</bpmn-visualization.version>
         <i18next.version>25.3.0</i18next.version>
         <alpinejs.version>3.15.11</alpinejs.version>
-        <harmonia.version>2.9.0</harmonia.version>
+        <harmonia.version>2.14.0</harmonia.version>
         <opensans.version>5.2.7</opensans.version>
         <lucide.version>1.8.0</lucide.version>
         <pinecone-router.version>7.5.2</pinecone-router.version>

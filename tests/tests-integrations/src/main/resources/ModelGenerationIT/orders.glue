@@ -189,6 +189,22 @@
             "toModel": "",
             "toPerspective": "Sales Invoices",
             "toPk": "Id",
+            "relationLoads": [
+                {
+                    "fkProperty": "Customer",
+                    "local": "customer",
+                    "targetEntity": "Customer",
+                    "targetPerspective": "Partners"
+                },
+                {
+                    "fkProperty": "Currency",
+                    "local": "currency",
+                    "crossModel": true,
+                    "targetModel": "currencies",
+                    "targetEntity": "Currency",
+                    "targetPerspective": "Currencies"
+                }
+            ],
             "fieldAssignments": "        target.Customer = source.Customer;\n",
             "sourceStatusProperty": "",
             "sourceStatusValue": "",
@@ -391,6 +407,59 @@
             "field": "Number",
             "series": "Sales Order",
             "per": ""
+        }
+    ],
+    "schedules": [
+        {
+            "name": "nightlyInvoiceLog",
+            "className": "NightlyInvoiceLog",
+            "cron": "0 0 3 * * ?",
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "criteriaExpression": "Criteria.create().eq(\"Status\", 3)",
+            "action": "generate",
+            "genToEntity": "SalesInvoice",
+            "genToModel": "",
+            "genToPerspective": "Sales Invoices",
+            "genToPk": "Id",
+            "genCrossModel": false,
+            "sourceCrossModel": false,
+            "sourceModel": "",
+            "attachKeyProperty": "Id",
+            "relationLoads": [
+                {
+                    "fkProperty": "Customer",
+                    "local": "customer",
+                    "targetEntity": "Customer",
+                    "targetPerspective": "Partners"
+                }
+            ],
+            "genFieldAssignments": [
+                {
+                    "targetProp": "Customer",
+                    "expr": "entity.Customer"
+                },
+                {
+                    "targetProp": "CustomerName",
+                    "expr": "(customer == null ? null : customer.Name)"
+                }
+            ],
+            "toExpression": "",
+            "subjectExpression": "",
+            "bodyExpression": "",
+            "attach": "",
+            "attachEntity": "",
+            "attachLanguageExpression": "",
+            "attachFileNameExpression": "",
+            "attachLanguageFkProperty": "",
+            "attachLanguageTargetEntity": "",
+            "attachLanguageTargetPerspective": "",
+            "attachLanguageCrossModel": false,
+            "attachLanguageTargetModel": "",
+            "usesRecordUrl": false,
+            "usesInboxUrl": false,
+            "recordUrlEntity": "",
+            "recordUrlKeyProperty": ""
         }
     ]
 }

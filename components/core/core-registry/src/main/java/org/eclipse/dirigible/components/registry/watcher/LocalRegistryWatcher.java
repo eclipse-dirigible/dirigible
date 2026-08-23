@@ -60,6 +60,12 @@ public class LocalRegistryWatcher implements DisposableBean {
     /** How long destroy() waits for the watch loop to leave before closing the service. */
     private static final long SHUTDOWN_TIMEOUT_SECONDS = 5;
 
+    /**
+     * How long we wait for the watch service's own {@code close()} before walking away from it - see
+     * {@link #closeWatchService()} for why walking away is the correct thing to do.
+     */
+    private static final long CLOSE_TIMEOUT_SECONDS = 2;
+
     /** The key to path map. */
     private final Map<WatchKey, Path> keyToPathMap = new HashMap<>();
 
@@ -508,23 +514,18 @@ public class LocalRegistryWatcher implements DisposableBean {
      * Destroy.
      *
      * <p>
-     * <b>Order matters: stop the watching thread FIRST, close the service second.</b> Closing the
-     * service while the thread sits in {@code take()} deadlocks on macOS, where the JDK has no native
-     * file-event source and falls back to {@code sun.nio.fs.PollingWatchService}: its {@code close()}
-     * walks the registered keys and locks each one while holding the key map, whereas the polling
-     * thread locks a key first and then the map - a lock-order inversion, and Spring's singleton
-     * teardown hangs for good (every {@code @DirtiesContext} integration test on a developer's Mac).
-     * Linux and Windows have native watchers and never showed it.
+     * <b>Order matters: stop the watching thread FIRST, close the service second</b> - clear
+     * {@code watching}, {@code shutdownNow()} to interrupt the blocking {@code take()} (the loop
+     * returns on the {@code InterruptedException}), wait briefly for the thread to actually be gone,
+     * and only then close the service, by which point none of OUR threads is inside it.
      *
      * <p>
-     * So: clear {@code watching}, {@code shutdownNow()} to interrupt the blocking {@code take()} (the
-     * loop returns on the {@code InterruptedException}), wait briefly for the thread to actually be
-     * gone, and only then close the service - by which point no one is inside it.
-     *
-     * @throws IOException Signals that an I/O exception has occurred.
+     * That ordering is necessary but <b>not</b> sufficient, and teardown must not hang on the part we
+     * cannot order - see {@link #closeWatchService()}. With the close offloaded there is nothing left
+     * here that can fail or block, so this no longer throws.
      */
     @Override
-    public void destroy() throws IOException {
+    public void destroy() {
         logger.info("Destroying Local Registry Watcher");
 
         watching = false;
@@ -551,16 +552,74 @@ public class LocalRegistryWatcher implements DisposableBean {
     }
 
     /**
-     * Close the watch service, if any. Split out of {@link #destroy()} because the re-initialization
-     * path runs on the watcher thread itself and must not shut down the executor it is running in.
+     * Close the watch service, if any - <b>never on the caller's thread</b>. Split out of
+     * {@link #destroy()} because the re-initialization path runs on the watcher thread itself and must
+     * not shut down the executor it is running in.
      *
-     * @throws IOException if the close fails
+     * <p>
+     * <b>Why the close is offloaded.</b> On macOS the JDK has no native file-event source and falls
+     * back to {@code sun.nio.fs.PollingWatchService}, which deadlocks against its own poller:
+     * {@code implClose()} takes the key map and then, per key, the key's monitor (via
+     * {@code PollingWatchKey.disable()}), while the poll task - {@code poll()}, a method synchronized
+     * on the key - takes the key's monitor and then the map, because a watched directory that has gone
+     * away sends it into {@code cancel()}, and {@code cancel()} locks the map. Whoever calls
+     * {@code close()} can therefore be parked forever by the service's own {@code FileSystemWatcher}
+     * thread, and Spring's singleton teardown hangs for good: every {@code @DirtiesContext} integration
+     * test on a developer's Mac, plus a locally started instance that never finishes shutting down.
+     * Linux and Windows have native watchers, which is why CI never showed it.
+     *
+     * <p>
+     * The inversion is entirely inside the JDK and both halves of it are the service's own: no ordering
+     * on our side can retire the poller, because it lives for as long as the service is open. Stopping
+     * OUR watch loop first (see {@link #destroy()}) was the fix attempted before, and it is not enough.
+     *
+     * <p>
+     * So close where a deadlock costs nothing: on a short-lived daemon thread, waited on only briefly.
+     * If the close does wedge, teardown proceeds and the JVM is free to exit anyway - the poller the
+     * service leaves behind is itself a daemon thread.
      */
-    private void closeWatchService() throws IOException {
+    private void closeWatchService() {
         WatchService service = this.watchService;
         this.watchService = null;
-        if (null != service) {
-            service.close();
+        if (null == service) {
+            return;
         }
+        if (!closeOffThread(service, CLOSE_TIMEOUT_SECONDS)) {
+            logger.warn(
+                    "The Local Registry watch service did not close within [{}]s - leaving it to the JVM."
+                            + " This is the JDK's polling watch service deadlocking against its own poller; teardown continues.",
+                    CLOSE_TIMEOUT_SECONDS);
+        }
+    }
+
+    /**
+     * Closes the given service on a short-lived daemon thread and waits at most {@code timeoutSeconds}
+     * for that close to finish - the whole point being that the caller walks away instead of hanging
+     * when it does not. Package-private and {@code static}: the JDK close that deadlocks cannot be
+     * provoked on demand, so this is the seam the shutdown test hands a close that never returns.
+     *
+     * @param service the service to close
+     * @param timeoutSeconds how long to wait for the close before giving up on it
+     * @return true if the close completed within the timeout, false if it was left running
+     */
+    static boolean closeOffThread(WatchService service, long timeoutSeconds) {
+        Thread closer = new Thread(() -> {
+            try {
+                service.close();
+            } catch (IOException | RuntimeException e) {
+                logger.warn("Failed to close the Local Registry watch service", e);
+            }
+        }, "dirigible-local-registry-watcher-close");
+        closer.setDaemon(true);
+        closer.start();
+
+        try {
+            closer.join(TimeUnit.SECONDS.toMillis(timeoutSeconds));
+        } catch (InterruptedException e) {
+            Thread.currentThread()
+                  .interrupt();
+            logger.warn("Interrupted while waiting for the Local Registry watch service to close", e);
+        }
+        return !closer.isAlive();
     }
 }

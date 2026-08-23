@@ -202,6 +202,16 @@ export function getTemplate(parameters) {
                 collection: "generateEvents"
             },
             {
+                // The declared-reopen subset of `generates` (issue #6868): the listener that returns the
+                // source to its pre-generation status when the target it made is retired, so the ordinary
+                // trigger can mint the replacement - void and reissue with nobody clicking.
+                location: "/template-application-events-java/events/GenerateReopen.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}GenerateReopen.java",
+                engine: "velocity",
+                collection: "generateReopens"
+            },
+            {
                 location: "/template-application-events-java/events/Transition.java.template",
                 action: "generate",
                 rename: "gen/events/{{javaGenFolderName}}/{{className}}Transition.java",

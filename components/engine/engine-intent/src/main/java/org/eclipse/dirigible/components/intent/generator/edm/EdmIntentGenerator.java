@@ -481,6 +481,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // listener/handler writes the started process-instance id here). See TriggerSupport.
             if (triggerTargets.contains(name)) {
                 properties.add(processIdProperty(name));
+                properties.add(processIdsProperty(name));
             }
             // A file-child (function: Attachment or Snapshot) gets the standard file-metadata columns
             // injected (like audit:) - the author never hand-writes plumbing; the upload (attachment) or
@@ -502,10 +503,23 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             List<Map<String, Object>> relations = new ArrayList<>();
             boolean compositionAssigned = false;
             for (RelationIntent relation : entity.getRelations()) {
-                if (!"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
+                if (!"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())
+                        && !"subset".equals(relation.getKind())) {
                     continue;
                 }
                 if (relation.getName() == null || relation.getTo() == null) {
+                    continue;
+                }
+                // A subset relation lowers to ONE plain VARCHAR property on the declaring entity - the
+                // MULTISELECT widget over the target's rows - never an FK: no relationship* attributes
+                // (the schema template emits a foreign key gated solely on relationshipEntityName) and
+                // no <relation> element, so no diagram edge and no FK constraint can appear. The where:
+                // option filter rides the same optionsFilter scalars the to-one dropdowns use.
+                if ("subset".equals(relation.getKind())) {
+                    Map<String, Object> subsetProperty = subsetProperty(name, relation, byName.get(relation.getTo()),
+                            perspectiveFor(relation.getTo(), compositionParents, settingEntities));
+                    putOptionsFilter(subsetProperty, relation, null);
+                    properties.add(subsetProperty);
                     continue;
                 }
                 // A cross-model relation references an entity owned by another intent model: emit a
@@ -536,7 +550,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     // link feeds document.relationsByEntity, from which appendMxGraphModel emits the mxGraph
                     // edge (owner FK cell -> projection PK cell). The target lives in another model, so
                     // relationLink's target is null and referencedProperty defaults to the projection's "Id".
-                    relations.add(relationLink(name, relation, null, compositionParents, settingEntities));
+                    relations.add(relationLink(name, relation, null, info.perspectiveName()));
                     continue;
                 }
                 boolean composition = !compositionAssigned && relation.isComposition();
@@ -556,7 +570,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         target == null || target.getIdentity() == null ? null : IntentNaming.pascalCase(target.getIdentity()),
                         target == null ? null : labelFieldName(target), true);
                 properties.add(fkProperty);
-                relations.add(relationLink(name, relation, target, compositionParents, settingEntities));
+                relations.add(relationLink(name, relation, target, targetPerspective));
             }
             // Explicit UI control order (intent `order:`): reorder the properties so the generated
             // form/list controls follow the author's sequence (fields and to-one relations interleaved)
@@ -701,9 +715,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (notBlank(icon)) {
             body.put("icon", icon);
         }
-        // Data-language codes the app offers (intent `languages:`). Carried on the .model root (JSON
-        // only - the XML root renders no attributes); the Harmonia shell's Region & Language setting
-        // lists them and sends the choice as Accept-Language on every request.
+        // Data-language codes the app offers (intent `languages:`). Carried on the .model root, and as a
+        // JSON-string attribute of the .edm's <model> element so a diagram save cannot drop it (#6882);
+        // the Harmonia shell's Region & Language setting lists them and sends the choice as
+        // Accept-Language on every request.
         if (!model.getLanguages()
                   .isEmpty()) {
             body.put("languages", new ArrayList<>(model.getLanguages()));
@@ -1228,9 +1243,45 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The {@code ProcessIds} bookkeeping property added next to {@code ProcessId}: which processes this
+     * record has already started, and with which instance, as {@code Process=instanceId} pairs (see
+     * {@code org.eclipse.dirigible.sdk.bpm.ProcessStamps}).
+     *
+     * <p>
+     * {@code ProcessId} cannot answer that question. It holds ONE instance - the most recent, which is
+     * what the UI correlates a record's tasks on - so reading it as "has this process run" makes every
+     * process indistinguishable from every other, and a record stamped by an earlier flow silently
+     * skipped its follow-up: exactly what an {@code onTransition} trigger composes ("on create
+     * identify; when identified, run dunning"). A wait and an abort have the same need, for their own
+     * instance rather than whichever process stamped last.
+     *
+     * <p>
+     * Wider than {@code ProcessId} because it holds several of them, and system-managed the same way:
+     * read-only, never a major widget, and excluded from the generated forms and lists.
+     */
+    private static Map<String, Object> processIdsProperty(String entityName) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("name", "ProcessIds");
+        p.put("description", "Processes started for this record, as Process=instanceId pairs");
+        p.put("tooltip", "");
+        p.put("dataName", IntentNaming.upperSnake(entityName) + "_" + IntentNaming.upperSnake("ProcessIds"));
+        p.put("dataType", "VARCHAR");
+        p.put("dataNullable", "true");
+        p.put("dataLength", "1000");
+        p.put("auditType", "NONE");
+        p.put("isReadOnlyProperty", "true");
+        p.put("widgetType", "TEXTBOX");
+        p.put("widgetSize", "");
+        p.put("widgetLength", "1000");
+        p.put("widgetIsMajor", "false");
+        return p;
+    }
+
+    /**
      * The {@code ProcessId} back-reference property added to an entity that a process starts on create.
      * A plain VARCHAR holding the started process-instance id; the runtime trigger handler writes it.
-     * Not a major widget - it is system-managed, not user input.
+     * Not a major widget - it is system-managed, not user input. The per-process bookkeeping lives in
+     * the sibling {@code ProcessIds} column ({@link #processIdsProperty(String)}).
      */
     private static Map<String, Object> processIdProperty(String entityName) {
         Map<String, Object> p = new LinkedHashMap<>();
@@ -1293,12 +1344,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("auditType", "NONE");
         // Relationship metadata the generation reads (Dirigible .model convention): composition vs
         // association + cardinality (composition 1_n; association n_1 for manyToOne, 1_1 for oneToOne);
-        // relationshipName is the FK constraint name <owner>_<target>; relationshipEntityName and
-        // relationshipEntityPerspectiveName drive the dropdown's data-service URL
+        // relationshipName is the relationship's identity (see relationshipName); relationshipEntityName
+        // and relationshipEntityPerspectiveName drive the dropdown's data-service URL
         // (api/<perspective>/<entity>Service.ts) and the create-detail dialog.
         p.put("relationshipType", composition ? "COMPOSITION" : "ASSOCIATION");
         p.put("relationshipCardinality", composition ? "1_n" : (oneToOne ? "1_1" : "n_1"));
-        p.put("relationshipName", ownerEntity + "_" + relation.getTo());
+        p.put("relationshipName", relationshipName(ownerEntity, relation));
         p.put("relationshipEntityName", relation.getTo());
         p.put("relationshipEntityPerspectiveName", targetPerspective);
         p.put("relationshipEntityPerspectiveLabel", "Entities");
@@ -1314,6 +1365,58 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetDropDownValue", labelFieldName(target));
         putCalculatedAction(p, relation);
         putLookupColumns(p, relation);
+        return p;
+    }
+
+    /**
+     * Plain value property added to the owning entity for a {@code subset} relation: the record holds a
+     * subset of the target's rows as ONE comma-separated key list ({@code "1,3"}, ascending,
+     * de-duplicated; empty selection = null), rendered as a MULTISELECT over the target's rows. It is
+     * deliberately NOT an FK property: it carries no {@code relationship*} attributes (the schema
+     * template emits a foreign key gated solely on {@code relationshipEntityName}) and no
+     * {@code <relation>} element - the option source is the dedicated {@code widgetOptionsEntityName}
+     * plus the same {@code widgetDropDownKey}/{@code widgetDropDownValue} pair every option-loading
+     * template block already reads. {@code widgetPattern} is the server-side shape guard - the only
+     * one, since no FK constrains the column; ascending order and de-duplication stay the client's
+     * normalization.
+     *
+     * <p>
+     * {@code widgetOptionsEntityPerspectiveName} completes the option source the way
+     * {@code relationshipEntityPerspectiveName} completes a dropdown's: a consumer that cannot resolve
+     * the target itself - a {@code related:} register whose source entity is owned by ANOTHER model -
+     * needs the perspective to build the options controller's URL, and the target's own model is the
+     * only place that knows it (dirigible #6896).
+     */
+    private static Map<String, Object> subsetProperty(String ownerEntity, RelationIntent relation, EntityIntent target,
+            String targetPerspective) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("name", IntentNaming.pascalCase(relation.getName()));
+        p.put("description", relation.getDescription() == null ? "" : relation.getDescription());
+        p.put("tooltip", "");
+        p.put("dataName", IntentNaming.upperSnake(ownerEntity) + "_" + IntentNaming.upperSnake(relation.getName()));
+        p.put("dataType", "VARCHAR");
+        // The length is deliberately not authorable (the value shape is normative), so headroom is the
+        // only safety valve: 512 holds ~100 four-digit keys - a "small lookup" by any measure - while
+        // an overflow would fail at the DB with nothing at authoring time to warn.
+        p.put("dataLength", "512");
+        boolean notNull = relation.isRequired();
+        p.put("dataNullable", notNull ? "false" : "true");
+        if (notNull) {
+            // "At least one selected": an empty selection stores null, so NOT NULL is the whole rule.
+            p.put("isRequiredProperty", "true");
+        }
+        p.put("auditType", "NONE");
+        p.put("widgetType", "MULTISELECT");
+        p.put("widgetSize", relation.getSize() == null ? ""
+                : relation.getSize()
+                          .toString());
+        p.put("widgetLength", "20");
+        p.put("widgetIsMajor", relation.isMajor() ? "true" : "false");
+        p.put("widgetOptionsEntityName", relation.getTo());
+        p.put("widgetOptionsEntityPerspectiveName", targetPerspective);
+        p.put("widgetDropDownKey", keyFieldName(target));
+        p.put("widgetDropDownValue", labelFieldName(target));
+        p.put("widgetPattern", "^\\d+(,\\d+)*$");
         return p;
     }
 
@@ -1347,7 +1450,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("auditType", "NONE");
         p.put("relationshipType", "ASSOCIATION");
         p.put("relationshipCardinality", oneToOne ? "1_1" : "n_1");
-        p.put("relationshipName", ownerEntity + "_" + relation.getTo());
+        p.put("relationshipName", relationshipName(ownerEntity, relation));
         p.put("relationshipEntityName", relation.getTo());
         // The owner's perspective for the target drives the dropdown's REST URL
         // (api/<perspective>/<Entity>Controller). Settings live under "Settings", primaries under their
@@ -1923,9 +2026,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /** The property keys a related register's column carries into the {@code .model}. */
-    private static final List<String> RELATED_COLUMN_KEYS = List.of("name", "widgetLabel", "dataName", "dataType", "dataScale",
-            "widgetType", "widgetPattern", "widgetDropDownKey", "widgetDropDownValue", "relationshipEntityName",
-            "relationshipEntityPerspectiveName", "sensitiveProperty", "referencedModel");
+    private static final List<String> RELATED_COLUMN_KEYS =
+            List.of("name", "widgetLabel", "dataName", "dataType", "dataScale", "widgetType", "widgetPattern", "widgetDropDownKey",
+                    "widgetDropDownValue", "relationshipEntityName", "relationshipEntityPerspectiveName", "widgetOptionsEntityName",
+                    "widgetOptionsEntityPerspectiveName", "sensitiveProperty", "referencedModel");
 
     /**
      * Emits each entity's {@code related:} declarations as the {@code relatedEntities} model attribute
@@ -2094,9 +2198,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         for (Map<String, Object> property : properties) {
             String name = str(property.get("name"));
             String auditType = str(property.get("auditType"));
-            boolean excluded = "true".equals(String.valueOf(property.get("dataAutoIncrement"))) || name.equals(fkProperty)
-                    || "ProcessId".equals(name) || "false".equals(String.valueOf(property.get("widgetIsMajor")))
-                    || (auditType != null && !auditType.isEmpty() && !"NONE".equals(auditType));
+            boolean excluded =
+                    "true".equals(String.valueOf(property.get("dataAutoIncrement"))) || name.equals(fkProperty) || "ProcessId".equals(name)
+                            || "ProcessIds".equals(name) || "false".equals(String.valueOf(property.get("widgetIsMajor")))
+                            || (auditType != null && !auditType.isEmpty() && !"NONE".equals(auditType));
             if (!excluded) {
                 columns.add(relatedColumn(property));
             }
@@ -2340,20 +2445,45 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The relationship's identity, and the ONLY place it is computed: {@code <owner>_<PascalCase
+     * relation name>}. Both writers of the {@code .edm} - the {@code <property>} element
+     * ({@link #relationProperty} / {@link #crossModelRelationProperty}) and the {@code <relation>}
+     * element ({@link #relationLink}) - derive it from here, so the two cannot disagree by construction
+     * (#6883).
+     *
+     * <p>
+     * It is derived from the RELATION's name rather than the target entity's because it must be unique
+     * within the owner: an entity with several relations to the same target (a posting rule naming a
+     * dozen accounts, a document with both a customer and a delivery address) collapses onto one name
+     * under the target form, and the {@code .schema}'s foreign keys then all claim the same
+     * {@code constraintName}.
+     */
+    private static String relationshipName(String ownerEntity, RelationIntent relation) {
+        return ownerEntity + "_" + IntentNaming.pascalCase(relation.getName());
+    }
+
+    /**
      * Top-level {@code <relation>} element interleaved with its owning {@code <entity>} in the XML.
-     * {@code relationshipEntityPerspectiveName} is the target's <i>resolved</i> perspective - for a
-     * dependent target that is its composition parent's perspective, mirroring how the EDM editor
-     * writes these links.
+     *
+     * <p>
+     * Its naming attributes restate what the FK {@code <property>} element already carries, so both are
+     * taken from the property's own inputs: {@link #relationshipName} for the identity, and the
+     * perspective the caller ALREADY resolved for the property - for a same-model target the resolved
+     * one (a dependent target's is its composition parent's, mirroring how the EDM editor writes these
+     * links), for a cross-model one the perspective its OWNER model publishes it under. Resolving it
+     * here instead, against this model, cannot see an external target at all and used to fall back to
+     * the entity's own name - which the save then wrote over the property, pointing the generated
+     * lookup URL at a controller that does not exist (#6883).
      */
     private static Map<String, Object> relationLink(String ownerEntity, RelationIntent relation, EntityIntent target,
-            Map<String, String> compositionParents, Set<String> settingEntities) {
+            String targetPerspective) {
         Map<String, Object> link = new LinkedHashMap<>();
-        String linkName = ownerEntity + "_" + IntentNaming.pascalCase(relation.getName());
+        String linkName = relationshipName(ownerEntity, relation);
         link.put("name", linkName);
         link.put("type", "relation");
         link.put("entity", ownerEntity);
         link.put("relationName", linkName);
-        link.put("relationshipEntityPerspectiveName", perspectiveFor(relation.getTo(), compositionParents, settingEntities));
+        link.put("relationshipEntityPerspectiveName", targetPerspective);
         link.put("relationshipEntityPerspectiveLabel", "Entities");
         link.put("property", IntentNaming.pascalCase(relation.getName()));
         link.put("referenced", relation.getTo());
@@ -2620,7 +2750,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> perspectives = (List<Map<String, Object>>) body.get("perspectives");
 
         StringBuilder sb = new StringBuilder(8192);
-        sb.append("<model>\n");
+        sb.append("<model");
+        appendDocumentAttributes(sb, body);
+        sb.append(">\n");
         sb.append(" <entities>\n");
         for (Map<String, Object> entity : entities) {
             sb.append("  <entity");
@@ -2671,6 +2803,52 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         appendMxGraphModel(sb, document, entities);
         sb.append("</model>\n");
         return sb.toString();
+    }
+
+    /**
+     * The {@code .model} root keys that have their own ELEMENT in the {@code .edm} and so are not also
+     * written as an attribute of {@code <model>}.
+     */
+    private static final Set<String> DOCUMENT_ELEMENT_KEYS = Set.of("entities", "perspectives", "navigations");
+
+    /**
+     * Emit the DOCUMENT-level metadata as attributes of the {@code <model>} element: the identity
+     * scalars ({@code title}, {@code description}, {@code icon}) verbatim, and the structured values
+     * ({@code languages}, {@code widgets}, {@code customActionLabels}, {@code processTaskLabels}) as
+     * JSON strings - the same flat-attribute mechanism the entity/property level uses, for the same
+     * reason: a flat attribute survives both the mxGraph cell round-trip of a live editor save and the
+     * {@code transform-edm} regeneration, which a nested element would not.
+     *
+     * <p>
+     * Without this the {@code <model>} element carried NO attributes at all, so everything the
+     * {@code .model} said above its entities had no representation in the {@code .edm} and a save
+     * simply deleted it (#6882) - the entity/property half of the same defect was #6826. The loss was
+     * silent and the worst of it invisible: {@code languages} gone downgrades a multilingual
+     * application to monolingual, and the two label maps gone replaces every custom-action and
+     * user-task caption with its raw identifier.
+     *
+     * <p>
+     * A non-scalar with no entry in {@link #STRUCTURED_ATTRIBUTES} cannot be written and is REPORTED
+     * rather than dropped quietly - that silence is what let this ship. {@code EdmModelRoundTripIT}
+     * enumerates the whole document, so it fails on such a key too.
+     *
+     * @param sb the buffer
+     * @param body the {@code .model} root
+     */
+    private static void appendDocumentAttributes(StringBuilder sb, Map<String, Object> body) {
+        for (Map.Entry<String, Object> attr : body.entrySet()) {
+            String key = attr.getKey();
+            if (DOCUMENT_ELEMENT_KEYS.contains(key)) {
+                continue;
+            }
+            Object value = attr.getValue();
+            if ((value instanceof Iterable || value instanceof Map) && !STRUCTURED_ATTRIBUTES.contains(key)) {
+                LOGGER.warn("Document-level model value [{}] has no .edm representation and is lost when a diagram is saved -"
+                        + " add it to STRUCTURED_ATTRIBUTES (and to transform-edm.js's MODEL_STRUCTURED)", key);
+                continue;
+            }
+            appendModelAttribute(sb, key, value);
+        }
     }
 
     /**
@@ -3035,12 +3213,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The entity/property attributes whose value is a List/Map. They are emitted into the {@code .edm}
-     * as a JSON string in a flat attribute (never dropped, never a nested element) so the {@code .edm}
-     * stays a lossless source for the derived {@code .model}: a flat attribute survives both the
-     * mxGraph cell-value round-trip of a live editor save and the {@code transform-edm} regeneration,
-     * which a nested element would not - #6826. {@code transform-edm.js} parses these keys back into
-     * objects.
+     * The document/entity/property attributes whose value is a List/Map. They are emitted into the
+     * {@code .edm} as a JSON string in a flat attribute (never dropped, never a nested element) so the
+     * {@code .edm} stays a lossless source for the derived {@code .model}: a flat attribute survives
+     * both the mxGraph cell-value round-trip of a live editor save and the {@code transform-edm}
+     * regeneration, which a nested element would not - #6826, and #6882 for the document level.
+     * {@code transform-edm.js} parses these keys back into objects.
      *
      * <p>
      * {@code uniqueConstraints} is deliberately NOT here: the composite-unique-key modeler feature owns
@@ -3048,8 +3226,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * {@code transform-edm} rebuilds into {@code uniqueConstraints}. Emitting it here too would write
      * it twice and round-trip it as a duplicate.
      */
-    private static final Set<String> STRUCTURED_ATTRIBUTES =
-            Set.of("rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys", "relatedEntities", "lookupColumns");
+    private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys",
+            "relatedEntities", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

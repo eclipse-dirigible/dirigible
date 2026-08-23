@@ -20,9 +20,11 @@
              :aria-label="T('database:explorer.datasource', 'Datasource')"
              :placeholder="T('database:explorer.datasource', 'Datasource')" />
       <div x-h-select-content>
-        <template x-for="name in state.datasources" :key="name">
-          <div x-h-select-option="name" :data-value="name"></div>
-        </template>
+        <div x-h-select-list>
+          <template x-for="name in state.datasources" :key="name">
+            <div x-h-select-option="name" :data-value="name"></div>
+          </template>
+        </div>
       </div>
     </div>
 

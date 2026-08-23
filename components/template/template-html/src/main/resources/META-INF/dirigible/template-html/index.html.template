@@ -31,9 +31,11 @@
       <div x-h-select class="w-56">
         <input x-h-select-input x-model="selected" placeholder="Choose a collection" />
         <div x-h-select-content>
-          <template x-for="collection in collections" :key="collection.name">
-            <div x-h-select-option="collection.label" :data-value="String(collection.name)"></div>
-          </template>
+          <div x-h-select-list>
+            <template x-for="collection in collections" :key="collection.name">
+              <div x-h-select-option="collection.label" :data-value="String(collection.name)"></div>
+            </template>
+          </div>
         </div>
       </div>
       <div class="flex-1"></div>

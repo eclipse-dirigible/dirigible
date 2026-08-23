@@ -43,11 +43,11 @@ import static org.eclipse.dirigible.components.ide.template.service.model.ModelV
 class GlueGenerator {
 
     /** The names of the collections this generator handles. */
-    private static final List<String> COLLECTIONS =
-            List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits", "aborts", "setters", "writers",
-                    "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles", "outbound", "stepEvents",
-                    "rollups", "expansions", "expansionCleanups", "settlements", "settlementListeners", "generates", "generateEvents",
-                    "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots", "numbering", "resolves");
+    private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
+            "aborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles",
+            "outbound", "stepEvents", "rollups", "expansions", "expansionCleanups", "settlements", "settlementListeners", "generates",
+            "generateEvents", "generateReopens", "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots",
+            "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -106,10 +106,11 @@ class GlueGenerator {
             case "expansionCleanups" -> each(collection, source, content, model, parameters, GlueGenerator::bindExpansionCleanup);
             case "settlements" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlement);
             case "settlementListeners" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlementListener);
-            // Both collections carry the SAME create-from descriptors (generateEvents is the
-            // event-driven subset), so they share one binding - the listener and the create-from it
-            // calls cannot be rendered from divergent data.
-            case "generates", "generateEvents" -> each(collection, source, content, model, parameters, GlueGenerator::bindGenerate);
+            // All three collections carry the SAME create-from descriptors (generateEvents is the
+            // event-driven subset, generateReopens the declared-reopen one), so they share one binding -
+            // the listeners and the create-from they surround cannot be rendered from divergent data.
+            case "generates", "generateEvents", "generateReopens" -> each(collection, source, content, model, parameters,
+                    GlueGenerator::bindGenerate);
             case "transitions" -> each(collection, source, content, model, parameters, GlueGenerator::bindTransition);
             case "sends" -> each(collection, source, content, model, parameters, GlueGenerator::bindSend);
             case "posts" -> each(collection, source, content, model, parameters, GlueGenerator::bindPost);
@@ -624,6 +625,11 @@ class GlueGenerator {
                 // a cancelled or voided document stops blocking its replacement. Gated on the boolean - a
                 // .glue written before this key existed keeps the existence-only guard it always had.
                 "hasRetiredStatus", "retiredStatusProperty", "retiredStatusCondition",
+                // The declared reopen (issue #6868): the status the SOURCE returns to when that target is
+                // retired, and the same retiring test rendered against the reopen listener's own local.
+                // The raw target perspective comes along because the listener binds the TARGET's topic,
+                // and a topic keeps the raw perspective while a package segment is sanitized.
+                "hasReopen", "reopenStatusValue", "reopenRetiredCondition", "toPerspective",
                 // The declared input form (issue #6685): the prompted target properties with their
                 // pre-rendered value conversions - the template renders one block per entry.
                 "hasPrompt", "promptFields");
@@ -641,10 +647,18 @@ class GlueGenerator {
         context.put("fromProjectName", truthy(item, "crossModelSource") ? str(item, "fromProject") : str(parameters, "projectName"));
         context.put("toGenFolder", truthy(item, "crossModel") ? sanitize(item, "toModel") : str(parameters, "javaGenFolderName"));
         context.put("toJavaPerspective", sanitize(item, "toPerspective"));
+        // The project publishing the TARGET's "-transitioned" topic, which only the reopen listener
+        // binds. A reopen is refused for a cross-model target - its retiring statuses are classified in
+        // the owner model and unresolvable here - so the target's project is always this one.
+        context.put("toProjectName", str(parameters, "projectName"));
         // A primary source item that is not a composition child lives outside the source document's
         // perspective, which the intent layer resolves; for the common case it is the same one.
         context.put("fromItemJavaPerspective",
                 NamingHelper.sanitizeJavaIdentifier(strOr(item, "fromItemPerspective", str(item, "fromPerspective"))));
+        // The one-hop `relation.field` map sources: one load per distinct relation, which the template
+        // emits before the mapping reads a field off it. A .glue written before this key existed carries
+        // none, and the loop renders nothing - the direct-property mapping it always had.
+        context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
     }
 
     /**
@@ -787,8 +801,11 @@ class GlueGenerator {
      */
     private static void bindSnapshot(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "master", "masterPk", "languageExpression", "languageFkProperty", "languageTargetEntity", "snapshotEntity",
-                "snapshotMasterFk");
+                "snapshotMasterFk", "fileNameExpression");
         context.put("masterJavaPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "masterPerspective", "")));
+        // The one-hop loads a fileName pattern reads off the master - the same shape (and the same
+        // cross-model package resolution) a notify listener's relation loads have.
+        context.put("fileNameLoads", relationLoads(item.get("fileNameLoads"), parameters));
         context.put("languageTargetJavaPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "languageTargetPerspective", "")));
         context.put("languageTargetJavaGenFolder",
                 truthy(item, "languageTargetModel") ? sanitize(item, "languageTargetModel") : str(parameters, "javaGenFolderName"));
