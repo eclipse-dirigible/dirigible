@@ -27,6 +27,8 @@ import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext
 import org.eclipse.dirigible.components.intent.generator.StatementSupport;
 import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
+import org.eclipse.dirigible.components.intent.generator.NotifySupport;
+import org.eclipse.dirigible.components.intent.generator.print.ReportPrintTemplate;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
@@ -214,6 +216,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             return;
         }
         Set<String> seenFiles = new HashSet<>();
+        // Which reports something MAILS. Only those need a print template to render through, so the
+        // scaffold appears exactly where an attachment renders it rather than beside every report.
+        Set<String> mailed = NotifySupport.attachedReports(model);
         for (ReportIntent report : model.getReports()) {
             if (report.getName() == null || report.getName()
                                                   .isBlank()) {
@@ -226,8 +231,25 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                         IntentNaming.baseName(context));
                 continue;
             }
-            context.writeModelFile(fileName, REPORT_JSON.toJson(build(context, report)));
+            Map<String, Object> document = build(context, report);
+            context.writeModelFile(fileName, REPORT_JSON.toJson(document));
+            if (mailed.contains(report.getName())) {
+                // The template is written from the columns THIS pass just resolved - the aliases the
+                // query actually SELECTs - so no placeholder in it can be dead. Written once and
+                // developer-owned afterwards, like the document scaffold: a mailed statement is a
+                // formatted artifact, and a later Generate must not overwrite a designed one.
+                String templateFile = ReportPrintTemplate.fileName(report.getName());
+                context.writeModelFileIfAbsent(templateFile, ReportPrintTemplate.build(report, columnsOf(document)));
+                LOGGER.debug("Generated standard report print template [{}]", templateFile);
+            }
         }
+    }
+
+    /** The columns the assembled {@code .report} document carries, empty when it declares none. */
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> columnsOf(Map<String, Object> document) {
+        Object columns = document.get("columns");
+        return columns instanceof List<?> list ? (List<Map<String, Object>>) list : List.of();
     }
 
     /** Test hook: the assembled {@code .report} document for one report. */

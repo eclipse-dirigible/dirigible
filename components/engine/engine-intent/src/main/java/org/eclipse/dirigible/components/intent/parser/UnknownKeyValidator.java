@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 
 import com.google.gson.annotations.SerializedName;
 
@@ -80,6 +81,10 @@ final class UnknownKeyValidator {
             Map.entry("ProcessIntent#trigger",
                     Set.of("onCreate", "onUpdate", "onDelete", "onTransition", "when", "businessKey", "businessKeyStrategy")),
             Map.entry("ProcessIntent#abortOn", Set.of("status", "then")), Map.entry("NotificationIntent#event", GLUE_EVENT_KEYS),
+            // A notify block's `attach` is a scalar (print / recordPrint) OR the report shape
+            // { report, bind } - a non-map node falls straight through this check. `bind`'s own keys are
+            // the named report's parameters, so it stays opaque here and the notify validator checks it.
+            Map.entry("NotificationIntent#attach", NotificationIntent.ATTACH_REPORT_KEYS),
             Map.entry("NotificationIntent#event.onStepReached", Set.of("process", "step")),
             Map.entry("NotificationIntent#event.onStepCompleted", Set.of("process", "step")),
             Map.entry("IntegrationIntent#event", GLUE_EVENT_KEYS),
