@@ -41,7 +41,7 @@ document.addEventListener('alpine:init', () => {
 
     // Role-scoped line-item columns withheld from this caller (see init).
     itemRestricted: [],
-#if($immutableStatusProperty || $immutableAlways)
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
 
     // Immutability pre-check (intent `immutable`/`immutableWhen:`), asked from the scoped
     // controller's GET /{id}/mutable so the Edit affordances stay honest - an /edit URL typed
@@ -99,7 +99,7 @@ document.addEventListener('alpine:init', () => {
       if (this.id) {
         try {
           const record = await App.services.api.get(this.apiPath + '/' + this.id);
-#if($immutableStatusProperty || $immutableAlways)
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
           try {
             const m = await App.services.api.get(this.apiPath + '/' + this.id + '/mutable');
             this.mutable = !m || m.mutable !== false;
@@ -272,7 +272,7 @@ document.addEventListener('alpine:init', () => {
 
     // An immutable document still SHOWS the calendar - it just never opens the item dialog from it.
     itemsEditable() {
-      return #if($immutableStatusProperty || $immutableAlways)this.mutable === true#{else}true#end;
+      return #if($immutableStatusProperty || $immutableAlways || $periodLock)this.mutable === true#{else}true#end;
     },
 
     onItemsEventClick(e) {

@@ -365,6 +365,64 @@ class ModelParameterProcessorTest {
         assertNull(child.get("masterLock"));
     }
 
+    /**
+     * Date-based immutability (intent {@code immutableInPeriod:}): the guarded entity names the
+     * register and its own date, the register carries its bounds and closed statuses, and only this
+     * pass knows both plus the package each one is generated into.
+     */
+    @Test
+    void aGuardedEntityJoinsItsPeriodRegister() {
+        Map<String, Object> register = entity("AccountingPeriod", "Periods", property("Id", "INTEGER"));
+        register.put("periodStartProperty", "StartDate");
+        register.put("periodEndProperty", "EndDate");
+        register.put("periodStatusProperty", "Status");
+        register.put("periodClosedValues", "2");
+        Map<String, Object> entry = entity("JournalEntry", "Ledger", property("EntryDate", "DATE"));
+        entry.put("periodLockEntity", "AccountingPeriod");
+        entry.put("periodLockDateProperty", "EntryDate");
+
+        ModelParameterProcessor.process(model(register, entry), javaParameters());
+
+        Map<String, Object> lock = (Map<String, Object>) entry.get("periodLock");
+        assertEquals("EntryDate", lock.get("dateProperty"));
+        assertEquals("java.time.LocalDate", lock.get("dateJavaClass"));
+        assertEquals("AccountingPeriod", lock.get("entity"));
+        assertEquals("gen.sales_order.data.periods.AccountingPeriodEntity", lock.get("entityClass"));
+        assertEquals("gen.sales_order.data.periods.AccountingPeriodRepository", lock.get("repositoryClass"));
+        assertEquals("StartDate", lock.get("startProperty"));
+        assertEquals("EndDate", lock.get("endProperty"));
+        assertEquals("Status", lock.get("statusProperty"));
+        assertEquals("2", lock.get("closedValues"));
+        // The register itself is not guarded by anything - closing a period is a write to the register.
+        assertNull(register.get("periodLock"));
+    }
+
+    /**
+     * A line's writes recompute its master's totals, so a document dated in a closed period freezes its
+     * lines with it - the same argument that made the status lock reach the children.
+     */
+    @Test
+    void aCompositionChildInheritsItsMastersPeriodLock() {
+        Map<String, Object> register = entity("AccountingPeriod", "Periods", property("Id", "INTEGER"));
+        register.put("periodStartProperty", "StartDate");
+        register.put("periodEndProperty", "EndDate");
+        register.put("periodStatusProperty", "Status");
+        register.put("periodClosedValues", "2");
+        Map<String, Object> master = entity("Invoice", "Invoices", property("IssueDate", "DATE"));
+        master.put("periodLockEntity", "AccountingPeriod");
+        master.put("periodLockDateProperty", "IssueDate");
+        Map<String, Object> child = entity("InvoiceItem", "Invoices", compositionTo("Invoice", "Invoices"));
+
+        ModelParameterProcessor.process(model(register, master, child), javaParameters());
+
+        Map<String, Object> lock = masterLock(child);
+        // A master locked only by its period carries no status half, and the guard says so.
+        assertEquals(Boolean.FALSE, lock.get("statusLock"));
+        Map<String, Object> period = (Map<String, Object>) lock.get("period");
+        assertEquals("IssueDate", period.get("dateProperty"));
+        assertEquals("gen.sales_order.data.periods.AccountingPeriodRepository", period.get("repositoryClass"));
+    }
+
     @Test
     void aChildOfAnUnlockedMasterCarriesNoGuard() {
         Map<String, Object> master = entity("Invoice", "Invoices", property("Id", "INTEGER"));

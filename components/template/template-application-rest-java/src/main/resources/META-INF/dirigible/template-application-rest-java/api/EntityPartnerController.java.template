@@ -145,6 +145,10 @@ public class ${name}PartnerController {
 #if($masterLock)
         requireMasterMutable(entity.${masterLock.fkProperty});
 #end
+#if($periodLock)
+        // Nothing new may be filed into a closed period either - that is what closing one means.
+        requirePeriodOpen(entity.${periodLock.dateProperty});
+#end
 #foreach($sensitive in $sensitiveProperties)
         entity.${sensitive} = null;
 #end
@@ -163,11 +167,15 @@ public class ${name}PartnerController {
     @Documentation("Update my ${name} by id")
     public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
         ${name}Entity existing = requireMine(id);
-#if($immutableAlways || $immutableStatusProperty)
+#if($immutableAlways || $immutableStatusProperty || $periodLock)
         requireMutable(existing);
 #end
 #if($masterLock)
         requireMasterMutable(existing.${masterLock.fkProperty});
+#end
+#if($periodLock)
+        // The stored date is checked above; this refuses a move INTO a closed period.
+        requirePeriodOpen(entity.${periodLock.dateProperty});
 #end
         entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = id;
 #if($partnerParent)
@@ -195,7 +203,7 @@ public class ${name}PartnerController {
     @Documentation("Delete my ${name} by id")
     public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
         ${name}Entity existing = requireMine(id);
-#if($immutableAlways || $immutableStatusProperty)
+#if($immutableAlways || $immutableStatusProperty || $periodLock)
         requireMutable(existing);
 #end
 #if($masterLock)
@@ -291,17 +299,28 @@ public class ${name}PartnerController {
             return;
         }
         ${masterLock.entityClass} master = ${masterRepositoryRef}.findOne(masterId).orElse(null);
-        if (master == null || isMasterMutable(master)) {
+        if (master == null) {
             return;
         }
+#if($masterLock.statusLock)
+        if (!isMasterMutable(master)) {
 #if($masterLock.always)
-        throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "This ${name} belongs to an append-only ${masterLock.entity} and can no longer be changed");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This ${name} belongs to an append-only ${masterLock.entity} and can no longer be changed");
 #else
-        throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "The ${masterLock.entity} of this ${name} is immutable in its current status - corrections go through the workflow");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The ${masterLock.entity} of this ${name} is immutable in its current status - corrections go through the workflow");
+#end
+        }
+#end
+#if($masterLock.period)
+        if (!isMasterPeriodOpen(master.${masterLock.period.dateProperty})) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The ${masterLock.period.entity} covering this ${masterLock.entity} is closed - book the correction in an open period");
+        }
 #end
     }
+#if($masterLock.statusLock)
 
     private static boolean isMasterMutable(${masterLock.entityClass} master) {
 #if($masterLock.always)
@@ -319,36 +338,97 @@ public class ${name}PartnerController {
 #end
     }
 #end
-#if($immutableAlways)
+#if($masterLock.period)
 
-    private void requireMutable(${name}Entity existing) {
-        if (isMutable(existing)) {
-            return;
+    // The master's own period guard, read through the line: adding, editing or removing a line
+    // recomputes the document's totals, so a document dated in a closed period freezes its lines with
+    // it - exactly as a locked status does.
+    private boolean isMasterPeriodOpen(${masterLock.period.dateJavaClass} date) {
+        if (date == null) {
+            return true;
         }
+        for (${masterLock.period.entityClass} period : new ${masterLock.period.repositoryClass}().findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                   .le("${masterLock.period.startProperty}", date)
+                                                                                   .ge("${masterLock.period.endProperty}", date))) {
+            if (period.${masterLock.period.statusProperty} != null) {
+                for (String closed : "${masterLock.period.closedValues}".split(",")) {
+                    if (closed.equals(String.valueOf(period.${masterLock.period.statusProperty}))) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+#end
+#end
+#if($immutableAlways || $immutableStatusProperty || $periodLock)
+
+    // User-write immutability. `immutable: true` freezes a record from the moment it is created,
+    // `immutableWhen:` while its status says so, `immutableInPeriod:` while the period covering its
+    // date is closed - and the three compose. Workflow / system writes through the repository stay
+    // unaffected, as on the power surface.
+    private void requireMutable(${name}Entity existing) {
+#if($immutableAlways)
         throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "This ${name} is append-only - records can neither be edited nor deleted");
-    }
-
-    private static boolean isMutable(${name}Entity existing) {
-        return false;
-    }
-#elseif($immutableStatusProperty)
-
-    private void requireMutable(${name}Entity existing) {
-        if (isMutable(existing)) {
-            return;
+#else
+#if($immutableStatusProperty)
+        if (!isStatusMutable(existing)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This ${name} is immutable in its current status - corrections go through the workflow");
         }
-        throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "This ${name} is immutable in its current status - corrections go through the workflow");
+#end
+#if($periodLock)
+        requirePeriodOpen(existing.${periodLock.dateProperty});
+#end
+#end
     }
+#end
+#if($immutableStatusProperty && !$immutableAlways)
 
-    private static boolean isMutable(${name}Entity existing) {
+    private static boolean isStatusMutable(${name}Entity existing) {
         if (existing.${immutableStatusProperty} == null) {
             return true;
         }
         for (String immutable : "${immutableStatusValues}".split(",")) {
             if (immutable.equals(String.valueOf(existing.${immutableStatusProperty}))) {
                 return false;
+            }
+        }
+        return true;
+    }
+#end
+#if($periodLock)
+
+    // Date-based immutability (intent `immutableInPeriod:`): once the ${periodLock.entity} covering a
+    // record's ${periodLock.dateProperty} is closed, that record can no longer be created, edited or
+    // deleted through this REST surface, whatever status it carries.
+    private void requirePeriodOpen(${periodLock.dateJavaClass} date) {
+        if (isPeriodOpen(date)) {
+            return;
+        }
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "The ${periodLock.entity} covering this date is closed - book the correction in an open period");
+    }
+
+    // A date covered by no period at all is open: periods are declared as they are needed, and an
+    // unopened future month must not freeze the present. A record carrying no date falls in none.
+    private boolean isPeriodOpen(${periodLock.dateJavaClass} date) {
+        if (date == null) {
+            return true;
+        }
+        for (${periodLock.entityClass} period : new ${periodLock.repositoryClass}().findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                   .le("${periodLock.startProperty}", date)
+                                                                                   .ge("${periodLock.endProperty}", date))) {
+            if (period.${periodLock.statusProperty} != null) {
+                for (String closed : "${periodLock.closedValues}".split(",")) {
+                    if (closed.equals(String.valueOf(period.${periodLock.statusProperty}))) {
+                        return false;
+                    }
+                }
             }
         }
         return true;

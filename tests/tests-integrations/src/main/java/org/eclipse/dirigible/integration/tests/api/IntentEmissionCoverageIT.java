@@ -68,8 +68,11 @@ import ch.qos.logback.classic.Level;
  * generated token at minimum, the runtime behavior where reachable), never only the parsed model.
  * Covered here: {@code immutableWhen} / {@code immutable} (409 on write/delete, and the lock
  * inherited by a composition child - a line of a locked document is refused while a child that
- * declared {@code locksWithMaster: false} keeps its writes), {@code checks} (exactlyOne / itemsMin
- * / itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual} (the read-time overlay
+ * declared {@code locksWithMaster: false} keeps its writes), {@code immutableInPeriod} (the same
+ * 409 keyed on a period register's status instead - a record booked into an open period stops being
+ * writable when the period around it closes, a create into or a move into a closed one is refused,
+ * and a date no period covers stays writable), {@code checks} (exactlyOne / itemsMin /
+ * itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual} (the read-time overlay
  * on an entity read, and its SQL counterpart on a report grouping by that nomenclature - the two
  * must agree on the same value in the same language), seed rows carrying a RELATION column,
  * aggregate totals, first-class {@code number:} stamping from an authored {@code .numbers} series
@@ -164,6 +167,33 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: note, type: string, length: 200 }
                 relations:
                   - { name: Tariff, kind: manyToOne, to: Tariff, calculatedActionOnCreate: QuoteTariffAction }
+
+              # Date-based immutability (immutableInPeriod:). The register declares its own two
+              # bounds and what CLOSED means; a record dated inside a closed window is frozen for
+              # user writes whatever status it carries - and unlike immutableWhen, a CREATE into a
+              # closed period is refused too, which is what closing one means.
+              - name: PeriodStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string,  required: true, length: 100 }
+
+              - name: AccountingPeriod
+                period: { start: startDate, end: endDate, closedWhen: "Status == CLOSED" }
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: name,      type: string, length: 100 }
+                  - { name: startDate, type: date, required: true }
+                  - { name: endDate,   type: date, required: true }
+                relations:
+                  - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: 1 }
+
+              - name: LedgerBooking
+                immutableInPeriod: { period: AccountingPeriod, date: bookedOn }
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: bookedOn, type: date, required: true }
+                  - { name: amount,   type: decimal }
 
               # Append-only (immutable: true): e.g. the snapshot stored when a document is sent -
               # user writes and deletes are rejected from the moment a record is created.
@@ -1313,6 +1343,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # The base tariff is row 2, NOT row 1: a calculated FK that resolved to 1 could be a
               # coincidence (a first row, a stray default), one that resolves to 2 can only be the
               # action having run and matched on `base`.
+              - name: period-statuses
+                entity: PeriodStatus
+                rows:
+                  - { id: 1, name: OPEN }
+                  - { id: 2, name: CLOSED }
               - name: tariffs
                 entity: Tariff
                 rows:
@@ -1605,6 +1640,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String entryMasterPage = contentOf("gen/emission/js/components/pages/Entry/EntryMasterPage.js");
         assertTrue(entryMasterPage.contains("isRowImmutable"),
                 "the browse page must gate row Edit/Delete on the baked per-row immutability check");
+        // Date-based immutability: the guard queries the register the intent named, and the same
+        // pre-check endpoint the status lock exposes now answers for it too.
+        String ledgerBookingController = contentOf("gen/emission/api/ledgerbooking/LedgerBookingController.java");
+        assertTrue(ledgerBookingController.contains("requirePeriodOpen(") && ledgerBookingController.contains("AccountingPeriodRepository"),
+                "immutableInPeriod must emit the period guard querying the declared register");
+        assertTrue(ledgerBookingController.contains("/{id}/mutable"),
+                "immutableInPeriod must emit the GET /{id}/mutable pre-check endpoint in the REST controller");
         assertTrue(entryController.contains("must reference a leaf"),
                 "leafOnly must emit the server-side children check in the REST controller");
 
@@ -3474,6 +3516,98 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("mutable", equalTo(false)));
+
+        // immutableInPeriod: the lock is DATA-driven, so it has to be exercised over the register's
+        // own lifecycle - a record booked into an open period is writable, and the very same record
+        // stops being writable the moment the accountant closes the period around it.
+        AtomicInteger fiscalPeriod = new AtomicInteger();
+        restAssuredExecutor.execute(() -> fiscalPeriod.set(given().contentType("application/json")
+                                                                  .body("{\"Name\":\"2026-03\",\"StartDate\":\"2026-03-01\",\"EndDate\":\"2026-03-31\",\"Status\":1}")
+                                                                  .when()
+                                                                  .post(API + "/accountingperiod/AccountingPeriodController")
+                                                                  .then()
+                                                                  .statusCode(200)
+                                                                  .extract()
+                                                                  .path("Id")));
+        AtomicInteger ledgerBooking = new AtomicInteger();
+        restAssuredExecutor.execute(() -> ledgerBooking.set(given().contentType("application/json")
+                                                                   .body("{\"BookedOn\":\"2026-03-10\",\"Amount\":100}")
+                                                                   .when()
+                                                                   .post(API + "/ledgerbooking/LedgerBookingController")
+                                                                   .then()
+                                                                   .statusCode(200)
+                                                                   .extract()
+                                                                   .path("Id")));
+        // A date no period covers at all stays writable - periods are opened as they are needed, and
+        // an undeclared month must not freeze what is booked into it.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"BookedOn\":\"2027-07-04\",\"Amount\":5}")
+                                                 .when()
+                                                 .post(API + "/ledgerbooking/LedgerBookingController")
+                                                 .then()
+                                                 .statusCode(200));
+        // Close March.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + fiscalPeriod.get()
+                                                         + ",\"Name\":\"2026-03\",\"StartDate\":\"2026-03-01\",\"EndDate\":\"2026-03-31\",\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/accountingperiod/AccountingPeriodController/" + fiscalPeriod.get())
+                                                 .then()
+                                                 .statusCode(200));
+        // The stored record is frozen - edit, delete, and a new record dated inside the closed window.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + ledgerBooking.get() + ",\"BookedOn\":\"2026-03-10\",\"Amount\":999}")
+                                                 .when()
+                                                 .put(API + "/ledgerbooking/LedgerBookingController/" + ledgerBooking.get())
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(API + "/ledgerbooking/LedgerBookingController/" + ledgerBooking.get())
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"BookedOn\":\"2026-03-20\",\"Amount\":7}")
+                                                 .when()
+                                                 .post(API + "/ledgerbooking/LedgerBookingController")
+                                                 .then()
+                                                 .statusCode(409));
+        // Moving a record INTO the closed period is refused as well - otherwise the guard would only
+        // protect what was already there.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"BookedOn\":\"2026-04-02\",\"Amount\":11}")
+                                                 .when()
+                                                 .post(API + "/ledgerbooking/LedgerBookingController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .extract()
+                                                 .path("Id"));
+        AtomicInteger april = new AtomicInteger();
+        restAssuredExecutor.execute(() -> april.set(given().contentType("application/json")
+                                                           .body("{\"BookedOn\":\"2026-04-03\",\"Amount\":12}")
+                                                           .when()
+                                                           .post(API + "/ledgerbooking/LedgerBookingController")
+                                                           .then()
+                                                           .statusCode(200)
+                                                           .extract()
+                                                           .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + april.get() + ",\"BookedOn\":\"2026-03-15\",\"Amount\":12}")
+                                                 .when()
+                                                 .put(API + "/ledgerbooking/LedgerBookingController/" + april.get())
+                                                 .then()
+                                                 .statusCode(409));
+        // ...and the pre-check endpoint reports it, so the form opens read-only rather than 409-ing
+        // on Save.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/ledgerbooking/LedgerBookingController/" + ledgerBooking.get() + "/mutable")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("mutable", equalTo(false)));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/ledgerbooking/LedgerBookingController/" + april.get() + "/mutable")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("mutable", equalTo(true)));
 
         // transitions: a fresh DRAFT entry cancels (200, status CANCELLED)...
         String transitionRun = "/services/java/" + PROJECT + "/gen/events/emission/CancelEntryTransition/run";

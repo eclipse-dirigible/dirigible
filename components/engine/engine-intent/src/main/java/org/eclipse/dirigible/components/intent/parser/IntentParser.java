@@ -63,6 +63,8 @@ import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.OutboundIntent;
 import org.eclipse.dirigible.components.intent.model.OutboundTargetIntent;
+import org.eclipse.dirigible.components.intent.model.PeriodIntent;
+import org.eclipse.dirigible.components.intent.model.PeriodLockIntent;
 import org.eclipse.dirigible.components.intent.model.PermissionIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessVarIntent;
@@ -2858,6 +2860,12 @@ public final class IntentParser {
                                                                    .isBlank()) {
                 validateImmutableWhen(entity, issues);
             }
+            if (entity.getPeriod() != null) {
+                validatePeriod(entity, issues);
+            }
+            if (entity.getImmutableInPeriod() != null) {
+                validateImmutableInPeriod(entity, byName, issues);
+            }
             if (entity.getChecks() != null) {
                 for (CheckIntent check : entity.getChecks()) {
                     validateCheck(entity, check, byName, model.getAggregates(), issues);
@@ -3182,22 +3190,95 @@ public final class IntentParser {
      * relation by its authored name, and the seed ids must be positive integers.
      */
     private static void validateImmutableWhen(EntityIntent entity, List<String> issues) {
-        String subject = "entity [" + entity.getName() + "] immutableWhen";
+        validateStatusExpression(entity, "entity [" + entity.getName() + "] immutableWhen", entity.getImmutableWhen(), issues);
+    }
+
+    /**
+     * A {@code period:} marker makes the entity a period register: its rows are the dated windows other
+     * entities are locked by. The two bounds must be its own {@code date} fields - a timestamp would
+     * make "the period covering this date" depend on a time of day nobody authored - and
+     * {@code closedWhen} must be a status expression over its own {@code function: EntityStatus}
+     * relation, since closing a period is a status transition like any other.
+     */
+    private static void validatePeriod(EntityIntent entity, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] period";
+        PeriodIntent period = entity.getPeriod();
+        validatePeriodBound(entity, subject, "start", period.getStart(), issues);
+        validatePeriodBound(entity, subject, "end", period.getEnd(), issues);
+        if (period.getClosedWhen() == null || period.getClosedWhen()
+                                                    .isBlank()) {
+            issues.add(subject + " declares no closedWhen - nothing would ever close the period");
+            return;
+        }
+        validateStatusExpression(entity, subject + " closedWhen", period.getClosedWhen(), issues);
+    }
+
+    /** One bound of a period register: a declared {@code date} field of the register itself. */
+    private static void validatePeriodBound(EntityIntent entity, String subject, String key, String name, List<String> issues) {
+        if (name == null || name.isBlank()) {
+            issues.add(subject + " declares no " + key + " - a period is bounded on both sides");
+            return;
+        }
+        FieldIntent bound = fieldByName(entity, name);
+        if (bound == null) {
+            issues.add(subject + " " + key + " [" + name + "] is not a field of [" + entity.getName() + "]");
+        } else if (!"date".equals(bound.getType())) {
+            issues.add(subject + " " + key + " [" + name + "] must be a date field - it is [" + bound.getType() + "]");
+        }
+    }
+
+    /**
+     * {@code immutableInPeriod: { period: <Register>, date: <own date field> }} refuses USER writes
+     * while the register row covering that date is closed. The register must be an entity of THIS model
+     * declaring {@code period:} - the guard is generated into this model's controllers, which can only
+     * query a repository generated alongside them - and the date must be this entity's own {@code date}
+     * field, matching the register's own bounds.
+     */
+    private static void validateImmutableInPeriod(EntityIntent entity, Map<String, EntityIntent> byName, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] immutableInPeriod";
+        PeriodLockIntent lock = entity.getImmutableInPeriod();
+        if (lock.getPeriod() == null || lock.getPeriod()
+                                            .isBlank()) {
+            issues.add(subject + " declares no period - name the entity that declares period:");
+        } else {
+            EntityIntent register = byName.get(lock.getPeriod());
+            if (register == null) {
+                issues.add(subject + " period [" + lock.getPeriod()
+                        + "] is not an entity of this model - a period register must be generated alongside what it locks");
+            } else if (register.getPeriod() == null) {
+                issues.add(subject + " period [" + lock.getPeriod() + "] does not declare period: - it is not a period register");
+            }
+        }
+        if (lock.getDate() == null || lock.getDate()
+                                          .isBlank()) {
+            issues.add(subject + " declares no date - name the field whose value decides the period");
+            return;
+        }
+        FieldIntent date = fieldByName(entity, lock.getDate());
+        if (date == null) {
+            issues.add(subject + " date [" + lock.getDate() + "] is not a field of [" + entity.getName() + "]");
+        } else if (!"date".equals(date.getType())) {
+            issues.add(subject + " date [" + lock.getDate() + "] must be a date field - it is [" + date.getType() + "]");
+        }
+    }
+
+    /**
+     * A boolean expression over an entity's own {@code function: EntityStatus} relation - the
+     * {@code immutableWhen} grammar, reused wherever a status condition is authored as text.
+     */
+    private static void validateStatusExpression(EntityIntent entity, String subject, String expression, List<String> issues) {
         RelationIntent status = null;
-        if (entity.getRelations() != null) {
-            for (RelationIntent relation : entity.getRelations()) {
-                if (relation.isEntityStatus()) {
-                    status = relation;
-                    break;
-                }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.isEntityStatus()) {
+                status = relation;
+                break;
             }
         }
         if (status == null) {
-            issues.add(subject + " requires a `function: EntityStatus` relation - immutability keys on the status");
+            issues.add(subject + " requires a `function: EntityStatus` relation on [" + entity.getName() + "]");
             return;
         }
-        for (String term : entity.getImmutableWhen()
-                                 .split("\\|\\|")) {
+        for (String term : expression.split("\\|\\|")) {
             java.util.regex.Matcher matcher = IMMUTABLE_WHEN_TERM.matcher(term);
             if (!matcher.matches()) {
                 issues.add(subject + " term [" + term.trim() + "] must be `<Status relation> == <seed id>` (terms joined with ||)");
