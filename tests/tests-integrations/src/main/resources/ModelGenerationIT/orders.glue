@@ -460,6 +460,50 @@
             "usesInboxUrl": false,
             "recordUrlEntity": "",
             "recordUrlKeyProperty": ""
+        },
+        {
+            "name": "monthlyStatements",
+            "className": "MonthlyStatements",
+            "cron": "0 0 7 1 * ?",
+            "entity": "Customer",
+            "perspective": "Partners",
+            "criteriaExpression": "Criteria.create().gt(\"OpenBalance\", 0)",
+            "action": "notify",
+            "sourceCrossModel": false,
+            "sourceModel": "",
+            "attachKeyProperty": "Id",
+            "relationLoads": [],
+            "toExpression": "entity.Email",
+            "subjectExpression": "\"Your statement\"",
+            "bodyExpression": "\"Please find attached your account statement.\"",
+            "attach": "report",
+            "attachEntity": "",
+            "attachReport": "CustomerStatement",
+            "attachReportBindings": [
+                {
+                    "parameter": "customer",
+                    "expression": "entity.Name"
+                },
+                {
+                    "parameter": "fromDate",
+                    "expression": "entity.PeriodStart"
+                },
+                {
+                    "parameter": "toDate",
+                    "expression": "entity.PeriodEnd"
+                }
+            ],
+            "attachLanguageExpression": "attachLanguageSource == null || attachLanguageSource.Language == null || attachLanguageSource.Language.isBlank() ? org.eclipse.dirigible.sdk.print.Print.defaultLanguage() : attachLanguageSource.Language.trim()",
+            "attachFileNameExpression": "\"CustomerStatement \" + \"Customer \" + entity.Id + \".pdf\"",
+            "attachLanguageFkProperty": "Country",
+            "attachLanguageTargetEntity": "Country",
+            "attachLanguageTargetPerspective": "Nomenclatures",
+            "attachLanguageCrossModel": false,
+            "attachLanguageTargetModel": "",
+            "usesRecordUrl": false,
+            "usesInboxUrl": false,
+            "recordUrlEntity": "",
+            "recordUrlKeyProperty": ""
         }
     ]
 }

@@ -24,6 +24,7 @@ filters) are covered at the generation layer by `IntentEngineIT` and the parser 
 | [`function`](#function--presentation-role) | explicit presentation role (Document, Setting, ...) |
 | [`checks`](#checks--declarative-validations) | cross-field / cross-line validations |
 | [`immutableWhen` / `immutable`](#immutablewhen--immutable---user-write-immutability) | 409 on user writes in a status / append-only snapshots |
+| [`period` / `immutableInPeriod`](#period--immutableinperiod---date-based-immutability) | 409 on user writes to a record dated in a closed fiscal period |
 | [`lifecycle`](#lifecycle---the-legal-status-graph) | the whole legal status graph, enforced on every status write |
 | [`phases`](#phases--the-enrichment-channel) | a named moment a listener's silent enrichment announces, which a consumer can bind |
 | [`hierarchy` / `leafOnly`](#hierarchy--leafonly--tree-entities) | tree entities, leaf-only references |
@@ -142,6 +143,41 @@ message).
 seed ids (terms joined with `||`). `immutable: true` is the unconditional append-only variant, mutually
 exclusive with `immutableWhen`. Workflow/system writes through the repository stay possible -
 corrections are flow-generated reversals, never edits.
+
+## period / immutableInPeriod - date-based immutability
+
+```yaml
+- name: AccountingPeriod
+  period:
+    start: startDate
+    end: endDate                       # inclusive
+    closedWhen: "Status == CLOSED"     # the immutableWhen grammar; seeded names or ids
+  fields:
+    - { name: id,        type: integer, primaryKey: true, generated: true }
+    - { name: startDate, type: date }
+    - { name: endDate,   type: date }
+  relations:
+    - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: OPEN }
+
+- name: JournalEntry
+  immutableInPeriod: { period: AccountingPeriod, date: entryDate }
+```
+
+`immutableWhen` freezes a record for what it IS; this freezes it for WHEN it falls. Once the period
+covering the named date is closed, that record can no longer be created, edited or deleted through
+the REST surface (409) - including a CREATE dated inside the closed window and an update that would
+MOVE a record into one. Workflow / system writes through the repository stay possible, exactly as for
+the status guard: a correction to a closed period is a reversal booked in an open one.
+
+The register is an ordinary entity, so closing a period is a plain status transition (a
+`transitions:` button, a `lifecycle:` edge, a workflow step) - `period:` only names the two bounds
+and what CLOSED means, once, where the period lives.
+
+A date covered by **no** period is open (periods are opened as they are needed, and an undeclared
+month must not freeze what is booked into it), and a record whose date is unset falls in none. The
+lock reaches a composition CHILD of a guarded master, as the status lock does, since a line write
+recomputes the document's totals. The register must be an entity of the SAME model - the guard is
+generated into this model's controllers, which can only query a repository generated alongside them.
 
 ## lifecycle - the legal status graph
 
@@ -562,6 +598,23 @@ rollups:
 
 Roll-ups compose transitively across a multi-level composition (leaf edit -> mid total -> top
 total); recomputation stops when values stop changing.
+
+Either end may be owned by another model. A cross-model PARENT is named by the `via` relation's own
+`model:` alias (the child is local and owns the event). A cross-model CHILD is named by the roll-up's
+`model:` plus a `parent:` naming the local entity the total lands on - the n:m allocation direction,
+where the link rows live with one side of the pairing and the other side's total belongs here:
+
+```yaml
+rollups:
+  - { name: paymentAllocated, entity: SalesInvoiceCustomerPayment, model: sales-invoices,
+      parent: CustomerPayment, via: CustomerPayment, field: allocated, op: sum, of: amount }
+```
+
+`capacity`/`balance`/`status` are refused for a cross-model PARENT (they read its own fields and
+seeds) but work for a cross-model CHILD, where they are writes on the local parent - except the
+overdraw guard, which belongs to the child's own DAO and is reported as not installed. The vacated
+side of a re-parented FOREIGN child is repaired only when the owner model marks that relation as a
+grouping key.
 
 ## settlements - payment allocation
 

@@ -169,6 +169,14 @@ final class StatusSymbolResolver {
                         "entity [" + entityName + "] immutableWhen");
                 put(entity, "immutableWhen", rewritten);
             }
+            // A period register's closedWhen keys on the REGISTER's own status - and the register is
+            // this entity, so the same target resolves it.
+            Map<?, ?> period = asMap(entity.get("period"));
+            if (period != null && period.get("closedWhen") != null) {
+                String rewritten = rewriteExpression(text(period, "closedWhen"), statusRelation, status,
+                        "entity [" + entityName + "] period closedWhen");
+                put(period, "closedWhen", rewritten);
+            }
             for (Object checkNode : asList(entity.get("checks"))) {
                 Map<?, ?> check = asMap(checkNode);
                 if (check == null) {

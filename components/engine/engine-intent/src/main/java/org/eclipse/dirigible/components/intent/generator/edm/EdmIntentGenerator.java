@@ -48,6 +48,8 @@ import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.LifecycleEdgeIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleStages;
+import org.eclipse.dirigible.components.intent.model.PeriodIntent;
+import org.eclipse.dirigible.components.intent.model.PeriodLockIntent;
 import org.eclipse.dirigible.components.intent.model.RelatedIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
@@ -608,6 +610,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     entityMap.put("immutableStatusValues", String.join(",", ids));
                 }
             }
+            putPeriod(entityMap, entity);
             putLifecycle(entityMap, entity, model);
             if (entity.getHierarchy() != null && !entity.getHierarchy()
                                                         .isBlank()) {
@@ -653,6 +656,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // child is the ordinary way that column moves. Without it here, only aggregate sources were
             // tracked and a re-parented roll-up child left its former parent's total stale forever (#6819).
             for (RollupIntent rollup : model.getRollups()) {
+                // A CROSS-MODEL child's grouping column belongs to the owner model's own .model - this
+                // one must not claim it off a local entity that merely shares the foreign child's name.
+                if (rollup.isCrossModelChild()) {
+                    continue;
+                }
                 if (rollup.getVia() != null && entity.getName()
                                                      .equals(rollup.getEntity())) {
                     addGroupingKey(groupingKeys, seenGroupingKeys, rollup.getVia());
@@ -840,6 +848,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             Map<String, String> compositionParents) {
         Map<String, Map<String, Object>> guards = new HashMap<>();
         for (RollupIntent rollup : model.getRollups()) {
+            // A cross-model child cannot carry a guard (the parser refuses capacity there) and must not
+            // be confused with a local entity of the same name.
+            if (rollup.isCrossModelChild()) {
+                continue;
+            }
             if (!"sum".equals(rollup.getOp()) || rollup.getCapacity() == null || rollup.getCapacity()
                                                                                        .isBlank()
                     || rollup.getOf() == null || rollup.getOf()
@@ -1995,6 +2008,52 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * does; the parser has already rejected an unseeded or self-referencing edge, so what is emitted
      * here is a valid graph.
      */
+    /**
+     * The two halves of date-based immutability, each emitted on the entity that DECLARES it.
+     *
+     * <p>
+     * A period register contributes its own shape - the two bounds, the status property and the seed
+     * ids that mean closed; a guarded entity contributes the register's name and which of its own dates
+     * decides the window. Scalars, like {@code immutableStatusValues}, so both reach the {@code .edm}
+     * twin as attributes; joining them into the guard the controller emits is
+     * {@code ModelParameterProcessor}'s job, exactly as for a master's inherited lock - it is the pass
+     * that already knows every entity's generated package.
+     *
+     * @param entityMap the entity's model map
+     * @param entity the authored entity
+     */
+    private static void putPeriod(Map<String, Object> entityMap, EntityIntent entity) {
+        PeriodIntent period = entity.getPeriod();
+        if (period != null) {
+            RelationIntent status = entityStatusRelation(entity);
+            if (status != null) {
+                entityMap.put("periodStartProperty", IntentNaming.pascalCase(period.getStart()));
+                entityMap.put("periodEndProperty", IntentNaming.pascalCase(period.getEnd()));
+                entityMap.put("periodStatusProperty", IntentNaming.pascalCase(status.getName()));
+                entityMap.put("periodClosedValues", statusIds(period.getClosedWhen()));
+            }
+        }
+        PeriodLockIntent lock = entity.getImmutableInPeriod();
+        if (lock != null) {
+            entityMap.put("periodLockEntity", lock.getPeriod());
+            entityMap.put("periodLockDateProperty", IntentNaming.pascalCase(lock.getDate()));
+        }
+    }
+
+    /**
+     * The seed ids of a status expression, in authored order, as the comma-separated list templates
+     * read.
+     */
+    private static String statusIds(String expression) {
+        List<String> ids = new ArrayList<>();
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("==\\s*(\\d+)")
+                                                                 .matcher(expression == null ? "" : expression);
+        while (matcher.find()) {
+            ids.add(matcher.group(1));
+        }
+        return String.join(",", ids);
+    }
+
     private static void putLifecycle(Map<String, Object> entityMap, EntityIntent entity, IntentModel model) {
         LifecycleIntent lifecycle = entity.getLifecycle();
         RelationIntent status = lifecycle == null ? null : entityStatusRelation(entity);

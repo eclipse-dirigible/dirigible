@@ -18,6 +18,8 @@ import java.util.List;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
+import org.eclipse.dirigible.components.intent.model.PeriodIntent;
+import org.eclipse.dirigible.components.intent.model.PeriodLockIntent;
 import org.junit.jupiter.api.Test;
 
 class IntentParserTest {
@@ -543,6 +545,154 @@ class IntentParserTest {
                              .getDependsOn();
         assertEquals("Country", dependsOn.getRelation());
         assertEquals("Country", dependsOn.getFilterBy());
+    }
+
+    @Test
+    void periodLockParsesAndValidates() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: PeriodStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: AccountingPeriod
+                    period: { start: startDate, end: endDate, closedWhen: "Status == CLOSED" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: startDate, type: date }
+                      - { name: endDate, type: date }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: 1 }
+                  - name: JournalEntry
+                    immutableInPeriod: { period: AccountingPeriod, date: entryDate }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: entryDate, type: date }
+                seeds:
+                  - name: period-statuses
+                    entity: PeriodStatus
+                    rows:
+                      - { id: 1, name: OPEN }
+                      - { id: 2, name: CLOSED }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        PeriodIntent period = model.getEntities()
+                                   .get(1)
+                                   .getPeriod();
+        assertEquals("startDate", period.getStart());
+        assertEquals("endDate", period.getEnd());
+        // The seeded name resolves to the id before the typed mapping, as everywhere a status is named.
+        assertEquals("Status == 2", period.getClosedWhen());
+        PeriodLockIntent lock = model.getEntities()
+                                     .get(2)
+                                     .getImmutableInPeriod();
+        assertEquals("AccountingPeriod", lock.getPeriod());
+        assertEquals("entryDate", lock.getDate());
+    }
+
+    @Test
+    void periodLockRejectsWhatItCannotGenerate() {
+        String timestampBound = """
+                name: ledger
+                entities:
+                  - name: PeriodStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: AccountingPeriod
+                    period: { start: startDate, end: endDate, closedWhen: "Status == 2" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: startDate, type: date }
+                      - { name: endDate, type: timestamp }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: 1 }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(timestampBound));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("end [endDate] must be a date field")),
+                "expected a bound-type issue, got: " + ex.getIssues());
+
+        String noStatus = """
+                name: ledger
+                entities:
+                  - name: AccountingPeriod
+                    period: { start: startDate, end: endDate, closedWhen: "Status == 2" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: startDate, type: date }
+                      - { name: endDate, type: date }
+                """;
+        ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(noStatus));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("closedWhen requires a `function: EntityStatus` relation")),
+                "expected a missing-status issue, got: " + ex.getIssues());
+
+        String notARegister = """
+                name: ledger
+                entities:
+                  - name: AccountingPeriod
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: JournalEntry
+                    immutableInPeriod: { period: AccountingPeriod, date: entryDate }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: entryDate, type: date }
+                """;
+        ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(notARegister));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("does not declare period:")),
+                "expected a not-a-register issue, got: " + ex.getIssues());
+
+        String unknownRegister = """
+                name: ledger
+                entities:
+                  - name: JournalEntry
+                    immutableInPeriod: { period: FiscalPeriod, date: entryDate }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: entryDate, type: date }
+                """;
+        ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(unknownRegister));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("is not an entity of this model")),
+                "expected a cross-model issue, got: " + ex.getIssues());
+
+        String wrongDate = """
+                name: ledger
+                entities:
+                  - name: PeriodStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: AccountingPeriod
+                    period: { start: startDate, end: endDate, closedWhen: "Status == 2" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: startDate, type: date }
+                      - { name: endDate, type: date }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: 1 }
+                  - name: JournalEntry
+                    immutableInPeriod: { period: AccountingPeriod, date: postedAt }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: postedAt, type: timestamp }
+                """;
+        ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(wrongDate));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("date [postedAt] must be a date field")),
+                "expected a date-type issue, got: " + ex.getIssues());
     }
 
     @Test

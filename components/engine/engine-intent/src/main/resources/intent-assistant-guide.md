@@ -114,8 +114,9 @@ not as an apology.
 - **The notify block is ONE shape reused at four call sites** - a `notifications[]` entry, a
   `schedules[].notify`, a `transitions[].notify`, and a `serviceTask`'s `args.notify`. Everywhere it is
   `to` / `subject` / `body` (+ `channel: email`), with `{field}` / `{relation.field}` interpolation in
-  the subject and body, plus the optional **`attach: print`** that mails the record's own rendered
-  document - see *send a document by e-mail*.
+  the subject and body, plus the optional **`attach:`** that mails a render along - `print` for the
+  record's own document (see *send a document by e-mail*), or `{ report, bind }` for a parameterized
+  report scoped to the recipient (see *mail a REPORT*).
 - **`{recordUrl}` and `{inboxUrl}` are the ready-made deep links - prefer them.** `{recordUrl}` is the
   link to the record the message is about (`body: "Approve it here: {recordUrl}"`), `{inboxUrl}` the
   link to the recipient's process Inbox. Both are assembled for you, so **never hand-type a route** -
@@ -306,6 +307,24 @@ field may declare:
   snapshot entity (e.g. the frozen copy stored when an invoice is SENT): written once by the flow,
   never editable. System writes through the repository stay possible. Mutually exclusive with
   `immutableWhen` (always-immutable subsumes any status scope); needs no EntityStatus relation.
+- `period: { start: <date field>, end: <date field>, closedWhen: "<Status> == <seed id>" }`
+  (entity-level) - **marks the entity a PERIOD REGISTER**: its rows are the dated windows other
+  entities are locked by. A fiscal period is an ordinary entity - a row with two dates and a
+  lifecycle - so this only names which fields are the bounds (both `date`, the end inclusive) and
+  which statuses mean CLOSED (the `immutableWhen` grammar over the register's own EntityStatus
+  relation, seeded names accepted). Closing a period is a plain status transition, authored with the
+  machinery that already exists; nothing here writes the register.
+- `immutableInPeriod: { period: <Register>, date: <own date field> }` (entity-level) - **date-based
+  user-write immutability**: while the register row covering the named date is closed, the record is
+  rejected with 409 on the REST surface. `immutableWhen` freezes a record for what it IS; this
+  freezes it for WHEN it falls, and the two compose (an entity may declare either, both or neither).
+  Unlike the status guard it also refuses a **create** dated inside a closed window and an update
+  that would MOVE a record into one - once March is closed, nothing dated in March may appear,
+  change or vanish. Workflow/system writes through the repository stay possible, as always. A date
+  covered by no period is open (periods are opened as they are needed) and an unset date falls in
+  none. The lock reaches composition CHILDREN exactly as the status one does. Boundary: the register
+  must be an entity of the SAME model - the guard is generated into this model's controllers, which
+  can only query a repository generated alongside them.
 - `lifecycle: { edges: [ { from: <status>, to: [<status>, ...] }, ... ] }` (entity-level) - **the
   declarative state machine**: the WHOLE set of legal status moves, declared once and enforced on
   EVERY status write. Without it the status machinery is a set of point constructs - `init:` names
@@ -2350,6 +2369,64 @@ absent both, the first entry of the tenant's application language set is used at
   committed, so an SMTP problem is logged and the transition still returns success. A `serviceTask`
   send, whose whole purpose IS the message, fails the task instead so the engine retries.
 
+### mail a REPORT - `attach: { report, bind }`
+
+`attach: print` carries the record's OWN document. Its sibling carries a **report**: the mailed artifact
+is a period of rows rather than one record's document - the customer statement, the supplier activity
+list, the monthly usage summary. A notify block names a declared report and binds its `parameters:` from
+the recipient row:
+
+```yaml
+reports:
+  - name: CustomerStatement
+    source: SalesInvoice
+    dimensions: [issuedOn]
+    measures: ["sum(total)"]
+    parameters:
+      - { name: fromDate, target: issuedOn, op: ge }
+      - { name: toDate, target: issuedOn, op: le }
+      - { name: customer, target: Customer.name, op: eq, initial: "-" }
+
+schedules:
+  - name: monthly-statements
+    cron: "0 0 7 1 * ?"
+    entity: Customer
+    where: [{ field: openBalance, op: gt, value: 0 }]
+    notify:
+      to: email
+      subject: "Your statement"
+      body: "Please find attached your account statement."
+      attach:
+        report: CustomerStatement
+        bind: { customer: name, fromDate: periodStart, toDate: periodEnd }
+```
+
+`bind:` maps a **report parameter** to a field of the record the message is about, or a one-hop
+`relation.field` path on it - the same path vocabulary a `{placeholder}` uses, resolved against the same
+record (inside a `forEach`, against the ROW). The report runs once per recipient with those values bound,
+and the rendered PDF is attached.
+
+**Every parameter that declares an `initial` must be bound.** A report parameter is bound on every call,
+so an unbound one rides its `initial` - one FIXED slice, identical for every recipient. That is the
+failure mode the rule exists for: the mail goes out, the attachment IS a report, and nothing about it
+says it is the wrong customer's ledger. A parameter with no `initial` is one whose comparison has a
+neutral any-value default (a date window bound, a `like` search), so omitting it legitimately means "the
+whole range". A balance report's own `fromDate` / `toDate` are bindable and optional for the same reason.
+
+A bound name that is not a parameter of that report is a validation error, not a request key the
+repository ignores - a typo would otherwise mail the report unfiltered.
+
+**The layout is a `.print` template of its own**, seeded once per mailed report at
+`doc/Templates/<Report>/Print/en/standard.print` and developer-owned afterwards (exactly like the
+document scaffold - a statement sent to a customer is a formatted artifact, and a later Generate will not
+overwrite a designed one). The scaffold binds the **bound parameters as the header** and the report's rows
+as the table, with one `{{<column alias>}}` per column the report SELECTs - the header is what says which
+slice the PDF is, since a table of rows never does. It is written only for reports something actually
+mails.
+
+`language:` / `languageFrom:` / `fileName:` work as they do for a document attachment, all resolved
+against the record the message is about; absent a `fileName:`, the name is `<Report> <record>.pdf`.
+
 ### naming a rendered document - `fileName:`
 
 Both server-side renders - the snapshot copy a document mints on issue and the PDF a notify block
@@ -2862,6 +2939,45 @@ Editing a leaf allocation recomputes its `EmployeeTimesheet.total`, which in tur
 the cascade stops at rest and never loops (composition is an acyclic tree). No UI is needed beyond the
 standard per-level master-detail: each level is its own record with its own detail rows.
 
+**A cross-model CHILD (`model:` + `parent:`).** When the rows being summed are owned by ANOTHER
+module, name that module with `model:` and the local entity the total lands on with `parent:`. That is
+the n:m allocation case: the link entity lives with the document that owns one side of the pairing,
+while the other side's total belongs to the module that owns it - a payment's allocated amount, a
+customer's unapplied credit:
+```yaml
+uses:
+  - { model: sales-invoices }
+rollups:
+  # CustomerPayment.allocated = the sum of the payment's allocation rows, which sales-invoices owns.
+  - { name: paymentAllocated, entity: SalesInvoiceCustomerPayment, model: sales-invoices,
+      parent: CustomerPayment, via: CustomerPayment, field: allocated, op: sum, of: amount }
+```
+`model:` must be a declared `uses:` alias, `parent:` must be a LOCAL entity (a total landing in a
+third model is that model's roll-up to declare), and `via:` names the FOREIGN child's to-one relation
+that points at the parent. The handler subscribes to the owner project's topic and reads the rows back
+through the owner's repository; the dependency edge stays one-way (this module already depends on the
+owner). `via` / `of` / `by` are checked against the owner's generated model at Generate time, so a
+misspelt one is reported there rather than at parse. Three limits, all deliberate:
+- **`capacity` / `balance` / `status` work, but the overdraw GUARD does not.** All three are writes on
+  the LOCAL parent, so `capacity: amount, balance: unapplied` keeps a payment's unapplied figure live
+  and a `status` reaches its fully-applied seed as usual. What a foreign child cannot carry is the
+  check that REFUSES a row overdrawing the parent - it is emitted into the child's own repository,
+  which the owner module generates - so Generate reports that the guard is not installed. Enforce the
+  limit where the rows are written (a `checks:` in the owner module) if it must be enforced.
+- **Re-parenting repairs the parent the event names.** Moving a foreign child row from one parent to
+  another is only repaired on BOTH sides when the OWNER model marks that relation as a grouping key
+  (it does so for its own roll-ups / aggregates over the same relation) - it is the owner's DAO that
+  publishes the `-rekeyed` notice. The parent the row moved *to* is always correct; the one it left is
+  corrected the next time one of its own rows changes. Deleting and re-creating the row is exact.
+- **A restricted foreign field does not propagate.** `sensitive:` / `visibleTo:` on the foreign `of`
+  field cannot be read from here, so declare the same restriction on the local target field when the
+  total must not be visible more widely than its source.
+
+**A cross-model PARENT** is the mirror direction and needs no new key: give the child's `via` relation
+its own `model:` alias (the child is local and owns the event, the total lands in the owner's model).
+There `capacity` / `balance` / `status` ARE refused - they read the foreign parent's own fields and
+status seeds, which this model does not own.
+
 **Rules:** `via` must be a to-one (`manyToOne` / `oneToOne`) relation of the child entity; `field`
 must be an existing field on the parent (**integer** for `count`, **numeric** for `sum`). For the sum
 extras: `capacity`/`balance` are numeric parent fields, `status` a to-one relation of the parent, and
@@ -3000,7 +3116,7 @@ or a seeded name.
 | trigger `businessKeyStrategy` | `timestamp` |
 | entity event | `onCreate`, `onUpdate`, `onDelete`, `onTransition` (the STATUS channel - a workflow setter / `transitions:` button / `generates` completion hook publishes it, and `onUpdate` never sees those) |
 | notification `channel` | `email` |
-| notify `attach` | `print` (the record the block is about - inside a fan-out, the ROW), `recordPrint` (a fan-out's anchor record, rendered once); whichever is rendered must be a document |
+| notify `attach` | `print` (the record the block is about - inside a fan-out, the ROW), `recordPrint` (a fan-out's anchor record, rendered once); whichever is rendered must be a document. Or the map form `{ report: <name>, bind: { <parameter>: <field> } }` - a rendered REPORT, scoped to the recipient by its own parameters |
 | notify `forEach` | a declared entity with exactly ONE to-one relation back to the record (one message per row; every bare path resolves against the row, `{record.<field>}` against the anchor record) - on `transitions[].notify` and `serviceTask` `args.notify` only |
 | notify block sites | `notifications[]`, `schedules[].notify`, `transitions[].notify`, `serviceTask` `args.notify` |
 | schedule `where` `op` | `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `like` |
@@ -3041,6 +3157,7 @@ or a seeded name.
 - "preload these values" -> **seeds**
 - "email someone when X is created/updated/deleted" -> **notifications**
 - "send the invoice / payslip / document itself to its customer or employee by e-mail" -> a **notify block with `attach: print`** (on a `serviceTask` step, a `transitions[]`, or a `schedules[]`)
+- "mail each customer their statement / activity list for the period" -> a **notify block with `attach: { report, bind }`** over a report whose `parameters:` scope it to the recipient (a `schedules[]` for the periodic run, a `transitions[]` for on demand)
 - "every day/hour, check X and notify" -> **schedules** (`notify`)
 - "on a schedule / every month, create a Y for each X / recurring invoices / auto-generate timesheets" -> **schedules** (`generate`)
 - "post / notify / create from a value a listener computes AFTER the record is inserted (a moving-average cost, a snapshot column, an external lookup)" -> declare a **`phases:`** entry on the entity and bind **`event: { onPhase: <Entity>, phase: <name> }`** - never `onCreate`, which races the listener

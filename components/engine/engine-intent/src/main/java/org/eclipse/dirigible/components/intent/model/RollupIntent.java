@@ -25,11 +25,31 @@ package org.eclipse.dirigible.components.intent.model;
  * recompute the value for the affected parent and write it back. It is recomputed from the store on
  * each event (not blindly incremented), so it self-heals; under high write concurrency it is
  * eventually consistent rather than transactionally exact.
+ *
+ * <p>
+ * Either END may be owned by another model. A cross-model PARENT is named by the {@link #via}
+ * relation's own {@code model:} alias (the child is local and owns the event). A cross-model CHILD
+ * is named by this roll-up's {@link #model} alias, and then {@link #parent} must name the local
+ * entity the total lands on - the child's relations are not in this document, so nothing can derive
+ * it from {@link #via}. That is the direction an n:m allocation needs: the link rows are owned by
+ * the module that owns one side of the pairing, while the OTHER side's total (a payment's allocated
+ * amount) belongs to the module that owns the payment.
  */
 public class RollupIntent {
 
     private String name;
     private String entity;
+    /**
+     * Optional {@code uses:} alias of the model that owns {@link #entity} - a CROSS-MODEL child. The
+     * handler then binds the owner project's topic and reads the rows back through the owner's
+     * generated repository; {@link #parent} is required alongside it.
+     */
+    private String model;
+    /**
+     * The local entity the total lands on. Required with {@link #model} (and only then): a foreign
+     * child's relations are not in this document, so the parent cannot be derived from {@link #via}.
+     */
+    private String parent;
     private String via;
     private String field;
     /** The aggregation: {@code count} (default), {@code sum}, or {@code latest}. */
@@ -82,6 +102,31 @@ public class RollupIntent {
 
     public void setEntity(String entity) {
         this.entity = entity;
+    }
+
+    public String getModel() {
+        return model;
+    }
+
+    public void setModel(String model) {
+        this.model = model;
+    }
+
+    public String getParent() {
+        return parent;
+    }
+
+    public void setParent(String parent) {
+        this.parent = parent;
+    }
+
+    /**
+     * Whether the counted child is owned by another model (a {@code model:} alias is declared).
+     *
+     * @return true when the child is cross-model
+     */
+    public boolean isCrossModelChild() {
+        return model != null && !model.isBlank();
     }
 
     public String getVia() {

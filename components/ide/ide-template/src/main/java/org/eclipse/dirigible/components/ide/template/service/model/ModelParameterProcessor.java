@@ -80,6 +80,9 @@ final class ModelParameterProcessor {
         // Before the scoped-surface passes below: they carry the flag onto the child panels they build.
         collectRestrictedProperties(entities);
         if (truthy(parameters, "javaRuntime")) {
+            // Before the master-lock pass: a child inherits its master's period guard along with the
+            // status one, so the master's own must be resolved first.
+            resolvePeriodLock(entities, parameters);
             inheritMasterLock(entities, parameters);
             inheritPersonalScope(entities, parameters);
             inheritPartnerScope(entities, parameters);
@@ -582,6 +585,43 @@ final class ModelParameterProcessor {
      * @param entities every entity in the model
      * @param parameters the generation parameters
      */
+    /**
+     * Joins the two halves of date-based immutability (intent {@code immutableInPeriod:}) into the one
+     * map the controller templates read.
+     *
+     * <p>
+     * The guarded entity carries which register locks it and which of its own dates decides the window;
+     * the register carries its bounds, its status property and the seed ids that mean closed. Only this
+     * pass knows both, plus the generated package each entity lands in - the same reason a master's
+     * inherited lock is resolved here rather than emitted whole.
+     *
+     * @param entities every entity in the model
+     * @param parameters the generation parameters
+     */
+    private static void resolvePeriodLock(List<Map<String, Object>> entities, Map<String, Object> parameters) {
+        for (Map<String, Object> entity : entities) {
+            Map<String, Object> register = findEntity(entities, str(entity, "periodLockEntity"));
+            String dateProperty = str(entity, "periodLockDateProperty");
+            if (register == null || dateProperty == null || dateProperty.isEmpty()) {
+                continue;
+            }
+            Map<String, Object> date = findProperty(entity, dateProperty);
+            String registerPerspective = NamingHelper.sanitizeJavaIdentifier(str(register, "perspectiveName"));
+            String registerPackage = "gen." + str(parameters, "javaGenFolderName") + ".data." + registerPerspective + ".";
+            Map<String, Object> periodLock = new LinkedHashMap<>();
+            periodLock.put("dateProperty", dateProperty);
+            periodLock.put("dateJavaClass", date == null ? "java.time.LocalDate" : str(date, "dataTypeJavaClass"));
+            periodLock.put("entity", register.get("name"));
+            periodLock.put("entityClass", registerPackage + str(register, "name") + "Entity");
+            periodLock.put("repositoryClass", registerPackage + str(register, "name") + "Repository");
+            periodLock.put("startProperty", str(register, "periodStartProperty"));
+            periodLock.put("endProperty", str(register, "periodEndProperty"));
+            periodLock.put("statusProperty", str(register, "periodStatusProperty"));
+            periodLock.put("closedValues", str(register, "periodClosedValues"));
+            entity.put("periodLock", periodLock);
+        }
+    }
+
     private static void inheritMasterLock(List<Map<String, Object>> entities, Map<String, Object> parameters) {
         for (Map<String, Object> entity : entities) {
             if ("false".equals(str(entity, "locksWithMaster"))) {
@@ -597,7 +637,8 @@ final class ModelParameterProcessor {
             }
             boolean always = truthy(parent, "immutableAlways");
             String statusProperty = str(parent, "immutableStatusProperty");
-            if (!always && (statusProperty == null || statusProperty.isEmpty())) {
+            Object parentPeriod = parent.get("periodLock");
+            if (!always && (statusProperty == null || statusProperty.isEmpty()) && parentPeriod == null) {
                 continue;
             }
             String parentPerspective = NamingHelper.sanitizeJavaIdentifier(str(parentFk, "relationshipEntityPerspectiveName"));
@@ -611,6 +652,9 @@ final class ModelParameterProcessor {
             masterLock.put("always", always);
             masterLock.put("statusProperty", statusProperty);
             masterLock.put("statusValues", str(parent, "immutableStatusValues"));
+            if (parentPeriod != null) {
+                masterLock.put("period", parentPeriod);
+            }
             entity.put("masterLock", masterLock);
         }
     }

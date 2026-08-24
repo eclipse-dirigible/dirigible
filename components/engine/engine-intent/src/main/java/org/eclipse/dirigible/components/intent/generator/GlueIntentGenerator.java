@@ -457,6 +457,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (attachment == null && NotifySupport.attachesPrint(notification)) {
                 continue; // asked for the document but it cannot be rendered - reported above
             }
+            NotifySupport.ReportAttachment reportAttachment = reportAttachment(notification, byName.get(entity), model, byName,
+                    compositionParents, context, "Notification [" + notification.getName() + "]");
+            if (reportAttachment == null && NotifySupport.attachesReport(notification)) {
+                continue; // asked for the report but it cannot be scoped - reported above
+            }
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("name", notification.getName());
             entry.put("className", IntentNaming.pascalCase(notification.getName()));
@@ -467,12 +472,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // engine IT keys "no trigger was generated" on trigger-only keys being absent.
             entry.put("attachKeyProperty", IntentEntities.keyFieldName(byName.get(entity)));
             entry.put("topicSuffix", StepEventSupport.topicSuffix(notification.getEvent()));
-            entry.put("relationLoads", relationLoads(plan, attachment));
+            entry.put("relationLoads", relationLoads(plan, attachment, reportAttachment));
             entry.put("guardExpression", plan.guardExpression());
             entry.put("toExpression", plan.toExpression());
             entry.put("subjectExpression", plan.subjectExpression());
             entry.put("bodyExpression", plan.bodyExpression());
-            entry.putAll(NotifySupport.attachmentFields(attachment));
+            entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment));
             entry.putAll(NotifySupport.deepLinkFields(plan, byName.get(entity)));
             notifications.add(entry);
         }
@@ -487,7 +492,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                   .isBlank()) {
                 continue;
             }
-            EntityIntent child = byName.get(rollup.getEntity());
+            // A CROSS-MODEL CHILD: the counted rows are owned by another model, the total lands on a
+            // LOCAL parent this roll-up names outright (a foreign child's relations are not in this
+            // document, so `via` alone cannot point at one). The handler binds the OWNER project's topic
+            // and reads the rows back through the owner's generated repository - the shape an n:m
+            // allocation needs, whose link rows live with one side of the pairing while the other side's
+            // total belongs here.
+            boolean crossModelChild = rollup.isCrossModelChild();
+            EntityIntent child = crossModelChild ? null : byName.get(rollup.getEntity());
             RelationIntent via = child == null ? null : toOneRelation(child, rollup.getVia());
             EntityIntent parent = via == null ? null : byName.get(via.getTo());
             // A CROSS-MODEL parent: the child is local (it owns the event this handler binds to), the
@@ -497,7 +509,53 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             boolean crossModelParent = via != null && via.getModel() != null && !via.getModel()
                                                                                     .isBlank();
             CrossModelSupport.TargetInfo parentTarget = null;
-            if (crossModelParent) {
+            String childPerspective = null;
+            String childProject = "";
+            String parentEntity = null;
+            String parentPerspective = null;
+            if (crossModelChild) {
+                UsesIntent uses = findUses(model, rollup.getModel());
+                EntityIntent localParent = rollup.getParent() == null ? null : byName.get(rollup.getParent());
+                if (uses == null || localParent == null) {
+                    continue; // parser already reported the undeclared alias / non-local parent
+                }
+                CrossModelSupport.TargetInfo childTarget;
+                try {
+                    childTarget = CrossModelSupport.resolve(context, uses, rollup.getEntity());
+                } catch (IntentValidationException ex) {
+                    reportDroppedGlue(context, "Roll-up [" + rollup.getName() + "] child entity [" + rollup.getEntity() + "] in model ["
+                            + rollup.getModel() + "] cannot be resolved: " + ex.getMessage() + " - not generated");
+                    continue;
+                }
+                // The owner model WAS read: every property this roll-up reads off the foreign child must
+                // be one of its own. The parser cannot check them (the entity is not local), so a miss is
+                // reported here rather than emitted as a handler that fails the client-Java batch.
+                String missing = firstUnresolvableChildProperty(rollup, childTarget);
+                if (missing != null) {
+                    reportDroppedGlue(context, "Roll-up [" + rollup.getName() + "] " + missing + " is not a property of cross-model child ["
+                            + rollup.getModel() + ":" + rollup.getEntity() + "] - not generated");
+                    continue;
+                }
+                // And `via` must reference THIS roll-up's parent. A property that exists but points at
+                // something else would key the aggregate on foreign ids and look up parents by them -
+                // wrong totals with nothing anywhere saying so, which is worse than not generating.
+                String references = childTarget.propertyRelations() == null ? null
+                        : childTarget.propertyRelations()
+                                     .get(IntentNaming.pascalCase(rollup.getVia()));
+                if (childTarget.resolved() && childTarget.propertyRelations() != null && !localParent.getName()
+                                                                                                     .equals(references)) {
+                    reportDroppedGlue(context,
+                            "Roll-up [" + rollup.getName() + "] via [" + rollup.getVia() + "] of cross-model child [" + rollup.getModel()
+                                    + ":" + rollup.getEntity() + "] references ["
+                                    + (references == null ? "nothing - it is not a relation" : references) + "], not the parent ["
+                                    + localParent.getName() + "] - not generated");
+                    continue;
+                }
+                childPerspective = childTarget.perspectiveName();
+                childProject = uses.resolveProject();
+                parentEntity = localParent.getName();
+                parentPerspective = IntentEntities.resolvePerspective(parentEntity, compositionParents, model);
+            } else if (crossModelParent) {
                 UsesIntent uses = findUses(model, via.getModel());
                 if (uses == null) {
                     reportDroppedGlue(context, "Roll-up [" + rollup.getName() + "] reaches its parent through model [" + via.getModel()
@@ -541,18 +599,25 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             String fkProperty = IntentNaming.pascalCase(rollup.getVia());
             Map<String, Object> base = new LinkedHashMap<>();
             base.put("childEntity", rollup.getEntity());
+            // Empty for a local child - the pipeline then uses this project's gen folder and name, so a
+            // local roll-up renders exactly as before.
+            base.put("childCrossModel", crossModelChild);
+            base.put("childModel", crossModelChild ? rollup.getModel() : "");
+            base.put("childProject", childProject);
             // A setting entity's generated code lives under the shared "Settings" perspective, not its
             // own name - so a roll-up whose child/parent is `kind: setting` must resolve there, like
             // the relation-link / personal-assignee builders do. Without this the generated handler
             // imports gen.<mod>.data.<entityname> (which does not exist) instead of ...data.settings
             // and the whole client-Java batch fails to compile (a setting-entity roll-up, e.g.
             // Currency <- CurrencyRate, is the case that exposed it).
-            base.put("childPerspective", IntentEntities.resolvePerspective(rollup.getEntity(), compositionParents, model));
-            base.put("parentEntity", via.getTo());
+            // A cross-model child's perspective comes from ITS owner's model (resolved above).
+            base.put("childPerspective",
+                    crossModelChild ? childPerspective : IntentEntities.resolvePerspective(rollup.getEntity(), compositionParents, model));
+            base.put("parentEntity", crossModelChild ? parentEntity : via.getTo());
             // A cross-model parent's perspective comes from the owner's model (resolved above); a local
             // one from this model's own composition/setting layout.
             base.put("parentPerspective", crossModelParent ? parentTarget.perspectiveName()
-                    : IntentEntities.resolvePerspective(via.getTo(), compositionParents, model));
+                    : crossModelChild ? parentPerspective : IntentEntities.resolvePerspective(via.getTo(), compositionParents, model));
             // Empty for a local parent - the generation pipeline then falls back to this project's gen folder.
             base.put("parentModel", crossModelParent ? via.getModel() : "");
             base.put("parentCrossModel", crossModelParent);
@@ -567,6 +632,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // `status` relation to whenFull/whenPartial at the thresholds. Empty string / -1 = not set.
             boolean withCapacity = sum && rollup.getCapacity() != null && !rollup.getCapacity()
                                                                                  .isBlank();
+            if (withCapacity && crossModelChild) {
+                // The balance and the status ARE maintained (both are writes on the local parent), but the
+                // capacity GUARD - the check that refuses a child row overdrawing the parent - is emitted
+                // into the child's own DAO, which the owner model generates. Said out loud, because a
+                // capacity that enforces nothing is exactly what must not pass for a limit.
+                String warning = "Roll-up [" + rollup.getName() + "] measures the cross-model child [" + rollup.getModel() + ":"
+                        + rollup.getEntity() + "] against capacity [" + rollup.getCapacity()
+                        + "]: the balance and status are maintained, but the overdraw GUARD is not installed - it belongs to the child's"
+                        + " own repository, which the [" + rollup.getModel() + "] model generates.";
+                LOGGER.warn(warning);
+                if (context != null) {
+                    context.addIssue(warning);
+                }
+            }
             base.put("capacityField", withCapacity ? IntentNaming.pascalCase(rollup.getCapacity()) : "");
             base.put("balanceField", withCapacity && rollup.getBalance() != null && !rollup.getBalance()
                                                                                            .isBlank()
@@ -589,7 +668,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // handler, so
             // the name must be shared across the group. Two roll-ups on the same child+fk+event collapse into
             // this one class.
-            String className = rollup.getEntity() + fkProperty;
+            // A foreign child is qualified by its model: a local and a foreign child of the SAME name
+            // rolling up through the same relation are two different handlers, and one class name for
+            // both would have the pipeline write one over the other.
+            String className = (crossModelChild ? IntentNaming.pascalIdentifier(rollup.getModel()) : "") + rollup.getEntity() + fkProperty;
             rollups.add(rollupEntry(base, className + "RollupOnCreate", ""));
             // EVERY op recomputes on update, not just sum / latest: a line edit changes the sum (or which
             // row is latest, or its value), and an edit that RE-PARENTS a child - the ordinary way a child
@@ -608,6 +690,39 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             rollups.add(rollupEntry(base, className + "RollupOnRekey", "-rekeyed"));
         }
         return rollups;
+    }
+
+    /**
+     * The first property this roll-up reads off a cross-model child that the owner's model does not
+     * declare - its {@code via} FK, and the {@code of} / {@code by} fields the aggregation reads.
+     * Returns null when everything resolves, and also when the owner's model could not be read (the
+     * convention fallback), which is the same rule {@code dependsOn} and the schedules use: never fail
+     * a generation on a model that was not there to check against.
+     *
+     * @param rollup the roll-up
+     * @param child the resolved cross-model child
+     * @return a description of the first unresolvable property, or null
+     */
+    private static String firstUnresolvableChildProperty(RollupIntent rollup, CrossModelSupport.TargetInfo child) {
+        if (!child.resolved() || child.propertyNames() == null) {
+            return null;
+        }
+        java.util.Map<String, String> read = new LinkedHashMap<>();
+        read.put("via", rollup.getVia());
+        if ("sum".equals(rollup.getOp()) || "latest".equals(rollup.getOp())) {
+            read.put("of", rollup.getOf());
+        }
+        if ("latest".equals(rollup.getOp())) {
+            read.put("by", rollup.getBy());
+        }
+        for (Map.Entry<String, String> entry : read.entrySet()) {
+            String property = entry.getValue();
+            if (property != null && !property.isBlank() && !child.propertyNames()
+                                                                 .contains(IntentNaming.pascalCase(property))) {
+                return entry.getKey() + " [" + property + "]";
+            }
+        }
+        return null;
     }
 
     /**
@@ -1307,9 +1422,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         EntityIntent document = NotifySupport.attachesRecordPrint(notify) && fanOut != null ? entity : about;
         NotifySupport.PrintAttachment attachment =
                 plan == null ? null : printAttachment(notify, document, model, byName, compositionParents, context, subject);
-        boolean send = plan != null && (attachment != null || !NotifySupport.attachesPrint(notify));
+        // A report attachment is always scoped by the record the message is ABOUT (the ROW inside a
+        // fan-out): its bindings are what make the report this recipient's, so there is no anchor-scoped
+        // counterpart the way `recordPrint` is one for a document.
+        NotifySupport.ReportAttachment reportAttachment =
+                plan == null ? null : reportAttachment(notify, about, model, byName, compositionParents, context, subject);
+        boolean send = plan != null && (attachment != null || !NotifySupport.attachesPrint(notify))
+                && (reportAttachment != null || !NotifySupport.attachesReport(notify));
         fields.put("notify", String.valueOf(send));
-        fields.put("notifyRelationLoads", send ? relationLoads(plan, attachment) : new ArrayList<>());
+        fields.put("notifyRelationLoads", send ? relationLoads(plan, attachment, reportAttachment) : new ArrayList<>());
         fields.put("notifyToExpression", send ? plan.toExpression() : "null");
         fields.put("notifySubjectExpression", send ? plan.subjectExpression() : "\"\"");
         fields.put("notifyBodyExpression", send ? plan.bodyExpression() : "\"\"");
@@ -1317,7 +1438,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         // loaded record to their send method, and only then (an argument nothing reads is noise).
         fields.put("notifyRecordScoped", String.valueOf(send && fanOut != null && NotifySupport.usesRecordScope(notify)));
         fields.putAll(NotifySupport.fanOutFields(send ? fanOut : null));
-        fields.putAll(NotifySupport.attachmentFields(send ? attachment : null));
+        fields.putAll(NotifySupport.attachmentFields(send ? attachment : null, send ? reportAttachment : null));
         // The key the print feeder is fed with: the ROW's for `attach: print` (the loop variable is
         // named `entity` in the templates for exactly this reason, so one expression set serves both
         // shapes), the ANCHOR record's for `attach: recordPrint`.
@@ -1381,8 +1502,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /** Test hook: build the {@code rollups} glue collection without a repository. */
     static List<Map<String, Object>> buildRollupsForTest(IntentModel model) {
+        return buildRollupsForTest(model, null);
+    }
+
+    /**
+     * Test hook: build the {@code rollups} glue collection against a context, so a cross-model child
+     * can be resolved against a REAL owner model rather than the naming-convention fallback.
+     *
+     * @param model the parsed model
+     * @param context the generation context (may be null)
+     * @return the glue entries
+     */
+    static List<Map<String, Object>> buildRollupsForTest(IntentModel model, IntentGenerationContext context) {
         return buildRollups(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
-                null);
+                context);
     }
 
     /** Test hook: build the {@code settlementListeners} glue collection without a repository. */
@@ -3466,12 +3599,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 if (attachment == null && NotifySupport.attachesPrint(schedule.getNotify())) {
                     continue; // asked for the document but it cannot be rendered - reported above
                 }
+                NotifySupport.ReportAttachment reportAttachment = reportAttachment(schedule.getNotify(), byName.get(entity), model, byName,
+                        compositionParents, context, "Schedule [" + schedule.getName() + "] notify");
+                if (reportAttachment == null && NotifySupport.attachesReport(schedule.getNotify())) {
+                    continue; // asked for the report but it cannot be scoped - reported above
+                }
                 entry.put("action", "notify");
-                entry.put("relationLoads", relationLoads(plan, attachment));
+                entry.put("relationLoads", relationLoads(plan, attachment, reportAttachment));
                 entry.put("toExpression", plan.toExpression());
                 entry.put("subjectExpression", plan.subjectExpression());
                 entry.put("bodyExpression", plan.bodyExpression());
-                entry.putAll(NotifySupport.attachmentFields(attachment));
+                entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment));
                 entry.putAll(NotifySupport.deepLinkFields(plan, byName.get(entity)));
             }
             schedules.add(entry);
@@ -3721,6 +3859,31 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The report attachment of a notify block, or {@code null} when none was asked for or it cannot be
+     * resolved - in which case the drop is reported with the precise reason. A report attachment that
+     * cannot be resolved must never degrade to a plain-text mail: the parameters are what scope the
+     * report to its recipient, so a mail whose bindings did not resolve would carry the wrong rows.
+     *
+     * @param notify the notify block
+     * @param entity the entity the message is about
+     * @param model the parsed model
+     * @param byName all local entities by name
+     * @param compositionParents composition-parent map
+     * @param context the generation context (to surface the drop as a response issue)
+     * @param subject the call site, for the reported message
+     * @return the attachment, or {@code null}
+     */
+    private static NotifySupport.ReportAttachment reportAttachment(NotificationIntent notify, EntityIntent entity, IntentModel model,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context, String subject) {
+        try {
+            return NotifySupport.reportAttachment(notify, entity, model, byName, compositionParents, crossModelLookup(model, context));
+        } catch (IllegalArgumentException ex) {
+            reportDroppedGlue(context, subject + " " + ex.getMessage() + " - the mail was NOT generated");
+            return null;
+        }
+    }
+
+    /**
      * The relation loads a notify-bearing handler must declare: the ones the message text needs, plus
      * the ones an authored {@code fileName:} pattern reads on top of them. Both sides name their local
      * after the relation, so a relation referenced by both is loaded ONCE - declaring it twice would
@@ -3731,13 +3894,34 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @return the merged loads, message-text ones first
      */
     private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan, NotifySupport.PrintAttachment attachment) {
+        return relationLoads(plan, attachment, null);
+    }
+
+    /**
+     * The same merge with a report attachment's loads folded in - the bindings and the file name of a
+     * rendered report read the same one-hop relations the message text does, through the same locals.
+     *
+     * @param plan the translated notify block
+     * @param attachment the resolved print attachment, or {@code null}
+     * @param report the resolved report attachment, or {@code null}
+     * @return the merged loads, message-text ones first
+     */
+    private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan, NotifySupport.PrintAttachment attachment,
+            NotifySupport.ReportAttachment report) {
         List<NotificationSupport.RelationLoad> merged = new ArrayList<>(plan.loads());
+        Set<String> declared = new LinkedHashSet<>();
+        for (NotificationSupport.RelationLoad load : merged) {
+            declared.add(load.local());
+        }
         if (attachment != null) {
-            Set<String> declared = new LinkedHashSet<>();
-            for (NotificationSupport.RelationLoad load : merged) {
-                declared.add(load.local());
-            }
             for (NotificationSupport.RelationLoad load : attachment.fileNameLoads()) {
+                if (declared.add(load.local())) {
+                    merged.add(load);
+                }
+            }
+        }
+        if (report != null) {
+            for (NotificationSupport.RelationLoad load : report.loads()) {
                 if (declared.add(load.local())) {
                     merged.add(load);
                 }
