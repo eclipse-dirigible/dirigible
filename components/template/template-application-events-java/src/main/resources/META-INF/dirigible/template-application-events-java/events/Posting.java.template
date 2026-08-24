@@ -10,16 +10,16 @@ import org.eclipse.dirigible.sdk.utils.Calc;
 import org.eclipse.dirigible.sdk.utils.Json;
 
 /**
- * Posting ${name}: when a ${sourceEntity}#if($isCreate) is created#{else} transitions into status ${guardValue}#end, create one
+ * Posting ${name}: when a ${sourceEntity} ${moment}, create one
  * ${targetEntity} with its ${itemsEntity} rows computed from the source's totals per the resolved
  * rule row. Generated from the intent postings block - do not edit; it is re-generated with the
  * application.
  *
  * Contract (the accounting posting semantics, generalized):
- * - binds the #if($isCreate)source's create topic (the bare entity topic - the platform publishes
- *   creates unsuffixed; the source has no status lifecycle, its insert IS the posting event)#{else}-transitioned topic (workflow status writes publish it; -updated reactions never see
- *   it, so no loops)#end and RE-LOADS the source by id - the payload is as-of the event and lacks
- *   later-step data such as a stamped document number;
+ * - binds the moment the source's own publisher raises (a create is unsuffixed, a workflow status
+ *   write publishes -transitioned, an enrichment listener announces its declared phase) and RE-LOADS
+ *   the source by id - the payload is as-of the event and lacks later-step data such as a stamped
+ *   document number;
  * - idempotent + resumable via the ${backRefProperty} back-reference: a redelivery of a complete post
  *   is a no-op, and a redelivery of a half-post (an item write failed after the target was saved)
  *   rebuilds the items so the post completes - so it never throws or leaves a half-post. Concurrent
@@ -41,7 +41,7 @@ public class ${className}Posting implements MessageHandler {
 
     @Override
     public String destination() {
-        return "${sourceTopicProject}-${sourcePerspective}-${sourceEntity}#if(!$isCreate)-transitioned#end";
+        return "${sourceTopicProject}-${sourcePerspective}-${sourceEntity}${topicSuffix}";
     }
 
     @Override

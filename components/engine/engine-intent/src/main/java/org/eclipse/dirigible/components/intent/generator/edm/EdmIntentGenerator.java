@@ -434,6 +434,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (!entity.locksWithMaster()) {
                 entityMap.put("locksWithMaster", "false");
             }
+            // Declared enrichment phases (#6929): the moments between "the row was inserted" and "the row
+            // is complete". The Java DAO template turns each into an announce<Phase> method - the
+            // enriching listener writes its values through that one call, so the value and the notice
+            // commit together and a consumer bound to the phase reads the ENRICHED row instead of
+            // racing the write, which publishes nothing on its own.
+            if (!entity.getPhases()
+                       .isEmpty()) {
+                entityMap.put("phases", String.join(",", entity.getPhases()));
+            }
             // Custom Java imports for the generated entity Repository (e.g. a calculated-field action's
             // CalculatedField class). Base64-encoded to match the EDM editor's serialization, which the
             // generation pipeline decodes before emitting them into the import block.

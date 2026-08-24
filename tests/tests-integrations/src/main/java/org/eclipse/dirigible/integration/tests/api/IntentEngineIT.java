@@ -3267,6 +3267,85 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void a_declared_phase_gives_an_enrichment_its_own_channel_a_posting_can_bind() {
+        // #6929: the costing listener computes CostValue from a moving-average pool and writes it back
+        // WITHOUT an event (an enrichment must not re-fire the onUpdate consumers), so a posting bound
+        // to onCreate raced it and could post a journal entry for a null amount with every step green.
+        // The phase is that write's own channel: the listener announces it through the generated
+        // repository, and the posting binds the announcement instead of the insert.
+        writeIntent("""
+                name: inventory
+                entities:
+                  - name: Account
+                    kind: setting
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                  - name: PostingRule
+                    kind: setting
+                    fields:
+                      - { name: id,           type: integer, primaryKey: true, generated: true }
+                      - { name: documentType, type: string }
+                    relations:
+                      - { name: CostOfSalesAccount, kind: manyToOne, to: Account }
+                      - { name: InventoryAccount,   kind: manyToOne, to: Account }
+                  - name: StockMovement
+                    phases: [costed]
+                    fields:
+                      - { name: id,        type: integer, primaryKey: true, generated: true }
+                      - { name: movedOn,   type: date }
+                      - { name: costValue, type: decimal, precision: 18, scale: 2 }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id,        type: integer, primaryKey: true, generated: true }
+                      - { name: entryDate, type: date }
+                    relations:
+                      - { name: StockMovement, kind: manyToOne, to: StockMovement }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: debit,  type: decimal, precision: 18, scale: 2 }
+                      - { name: credit, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                      - { name: Account,      kind: manyToOne, to: Account, required: true }
+                postings:
+                  - name: cogsPosting
+                    event: { onPhase: StockMovement, phase: costed }
+                    creates: JournalEntry
+                    backReference: StockMovement
+                    map: { entryDate: movedOn }
+                    rule: { entity: PostingRule, match: { documentType: "Goods Issue" } }
+                    items:
+                      - { Account: rule(costOfSalesAccount), debit: "CostValue" }
+                      - { Account: rule(inventoryAccount), credit: "CostValue" }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        assertTrue(contentOf("inventory.model").contains("\"phases\": \"costed\""),
+                "the declared phase must reach the .model - it is what the DAO template turns into announceCosted");
+
+        // The write half: one targeted write carries the enrichment AND the announcement, so the value
+        // and the notice commit together and no consumer can observe one without the other.
+        generateFromModel("template-application-dao-java/template/template.js", "inventory.model");
+        String repository = codeOf("gen/inventory/data/stockmovement/StockMovementRepository.java");
+        assertTrue(repository.contains("public int announceCosted(Object id, java.util.Map<String, Object> values)"),
+                "the repository should expose the declared phase as a method, so a typo is a compile error: " + repository);
+        assertTrue(repository.contains("updateProperties(id, values, \"" + PROJECT + "-StockMovement-StockMovement-costed\")"),
+                "the announcement must ride the enrichment write, on the phase's own topic: " + repository);
+        assertFalse(codeOf("gen/inventory/data/journalentry/JournalEntryRepository.java").contains("announce"),
+                "an entity that declares no phase must generate exactly what it always did");
+
+        // The read half: the posting listens on the phase topic, not on the insert.
+        generateFromModel("template-application-events-java/template/template.js", "inventory.glue");
+        String posting = contentOf("gen/events/inventory/CogsPostingPosting.java");
+        assertTrue(posting.contains("return \"" + PROJECT + "-StockMovement-StockMovement-costed\";"),
+                "the posting must bind the enrichment moment, not the raw insert: " + posting);
+    }
+
+    @Test
     void editable_task_form_fields_are_coerced_to_their_java_type_on_write_back() {
         // A BPM task form opts fields back to editable; on completion the generated Writer persists them,
         // coercing each from its process variable to the entity's Java type

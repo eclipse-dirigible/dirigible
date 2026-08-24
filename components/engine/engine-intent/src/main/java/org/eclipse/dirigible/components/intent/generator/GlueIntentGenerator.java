@@ -1072,9 +1072,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /**
      * The event half of a create-from (issues #6711, #6800), pre-rendered onto its glue entry: the
      * topic suffix the listener binds to (an {@code onCreate} the source's bare create topic, an
-     * {@code onTransition} its {@code -transitioned} topic, a step binding the step-scoped topic the
-     * generated emitter publishes to), the optional status guard as a property/value pair evaluated
-     * against the RE-LOADED source, the cardinality, and the back-reference.
+     * {@code onTransition} its {@code -transitioned} topic, an {@code onPhase} the declared phase's
+     * topic, a step binding the step-scoped topic the generated emitter publishes to), the optional
+     * status guard as a property/value pair evaluated against the RE-LOADED source, the cardinality,
+     * and the back-reference.
      *
      * <p>
      * The back-reference is DERIVED from the {@code map} entry that copies the source's primary key
@@ -1108,8 +1109,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         e.put("isStep", step != null);
         e.put("stepProcess", step == null ? "" : step.process());
         e.put("stepName", step == null ? "" : step.step());
-        e.put("topicSuffix",
-                step != null ? StepEventSupport.topicSuffix(step.process(), step.step(), step.kind()) : isCreate ? "" : "-transitioned");
+        // One resolution for every axis the create-from can bind - the step suffix, a declared phase
+        // (#6929), the bare create topic or "-transitioned" - so the listener and the moment's
+        // publisher cannot disagree about the channel.
+        e.put("topicSuffix", StepEventSupport.topicSuffix(g.getEvent()));
         // The cardinality (#6800): `append` drops the existing-target lookup in the create-from, so
         // every delivery of the event creates a row. It is the absence of a guard, not another guard.
         e.put("appendMode", g.isAppendMode());
@@ -2093,13 +2096,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // The trigger: `onTransition` binds the -transitioned topic (status guard mandatory);
             // `onCreate` binds the source's CREATE topic (the bare entity topic - the platform
             // publishes creates unsuffixed) - the source with no status lifecycle (a booked
-            // payment) whose only event is its insert. The guard stays optional for onCreate.
-            Object onCreateSource = posting.getEvent()
-                                           .get("onCreate");
-            boolean isCreate = onCreateSource != null;
-            String sourceEntity = String.valueOf(isCreate ? onCreateSource
-                    : posting.getEvent()
-                             .get("onTransition"));
+            // payment) whose only event is its insert; `onPhase` binds a declared enrichment phase
+            // (#6929) - the moment the row is COMPLETE, which is the only one a posting reading an
+            // enriched amount may observe. The guard stays optional on both of the latter two: each
+            // names one moment already, where a transition is any status write.
+            String eventKind = EventBinding.kind(posting.getEvent());
+            boolean isCreate = "onCreate".equals(eventKind);
+            boolean isPhase = EventBinding.ON_PHASE.equals(eventKind);
+            String sourceEntity = String.valueOf(EventBinding.entity(posting.getEvent()));
             Object alias = posting.getEvent()
                                   .get("model");
             String sourceProject;
@@ -2140,13 +2144,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
                 guardProperty = IntentNaming.pascalCase(when.group(1));
                 guardValue = when.group(2);
-            } else if (!isCreate) {
+            } else if (!isCreate && !isPhase) {
                 continue; // parser already reported it (onTransition requires the status guard)
             }
             Map<String, Object> e = new LinkedHashMap<>();
             e.put("name", posting.getName());
             e.put("className", IntentNaming.pascalIdentifier(posting.getName()));
             e.put("isCreate", isCreate);
+            // The channel and the sentence describing it, pre-rendered together so the template cannot
+            // say one thing while binding another (the expansions convention - the template stays
+            // shape-only).
+            e.put("topicSuffix", EventBinding.topicSuffix(posting.getEvent()));
+            e.put("moment", isPhase ? "reaches the " + EventBinding.phase(posting.getEvent()) + " phase"
+                    : isCreate ? "is created" : "transitions into status " + guardValue);
             e.put("crossModel", alias != null);
             e.put("sourceProject", sourceProject);
             e.put("sourceGenFolder", sourceGenFolder);

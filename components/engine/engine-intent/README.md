@@ -26,6 +26,7 @@ filters) are covered at the generation layer by `IntentEngineIT` and the parser 
 | [`immutableWhen` / `immutable`](#immutablewhen--immutable---user-write-immutability) | 409 on user writes in a status / append-only snapshots |
 | [`period` / `immutableInPeriod`](#period--immutableinperiod---date-based-immutability) | 409 on user writes to a record dated in a closed fiscal period |
 | [`lifecycle`](#lifecycle---the-legal-status-graph) | the whole legal status graph, enforced on every status write |
+| [`phases`](#phases--the-enrichment-channel) | a named moment a listener's silent enrichment announces, which a consumer can bind |
 | [`hierarchy` / `leafOnly`](#hierarchy--leafonly--tree-entities) | tree entities, leaf-only references |
 | [`multilingual` / `languages`](#multilingual--translated-master-data) | `_LANG` tables + read-time translation overlay |
 | [calculated fields](#calculated-fields--actions) | server+UI-evaluated expressions, date functions, Java call-outs |
@@ -200,6 +201,56 @@ controller's targeted write, a workflow `setRelationField`, a hand-written actio
 declared, a record must also be created in that status. At authoring time the graph is what
 `transitions:`, a status-setting workflow step and a check's rejection are validated against, so the
 buttons and the graph cannot disagree.
+
+## phases - the enrichment channel
+
+An enrichment a listener computes on create - a costing pool, a snapshot column, an external lookup -
+has to be written back **without** an event, or it would re-fire every onUpdate consumer of a change
+the user never made. So it publishes nothing at all, and a declarative consumer of the enriched value
+had no moment to bind: bound to `onCreate` it races the listener (the order of two listeners on one
+event is undefined) and reads the un-enriched row - a plausible journal entry posted for a null
+amount, with every pipeline step green.
+
+A phase is that write's own channel. The entity declares the moments it announces:
+
+```yaml
+entities:
+  - name: StockMovement
+    phases: [costed]
+    fields:
+      - { name: id,        type: integer, primaryKey: true, generated: true }
+      - { name: costValue, type: decimal, precision: 18, scale: 2 }
+```
+
+The generated repository gains one `announce<Phase>` method per declared phase. The enriching
+listener writes **through it** - the values and the notice travel in ONE targeted write, so they
+commit together and nobody can observe one without the other:
+
+```java
+new StockMovementRepository().announceCosted(movement.Id, java.util.Map.of("CostValue", cost));
+```
+
+Any glue consumer then binds the phase instead of the insert:
+
+```yaml
+postings:
+  - name: cogsPosting
+    event: { onPhase: StockMovement, phase: costed }
+    creates: JournalEntry
+    backReference: StockMovement
+    rule: { entity: PostingRule, match: { documentType: "Goods Issue" } }
+    items:
+      - { Account: rule(costOfSalesAccount), debit: "CostValue" }
+      - { Account: rule(inventoryAccount),   credit: "CostValue" }
+```
+
+`onPhase` is accepted by `postings:`, `notifications:`, `integrations:`, `outbound:` and an
+event-driven `generates:`; the `when:` guard stays optional there, the phase already being one moment.
+A phase name is a lower-camel identifier and may not be one of the platform's own channels
+(`updated` / `deleted` / `transitioned` / `rekeyed`). A consumer binding a phase the entity does not
+declare fails the parse - it would otherwise bind a topic nothing publishes to and simply never fire.
+A cross-model source declares its phases in its own model, so the name cannot be checked from here
+(the same limit a cross-model status nomenclature has).
 
 ## hierarchy / leafOnly - tree entities
 
@@ -506,7 +557,7 @@ unposted worklist), never throws.
 ```yaml
 postings:
   - name: salesInvoicePosting
-    event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 3" }
+    event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 3" }   # or onCreate, or onPhase
     creates: JournalEntry
     backReference: SalesInvoice
     map: { entryDate: date, reason: "Sales invoice {number}" }
