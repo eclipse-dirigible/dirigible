@@ -1779,6 +1779,45 @@ A dimension may bucket a date for aggregation: `month(field)` (a sortable YYYYMM
 for monthly income/VAT. (Uses standard-SQL `EXTRACT` — H2/PostgreSQL; not SQL Server.)
 `relation.field` joins to a related field, `field` is a plain column.
 
+#### reports[].parameters - user-set inputs
+
+**Use when:** the report is read for a period, a threshold or a name the user chooses - a from/to date
+range, "invoices over 1000", a customer search. Without them the only way to narrow a report is the
+per-column filter panel, which can only reach the columns the report already shows.
+
+Each parameter is rendered as an input above the report and bound into the query's `WHERE`:
+
+```yaml
+reports:
+  - name: Revenue
+    source: SalesInvoice
+    dimensions: [date, Customer.name]
+    measures: ["sum(total)"]
+    parameters:
+      - { name: fromDate, target: date, op: ge }                        # From picker
+      - { name: toDate, target: date, op: le }                          # To picker
+      - { name: minTotal, target: total, op: ge, initial: "0" }         # amount threshold
+      - { name: customer, target: Customer.name, op: like }             # name search
+```
+
+`target` is the filtered field - a field of the source or a one-hop `relation.field` path, which joins
+exactly like a dimension, so a parameter may filter by a field the report does not display. `op` is
+`ge` | `le` | `eq` | `like`. `initial` is the value bound when the user leaves the input empty, i.e.
+what the report shows before anyone touches it.
+
+**Rules:** a parameter is bound on **every** call, so `initial` is required unless the comparison has a
+neutral "any value" default - a date `ge`/`le` bound (widened to all time) and `like` (the empty
+pattern, which matches everything). An `eq` selector and a numeric bound have none: declare the
+default the report opens with (`initial: "0"` for an amount threshold). The target field types the
+parameter; an authored `type:` (`date`|`timestamp`|`number`|`string`) is a declaration checked against
+it, not a conversion. `like` matches anywhere in the value and needs a string target. A `timestamp`
+target is compared as a date, so a `le` bound includes the chosen day. The target must be a **field**
+- a relation itself is not one (name a field of it: `Customer.name`), `boolean` and `text` fields are
+not parameterizable, and the name must be a plain, non-keyword identifier that is not one the
+platform already binds (`language`) or the generated controller declares (`filter`, `limit`,
+`offset`, `repository`). `kind: balance` declares its own `fromDate`/`toDate`,
+so a balance report may add further parameters but not redeclare those two.
+
 #### reports[].scope - which lifecycle rows an aggregate counts
 
 **Use when:** the report aggregates over an entity that carries a `function: EntityStatus`, i.e. one

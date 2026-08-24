@@ -33,6 +33,7 @@ import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
 import org.eclipse.dirigible.components.intent.model.WidgetIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,6 +63,12 @@ import org.springframework.stereotype.Component;
  * names rewritten to their qualified physical columns (so {@code dueOn <= CURRENT_DATE} ->
  * {@code Loan."LOAN_DUE_ON" <= CURRENT_DATE}); non-field tokens (operators, {@code CURRENT_DATE},
  * literals) pass through untouched.
+ *
+ * <p>
+ * {@link ReportIntent#getParameters()} are the report's <b>user-set</b> inputs: each one is
+ * rendered above the report and bound into the same {@code WHERE} as a named marker, so a from/to
+ * window bound, an amount threshold or a name search is a report definition rather than a
+ * hand-written query - see {@link #parameterConditions}.
  *
  * <p>
  * {@link ReportIntent#getScope()} adds the <b>lifecycle</b> predicate on top of that - see
@@ -151,6 +158,21 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
 
     /** A translation table is joined leniently - a row without a translation keeps its base value. */
     private static final String LANGUAGE_JOIN_TYPE = "LEFT";
+
+    /** The SQL type of a date-valued report parameter - a date picker on the report page. */
+    private static final String DATE_TYPE = "DATE";
+
+    /** The all-time window bounds a date parameter falls back to when the request carries no value. */
+    private static final String NEUTRAL_FROM_DATE = "1900-01-01";
+    private static final String NEUTRAL_TO_DATE = "9999-12-31";
+
+    private static final String LIKE_OPERATION = "LIKE";
+
+    /** The report types a parameter binds as a number. */
+    private static final Set<String> NUMERIC_TYPES = Set.of("INTEGER", "BIGINT", "DECIMAL");
+
+    /** An authored parameter's {@code op} as its SQL operator. */
+    private static final Map<String, String> SQL_OPERATIONS = Map.of("ge", ">=", "le", "<=", "eq", "=", "like", LIKE_OPERATION);
 
     @Override
     public String name() {
@@ -278,8 +300,16 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         warnOnRestrictedColumns(context, model, source, report);
         String filter = buildWhere(context, model, source, baseAlias, joins, report.getFilter());
         Map<String, Object> scope = scopeCondition(context, model, source, baseAlias, report, aggregated);
+        List<Map<String, Object>> parameters = balance ? balanceParameters() : new ArrayList<>();
+        List<Map<String, Object>> parameterConditions = parameterConditions(context, model, source, baseAlias, report, joins, parameters);
         List<Map<String, Object>> conditions = conditions(filter, scope);
-        String where = conditions == null ? rawWhere(filter, scope) : predicate(conditions);
+        String where;
+        if (conditions == null) {
+            where = rawWhere(filter, scope, parameterConditions.isEmpty() ? null : predicate(parameterConditions));
+        } else {
+            conditions.addAll(parameterConditions);
+            where = predicate(conditions);
+        }
         List<Map<String, Object>> joinRows = joinRows(joins);
         String query = buildQuery(baseTable, baseAlias, joinRows, columns, where);
 
@@ -319,8 +349,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             document.put("joins", joinRows);
         }
         document.put("query", query);
-        if (balance) {
-            document.put("parameters", balanceParameters());
+        if (!parameters.isEmpty()) {
+            document.put("parameters", parameters);
         }
         // Only when the predicate round-trips: an empty `conditions` used to make the editor emit a
         // bare `WHERE`, and a partial one would have silently dropped the rest of the filter.
@@ -456,15 +486,113 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      */
     private static List<Map<String, Object>> balanceParameters() {
         List<Map<String, Object>> parameters = new ArrayList<>();
-        parameters.add(reportParameter("fromDate", "1900-01-01"));
-        parameters.add(reportParameter("toDate", "9999-12-31"));
+        parameters.add(reportParameter("fromDate", DATE_TYPE, NEUTRAL_FROM_DATE));
+        parameters.add(reportParameter("toDate", DATE_TYPE, NEUTRAL_TO_DATE));
         return parameters;
     }
 
-    private static Map<String, Object> reportParameter(String name, String initial) {
+    /**
+     * The report's authored {@code parameters:} as the {@code WHERE} terms that bind them, appending
+     * each one's declaration to {@code parameters} on the way.
+     *
+     * <p>
+     * A parameter is bound on EVERY call - the generated repository falls back to the declared
+     * {@code initial} when the request carries no value - so a term is a plain binary comparison
+     * against a named marker and the neutral case is expressed by the default, not by a nullable
+     * predicate. That keeps each term representable as a structured {@code conditions} row, so
+     * declaring a parameter cannot park the report in the editor's free-style mode.
+     *
+     * <p>
+     * A {@code timestamp} target is compared as a DATE ({@code CAST(col AS DATE)}): the input is a date
+     * picker, and comparing the raw instant against midnight of the chosen day would silently drop that
+     * day's rows from a {@code le} bound. A {@code like} parameter matches anywhere in the value
+     * ({@code '%' || :p || '%'}), which is also what makes the empty default match every row. A
+     * NULLABLE target is read through {@link #emptyLiteral} - without it a row holding no value in the
+     * target column would drop out of the report the moment a parameter is declared, before the user
+     * sets anything, which is the opposite of what the neutral default promises.
+     *
+     * @param context the generation context
+     * @param model the intent model
+     * @param source the report's source entity
+     * @param baseAlias the base table alias
+     * @param report the report
+     * @param joins the collected joins - a parameter over a {@code relation.field} path joins like a
+     *        dimension
+     * @param parameters the collecting parameter declarations
+     * @return the parameter conditions, in the authored order
+     */
+    private static List<Map<String, Object>> parameterConditions(IntentGenerationContext context, IntentModel model, EntityIntent source,
+            String baseAlias, ReportIntent report, Map<String, Join> joins, List<Map<String, Object>> parameters) {
+        List<Map<String, Object>> conditions = new ArrayList<>();
+        for (ReportParameterIntent parameter : report.getParameters()) {
+            String name = parameter.getName();
+            String target = parameter.getNormalizedTarget();
+            String operation = SQL_OPERATIONS.get(parameter.getNormalizedOp());
+            if (name == null || name.isBlank() || target == null || operation == null) {
+                LOGGER.warn("Skipping incomplete parameter [{}] of report [{}]", name, report.getName());
+                continue;
+            }
+            ColumnRef ref = resolve(context, model, source, baseAlias, target);
+            registerJoin(joins, ref);
+            boolean timestamp = "TIMESTAMP".equals(ref.reportType);
+            String type = timestamp ? DATE_TYPE : ref.reportType;
+            String left = timestamp ? "CAST(" + ref.qualified() + " AS DATE)" : ref.qualified();
+            if (ref.nullable) {
+                left = "COALESCE(" + left + ", " + emptyLiteral(type, operation) + ")";
+            }
+            String marker = ":" + name.trim();
+            String right = LIKE_OPERATION.equals(operation) ? "'%' || " + marker + " || '%'" : marker;
+            conditions.add(condition(left, operation, right));
+            parameters.add(reportParameter(name.trim(), type, initialValue(parameter, type, operation)));
+        }
+        return conditions;
+    }
+
+    /**
+     * The value a parameter binds when the request carries none - the authored {@code initial}, or the
+     * neutral default of the comparisons that have one: a date window bound widens to all time and a
+     * {@code like} search to the empty pattern, which matches every value. An {@code eq} selector and a
+     * numeric bound have no neutral value; the parser requires their {@code initial}, so an empty one
+     * here is a report authored before that check and binds as-is.
+     *
+     * @param parameter the parameter
+     * @param type the parameter's SQL type
+     * @param operation the SQL operator it compares with
+     * @return the initial value
+     */
+    private static String initialValue(ReportParameterIntent parameter, String type, String operation) {
+        if (parameter.getInitial() != null && !parameter.getInitial()
+                                                        .isBlank()) {
+            return parameter.getInitial()
+                            .trim();
+        }
+        if (DATE_TYPE.equals(type) && !LIKE_OPERATION.equals(operation)) {
+            return "<=".equals(operation) ? NEUTRAL_TO_DATE : NEUTRAL_FROM_DATE;
+        }
+        return "";
+    }
+
+    /**
+     * What a missing value in the target column reads as, so an untouched parameter cannot hide a row:
+     * a number counts as zero and a string as empty, both of which the neutral default still matches,
+     * and a date as the far end of the window in the direction of the bound. Only a NULLABLE target is
+     * coalesced - a required column keeps the plain, index-friendly comparison.
+     *
+     * @param type the parameter's SQL type
+     * @param operation the SQL operator it compares with
+     * @return the SQL literal
+     */
+    private static String emptyLiteral(String type, String operation) {
+        if (DATE_TYPE.equals(type)) {
+            return "DATE '" + ("<=".equals(operation) ? NEUTRAL_TO_DATE : NEUTRAL_FROM_DATE) + "'";
+        }
+        return NUMERIC_TYPES.contains(type) ? "0" : "''";
+    }
+
+    private static Map<String, Object> reportParameter(String name, String type, String initial) {
         Map<String, Object> parameter = new LinkedHashMap<>();
         parameter.put("name", name);
-        parameter.put("type", "DATE");
+        parameter.put("type", type);
         parameter.put("initial", initial);
         return parameter;
     }
@@ -569,6 +697,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 FieldIntent targetField = fieldByName(target, fieldName);
                 // A cross-model target's fields are not in this model; string is the safe display type.
                 ref.reportType = targetField == null ? "CHARACTER VARYING" : reportType(targetField.getType());
+                ref.nullable = targetField == null || !targetField.isRequired();
                 ref.displayAlias = humanize(reference.replace('.', ' '));
                 ref.join = join(context, model, source, relation, target, targetAlias, baseAlias);
                 translate(context, ref, target, crossModelInfo(context, model, relation), fieldName);
@@ -581,6 +710,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             ref.tableAlias = baseAlias;
             ref.physicalColumn = column(source.getName(), reference);
             ref.reportType = reportType(field.getType());
+            ref.nullable = !field.isRequired();
             ref.displayAlias = humanize(reference);
             translate(context, ref, source, null, reference);
             return ref;
@@ -1128,15 +1258,41 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The WHERE predicate for a filter the builder cannot represent: the filter is parenthesised so an
-     * appended scope condition cannot rebind it.
+     * The WHERE predicate for a filter the builder cannot represent: the filter is parenthesised
+     * whenever anything is appended to it, so neither the lifecycle scope nor a parameter predicate can
+     * rebind it - an {@code OR}-carrying filter is exactly the one that does not round-trip, and
+     * {@code AND} binds tighter than {@code OR}.
+     *
+     * @param filter the rewritten filter, or null/blank for none
+     * @param scope the lifecycle scope condition, or null for none
+     * @param parameters the parameter predicate, or null for none
+     * @return the predicate, or null when there is nothing to filter by
      */
-    private static String rawWhere(String filter, Map<String, Object> scope) {
-        String scopePredicate = scope == null ? null : predicate(List.of(scope));
+    private static String rawWhere(String filter, Map<String, Object> scope, String parameters) {
+        String appended = and(scope == null ? null : predicate(List.of(scope)), parameters);
         if (filter == null || filter.isBlank()) {
-            return scopePredicate;
+            return appended;
         }
-        return scopePredicate == null ? filter : "(" + filter + ") AND " + scopePredicate;
+        return appended == null ? filter : "(" + filter + ") AND " + appended;
+    }
+
+    /**
+     * The two predicates ANDed, tolerating either being absent. The left one is already parenthesised
+     * where it needs to be ({@link #rawWhere}); a parameter predicate is a conjunction of plain
+     * comparisons, so it needs none.
+     *
+     * @param left the left predicate, or null
+     * @param right the right predicate, or null
+     * @return the combined predicate, or null when both are absent
+     */
+    private static String and(String left, String right) {
+        if (left == null || left.isBlank()) {
+            return right;
+        }
+        if (right == null || right.isBlank()) {
+            return left;
+        }
+        return left + " AND " + right;
     }
 
     private static int countOf(String value, char character) {
@@ -1347,6 +1503,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         private String physicalColumn;
         private String reportType;
         private String displayAlias;
+        /** Whether the column may hold no value - what makes a parameter predicate coalesce it. */
+        private boolean nullable = true;
         private Join join;
         private Join languageJoin;
         private String languageColumn;

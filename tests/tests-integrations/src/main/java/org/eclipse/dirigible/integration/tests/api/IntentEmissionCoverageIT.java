@@ -1296,6 +1296,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 source: Claim
                 dimensions: [Unit]
                 measures: ["count(*)"]
+                # User-set parameters: rendered above the report and bound into its WHERE. Both
+                # targets are NULLABLE and unset on the seeded claims, so the unparameterized call
+                # below is the assertion that a declared parameter does not narrow the report before
+                # anyone touches it - a plain `>= :minTotal` would drop both rows on a NULL total.
+                parameters:
+                  - { name: minTotal, target: totalCost, op: ge, initial: "0" }
+                  - { name: note, target: note, op: like }
 
             seeds:
               - name: people
@@ -1742,6 +1749,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the report repository must bind the language parameter its query uses");
         assertTrue(claimsByUnitRepository.contains("User.getLanguage()"),
                 "the report's language must come from the caller's Accept-Language, like every entity read");
+        // Authored parameters: declared on the .report with the value they bind when the request
+        // carries none, bound by the repository, and exposed as query parameters by the controller.
+        assertTrue(claimsByUnitReport.contains("\"name\": \"minTotal\"") && claimsByUnitReport.contains("\"initial\": \"0\""),
+                "an authored report parameter must be declared on the .report with its initial value: " + claimsByUnitReport);
+        assertTrue(claimsByUnitRepository.contains("parameter(\"minTotal\", \"DECIMAL\", value(filter, \"minTotal\", \"0\"))"),
+                "the report repository must bind each authored parameter, typed from its target field");
+        assertTrue(contentOf("gen/claimsbyunit/api/reports/ClaimsByUnitController.java").contains("@QueryParam(\"minTotal\")"),
+                "the report controller must expose each authored parameter as a query parameter");
 
         // The seed's RELATION key (Parent: 1) must survive into the CSV as the FK column - an
         // unknown/mis-cased key is dropped silently and CSVIM then skips the rows.
@@ -2918,6 +2933,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("[0].Unit", equalTo("Piece")));
+
+        // Authored report parameters, end to end. The two calls above already proved the half that is
+        // easy to get wrong: both claims are counted although the report declares a `>= :minTotal`
+        // bound over a totalCost neither of them has - an unset parameter must not narrow anything.
+        // Here the values are actually supplied, which is what proves the generated SQL runs: the
+        // contains-search concatenation (LIKE '%' || :note || '%') and the bound numeric comparison,
+        // on whichever database the suite runs against.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(REPORT_API + "/ClaimsByUnitController?note=mine")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("[0].Count", equalTo(1.0F)));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(REPORT_API + "/ClaimsByUnitController?minTotal=1000")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(0)));
 
         // calculatedActionOnCreate on a to-one relation, end to end: a create that OMITS the FK comes
         // back carrying the one the action resolved. Tariff 2 is the row flagged `base` - not the first
