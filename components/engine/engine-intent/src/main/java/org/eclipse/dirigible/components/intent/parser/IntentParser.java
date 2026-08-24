@@ -20,6 +20,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+import javax.lang.model.SourceVersion;
+
 import org.eclipse.dirigible.components.intent.generator.ArrivalSupport;
 import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
@@ -69,6 +71,7 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ResolveIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
 import org.eclipse.dirigible.components.intent.model.ExpansionIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
@@ -6942,6 +6945,7 @@ public final class IntentParser {
                         + REPORT_CHART_KINDS);
             }
             validateAgeingDimensions(model, report, issues);
+            validateReportParameters(model, report, issues);
             validateBalanceReport(model, report, issues);
             validateReportScope(model, report, issues);
             validateSubsetReportReferences(model, report, issues);
@@ -7202,53 +7206,208 @@ public final class IntentParser {
      * The bucketed field: an own {@code date}/{@code timestamp} of the source, or a one-hop relation's.
      */
     private static void validateAgeingField(IntentModel model, ReportIntent report, String subject, String path, List<String> issues) {
-        EntityIntent source = null;
-        for (EntityIntent entity : model.getEntities()) {
-            if (entity.getName() != null && entity.getName()
-                                                  .equals(report.getSource())) {
-                source = entity;
-            }
-        }
+        EntityIntent source = reportSource(model, report);
         if (source == null) {
             return; // an unknown source is reported separately
         }
+        FieldIntent field = reportPathField(model, source, subject, path, issues);
+        if (field == null) {
+            return;
+        }
+        String type = fieldType(field);
+        if (!"date".equals(type) && !"timestamp".equals(type)) {
+            issues.add(subject + " buckets by age, so [" + path + "] must be a date/timestamp field - got [" + field.getType() + "]");
+        }
+    }
+
+    /** The report's source entity, or null when it is missing or unknown (reported separately). */
+    private static EntityIntent reportSource(IntentModel model, ReportIntent report) {
+        return report.getSource() == null ? null : entityByName(model, report.getSource());
+    }
+
+    /** A field's declared type, lower-cased, or the empty string when it declares none. */
+    private static String fieldType(FieldIntent field) {
+        return field.getType() == null ? ""
+                : field.getType()
+                       .toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * The field a report path names: a field of the report's source, or a field of the entity ONE
+     * to-one relation hop away - the same reach a dimension and a measure resolve against.
+     *
+     * @param model the intent model
+     * @param source the report's source entity
+     * @param subject the authoring site, for the issue message
+     * @param path the authored field path
+     * @param issues the collecting issue list
+     * @return the field, or null when the path does not resolve here - either an issue was reported, or
+     *         the hop crosses into another model, where the field is resolved at generation time
+     */
+    private static FieldIntent reportPathField(IntentModel model, EntityIntent source, String subject, String path, List<String> issues) {
         String[] segments = path.split("\\.");
         if (segments.length > 2) {
             issues.add(subject + " field [" + path + "] may reference the source or ONE relation hop");
-            return;
+            return null;
         }
         EntityIntent owner = source;
         if (segments.length == 2) {
             RelationIntent hop = toOneRelationByName(source, segments[0]);
             if (hop == null) {
                 issues.add(subject + " [" + segments[0] + "] is not a to-one relation of [" + source.getName() + "]");
-                return;
+                return null;
             }
             if (hop.isCrossModel()) {
-                return; // resolved at generation against the owner model
+                return null; // resolved at generation against the owner model
             }
-            owner = null;
-            for (EntityIntent entity : model.getEntities()) {
-                if (entity.getName() != null && entity.getName()
-                                                      .equals(hop.getTo())) {
-                    owner = entity;
-                }
-            }
+            owner = hop.getTo() == null ? null : entityByName(model, hop.getTo());
             if (owner == null) {
-                return; // the dangling relation target is reported separately
+                return null; // the dangling relation target is reported separately
             }
         }
         FieldIntent field = fieldByName(owner, segments[segments.length - 1]);
         if (field == null) {
             issues.add(subject + " field [" + path + "] is not a field of [" + owner.getName() + "]");
-            return;
         }
-        String type = field.getType() == null ? ""
-                : field.getType()
-                       .toLowerCase();
-        if (!"date".equals(type) && !"timestamp".equals(type)) {
-            issues.add(subject + " buckets by age, so [" + path + "] must be a date/timestamp field - got [" + field.getType() + "]");
+        return field;
+    }
+
+    /** The comparisons an authored report parameter may bind with. */
+    private static final Set<String> REPORT_PARAMETER_OPS = Set.of("ge", "le", "eq", "like");
+
+    /** The types an authored report parameter may declare - the families the report page renders. */
+    private static final Set<String> REPORT_PARAMETER_TYPES = Set.of("date", "timestamp", "number", "string");
+
+    /** A target field's own type as the parameter family it belongs to. */
+    private static final Map<String, String> REPORT_PARAMETER_FAMILIES = Map.ofEntries(Map.entry("date", "date"),
+            Map.entry("timestamp", "timestamp"), Map.entry("integer", "number"), Map.entry("int", "number"), Map.entry("long", "number"),
+            Map.entry("decimal", "number"), Map.entry("double", "number"), Map.entry("string", "string"), Map.entry("uuid", "string"));
+
+    /** A parameter name is a SQL named marker and a request key, so it stays a plain identifier. */
+    private static final java.util.regex.Pattern REPORT_PARAMETER_NAME = java.util.regex.Pattern.compile("[A-Za-z][A-Za-z0-9_]*");
+
+    /**
+     * Names a report parameter cannot take. {@code language} is the multilingual overlay's own bound
+     * parameter; the others are the identifiers the generated report controller declares around it -
+     * its {@code repository} field, the {@code filter} map it fills and its paging locals - which a
+     * same-named parameter would shadow into code that does not compile.
+     */
+    private static final Set<String> RESERVED_REPORT_PARAMETERS = Set.of("language", "limit", "offset", "filter", "repository");
+
+    /** The window bounds {@code kind: balance} declares on its own behalf. */
+    private static final Set<String> BALANCE_REPORT_PARAMETERS = Set.of("fromDate", "toDate");
+
+    /**
+     * A report's authored {@code parameters:} - the user-set inputs bound into its {@code WHERE}.
+     *
+     * <p>
+     * A parameter is bound on EVERY call: when the request carries no value the generated repository
+     * binds the declared {@code initial}, which is therefore what the report shows unparameterized.
+     * That is why {@code initial} is required unless the comparison has a neutral "any value" default -
+     * a date window bound (widened to all time) and a {@code like} search (the empty pattern, which
+     * matches every value). An {@code eq} selector and a numeric bound have none: without a declared
+     * default they would silently show an empty or arbitrarily narrowed report, so they are refused
+     * here instead.
+     *
+     * <p>
+     * The target is a field of the source or a field one to-one relation hop away, and its own type
+     * types the parameter - an authored {@code type:} is a declaration checked against it, never a
+     * conversion. A relation itself is not a target: the value would be its raw foreign key and the
+     * report page has no picker to choose one, so the message points at the report's own per-column
+     * filters instead.
+     */
+    private static void validateReportParameters(IntentModel model, ReportIntent report, List<String> issues) {
+        EntityIntent source = reportSource(model, report);
+        Set<String> names = new HashSet<>();
+        for (ReportParameterIntent parameter : report.getParameters()) {
+            String name = parameter.getName() == null ? null
+                    : parameter.getName()
+                               .trim();
+            if (name == null || name.isEmpty()) {
+                issues.add("report [" + report.getName() + "] has a parameter with no name");
+                continue;
+            }
+            String subject = "report [" + report.getName() + "] parameter [" + name + "]";
+            if (!REPORT_PARAMETER_NAME.matcher(name)
+                                      .matches()
+                    || SourceVersion.isKeyword(name)) {
+                // The generated report controller declares the parameter as a Java method parameter and
+                // binds it as a SQL named marker, so a name that is not an identifier in both - or is a
+                // Java keyword - is caught here rather than as a javac error in generated code.
+                issues.add(subject + " must be named as a plain identifier - letters, digits and underscore, starting with a letter,"
+                        + " and not a Java keyword");
+            }
+            if (!names.add(name)) {
+                issues.add(subject + " is declared twice");
+            }
+            if (RESERVED_REPORT_PARAMETERS.contains(name)) {
+                issues.add(subject + " uses the reserved name [" + name
+                        + "] - the platform binds it itself or the generated report controller declares it");
+            }
+            if (report.isBalance() && BALANCE_REPORT_PARAMETERS.contains(name)) {
+                issues.add(subject + " collides with the balance window parameter of the same name");
+            }
+            String op = parameter.getNormalizedOp();
+            if (op == null) {
+                issues.add(subject + " has no op - expected one of " + REPORT_PARAMETER_OPS);
+            } else if (!REPORT_PARAMETER_OPS.contains(op)) {
+                issues.add(subject + " has unknown op [" + parameter.getOp() + "] - expected one of " + REPORT_PARAMETER_OPS);
+                op = null;
+            }
+            String declared = parameter.getNormalizedType();
+            if (declared != null && !REPORT_PARAMETER_TYPES.contains(declared)) {
+                issues.add(subject + " has unknown type [" + parameter.getType() + "] - expected one of " + REPORT_PARAMETER_TYPES);
+                declared = null;
+            }
+            String family = validateReportParameterTarget(model, source, parameter, subject, declared, issues);
+            String kind = family != null ? family : declared;
+            if ("like".equals(op) && kind != null && !"string".equals(kind)) {
+                issues.add(subject + " compares with op: like, which matches text - [" + parameter.getNormalizedTarget() + "] is a [" + kind
+                        + "] field");
+            }
+            boolean neutral =
+                    "like".equals(op) || (("date".equals(kind) || "timestamp".equals(kind)) && ("ge".equals(op) || "le".equals(op)));
+            if (!neutral && op != null && (parameter.getInitial() == null || parameter.getInitial()
+                                                                                      .isBlank())) {
+                issues.add(subject + " needs an initial value - it is bound on every call and [" + op
+                        + "] has no neutral default, so declare what the report shows before the user sets it");
+            }
         }
+    }
+
+    /**
+     * The parameter target's field family, or null when the target does not resolve to a field of this
+     * model (a cross-model hop, or an issue already reported).
+     */
+    private static String validateReportParameterTarget(IntentModel model, EntityIntent source, ReportParameterIntent parameter,
+            String subject, String declared, List<String> issues) {
+        String target = parameter.getNormalizedTarget();
+        if (target == null) {
+            issues.add(subject + " has no target field to filter");
+            return null;
+        }
+        if (source == null) {
+            return null; // an unknown source is reported separately
+        }
+        if (relationByName(source, target) != null) {
+            issues.add(subject + " targets the relation [" + target
+                    + "] - a parameter filters a field, so name one of it (<relation>.<field>) or filter by the related column on the report itself");
+            return null;
+        }
+        FieldIntent field = reportPathField(model, source, subject, target, issues);
+        if (field == null) {
+            return null;
+        }
+        String family = REPORT_PARAMETER_FAMILIES.get(fieldType(field));
+        if (family == null) {
+            issues.add(subject + " filters [" + target + "], a [" + field.getType()
+                    + "] field - a parameter binds a date, timestamp, number or string");
+            return null;
+        }
+        if (declared != null && !declared.equals(family)) {
+            issues.add(subject + " declares type [" + declared + "] but [" + target + "] is a [" + field.getType() + "] field");
+        }
+        return family;
     }
 
     /**

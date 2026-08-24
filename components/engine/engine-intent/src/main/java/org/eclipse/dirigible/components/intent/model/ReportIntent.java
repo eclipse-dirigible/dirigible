@@ -42,6 +42,12 @@ public class ReportIntent {
     private String credit;
     private List<String> dimensions = new ArrayList<>();
     private List<String> measures = new ArrayList<>();
+    /**
+     * User-set parameters rendered as inputs above the report and bound into the generated query's
+     * {@code WHERE} - a from/to window bound, an amount threshold, a name search. Empty (the default)
+     * -> the report takes no input beyond the generic per-column filters.
+     */
+    private List<ReportParameterIntent> parameters = new ArrayList<>();
     private String filter;
     /**
      * Which lifecycle rows of the source this report counts, when the source carries a
@@ -139,6 +145,14 @@ public class ReportIntent {
 
     public void setMeasures(List<String> measures) {
         this.measures = measures == null ? new ArrayList<>() : measures;
+    }
+
+    public List<ReportParameterIntent> getParameters() {
+        return parameters;
+    }
+
+    public void setParameters(List<ReportParameterIntent> parameters) {
+        this.parameters = parameters == null ? new ArrayList<>() : parameters;
     }
 
     public String getFilter() {
