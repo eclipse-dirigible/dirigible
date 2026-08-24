@@ -82,8 +82,9 @@ class ProjectDependenciesCollector {
     }
 
     /**
-     * Collects one project's maven declarations - git entries keep their meaning elsewhere, and unknown
-     * types are tolerated with a warning so an older platform accepts a newer descriptor.
+     * Collects one project's maven declarations - git and typeless project-to-project entries keep
+     * their meaning elsewhere, and unknown types are tolerated with a warning so an older platform
+     * accepts a newer descriptor.
      *
      * @param project the project name
      * @param metadata the parsed project.json
@@ -95,6 +96,9 @@ class ProjectDependenciesCollector {
             Map<String, Set<String>> declaredBy) {
         for (ProjectMetadataDependency declared : metadata.getDependencies()) {
             String type = declared.getType();
+            if (type == null || type.isBlank()) {
+                continue; // the classic project-to-project (guid) dependency, consumed by the IDE workspace
+            }
             if (ProjectMetadataDependency.TYPE_GIT.equalsIgnoreCase(type)) {
                 continue; // consumed by the IDE workspace
             }
