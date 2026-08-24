@@ -556,6 +556,14 @@ reports:
     credit: credit
     dimensions: [account.code, account.name]
     filter: "journalEntry.status == 2"
+  - name: GeneralLedger
+    kind: balance
+    source: JournalEntryItem
+    date: journalEntry.entryDate              # its first hop is the document the lines share
+    debit: debit
+    credit: credit
+    dimensions: [account.code, account.name]
+    correspondence: account.code              # turnovers per corresponding account, allocated
 ```
 
 In `filter:`, reference relations via `relation.field` (translated to a JOIN); a bare relation

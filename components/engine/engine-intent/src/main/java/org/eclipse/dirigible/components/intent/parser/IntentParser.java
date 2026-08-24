@@ -6997,6 +6997,18 @@ public final class IntentParser {
                         + reference.name() + "]" + reference.on() + rowAlternative);
             }
         }
+        if (!isBlank(report.getCorrespondence())) {
+            // The correspondence bucket is a dimension read off a sibling line, so a subset relation is
+            // as wrong there as it is on a dimension - it would GROUP BY the stored key list.
+            SubsetReference reference = subsetReferenced(model, source, referencedPath(report.getCorrespondence()));
+            if (reference != null) {
+                issues.add("report [" + report.getName() + "] correspondence [" + report.getCorrespondence()
+                                                                                        .trim()
+                        + "] " + (reference.joinedEntity() == null ? "is a subset relation"
+                                : "references the subset relation [" + reference.name() + "]" + reference.on())
+                        + rowAlternative);
+            }
+        }
         if (!isBlank(report.getFilter())) {
             // Identifier tokens not preceded by a dot are the first segments the generator rewrites; the
             // optional second segment is the one-hop path it resolves against the joined entity.
@@ -7419,13 +7431,15 @@ public final class IntentParser {
      * {@code measures} because the six opening / period / closing totals ARE the measures.
      */
     private static void validateBalanceReport(IntentModel model, ReportIntent report, List<String> issues) {
-        boolean balanceInputs = report.getDate() != null || report.getDebit() != null || report.getCredit() != null;
+        boolean balanceInputs =
+                report.getDate() != null || report.getDebit() != null || report.getCredit() != null || report.getCorrespondence() != null;
         boolean statementInputs = report.getAccount() != null || !report.getLines()
                                                                         .isEmpty();
         if (report.getKind() == null || report.getKind()
                                               .isBlank()) {
             if (balanceInputs) {
-                issues.add("report [" + report.getName() + "] declares date/debit/credit but is not kind: balance or kind: statement");
+                issues.add("report [" + report.getName()
+                        + "] declares date/debit/credit/correspondence but is not kind: balance or kind: statement");
             }
             if (statementInputs) {
                 issues.add("report [" + report.getName() + "] declares account/lines but is not kind: statement");
@@ -7450,6 +7464,11 @@ public final class IntentParser {
                       .anyMatch(d -> d != null && !d.isBlank())) {
                 issues.add(prefix + " must not declare dimensions - its rows are the declared lines");
             }
+            if (report.getCorrespondence() != null) {
+                // Correspondence buckets one account's turnover by the accounts it faced; a statement has
+                // no account axis to bucket - its rows are the declared lines.
+                issues.add(prefix + " must not declare correspondence - the general ledger axis belongs to kind: balance");
+            }
         } else {
             if (report.getDimensions()
                       .stream()
@@ -7471,6 +7490,9 @@ public final class IntentParser {
             return; // the missing/unknown source is already reported
         }
         validateBalanceDate(model, source, report, issues, prefix);
+        if (!report.isStatement()) {
+            validateBalanceCorrespondence(model, source, report, issues, prefix);
+        }
         requireNumericBalanceField(source, report.getDebit(), "debit", issues, prefix);
         requireNumericBalanceField(source, report.getCredit(), "credit", issues, prefix);
         if (report.isStatement()) {
@@ -7485,6 +7507,65 @@ public final class IntentParser {
      * is the code the line selectors match with, so a numeric or date field cannot carry it, and a
      * cross-model target is checked at generation like every cross-model reference.
      */
+    /**
+     * {@code correspondence} - the general ledger's "in correspondence with" axis. The bucket is read
+     * off a SIBLING line of the same document, so two things have to hold that a plain dimension never
+     * needs: the source must reach its document (the first hop of {@code date}, which is where the
+     * sibling grouping key comes from) and it must have a primary key (a line does not correspond with
+     * itself, and self-exclusion is by key). The path itself resolves against the source entity - the
+     * sibling is another row of it - so it is checked exactly like a dimension.
+     */
+    private static void validateBalanceCorrespondence(IntentModel model, EntityIntent source, ReportIntent report, List<String> issues,
+            String prefix) {
+        String reference = report.getCorrespondence();
+        if (reference == null) {
+            return;
+        }
+        if (reference.isBlank()) {
+            issues.add(prefix + " correspondence is empty - name the path bucketing the counter-side lines,"
+                    + " e.g. correspondence: Account.number");
+            return;
+        }
+        reference = reference.trim();
+        String date = report.getDate() == null ? ""
+                : report.getDate()
+                        .trim();
+        int dateDot = date.indexOf('.');
+        if (dateDot <= 0 || toOneRelation(source, date.substring(0, dateDot)) == null) {
+            issues.add(prefix + " correspondence needs the document its lines share, which is the first hop of date - so date ["
+                    + report.getDate() + "] must be a <relation>.<field> path over a to-one relation of [" + source.getName()
+                    + "] to its journal entry / voucher");
+        }
+        if (source.getFields()
+                  .stream()
+                  .noneMatch(FieldIntent::isPrimaryKey)) {
+            issues.add(prefix + " correspondence needs a primaryKey on [" + source.getName()
+                    + "] - a line is excluded from its own correspondent bucket by key");
+        }
+        int dot = reference.indexOf('.');
+        if (dot > 0) {
+            String relationName = reference.substring(0, dot);
+            RelationIntent relation = toOneRelation(source, relationName);
+            if (relation == null) {
+                issues.add(
+                        prefix + " correspondence [" + reference + "] does not start with a to-one relation of [" + source.getName() + "]");
+                return;
+            }
+            if (relation.isCrossModel()) {
+                return; // like every cross-model reference, resolved at generation
+            }
+            EntityIntent target = entityByName(model, relation.getTo());
+            if (target != null && fieldByName(target, reference.substring(dot + 1)) == null) {
+                issues.add(prefix + " correspondence [" + reference + "] does not resolve to a field of [" + relation.getTo() + "]");
+            }
+            return;
+        }
+        if (fieldByName(source, reference) == null && toOneRelation(source, reference) == null) {
+            issues.add(
+                    prefix + " correspondence [" + reference + "] is neither a field nor a to-one relation of [" + source.getName() + "]");
+        }
+    }
+
     private static void validateStatementAccount(IntentModel model, EntityIntent source, ReportIntent report, List<String> issues,
             String prefix) {
         String reference = report.getAccount();

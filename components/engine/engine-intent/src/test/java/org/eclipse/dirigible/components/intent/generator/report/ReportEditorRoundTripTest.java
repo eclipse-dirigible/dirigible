@@ -235,43 +235,79 @@ class ReportEditorRoundTripTest {
                         .toString());
     }
 
+    private static final String LEDGER = """
+            name: ledger
+            entities:
+              - name: Account
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string }
+              - name: JournalEntry
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: entryDate, type: date }
+                relations:
+                  - { name: items, kind: oneToMany, to: JournalEntryItem }
+              - name: JournalEntryItem
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: debit, type: decimal }
+                  - { name: credit, type: decimal }
+                relations:
+                  - { name: journalEntry, kind: manyToOne, to: JournalEntry, composition: true }
+                  - { name: account, kind: manyToOne, to: Account, required: true }
+            reports:
+              - name: TrialBalance
+                kind: balance
+                source: JournalEntryItem
+                date: journalEntry.entryDate
+                debit: debit
+                credit: credit
+                dimensions: [account.code]
+                #EXTRA#
+            """;
+
+    private static Map<String, Object> ledgerReport(String extra) {
+        IntentModel model = IntentParser.parse(LEDGER.replace("#EXTRA#", extra));
+        return ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                    .get(0));
+    }
+
     /** The balance windows are expressions too, so the accounting reports round-trip as well. */
     @Test
     void aBalanceReportRoundTrips() {
-        IntentModel model = IntentParser.parse("""
-                name: ledger
-                entities:
-                  - name: Account
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: code, type: string }
-                  - name: JournalEntry
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: entryDate, type: date }
-                    relations:
-                      - { name: items, kind: oneToMany, to: JournalEntryItem }
-                  - name: JournalEntryItem
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: debit, type: decimal }
-                      - { name: credit, type: decimal }
-                    relations:
-                      - { name: journalEntry, kind: manyToOne, to: JournalEntry, composition: true }
-                      - { name: account, kind: manyToOne, to: Account, required: true }
-                reports:
-                  - name: TrialBalance
-                    kind: balance
-                    source: JournalEntryItem
-                    date: journalEntry.entryDate
-                    debit: debit
-                    credit: credit
-                    dimensions: [account.code]
-                """);
-        Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
-                                                                                                            .get(0));
+        Map<String, Object> document = ledgerReport("");
         assertRoundTrips(document);
         assertEquals(2, joins(document).size());
+    }
+
+    /**
+     * The general ledger's correspondence axis is the one report shape that joins a table to ITSELF and
+     * hangs a second copy of a dimension's join off that - all of it through the same {@code joins}
+     * rows and column {@code expression}s, so the builder still owns the query.
+     */
+    @Test
+    void aCorrespondenceBalanceReportRoundTrips() {
+        Map<String, Object> document = ledgerReport("correspondence: account.code");
+        assertRoundTrips(document);
+
+        List<Map<String, Object>> joins = joins(document);
+        assertEquals(4, joins.size());
+        Map<String, Object> self = joins.get(2);
+        assertEquals("JournalEntryItemCorrespondent", self.get("alias"));
+        assertEquals("LEDGER_JOURNAL_ENTRY_ITEM", self.get("name"));
+        // LEFT, so a document with nothing on the counter side keeps its line - and its turnover.
+        assertEquals("LEFT", self.get("type"));
+        // The self-join must be introduced BEFORE the join that hangs off its alias.
+        assertEquals("AccountCorrespondent", joins.get(3)
+                                                  .get("alias"));
+        assertEquals("LEFT", joins.get(3)
+                                  .get("type"));
+        assertNotEquals(joins.get(0)
+                             .get("alias"),
+                joins.get(3)
+                     .get("alias"),
+                "the two copies of the account join must not share an alias, or one of them is dropped");
     }
 
     /**

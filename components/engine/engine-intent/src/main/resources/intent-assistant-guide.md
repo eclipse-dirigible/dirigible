@@ -1918,6 +1918,46 @@ must be numeric fields of the source; at least one dimension; `measures` must be
 posted entries with a `filter` on the source's (or its master's) status FK — the report itself does
 not filter.
 
+##### correspondence - turnovers per corresponding account (the general ledger)
+
+**Use when:** the user needs the double-entry **general ledger** (главна книга) rather than the trial
+balance — per account, the turnover split by the accounts on the OPPOSITE side of the same document
+(account 411 Customers' debit turnover in correspondence with 702 Revenue and 4532 VAT on sales).
+
+```yaml
+reports:
+  - name: GeneralLedger
+    kind: balance
+    source: JournalEntryItem
+    date: journalEntry.entryDate           # its FIRST HOP is the document the lines share
+    debit: debit
+    credit: credit
+    dimensions: [account.code, account.name]
+    correspondence: account.code           # bucket the counter-side lines of the same entry by this
+    filter: "journalEntry.status == 2"
+```
+
+The correspondent account is not on the source row — it sits on a **sibling line of the same journal
+entry** — so `correspondence` is resolved a second time against that sibling and added as one more
+grouping dimension (`Correspondent Account Code`). It takes the same shapes a dimension does: a field
+of the source, a `relation.field` path, or a bare to-one relation. The document the lines share is
+the **first hop of `date`**, which is why a correspondence report must take its date over the
+relation to its journal entry / voucher rather than off a line-local date column.
+
+Amounts are allocated **proportionally**: a debit line's share of a bucket is that bucket's credit
+over the document's total credit, and the mirror image for a credit line. A simple entry (one line on
+at least one side) therefore attributes its full amount to the single counter-account, a compound
+entry (M debit lines against N credit lines) splits it by the counter-side amounts, and a line whose
+document has nothing on the counter side keeps its full amount in one **empty bucket** rather than
+disappearing. So each account's totals across its correspondence buckets add up to exactly the
+figures the plain balance report shows for the same window — that reconciliation is the property to
+check when in doubt.
+
+**Rules:** `correspondence` belongs to `kind: balance` only — a `kind: statement` report has no
+account axis to bucket (its rows are the declared lines) and declaring it there is an error. The
+source needs a `primaryKey` (a line is excluded from its own bucket by key), and a subset relation is
+as wrong here as it is on a dimension.
+
 #### reports[].kind: statement - the statutory financial statement
 
 **Use when:** the user needs a balance sheet, an income statement, or any other fixed line structure
