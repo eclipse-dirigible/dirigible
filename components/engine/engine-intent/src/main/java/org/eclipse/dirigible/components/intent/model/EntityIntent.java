@@ -163,6 +163,18 @@ public class EntityIntent {
      */
     private Boolean immutable;
     /**
+     * Optional date-based immutability: while the period covering the named date of this record is
+     * closed, user writes are refused (409), exactly as for {@code immutableWhen}. Composes with the
+     * status-scoped guard rather than replacing it - a record can be frozen by what it IS and by WHEN
+     * it falls, independently.
+     */
+    private PeriodLockIntent immutableInPeriod;
+    /**
+     * Optional period-register marker: this entity's rows ARE the dated windows other entities are
+     * locked by, and this names its two bounds and the statuses that mean CLOSED.
+     */
+    private PeriodIntent period;
+    /**
      * Whether this composition child freezes together with its master ({@code locksWithMaster}, default
      * true). A master's {@code immutableWhen} locks the document's own CONTENT; it says nothing about a
      * child collection that is a different entity with its own controller and its own rules. Declaring
@@ -501,6 +513,22 @@ public class EntityIntent {
 
     public void setImmutable(Boolean immutable) {
         this.immutable = immutable;
+    }
+
+    public PeriodLockIntent getImmutableInPeriod() {
+        return immutableInPeriod;
+    }
+
+    public void setImmutableInPeriod(PeriodLockIntent immutableInPeriod) {
+        this.immutableInPeriod = immutableInPeriod;
+    }
+
+    public PeriodIntent getPeriod() {
+        return period;
+    }
+
+    public void setPeriod(PeriodIntent period) {
+        this.period = period;
     }
 
     public String getHierarchy() {

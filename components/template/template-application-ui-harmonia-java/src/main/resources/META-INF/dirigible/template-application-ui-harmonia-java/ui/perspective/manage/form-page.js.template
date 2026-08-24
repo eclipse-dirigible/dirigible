@@ -194,7 +194,7 @@ document.addEventListener('alpine:init', () => {
 #set($historyFirst = true)
     historyLabels: {#foreach($property in $properties)#if(!$property.dataPrimaryKey && (!$property.auditType || $property.auditType == "NONE"))#if($property.widgetLabel)#set($hlabel = $property.widgetLabel)#else#set($hlabel = $property.name)#end#if($historyFirst)#set($historyFirst = false)#else, #end'${property.name}': ['$projectName:${tprefix}.t.${property.dataName}', '${hlabel}']#end#end},
 #end
-#if($immutableStatusProperty || $immutableAlways)
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
 
     // Immutability pre-check (intent `immutable`/`immutableWhen:`), asked from the controller's
     // GET /{id}/mutable so the Edit affordances stay honest - an /edit URL typed directly opens
@@ -313,7 +313,7 @@ document.addEventListener('alpine:init', () => {
         await this.ensureFilteredCurrent('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.widgetDropDownKey}', '${property.widgetDropDownValue}');
 #end
 #end
-#if($immutableStatusProperty || $immutableAlways)
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
         try {
           const m = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id) + '/mutable');
           this.mutable = !m || m.mutable !== false;

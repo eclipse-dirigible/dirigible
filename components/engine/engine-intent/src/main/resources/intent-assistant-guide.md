@@ -306,6 +306,24 @@ field may declare:
   snapshot entity (e.g. the frozen copy stored when an invoice is SENT): written once by the flow,
   never editable. System writes through the repository stay possible. Mutually exclusive with
   `immutableWhen` (always-immutable subsumes any status scope); needs no EntityStatus relation.
+- `period: { start: <date field>, end: <date field>, closedWhen: "<Status> == <seed id>" }`
+  (entity-level) - **marks the entity a PERIOD REGISTER**: its rows are the dated windows other
+  entities are locked by. A fiscal period is an ordinary entity - a row with two dates and a
+  lifecycle - so this only names which fields are the bounds (both `date`, the end inclusive) and
+  which statuses mean CLOSED (the `immutableWhen` grammar over the register's own EntityStatus
+  relation, seeded names accepted). Closing a period is a plain status transition, authored with the
+  machinery that already exists; nothing here writes the register.
+- `immutableInPeriod: { period: <Register>, date: <own date field> }` (entity-level) - **date-based
+  user-write immutability**: while the register row covering the named date is closed, the record is
+  rejected with 409 on the REST surface. `immutableWhen` freezes a record for what it IS; this
+  freezes it for WHEN it falls, and the two compose (an entity may declare either, both or neither).
+  Unlike the status guard it also refuses a **create** dated inside a closed window and an update
+  that would MOVE a record into one - once March is closed, nothing dated in March may appear,
+  change or vanish. Workflow/system writes through the repository stay possible, as always. A date
+  covered by no period is open (periods are opened as they are needed) and an unset date falls in
+  none. The lock reaches composition CHILDREN exactly as the status one does. Boundary: the register
+  must be an entity of the SAME model - the guard is generated into this model's controllers, which
+  can only query a repository generated alongside them.
 - `lifecycle: { edges: [ { from: <status>, to: [<status>, ...] }, ... ] }` (entity-level) - **the
   declarative state machine**: the WHOLE set of legal status moves, declared once and enforced on
   EVERY status write. Without it the status machinery is a set of point constructs - `init:` names
