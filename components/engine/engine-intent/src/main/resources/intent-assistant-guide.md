@@ -1815,8 +1815,8 @@ target is compared as a date, so a `le` bound includes the chosen day. The targe
 - a relation itself is not one (name a field of it: `Customer.name`), `boolean` and `text` fields are
 not parameterizable, and the name must be a plain, non-keyword identifier that is not one the
 platform already binds (`language`) or the generated controller declares (`filter`, `limit`,
-`offset`, `repository`). `kind: balance` declares its own `fromDate`/`toDate`,
-so a balance report may add further parameters but not redeclare those two.
+`offset`, `repository`). `kind: balance` and `kind: statement` declare their own
+`fromDate`/`toDate`, so either may add further parameters but not redeclare those two.
 
 #### reports[].scope - which lifecycle rows an aggregate counts
 
@@ -1917,6 +1917,74 @@ a `date`-typed field (a `timestamp` is rejected — the window bounds are dates)
 must be numeric fields of the source; at least one dimension; `measures` must be empty. Restrict to
 posted entries with a `filter` on the source's (or its master's) status FK — the report itself does
 not filter.
+
+#### reports[].kind: statement - the statutory financial statement
+
+**Use when:** the user needs a balance sheet, an income statement, or any other fixed line structure
+over the same signed ledger — a form where every line is a formula over the chart of accounts and
+some lines are subtotals of others. A `kind: balance` report gives one row per dimension value; a
+statement gives the *lines of the form*.
+
+```yaml
+reports:
+  - name: BalanceSheet
+    kind: statement
+    source: JournalEntryItem              # the ledger line items (same as a balance report)
+    date: journalEntry.entryDate          # the date driving the window (field or one-hop relation.field)
+    debit: debit                          # the numeric debit amount field of the source
+    credit: credit                        # the numeric credit amount field of the source
+    account: account.code                 # the account CODE the lines select on (a string field)
+    filter: "journalEntry.status == 2"    # only POSTED entries count
+    lines:
+      - { code: A.I,  label: Fixed assets,   accounts: "20*,21*", measure: closingNetDebit }
+      - { code: A.II, label: Receivables,    accounts: "41*",     measure: closingNetDebit }
+      - { code: A,    label: Total assets,   sum: [A.I, A.II] }
+      - { code: B.I,  label: Payables,       accounts: "40-49",   measure: closingNetCredit }
+      - { code: B,    label: Net assets,     sum: [A], less: [B.I] }
+```
+
+The report's rows are the declared `lines`, in the authored order, as three columns — **Code**,
+**Label**, **Amount** — and the window is the same pair of runtime From/To date parameters a balance
+report declares.
+
+**A line is either a leaf or computed, never both.** A leaf reads the ledger: `accounts` selects the
+accounts and `measure` says which of their balances to take. A computed line is arithmetic over
+other lines of the same statement, referenced by their `code` — `sum:` adds them, `less:` subtracts
+them; both may appear on one line.
+
+**`accounts` — the selector**, comma-separated, matching the account code:
+
+| term      | means                                                                  |
+| --------- | ---------------------------------------------------------------------- |
+| `20*`     | every account whose code starts with `20`                              |
+| `4110`    | exactly that account                                                   |
+| `60-69`   | every account starting inside the range — the bounds are equally long prefixes, so this takes `601` and `6999` too |
+
+A code may hold letters, digits, dot and underscore; the hyphen is the range separator and a
+trailing asterisk makes a prefix.
+
+**`measure` — which balance the line takes**, one of the twelve:
+`openingDebit`, `openingCredit`, `openingNetDebit`, `openingNetCredit`,
+`periodDebit`, `periodCredit`, `periodNetDebit`, `periodNetCredit`,
+`closingDebit`, `closingCredit`, `closingNetDebit`, `closingNetCredit`.
+
+The plain ones sum the raw side (turnover). **The `Net` ones net an account's two sides before the
+line sums it and keep only what is left on the named side** — that is what puts a both-type account
+on the side its actual balance puts it on, and it is what a balance sheet line almost always wants:
+a settlement account in debit is a receivable, the same account in credit is a payable, and
+`closingNetDebit` on the asset line together with `closingNetCredit` on the liability line files each
+one where it belongs without the author having to know which way it went. Use a plain measure only
+when the line really is a turnover (an income statement's gross movements).
+
+**Rules:** `date` must be a `date` field (a `timestamp` is rejected — the window bounds are dates);
+`debit`/`credit` must be numeric fields of the source; `account` must be a `string` field (own or
+one-hop) holding the code; `dimensions` and `measures` must be empty (the lines ARE the rows); line
+codes are unique, every `sum`/`less` code must be a declared line, and the references must not form
+a cycle. Restrict to posted entries with a `filter`, exactly as for a balance report.
+
+**Boundary:** a statement report computes the statement's *numbers*. The legally mandated print
+layout stays a hand-authored `.print` template over that result — the platform's standing contract
+for statutory form.
 
 #### reports[].chart - render as a chart
 

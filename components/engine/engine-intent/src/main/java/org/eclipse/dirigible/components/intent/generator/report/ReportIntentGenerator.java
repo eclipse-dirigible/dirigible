@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.intent.generator.report;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -23,6 +24,7 @@ import java.util.stream.Collectors;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
+import org.eclipse.dirigible.components.intent.generator.StatementSupport;
 import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
@@ -34,6 +36,7 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
+import org.eclipse.dirigible.components.intent.model.StatementLineIntent;
 import org.eclipse.dirigible.components.intent.model.WidgetIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -215,9 +218,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         String baseTable = report.getSource() == null ? "" : IntentNaming.tableName(context, report.getSource());
 
         boolean balance = report.isBalance();
-        boolean aggregated = balance || report.getMeasures()
-                                              .stream()
-                                              .anyMatch(m -> m != null && !m.isBlank());
+        boolean statement = report.isStatement();
+        boolean aggregated = balance || statement || report.getMeasures()
+                                                           .stream()
+                                                           .anyMatch(m -> m != null && !m.isBlank());
 
         Map<String, Join> joins = new LinkedHashMap<>();
         List<Map<String, Object>> columns = new ArrayList<>();
@@ -282,8 +286,14 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             columns.add(dimensionColumn);
             dimensionColumns.put(expressionKey(dimension), new WidgetDimension(dimensionColumn, null));
         }
+        StatementQuery statementQuery = null;
         if (balance) {
             addBalanceMeasures(context, model, source, baseAlias, report, joins, columns);
+        } else if (statement) {
+            // The ledger references are resolved (and their joins registered) BEFORE the filter's, so
+            // the emitted FROM introduces the statement's own tables first - the order the balance
+            // report already establishes.
+            statementQuery = prepareStatement(context, model, source, baseAlias, report, joins, columns);
         } else {
             for (String measure : report.getMeasures()) {
                 if (measure == null || measure.isBlank()) {
@@ -300,7 +310,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         warnOnRestrictedColumns(context, model, source, report);
         String filter = buildWhere(context, model, source, baseAlias, joins, report.getFilter());
         Map<String, Object> scope = scopeCondition(context, model, source, baseAlias, report, aggregated);
-        List<Map<String, Object>> parameters = balance ? balanceParameters() : new ArrayList<>();
+        // A statement takes the balance window too: its ledger reduction is the balance report's,
+        // and the authored `parameters:` are appended to the same list below.
+        List<Map<String, Object>> parameters = report.isLedgerKind() ? balanceParameters() : new ArrayList<>();
         List<Map<String, Object>> parameterConditions = parameterConditions(context, model, source, baseAlias, report, joins, parameters);
         List<Map<String, Object>> conditions = conditions(filter, scope);
         String where;
@@ -311,7 +323,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             where = predicate(conditions);
         }
         List<Map<String, Object>> joinRows = joinRows(joins);
-        String query = buildQuery(baseTable, baseAlias, joinRows, columns, where);
+        String query = statementQuery == null ? buildQuery(baseTable, baseAlias, joinRows, columns, where)
+                : statementQuery.sql(baseTable, baseAlias, joinRows, where);
 
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("name", report.getName());
@@ -343,9 +356,17 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             // The report kind rides on the .report so the generated page knows to render the
             // balance affordances (window pickers, totals row).
             document.put("kind", "balance");
+        } else if (statement) {
+            document.put("kind", "statement");
         }
         document.put("columns", columns);
-        if (!joinRows.isEmpty()) {
+        // A statement's joins and filter live inside its own subquery, not in a SELECT the report
+        // editor's visual builder could rebuild - so they are deliberately NOT emitted as the
+        // builder-owned model. The builder's round-trip check then fails to reproduce the query and
+        // the report opens free-style, where the query string is the source of truth: the honest
+        // outcome, and the one that keeps the editor from rewriting the statement into a flat SELECT
+        // on save (dirigible #6675).
+        if (!statement && !joinRows.isEmpty()) {
             document.put("joins", joinRows);
         }
         document.put("query", query);
@@ -354,7 +375,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
         // Only when the predicate round-trips: an empty `conditions` used to make the editor emit a
         // bare `WHERE`, and a partial one would have silently dropped the rest of the filter.
-        if (conditions != null && !conditions.isEmpty()) {
+        if (!statement && conditions != null && !conditions.isEmpty()) {
             document.put("conditions", conditions);
         }
         document.put("security", security(context, report.getName()));
@@ -595,6 +616,259 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         parameter.put("type", type);
         parameter.put("initial", initial);
         return parameter;
+    }
+
+    /** The alias of the per-account balance subquery a statement's lines read. */
+    private static final String ACCOUNT_BALANCES = "\"ACCOUNT_BALANCES\"";
+
+    /** The alias of the derived table holding the statement's lines. */
+    private static final String STATEMENT_LINES_ALIAS = "STATEMENT_LINES";
+
+    /** The same alias, quoted, as the query refers to it. */
+    private static final String STATEMENT_LINES = "\"" + STATEMENT_LINES_ALIAS + "\"";
+
+    /** The account-code column the per-account balance subquery exposes to the line selectors. */
+    private static final String ACCOUNT_CODE = "\"ACCOUNT_CODE\"";
+
+    /**
+     * Resolve a statement's ledger references, register their joins and emit its three output columns.
+     *
+     * @param context the generation context
+     * @param model the intent model
+     * @param source the report's source entity
+     * @param baseAlias the base-table alias
+     * @param report the statement report
+     * @param joins the joins collected so far, added to
+     * @param columns the emitted columns, appended to
+     * @return everything the query assembly needs afterwards
+     */
+    private static StatementQuery prepareStatement(IntentGenerationContext context, IntentModel model, EntityIntent source,
+            String baseAlias, ReportIntent report, Map<String, Join> joins, List<Map<String, Object>> columns) {
+        ColumnRef date = resolve(context, model, source, baseAlias, report.getDate()
+                                                                          .trim());
+        registerJoin(joins, date);
+        ColumnRef debit = resolve(context, model, source, baseAlias, report.getDebit()
+                                                                           .trim());
+        registerJoin(joins, debit);
+        ColumnRef credit = resolve(context, model, source, baseAlias, report.getCredit()
+                                                                            .trim());
+        registerJoin(joins, credit);
+        ColumnRef account = resolve(context, model, source, baseAlias, report.getAccount()
+                                                                             .trim());
+        // Only the entity join, never the language overlay: the account CODE is an identifier the line
+        // selectors match on, and matching a translated value would make a statement's lines depend on
+        // the reader's language.
+        if (account.join != null) {
+            joins.putIfAbsent(account.join.alias, account.join);
+        }
+        columns.add(column(STATEMENT_LINES_ALIAS, "Code", "Code", "CHARACTER VARYING", "NONE", false));
+        columns.add(column(STATEMENT_LINES_ALIAS, "Label", "Label", "CHARACTER VARYING", "NONE", false));
+        columns.add(column(STATEMENT_LINES_ALIAS, "Amount", "Amount", "DECIMAL", "NONE", false));
+        return new StatementQuery(account.qualified(), balanceSums(date, debit, credit), statementLines(report));
+    }
+
+    /**
+     * The six per-account windowed sums of the statement subquery, in the {@code <sql> as "<column>"}
+     * form. The windows are the balance report's, to the token: opening strictly before
+     * {@code :fromDate}, the period inclusive of both bounds, closing everything up to {@code :toDate}
+     * - so the two kinds cannot disagree about what a period is.
+     *
+     * @param date the window-driving date column
+     * @param debit the debit amount column
+     * @param credit the credit amount column
+     * @return the select terms
+     */
+    private static List<String> balanceSums(ColumnRef date, ColumnRef debit, ColumnRef credit) {
+        Map<String, String> windows = Map.of("opening", date.qualified() + " < :fromDate", "period",
+                date.qualified() + " >= :fromDate AND " + date.qualified() + " <= :toDate", "closing", date.qualified() + " <= :toDate");
+        List<String> sums = new ArrayList<>();
+        for (StatementSupport.Balance balance : StatementSupport.balanceColumns()) {
+            ColumnRef amount = balance.debit() ? debit : credit;
+            sums.add("SUM(CASE WHEN " + windows.get(balance.window()) + " THEN COALESCE(" + amount.qualified() + ", 0) ELSE 0 END) as "
+                    + balance.column());
+        }
+        return sums;
+    }
+
+    /**
+     * The statement's lines, each resolved to the amount expression it selects from the per-account
+     * balances. Computed lines are FLATTENED here - a line summing other lines is replaced by their own
+     * account terms, recursively - so every emitted line is one aggregate over the same subquery and no
+     * line has to be evaluated before another. The parser has already rejected a cycle and an unknown
+     * reference; the walk still carries its own path guard, because a cycle reaching the generator
+     * would recurse until the stack ran out rather than report anything.
+     *
+     * @param report the statement report
+     * @return the lines, in the authored order
+     */
+    private static List<StatementLine> statementLines(ReportIntent report) {
+        Map<String, StatementLineIntent> byCode = new LinkedHashMap<>();
+        for (StatementLineIntent line : report.getLines()) {
+            if (line.getCode() != null && !line.getCode()
+                                               .isBlank()) {
+                byCode.putIfAbsent(line.getCode()
+                                       .trim(),
+                        line);
+            }
+        }
+        List<StatementLine> lines = new ArrayList<>();
+        for (StatementLineIntent line : report.getLines()) {
+            List<String> terms = new ArrayList<>();
+            collectStatementTerms(line, 1, byCode, terms, new LinkedHashSet<>());
+            String amount = terms.isEmpty() ? "0" : String.join(" ", terms);
+            lines.add(new StatementLine(line.getCode()
+                                            .trim(),
+                    line.getLabel()
+                        .trim(),
+                    amount));
+        }
+        return lines;
+    }
+
+    /**
+     * Append the signed account terms a line contributes, following its {@code sum}/{@code less}
+     * references down to the leaves.
+     *
+     * @param line the line to flatten
+     * @param sign {@code 1} when the line is added, {@code -1} when it is subtracted
+     * @param byCode the statement's lines by code
+     * @param terms the emitted terms, appended to - each carrying its own leading sign
+     * @param path the codes on the current walk, guarding against a cycle
+     */
+    private static void collectStatementTerms(StatementLineIntent line, int sign, Map<String, StatementLineIntent> byCode,
+            List<String> terms, Set<String> path) {
+        if (line == null) {
+            return;
+        }
+        String code = line.getCode() == null ? null
+                : line.getCode()
+                      .trim();
+        if (code != null && !path.add(code)) {
+            LOGGER.warn("Statement line [{}] takes part in a cycle - dropping the reference that closes it", code);
+            return;
+        }
+        if (line.isLeaf()) {
+            // The parser has already reported anything wrong with the selector, so the issues it
+            // collects here are a duplicate of what the author has been told and are discarded.
+            List<String> reported = new ArrayList<>();
+            StatementSupport.Selector selector = StatementSupport.selector(line.getAccounts(), reported, "");
+            StatementSupport.Measure measure = StatementSupport.measure(line.getMeasure());
+            if (selector != null && measure != null) {
+                terms.add((terms.isEmpty() && sign > 0 ? "" : (sign > 0 ? "+ " : "- ")) + "COALESCE(SUM(CASE WHEN "
+                        + selector.sql(ACCOUNT_CODE) + " THEN " + measure.sql() + " ELSE 0 END), 0)");
+            }
+        } else {
+            for (String reference : line.getSum()) {
+                collectStatementTerms(byCode.get(trimmed(reference)), sign, byCode, terms, path);
+            }
+            for (String reference : line.getLess()) {
+                collectStatementTerms(byCode.get(trimmed(reference)), -sign, byCode, terms, path);
+            }
+        }
+        if (code != null) {
+            path.remove(code);
+        }
+    }
+
+    private static String trimmed(String value) {
+        return value == null ? null : value.trim();
+    }
+
+    /** One emitted statement line: its code, its caption and the amount it selects. */
+    private record StatementLine(String code, String label, String amount) {
+    }
+
+    /**
+     * A statement's query: the per-account balances it aggregates and the fixed lines it renders from
+     * them.
+     *
+     * @param accountColumn the qualified account-code column of the source
+     * @param balanceSums the six windowed per-account sums, as select terms
+     * @param lines the statement's lines, already flattened
+     */
+    private record StatementQuery(String accountColumn, List<String> balanceSums, List<StatementLine> lines) {
+
+        /**
+         * The statement SQL: one subquery reducing the ledger to a balance per account, then one row per
+         * declared line reading it.
+         *
+         * <p>
+         * The per-account level is not an optimisation, it is the semantics: a {@code Net} measure nets an
+         * account's two sides before the line sums it, so the reduction has to happen per account and
+         * exactly once. It is a common table expression for that reason - repeating the subquery per line
+         * would re-scan the ledger once per statement line.
+         *
+         * @param baseTable the physical source table
+         * @param baseAlias the source alias
+         * @param joins the resolved joins
+         * @param where the WHERE predicate restricting which ledger rows count, or null
+         * @return the query
+         */
+        String sql(String baseTable, String baseAlias, List<Map<String, Object>> joins, String where) {
+            StringBuilder sql = new StringBuilder("WITH ").append(ACCOUNT_BALANCES)
+                                                          .append(" as (\nSELECT ")
+                                                          .append(accountColumn)
+                                                          .append(" as ")
+                                                          .append(ACCOUNT_CODE);
+            for (String balance : balanceSums) {
+                sql.append(", ")
+                   .append(balance);
+            }
+            sql.append("\nFROM ")
+               .append(quote(baseTable))
+               .append(" as ")
+               .append(baseAlias);
+            for (Map<String, Object> join : joins) {
+                sql.append('\n')
+                   .append(join.get("type"))
+                   .append(" JOIN ")
+                   .append(quote((String) join.get("name")))
+                   .append(" as ")
+                   .append(join.get("alias"))
+                   .append(" ON ")
+                   .append(join.get("condition"));
+            }
+            if (where != null && !where.isBlank()) {
+                sql.append("\nWHERE ")
+                   .append(where);
+            }
+            sql.append("\nGROUP BY ")
+               .append(accountColumn)
+               .append("\n)\nSELECT ")
+               .append(STATEMENT_LINES)
+               .append(".\"Code\" as \"Code\", ")
+               .append(STATEMENT_LINES)
+               .append(".\"Label\" as \"Label\", ")
+               .append(STATEMENT_LINES)
+               .append(".\"Amount\" as \"Amount\"\nFROM (");
+            for (int ordinal = 0; ordinal < lines.size(); ordinal++) {
+                StatementLine line = lines.get(ordinal);
+                if (ordinal > 0) {
+                    sql.append("\nUNION ALL");
+                }
+                // The line's ordinal is what ORDERs the statement: a statement's rows are a structure,
+                // and its codes sort lexicographically wrong (A.II before A.X). It is selected but not
+                // projected - the reader gets Code / Label / Amount.
+                // Every literal is CAST, so the union's own column types are the declared ones rather
+                // than whatever the first branch's literal happened to be long enough for.
+                sql.append("\nSELECT ")
+                   .append(ordinal + 1)
+                   .append(" as \"Ordinal\", CAST('")
+                   .append(line.code())
+                   .append("' AS VARCHAR(255)) as \"Code\", CAST('")
+                   .append(line.label())
+                   .append("' AS VARCHAR(4000)) as \"Label\", ")
+                   .append(line.amount())
+                   .append(" as \"Amount\"\nFROM ")
+                   .append(ACCOUNT_BALANCES);
+            }
+            return sql.append("\n) as ")
+                      .append(STATEMENT_LINES)
+                      .append("\nORDER BY ")
+                      .append(STATEMENT_LINES)
+                      .append(".\"Ordinal\"")
+                      .toString();
+        }
     }
 
     /**
@@ -1077,7 +1351,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      *
      * <p>
      * Own fields and one-hop {@code relation.field} paths are both scanned, over the dimensions, the
-     * measures, the filter and the {@code kind: balance} amount fields.
+     * measures, the filter and the ledger kinds' amount / account fields.
      */
     private static void warnOnRestrictedColumns(IntentGenerationContext context, IntentModel model, EntityIntent source,
             ReportIntent report) {
@@ -1089,6 +1363,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         expressions.add(report.getFilter());
         expressions.add(report.getDebit());
         expressions.add(report.getCredit());
+        expressions.add(report.getAccount());
         for (FieldIntent field : source.getFields()) {
             if (!field.getVisibleTo()
                       .isEmpty()

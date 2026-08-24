@@ -26,8 +26,11 @@ public class ReportIntent {
      * Optional report kind. {@code balance} is the accounting balance shape: opening / period / closing
      * debit and credit totals per dimension over the runtime {@code fromDate}/{@code toDate} window -
      * {@link #date} drives the window, {@link #debit}/{@link #credit} are the summed amount fields, and
-     * the report declares the two date parameters on the generated {@code .report}. Absent (the
-     * default) -> a plain aggregation report from {@link #measures}.
+     * the report declares the two date parameters on the generated {@code .report}. {@code statement}
+     * is the statutory statement shape over the same signed ledger: the same window and amount fields,
+     * but the output is the fixed {@link #lines} of a balance sheet or an income statement rather than
+     * one row per dimension value. Absent (the default) -> a plain aggregation report from
+     * {@link #measures}.
      */
     private String kind;
     /**
@@ -40,6 +43,18 @@ public class ReportIntent {
     private String debit;
     /** {@code kind: balance}: the numeric source field holding the credit amount. */
     private String credit;
+    /**
+     * {@code kind: statement}: the account-code field the statement groups the ledger by - a
+     * {@code string} field of the source or a one-hop {@code relation.field} path to it (e.g.
+     * {@code account.code}). It is the code the {@link StatementLineIntent#getAccounts() line
+     * selectors} match against, so it is the chart-of-accounts code and never the display name.
+     */
+    private String account;
+    /**
+     * {@code kind: statement}: the statement's fixed lines, in the order they are rendered - each one
+     * either reading the ledger through an account selector or computed from other lines.
+     */
+    private List<StatementLineIntent> lines = new ArrayList<>();
     private List<String> dimensions = new ArrayList<>();
     private List<String> measures = new ArrayList<>();
     /**
@@ -99,6 +114,19 @@ public class ReportIntent {
         return kind != null && "balance".equalsIgnoreCase(kind.trim());
     }
 
+    /** Whether this is a financial statement report ({@code kind: statement}). */
+    public boolean isStatement() {
+        return kind != null && "statement".equalsIgnoreCase(kind.trim());
+    }
+
+    /**
+     * Whether this report reads the signed ledger - the two kinds sharing {@link #date} /
+     * {@link #debit} / {@link #credit}.
+     */
+    public boolean isLedgerKind() {
+        return isBalance() || isStatement();
+    }
+
     public String getKind() {
         return kind;
     }
@@ -129,6 +157,22 @@ public class ReportIntent {
 
     public void setCredit(String credit) {
         this.credit = credit;
+    }
+
+    public String getAccount() {
+        return account;
+    }
+
+    public void setAccount(String account) {
+        this.account = account;
+    }
+
+    public List<StatementLineIntent> getLines() {
+        return lines;
+    }
+
+    public void setLines(List<StatementLineIntent> lines) {
+        this.lines = lines == null ? new ArrayList<>() : lines;
     }
 
     public List<String> getDimensions() {

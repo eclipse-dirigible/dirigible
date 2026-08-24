@@ -220,6 +220,23 @@ class IntentEngineIT extends IntegrationTest {
                 debit: total
                 credit: creditSnapshot
                 dimensions: [customer]
+              # kind: statement - the statutory shape over the SAME signed ledger: instead of one row
+              # per dimension value, a fixed line structure where each line is a formula over the
+              # account codes, plus arithmetic over other lines. (The ledger here is the balance
+              # report's; the country code stands in for the chart-of-accounts code.)
+              - name: OrderStatement
+                kind: statement
+                source: Order
+                date: orderDate
+                debit: total
+                credit: creditSnapshot
+                account: country.code2
+                lines:
+                  - { code: A.I,  label: Alpine markets, accounts: "AL,AT", measure: closingNetDebit }
+                  - { code: A.II, label: Other markets,  accounts: "B-Z",   measure: closingNetDebit }
+                  - { code: A,    label: Total markets,  sum: [A.I, A.II] }
+                  - { code: B,    label: Owed to markets, accounts: "A-Z",  measure: closingNetCredit }
+                  - { code: C,    label: Net position,   sum: [A], less: [B] }
 
             # Custom dashboard widgets - developer-supplied content: a REST KPI (the url returns
             # {value, description?}) and an embedded page tile.
@@ -359,7 +376,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("processes", hasSize(1))
                                                  .body("processes[0].steps", hasSize(6))
                                                  .body("forms", hasSize(1))
-                                                 .body("reports", hasSize(4))
+                                                 .body("reports", hasSize(5))
                                                  .body("permissions", hasSize(2))
                                                  .body("seeds[0].rows", hasSize(2)));
     }
@@ -603,8 +620,8 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("project", equalTo(PROJECT))
                                                  .body("written",
                                                          hasItems("orders.edm", "orders.model", "OrderApproval.bpmn", "ApproveOrder.form",
-                                                                 "OrdersByCustomer.report", "OrderBalance.report", "orders.roles",
-                                                                 "orders.glue", "countries.csvim", "countries.csv",
+                                                                 "OrdersByCustomer.report", "OrderBalance.report", "OrderStatement.report",
+                                                                 "orders.roles", "orders.glue", "countries.csvim", "countries.csv",
                                                                  "doc/Templates/Order/Print/en/standard.print", "orders.test"))
                                                  .body("scrubbed", hasSize(0))
                                                  // The model-to-code plan the editor replays: one entry per generated model with a
@@ -3149,6 +3166,21 @@ class IntentEngineIT extends IntegrationTest {
                 "the report table should align and format cells from the column metadata");
         assertTrue(page.contains("align: 'right'"), "decimal measures should be right-aligned");
         assertTrue(page.contains("pattern: '### ### ### ##0.00'"), "the page metadata should carry the money pattern for decimal columns");
+        assertTrue(page.contains("limit: 20"), "an ordinary report should page in twenties");
+
+        // A statement's rows ARE its structure, so its page fetches the whole statement rather than
+        // splitting a balance sheet across pages.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(payload)
+                                                 .when()
+                                                 .post("/services/ide/generate/model/" + WORKSPACE + "/" + PROJECT
+                                                         + "?path=OrderStatement.report")
+                                                 .then()
+                                                 .statusCode(201));
+        String statementPage = contentOf("gen/OrderStatement/reports/OrderStatement/report.js");
+        assertTrue(statementPage.contains("limit: 500"), "a statement page should fetch the whole line structure at once");
+        assertTrue(statementPage.contains("{ key: 'Code', kind: 'text'") && statementPage.contains("{ key: 'Amount', kind: 'number'"),
+                "the statement page should carry the Code / Label / Amount column metadata");
     }
 
     @Test
@@ -4140,6 +4172,25 @@ class IntentEngineIT extends IntegrationTest {
                 "the balance report should declare the two window parameters");
         assertTrue(balance.contains("\"initial\": \"1900-01-01\"") && balance.contains("\"initial\": \"9999-12-31\""),
                 "the window parameters should default to the all-time balance");
+
+        // kind: statement - the same window, but the rows are the declared lines: one subquery
+        // reducing the ledger to a balance per account code, then one row per line reading it.
+        String statement = contentOf("OrderStatement.report");
+        assertTrue(statement.contains("\"kind\": \"statement\""), "the statement report should carry its kind");
+        assertTrue(statement.contains("WITH \\\"ACCOUNT_BALANCES\\\" as (") && statement.contains("GROUP BY Country.\\\"COUNTRY_CODE2\\\""),
+                "the statement should reduce the ledger to one balance per account code before its lines read it");
+        assertTrue(statement.contains("CAST('A.I' AS VARCHAR(255))") && statement.contains("CAST('Alpine markets' AS VARCHAR(4000))"),
+                "each line should render its code and label as the statement's first two columns");
+        assertTrue(statement.contains("(\\\"ACCOUNT_CODE\\\" = 'AL' OR \\\"ACCOUNT_CODE\\\" = 'AT')"),
+                "a comma-separated selector of exact codes should be an OR of equalities");
+        assertTrue(statement.contains("SUBSTRING(\\\"ACCOUNT_CODE\\\" FROM 1 FOR 1) >= 'B'"),
+                "a range selector should compare equally long code prefixes, not the whole code");
+        assertTrue(statement.contains("ORDER BY \\\"STATEMENT_LINES\\\".\\\"Ordinal\\\""),
+                "the statement should render its lines in the authored order");
+        assertTrue(statement.contains("\"alias\": \"Code\"") && statement.contains("\"alias\": \"Label\"")
+                && statement.contains("\"alias\": \"Amount\""), "a statement's columns are Code / Label / Amount");
+        assertTrue(statement.contains("\"name\": \"fromDate\"") && statement.contains("\"name\": \"toDate\""),
+                "a statement should declare the same window parameters as a balance report");
     }
 
     private void assertRoles() {
