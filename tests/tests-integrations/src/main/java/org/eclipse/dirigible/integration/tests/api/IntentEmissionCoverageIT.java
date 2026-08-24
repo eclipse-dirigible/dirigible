@@ -2594,7 +2594,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // status guard.
         String createPosting = contentOf("gen/events/emission/PaymentPostingPosting.java");
         assertTrue(createPosting.contains("-Payment\";"), "an onCreate posting must bind the source's bare create topic");
-        assertTrue(!createPosting.contains("-transitioned"), "an onCreate posting must not bind the -transitioned topic");
+        // Anchored on the destination()'s return literal, like the positive assertion above: what must
+        // not happen is BINDING the status channel, and a whole-file scan also trips on any prose that
+        // happens to name it.
+        assertTrue(!createPosting.contains("-transitioned\";"), "an onCreate posting must not bind the -transitioned topic");
         assertTrue(!createPosting.contains("source.Status"), "an onCreate posting without a when guard must not emit a status guard");
         assertTrue(createPosting.contains("target.Payment = source.Id;"), "the onCreate posting must stamp its back-reference");
 
