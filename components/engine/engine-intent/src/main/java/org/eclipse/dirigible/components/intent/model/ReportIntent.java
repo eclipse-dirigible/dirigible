@@ -44,6 +44,22 @@ public class ReportIntent {
     /** {@code kind: balance}: the numeric source field holding the credit amount. */
     private String credit;
     /**
+     * {@code kind: balance}: an extra grouping dimension that buckets each ledger line by the accounts
+     * on the OPPOSITE side of the same document - the general ledger's "in correspondence with" axis
+     * (e.g. account 411's debit turnover split by the credit accounts it corresponded with). The
+     * correspondent line is a sibling row of the source, so this resolves like a dimension but against
+     * that sibling: a field of the source, a {@code relation.field} path or a bare to-one relation.
+     *
+     * <p>
+     * The document the lines share is the first hop of {@link #date} - the source's to-one relation to
+     * its journal entry / voucher - so a balance report declaring this must take its date over that
+     * relation. A compound entry (M debit lines against N credit lines) is allocated
+     * <b>proportionally</b> by the counter-side amounts, and a line with no counter side at all lands
+     * in one empty bucket, so each account's totals across the correspondence buckets still add up to
+     * the same figures the plain balance report shows for the same window.
+     */
+    private String correspondence;
+    /**
      * {@code kind: statement}: the account-code field the statement groups the ledger by - a
      * {@code string} field of the source or a one-hop {@code relation.field} path to it (e.g.
      * {@code account.code}). It is the code the {@link StatementLineIntent#getAccounts() line
@@ -157,6 +173,19 @@ public class ReportIntent {
 
     public void setCredit(String credit) {
         this.credit = credit;
+    }
+
+    public String getCorrespondence() {
+        return correspondence;
+    }
+
+    public void setCorrespondence(String correspondence) {
+        this.correspondence = correspondence;
+    }
+
+    /** Whether this balance report groups by the correspondent accounts of the same document. */
+    public boolean hasCorrespondence() {
+        return isBalance() && correspondence != null && !correspondence.isBlank();
     }
 
     public String getAccount() {

@@ -162,6 +162,30 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     /** A translation table is joined leniently - a row without a translation keeps its base value. */
     private static final String LANGUAGE_JOIN_TYPE = "LEFT";
 
+    /**
+     * The alias suffix of every table the {@code correspondence} axis joins - the counter-side line
+     * itself and whatever its bucket path resolves through. The same entity is joined twice in such a
+     * query (the line's own account AND the account it corresponded with), so without the suffix the
+     * second join would collide with the first on its alias and be dropped.
+     */
+    private static final String CORRESPONDENT_SUFFIX = "Correspondent";
+
+    /** The alias suffix of the correlated subquery that totals the document's counter side. */
+    private static final String DOCUMENT_TOTAL_SUFFIX = "DocumentTotal";
+
+    /**
+     * The correspondence axis is joined leniently - a line whose document has nothing on the counter
+     * side keeps its row (and its turnover) in one empty bucket.
+     */
+    private static final String CORRESPONDENCE_JOIN_TYPE = "LEFT";
+
+    /**
+     * The type the proportional allocation computes in. The cast is what makes the share a fraction:
+     * with {@code integer} debit/credit columns, {@code counter / total} would be integer division and
+     * truncate every allocated amount to zero.
+     */
+    private static final String ALLOCATION_TYPE = "DECIMAL(34,12)";
+
     /** The SQL type of a date-valued report parameter - a date picker on the report page. */
     private static final String DATE_TYPE = "DATE";
 
@@ -288,7 +312,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
         StatementQuery statementQuery = null;
         if (balance) {
-            addBalanceMeasures(context, model, source, baseAlias, report, joins, columns);
+            addBalanceMeasures(context, model, source, baseAlias, baseTable, report, joins, columns);
         } else if (statement) {
             // The ledger references are resolved (and their joins registered) BEFORE the filter's, so
             // the emitted FROM introduces the statement's own tables first - the order the balance
@@ -472,31 +496,162 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void addBalanceMeasures(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
-            ReportIntent report, Map<String, Join> joins, List<Map<String, Object>> columns) {
+            String baseTable, ReportIntent report, Map<String, Join> joins, List<Map<String, Object>> columns) {
         ColumnRef date = resolve(context, model, source, baseAlias, report.getDate()
                                                                           .trim());
         registerJoin(joins, date);
+        // The parser has already established that both amounts are fields of the SOURCE, so both sit on
+        // the base alias - which is what lets the correspondence axis qualify the same physical columns
+        // on the counter-side line below.
         ColumnRef debit = resolve(context, model, source, baseAlias, report.getDebit()
                                                                            .trim());
         registerJoin(joins, debit);
         ColumnRef credit = resolve(context, model, source, baseAlias, report.getCredit()
                                                                             .trim());
         registerJoin(joins, credit);
+        String debitAmount = "COALESCE(" + debit.qualified() + ", 0)";
+        String creditAmount = "COALESCE(" + credit.qualified() + ", 0)";
+        // The correspondence axis (the general ledger's "in correspondence with"): the counter-side
+        // lines of the same document become an extra grouping dimension, and each amount is allocated
+        // across them. It goes in BEFORE the totals so the dimension column precedes them in the
+        // SELECT, and its self-join precedes the joins its bucket path hangs off.
+        String correspondent = correspondenceAxis(context, model, source, baseAlias, baseTable, report, debit, credit, joins, columns);
+        if (correspondent != null) {
+            String counterDebit = "COALESCE(" + correspondent + "." + quote(debit.physicalColumn) + ", 0)";
+            String counterCredit = "COALESCE(" + correspondent + "." + quote(credit.physicalColumn) + ", 0)";
+            String documentDebit = documentTotal(source, baseAlias, baseTable, report, debit);
+            String documentCredit = documentTotal(source, baseAlias, baseTable, report, credit);
+            // A debit line corresponds with the CREDIT side of its document, so its share of a bucket is
+            // that bucket's credit over the document's total credit - and vice versa.
+            debitAmount = allocated(debitAmount, counterCredit, documentCredit);
+            creditAmount = allocated(creditAmount, counterDebit, documentDebit);
+        }
         String opening = date.qualified() + " < :fromDate";
         String period = date.qualified() + " >= :fromDate AND " + date.qualified() + " <= :toDate";
         String closing = date.qualified() + " <= :toDate";
-        addBalanceColumn(columns, debit, opening, "Opening Debit");
-        addBalanceColumn(columns, credit, opening, "Opening Credit");
-        addBalanceColumn(columns, debit, period, "Debit");
-        addBalanceColumn(columns, credit, period, "Credit");
-        addBalanceColumn(columns, debit, closing, "Closing Debit");
-        addBalanceColumn(columns, credit, closing, "Closing Credit");
+        addBalanceColumn(columns, debit, opening, debitAmount, "Opening Debit");
+        addBalanceColumn(columns, credit, opening, creditAmount, "Opening Credit");
+        addBalanceColumn(columns, debit, period, debitAmount, "Debit");
+        addBalanceColumn(columns, credit, period, creditAmount, "Credit");
+        addBalanceColumn(columns, debit, closing, debitAmount, "Closing Debit");
+        addBalanceColumn(columns, credit, closing, creditAmount, "Closing Credit");
     }
 
-    private static void addBalanceColumn(List<Map<String, Object>> columns, ColumnRef amount, String window, String alias) {
+    /**
+     * Register the {@code correspondence} self-join and emit its grouping column.
+     *
+     * <p>
+     * The counter-side account is NOT reachable from the source row - it sits on a sibling line of the
+     * same journal entry - so the axis is a self-join of the source table on the document the lines
+     * share, keyed by the FK of the first hop of {@code date}. The pairing is restricted to the
+     * OPPOSITE side (a debit line pairs with the credit lines and vice versa) so no bucket is emitted
+     * for a same-side sibling, and the line itself is excluded by primary key.
+     *
+     * <p>
+     * The join is LEFT on purpose: a document with nothing on the counter side (a single-line opening
+     * entry) would otherwise drop out of the report entirely, and its turnover would go missing from a
+     * report whose whole promise is that it reconciles with the plain balance. Such a line keeps one
+     * row with an empty bucket, and {@link #allocated} gives it the full amount.
+     *
+     * @return the alias of the counter-side line, or null when the report declares no correspondence
+     *         (or its document relation cannot be resolved)
+     */
+    private static String correspondenceAxis(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
+            String baseTable, ReportIntent report, ColumnRef debit, ColumnRef credit, Map<String, Join> joins,
+            List<Map<String, Object>> columns) {
+        if (!report.hasCorrespondence()) {
+            return null;
+        }
+        String documentColumn = documentColumn(source, report);
+        if (documentColumn == null) {
+            LOGGER.warn("Balance report [{}] declares correspondence but its date [{}] does not go through a to-one relation of [{}]"
+                    + " - the correspondence axis is skipped", report.getName(), report.getDate(), source.getName());
+            return null;
+        }
+        String correspondent = source.getName() + CORRESPONDENT_SUFFIX;
+        String keyColumn = keyColumn(source);
+        String baseDebit = "COALESCE(" + debit.qualified() + ", 0)";
+        String baseCredit = "COALESCE(" + credit.qualified() + ", 0)";
+        String counterDebit = "COALESCE(" + correspondent + "." + quote(debit.physicalColumn) + ", 0)";
+        String counterCredit = "COALESCE(" + correspondent + "." + quote(credit.physicalColumn) + ", 0)";
+        String on = correspondent + "." + quote(documentColumn) + " = " + baseAlias + "." + quote(documentColumn) + " AND " + correspondent
+                + "." + quote(keyColumn) + " <> " + baseAlias + "." + quote(keyColumn) + " AND ((" + baseDebit + " <> 0 AND "
+                + counterCredit + " <> 0) OR (" + baseCredit + " <> 0 AND " + counterDebit + " <> 0))";
+        joins.putIfAbsent(correspondent, new Join(baseTable, correspondent, on, CORRESPONDENCE_JOIN_TYPE));
+        String path = report.getCorrespondence()
+                            .trim();
+        ColumnRef bucket = resolve(context, model, source, correspondent, path, CORRESPONDENT_SUFFIX, CORRESPONDENCE_JOIN_TYPE);
+        registerJoin(joins, bucket);
+        columns.add(column(bucket.tableAlias, humanize("correspondent " + path.replace('.', ' ')), bucket.physicalColumn, bucket.reportType,
+                "NONE", true, bucket.translationExpression()));
+        return correspondent;
+    }
+
+    /**
+     * The document's total on the side named by {@code amount}, excluding the line itself - the
+     * denominator of the proportional allocation. A correlated scalar subquery rather than a joined
+     * derived table because the {@code .report} join model holds a plain table name (the editor quotes
+     * it), and a model the editor's builder cannot rebuild would open the report free-style.
+     *
+     * <p>
+     * It sums over ALL siblings, not only the joined ones: a same-side sibling contributes 0 on this
+     * side anyway, so the subquery equals the sum of the buckets the join actually produced - which is
+     * exactly what makes the shares add up to 1. It deliberately carries neither the report filter nor
+     * the lifecycle scope: the denominator is a fact about the document, not about the window.
+     */
+    private static String documentTotal(EntityIntent source, String baseAlias, String baseTable, ReportIntent report, ColumnRef amount) {
+        String alias = source.getName() + DOCUMENT_TOTAL_SUFFIX;
+        String documentColumn = documentColumn(source, report);
+        String keyColumn = keyColumn(source);
+        return "(SELECT SUM(COALESCE(" + alias + "." + quote(amount.physicalColumn) + ", 0)) FROM " + quote(baseTable) + " as " + alias
+                + " WHERE " + alias + "." + quote(documentColumn) + " = " + baseAlias + "." + quote(documentColumn) + " AND " + alias + "."
+                + quote(keyColumn) + " <> " + baseAlias + "." + quote(keyColumn) + ")";
+    }
+
+    /**
+     * The FK column on the source that groups its lines into one document - the first hop of the
+     * balance {@code date}, which is the relation to the journal entry / voucher. Null when the date is
+     * not such a path (the parser rejects that combination; generation only has to stay quiet).
+     */
+    private static String documentColumn(EntityIntent source, ReportIntent report) {
+        String date = report.getDate() == null ? ""
+                : report.getDate()
+                        .trim();
+        int dot = date.indexOf('.');
+        if (dot <= 0) {
+            return null;
+        }
+        RelationIntent relation = relationByName(source, date.substring(0, dot));
+        return relation == null ? null : column(source.getName(), relation.getName());
+    }
+
+    /** The source's primary-key column - how a line is excluded from its own correspondent bucket. */
+    private static String keyColumn(EntityIntent source) {
+        FieldIntent primaryKey = primaryKeyOf(source);
+        return column(source.getName(), primaryKey == null ? "id" : primaryKey.getName());
+    }
+
+    /**
+     * One line's amount allocated over the counter-side buckets of its document: the amount times the
+     * bucket's share ({@code counter / total}) - written as a product BEFORE the division so the result
+     * carries no avoidable rounding.
+     *
+     * <p>
+     * When the document has nothing on the counter side the total is 0 (or NULL, with no siblings at
+     * all), the division is NULL and the whole line falls back to its full amount in the one empty
+     * bucket the LEFT join left it. That fallback is what keeps the promise of this report shape: each
+     * account's totals across its correspondence buckets add up to the figures the plain balance report
+     * shows for the same window.
+     */
+    private static String allocated(String amount, String counter, String total) {
+        return "COALESCE(CAST(" + amount + " AS " + ALLOCATION_TYPE + ") * " + counter + " / NULLIF(" + total + ", 0), " + amount + ")";
+    }
+
+    private static void addBalanceColumn(List<Map<String, Object>> columns, ColumnRef amount, String window, String amountExpression,
+            String alias) {
         // COALESCE the amount: a one-sided ledger line (the exactlyOne debit/credit shape) holds
         // NULL on the other side, and SUM over all-NULL yields NULL instead of the 0 a balance shows.
-        String expression = "CASE WHEN " + window + " THEN COALESCE(" + amount.qualified() + ", 0) ELSE 0 END";
+        String expression = "CASE WHEN " + window + " THEN " + amountExpression + " ELSE 0 END";
         columns.add(column(amount.tableAlias, alias, amount.physicalColumn, "DECIMAL", "SUM", false, expression));
     }
 
@@ -957,6 +1112,18 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      */
     private static ColumnRef resolve(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
             String reference) {
+        return resolve(context, model, source, baseAlias, reference, "", JOIN_TYPE);
+    }
+
+    /**
+     * Resolve a reference against {@code baseAlias}, aliasing every table it joins with
+     * {@code aliasSuffix} and joining it with {@code joinType}. Both are empty/INNER for an ordinary
+     * dimension; the correspondence axis resolves the same paths a second time against the counter-side
+     * line, where the suffix keeps the two sets of aliases apart and LEFT keeps a line whose document
+     * has no counter side.
+     */
+    private static ColumnRef resolve(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
+            String reference, String aliasSuffix, String joinType) {
         ColumnRef ref = new ColumnRef();
         int dot = reference.indexOf('.');
         if (dot > 0 && source != null) {
@@ -965,15 +1132,16 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             RelationIntent relation = relationByName(source, relationName);
             if (relation != null && relation.getTo() != null) {
                 EntityIntent target = entityByName(model, relation.getTo());
-                String targetAlias = relation.getTo();
+                String targetName = relation.getTo();
+                String targetAlias = targetName + aliasSuffix;
                 ref.tableAlias = targetAlias;
-                ref.physicalColumn = column(targetAlias, fieldName);
+                ref.physicalColumn = column(targetName, fieldName);
                 FieldIntent targetField = fieldByName(target, fieldName);
                 // A cross-model target's fields are not in this model; string is the safe display type.
                 ref.reportType = targetField == null ? "CHARACTER VARYING" : reportType(targetField.getType());
                 ref.nullable = targetField == null || !targetField.isRequired();
                 ref.displayAlias = humanize(reference.replace('.', ' '));
-                ref.join = join(context, model, source, relation, target, targetAlias, baseAlias);
+                ref.join = join(context, model, source, relation, target, targetName, targetAlias, baseAlias, joinType);
                 translate(context, ref, target, crossModelInfo(context, model, relation), fieldName);
                 return ref;
             }
@@ -996,16 +1164,17 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         if (relation != null && relation.getTo() != null
                 && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
             EntityIntent target = entityByName(model, relation.getTo());
-            String targetAlias = relation.getTo();
+            String targetName = relation.getTo();
+            String targetAlias = targetName + aliasSuffix;
             // A cross-model target's label comes from the resolved owner model (its Name-like field).
             CrossModelSupport.TargetInfo info = crossModelInfo(context, model, relation);
             String labelField = info != null ? info.labelField() : labelFieldName(target);
             FieldIntent labeled = fieldByName(target, labelField);
             ref.tableAlias = targetAlias;
-            ref.physicalColumn = column(targetAlias, labelField);
+            ref.physicalColumn = column(targetName, labelField);
             ref.reportType = info != null ? "CHARACTER VARYING" : reportType(labeled == null ? null : labeled.getType());
             ref.displayAlias = humanize(reference);
-            ref.join = join(context, model, source, relation, target, targetAlias, baseAlias);
+            ref.join = join(context, model, source, relation, target, targetName, targetAlias, baseAlias, joinType);
             // The label of a multilingual nomenclature is exactly the value a list page shows
             // translated - this is the column the issue was raised about (dirigible #6544).
             translate(context, ref, target, info, labelField);
@@ -1066,8 +1235,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
         String alias = ref.tableAlias + LANGUAGE_TABLE_SUFFIX;
         ref.languageColumn = property;
-        ref.languageJoin = new Join(table + LANGUAGE_TABLE_SUFFIX, alias, alias + "." + quote(LANGUAGE_ID_COLUMN) + " = " + ref.tableAlias
-                + "." + quote(keyColumn) + " AND " + alias + "." + quote(LANGUAGE_CODE_COLUMN) + " = " + LANGUAGE_PARAMETER, true);
+        ref.languageJoin = new Join(
+                table + LANGUAGE_TABLE_SUFFIX, alias, alias + "." + quote(LANGUAGE_ID_COLUMN) + " = " + ref.tableAlias + "."
+                        + quote(keyColumn) + " AND " + alias + "." + quote(LANGUAGE_CODE_COLUMN) + " = " + LANGUAGE_PARAMETER,
+                LANGUAGE_JOIN_TYPE);
     }
 
     /**
@@ -1117,20 +1288,27 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         return "string".equals(t) || "text".equals(t) || "uuid".equals(t);
     }
 
+    /**
+     * The join a {@code relation.field} path needs. {@code targetName} is the target ENTITY - it names
+     * the physical table and prefixes its columns; {@code targetAlias} is only the SQL alias, and the
+     * two differ when the same entity is joined twice in one query (the correspondence axis joins the
+     * dimension's account and the counter-side account of the same document - see
+     * {@link #CORRESPONDENT_SUFFIX}).
+     */
     private static Join join(IntentGenerationContext context, IntentModel model, EntityIntent source, RelationIntent relation,
-            EntityIntent target, String targetAlias, String baseAlias) {
+            EntityIntent target, String targetName, String targetAlias, String baseAlias, String joinType) {
         String fkColumn = quote(column(source.getName(), relation.getName()));
         // A cross-model target's table and primary-key column come from the resolved owner model -
         // this model's intent-prefixed naming would point at a non-existent local table.
         CrossModelSupport.TargetInfo info = crossModelInfo(context, model, relation);
         if (info != null) {
             return new Join(info.tableDataName(), targetAlias,
-                    baseAlias + "." + fkColumn + " = " + targetAlias + "." + quote(info.keyColumn()));
+                    baseAlias + "." + fkColumn + " = " + targetAlias + "." + quote(info.keyColumn()), joinType);
         }
         FieldIntent targetPk = target == null ? null : primaryKeyOf(target);
-        String pkColumn = quote(column(targetAlias, targetPk == null ? "id" : targetPk.getName()));
-        return new Join(IntentNaming.tableName(context, targetAlias), targetAlias,
-                baseAlias + "." + fkColumn + " = " + targetAlias + "." + pkColumn);
+        String pkColumn = quote(column(targetName, targetPk == null ? "id" : targetPk.getName()));
+        return new Join(IntentNaming.tableName(context, targetName), targetAlias,
+                baseAlias + "." + fkColumn + " = " + targetAlias + "." + pkColumn, joinType);
     }
 
     /**
@@ -1251,8 +1429,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             row.put("alias", join.alias);
             row.put("name", join.table);
             // A language join is LEFT: an untranslated row - or a caller with no language at all - must
-            // still appear, carrying the base value the SELECT's COALESCE then falls back to.
-            row.put("type", join.language ? LANGUAGE_JOIN_TYPE : JOIN_TYPE);
+            // still appear, carrying the base value the SELECT's COALESCE then falls back to. So is the
+            // correspondence axis, for the line whose document has nothing on the counter side.
+            row.put("type", join.type);
             row.put("condition", join.on);
             rows.add(row);
         }
@@ -1420,7 +1599,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             if (relation != null && relation.getTo() != null) {
                 EntityIntent target = entityByName(model, relation.getTo());
                 String targetAlias = relation.getTo();
-                joins.putIfAbsent(targetAlias, join(context, model, source, relation, target, targetAlias, baseAlias));
+                joins.putIfAbsent(targetAlias,
+                        join(context, model, source, relation, target, targetAlias, targetAlias, baseAlias, JOIN_TYPE));
                 matcher.appendReplacement(dotted,
                         Matcher.quoteReplacement(targetAlias + "." + quote(column(targetAlias, matcher.group(2)))));
             } else {
@@ -1798,22 +1978,25 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
     }
 
-    /** A join to a related entity's table - INNER, or LEFT for a language table. */
+    /**
+     * A join to another table - INNER by default; LEFT for a language table, and for the correspondent
+     * line of a correspondence balance report.
+     */
     private static final class Join {
         private final String table;
         private final String alias;
         private final String on;
-        private final boolean language;
+        private final String type;
 
         private Join(String table, String alias, String on) {
-            this(table, alias, on, false);
+            this(table, alias, on, JOIN_TYPE);
         }
 
-        private Join(String table, String alias, String on, boolean language) {
+        private Join(String table, String alias, String on, String type) {
             this.table = table;
             this.alias = alias;
             this.on = on;
-            this.language = language;
+            this.type = type;
         }
     }
 }

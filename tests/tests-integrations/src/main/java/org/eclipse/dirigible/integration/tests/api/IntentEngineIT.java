@@ -220,6 +220,17 @@ class IntentEngineIT extends IntegrationTest {
                 debit: total
                 credit: creditSnapshot
                 dimensions: [customer]
+              # correspondence - the general ledger axis: the counter-side lines of the same document
+              # become one more bucket, and each amount is allocated proportionally across them. The
+              # document the lines share is the first hop of `date`.
+              - name: OrderItemCorrespondence
+                kind: balance
+                source: OrderItem
+                date: order.orderDate
+                debit: quantity
+                credit: creditSnapshot
+                dimensions: [order]
+                correspondence: order.orderDate
               # kind: statement - the statutory shape over the SAME signed ledger: instead of one row
               # per dimension value, a fixed line structure where each line is a formula over the
               # account codes, plus arithmetic over other lines. (The ledger here is the balance
@@ -376,7 +387,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("processes", hasSize(1))
                                                  .body("processes[0].steps", hasSize(6))
                                                  .body("forms", hasSize(1))
-                                                 .body("reports", hasSize(5))
+                                                 .body("reports", hasSize(6))
                                                  .body("permissions", hasSize(2))
                                                  .body("seeds[0].rows", hasSize(2)));
     }
@@ -621,7 +632,8 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("written",
                                                          hasItems("orders.edm", "orders.model", "OrderApproval.bpmn", "ApproveOrder.form",
                                                                  "OrdersByCustomer.report", "OrderBalance.report", "OrderStatement.report",
-                                                                 "orders.roles", "orders.glue", "countries.csvim", "countries.csv",
+                                                                 "OrderItemCorrespondence.report", "orders.roles", "orders.glue",
+                                                                 "countries.csvim", "countries.csv",
                                                                  "doc/Templates/Order/Print/en/standard.print", "orders.test"))
                                                  .body("scrubbed", hasSize(0))
                                                  // The model-to-code plan the editor replays: one entry per generated model with a
@@ -4168,10 +4180,25 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(balance.contains(
                 "SUM(CASE WHEN Order.\\\"ORDER_ORDER_DATE\\\" <= :toDate THEN COALESCE(Order.\\\"ORDER_TOTAL\\\", 0) ELSE 0 END) as \\\"Closing Debit\\\""),
                 "the closing debit should sum everything up to and including :toDate");
+
         assertTrue(balance.contains("\"name\": \"fromDate\"") && balance.contains("\"name\": \"toDate\""),
                 "the balance report should declare the two window parameters");
         assertTrue(balance.contains("\"initial\": \"1900-01-01\"") && balance.contains("\"initial\": \"9999-12-31\""),
                 "the window parameters should default to the all-time balance");
+        // correspondence - the counter-side lines of the same document as an extra grouping bucket.
+        String correspondence = contentOf("OrderItemCorrespondence.report");
+        assertTrue(correspondence.contains(
+                "LEFT JOIN \\\"ORDERS_ORDER_ITEM\\\" as OrderItemCorrespondent ON OrderItemCorrespondent.\\\"ORDER_ITEM_ORDER\\\" = OrderItem.\\\"ORDER_ITEM_ORDER\\\" AND OrderItemCorrespondent.\\\"ORDER_ITEM_ID\\\" <> OrderItem.\\\"ORDER_ITEM_ID\\\""),
+                "the correspondence axis should LEFT self-join the source on the document its lines share, excluding the line itself");
+        assertTrue(
+                correspondence.contains("as OrderCorrespondent ON OrderItemCorrespondent.\\\"ORDER_ITEM_ORDER\\\" = OrderCorrespondent."),
+                "the bucket path should be resolved against the counter-side line, under its own alias");
+        assertTrue(correspondence.contains("as \\\"Correspondent Order Order Date\\\""),
+                "the correspondence bucket should be emitted as a grouping column of its own");
+        assertTrue(
+                correspondence.contains("CAST(COALESCE(OrderItem.\\\"ORDER_ITEM_QUANTITY\\\", 0) AS DECIMAL(34,12))")
+                        && correspondence.contains("NULLIF((SELECT SUM(COALESCE(OrderItemDocumentTotal."),
+                "each amount should be allocated over the counter-side buckets of its own document");
 
         // kind: statement - the same window, but the rows are the declared lines: one subquery
         // reducing the ledger to a balance per account code, then one row per line reading it.

@@ -235,6 +235,102 @@ class ReportIntentGeneratorTest {
         assertTrue(!query.contains(" Status "), query);
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void correspondenceBucketsTheCounterSideOfTheSameDocumentAndAllocatesProportionally() {
+        IntentModel model = IntentParser.parse(GENERAL_LEDGER_INTENT);
+        Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                            .get(0));
+        String query = (String) document.get("query");
+
+        // The counter-side line is a LEFT self-join on the document (the first hop of `date`), with the
+        // line itself excluded by key and the pairing restricted to the opposite side - so no bucket is
+        // emitted for a same-side sibling, and a document with no counter side keeps its row.
+        assertTrue(query.contains(
+                "LEFT JOIN \"LEDGER_JOURNAL_ENTRY_ITEM\" as JournalEntryItemCorrespondent ON JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_JOURNAL_ENTRY\" = JournalEntryItem.\"JOURNAL_ENTRY_ITEM_JOURNAL_ENTRY\""
+                        + " AND JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_ID\" <> JournalEntryItem.\"JOURNAL_ENTRY_ITEM_ID\""
+                        + " AND ((COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) <> 0 AND COALESCE(JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_CREDIT\", 0) <> 0)"
+                        + " OR (COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_CREDIT\", 0) <> 0 AND COALESCE(JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) <> 0))"),
+                query);
+        // The bucket path is resolved a SECOND time, against that line - so the account it joins must
+        // carry its own alias, or it would collide with the dimension's account and be dropped.
+        assertTrue(query.contains(
+                "LEFT JOIN \"LEDGER_ACCOUNT\" as AccountCorrespondent ON JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_ACCOUNT\" = AccountCorrespondent.\"ACCOUNT_ID\""),
+                query);
+        assertTrue(query.contains("AccountCorrespondent.\"ACCOUNT_CODE\" as \"Correspondent Account Code\""), query);
+        assertTrue(query.contains("GROUP BY Account.\"ACCOUNT_CODE\", Account.\"ACCOUNT_NAME\", AccountCorrespondent.\"ACCOUNT_CODE\""),
+                query);
+
+        // A debit line's share of a bucket is that bucket's CREDIT over the document's total credit
+        // (excluding the line itself); the cast makes the share a fraction rather than integer division,
+        // and the outer COALESCE gives a line with no counter side its full amount in the empty bucket.
+        String documentCredit =
+                "(SELECT SUM(COALESCE(JournalEntryItemDocumentTotal.\"JOURNAL_ENTRY_ITEM_CREDIT\", 0)) FROM \"LEDGER_JOURNAL_ENTRY_ITEM\" as JournalEntryItemDocumentTotal"
+                        + " WHERE JournalEntryItemDocumentTotal.\"JOURNAL_ENTRY_ITEM_JOURNAL_ENTRY\" = JournalEntryItem.\"JOURNAL_ENTRY_ITEM_JOURNAL_ENTRY\""
+                        + " AND JournalEntryItemDocumentTotal.\"JOURNAL_ENTRY_ITEM_ID\" <> JournalEntryItem.\"JOURNAL_ENTRY_ITEM_ID\")";
+        assertTrue(query.contains(
+                "SUM(CASE WHEN JournalEntry.\"JOURNAL_ENTRY_ENTRY_DATE\" >= :fromDate AND JournalEntry.\"JOURNAL_ENTRY_ENTRY_DATE\" <= :toDate"
+                        + " THEN COALESCE(CAST(COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) AS DECIMAL(34,12))"
+                        + " * COALESCE(JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_CREDIT\", 0) / NULLIF(" + documentCredit + ", 0),"
+                        + " COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0)) ELSE 0 END) as \"Debit\""),
+                query);
+        // ... and a credit line's share is the mirror image - the bucket's DEBIT over the total debit.
+        assertTrue(query.contains(
+                "* COALESCE(JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) / NULLIF((SELECT SUM(COALESCE(JournalEntryItemDocumentTotal.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0))"),
+                query);
+
+        // The correspondence bucket is a dimension: it groups, and it sits before the six totals.
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) document.get("columns");
+        assertEquals(9, columns.size());
+        Map<String, Object> bucket = columns.get(2);
+        assertEquals("Correspondent Account Code", bucket.get("alias"));
+        assertEquals("AccountCorrespondent", bucket.get("table"));
+        assertEquals("NONE", bucket.get("aggregate"));
+        assertEquals(Boolean.TRUE, bucket.get("grouping"));
+        assertEquals("Debit", columns.get(5)
+                                     .get("alias"));
+    }
+
+    @Test
+    void correspondenceNeedsADocumentReachingDateAndAResolvablePath() {
+        IntentValidationException error = assertThrows(IntentValidationException.class, () -> IntentParser.parse("""
+                name: ledger
+                entities:
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: entryDate, type: date }
+                      - { name: debit, type: decimal }
+                      - { name: credit, type: decimal }
+                reports:
+                  - name: GeneralLedger
+                    kind: balance
+                    source: JournalEntryItem
+                    date: entryDate
+                    debit: debit
+                    credit: credit
+                    dimensions: [debit]
+                    correspondence: account.code
+                """));
+        String message = error.getMessage();
+        // The document the lines share IS the first hop of `date`, so a line-local date has none.
+        assertTrue(message.contains("correspondence needs the document its lines share"), message);
+        assertTrue(message.contains("correspondence [account.code] does not start with a to-one relation of [JournalEntryItem]"), message);
+    }
+
+    /**
+     * A statement's rows are its declared lines, so it has no account axis to bucket - declaring the
+     * general ledger's correspondence there is a mistake, not a silently ignored key.
+     */
+    @Test
+    void correspondenceOnAStatementIsRejected() {
+        IntentValidationException error = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(GENERAL_LEDGER_INTENT.replace("kind: balance", "kind: statement")));
+        assertTrue(error.getMessage()
+                        .contains("must not declare correspondence - the general ledger axis belongs to kind: balance"),
+                error.getMessage());
+    }
+
     private static final String LEDGER_INTENT = """
             name: ledger
             entities:
@@ -267,6 +363,14 @@ class ReportIntentGeneratorTest {
                 dimensions: [account.code, account.name]
                 filter: "credit == 0"
             """;
+
+    private static final String GENERAL_LEDGER_INTENT = LEDGER_INTENT.replace("""
+                dimensions: [account.code, account.name]
+                filter: "credit == 0"
+            """, """
+                dimensions: [account.code, account.name]
+                correspondence: account.code
+            """);
 
     @Test
     @SuppressWarnings("unchecked")
@@ -364,7 +468,7 @@ class ReportIntentGeneratorTest {
                     source: JournalEntryItem
                 """));
         String message = error.getMessage();
-        assertTrue(message.contains("declares date/debit/credit but is not kind: balance"), message);
+        assertTrue(message.contains("declares date/debit/credit/correspondence but is not kind: balance"), message);
         assertTrue(message.contains("unknown kind [pivot]"), message);
     }
 
