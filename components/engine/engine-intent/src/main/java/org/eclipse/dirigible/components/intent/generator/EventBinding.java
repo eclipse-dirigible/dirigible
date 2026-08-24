@@ -24,10 +24,27 @@ import java.util.Map;
  * {@code -updated} - deliberately, so a system write cannot re-fire the onUpdate reactions meant
  * for a person's edit. The consequence was that the {@code -updated} half of the DSL could not
  * observe a status change at all; binding to it is what this kind exists for.
+ *
+ * <p>
+ * {@code onPhase} is the ENRICHMENT axis, and its suffix comes from the binding rather than the
+ * kind: a phase is a name the entity declares ({@code phases: [costed]}) and the topic is
+ * {@code -<phase>}. It exists because an enrichment a listener computes and writes back
+ * event-silently publishes nothing at all, so a consumer bound to {@code onCreate} races it and
+ * reads the un-enriched row - with every step green. Reading the suffix therefore needs the whole
+ * binding map, which is what {@link #topicSuffix(Map)} is for; {@link #topicSuffix(String)} answers
+ * for the kind-only channels and cannot resolve a phase.
  */
 public final class EventBinding {
 
-    private static final String[] KINDS = {"onCreate", "onUpdate", "onDelete", "onTransition"};
+    /**
+     * The enrichment axis: the bound entity, with the phase named by the sibling {@link #PHASE_KEY}.
+     */
+    public static final String ON_PHASE = "onPhase";
+
+    /** The key naming which declared phase an {@link #ON_PHASE} binding observes. */
+    public static final String PHASE_KEY = "phase";
+
+    private static final String[] KINDS = {"onCreate", "onUpdate", "onDelete", "onTransition", ON_PHASE};
 
     private EventBinding() {}
 
@@ -60,11 +77,42 @@ public final class EventBinding {
     }
 
     /**
+     * @param event the binding map (may be {@code null})
+     * @return the phase an {@link #ON_PHASE} binding names, or {@code null} for any other binding
+     */
+    public static String phase(Map<String, Object> event) {
+        if (event == null || event.get(ON_PHASE) == null) {
+            return null;
+        }
+        Object phase = event.get(PHASE_KEY);
+        return phase == null ? null : phase.toString();
+    }
+
+    /**
+     * The topic suffix of a whole binding - the only form that can resolve an {@code onPhase} one,
+     * whose suffix is the declared phase name rather than a constant of the kind.
+     *
+     * @param event the binding map (may be {@code null})
+     * @return the topic suffix the bound event's publisher uses
+     */
+    public static String topicSuffix(Map<String, Object> event) {
+        String phase = phase(event);
+        return phase == null ? topicSuffix(kind(event)) : "-" + phase;
+    }
+
+    /**
      * @param kind the event kind
      * @return the topic suffix ({@code ""} for create, else
      *         {@code -updated}/{@code -deleted}/{@code -transitioned})
+     * @throws IllegalArgumentException for {@code onPhase}, whose suffix is the phase name and lives in
+     *         the binding - a consumer that can bind a phase must read {@link #topicSuffix(Map)}, and
+     *         answering the create topic here would silently bind the un-enriched moment, which is the
+     *         very failure the phase axis exists to remove
      */
     public static String topicSuffix(String kind) {
+        if (ON_PHASE.equals(kind)) {
+            throw new IllegalArgumentException("onPhase has no kind-only topic suffix - read topicSuffix(event)");
+        }
         if ("onUpdate".equals(kind)) {
             return "-updated";
         }

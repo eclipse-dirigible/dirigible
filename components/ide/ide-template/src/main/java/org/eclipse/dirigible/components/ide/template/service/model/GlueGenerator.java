@@ -731,6 +731,13 @@ class GlueGenerator {
                 "guardValue", "targetEntity", "targetPk", "itemsEntity", "itemsFk", "backRefProperty", "stornoProperty",
                 "stornoFilterProperty", "hasRule", "ruleEntity", "ruleMatchProperty", "ruleMatchValueJava", "usedRuleColumns",
                 "conditionalRuleGuards", "headerAssignments", "itemRows");
+        // The bound axis (issue #6929): the channel the handler subscribes to, and the sentence its
+        // header comment describes it in. Both are absent from a .glue written before the enrichment
+        // phase existed, and a bare reference would render as its own literal - so each falls back to
+        // exactly what that shape used to emit, the two-state lifecycle branch the template hardcoded.
+        context.put("topicSuffix", strOr(item, "topicSuffix", truthy(item, "isCreate") ? "" : "-transitioned"));
+        context.put("moment",
+                strOr(item, "moment", truthy(item, "isCreate") ? "is created" : "transitions into status " + str(item, "guardValue")));
         boolean crossModel = truthy(item, "crossModel");
         context.put("sourceTopicProject", crossModel ? item.get("sourceProject") : parameters.get("projectName"));
         context.put("sourceJavaGenFolder", crossModel ? sanitize(item, "sourceGenFolder") : str(parameters, "javaGenFolderName"));

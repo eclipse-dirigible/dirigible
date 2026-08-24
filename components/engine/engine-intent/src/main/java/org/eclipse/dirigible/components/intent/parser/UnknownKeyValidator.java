@@ -61,9 +61,12 @@ final class UnknownKeyValidator {
      * The entity-event / process-step axes a notification, an integration or a departure may bind to.
      * {@code onTransition} is the status channel - a workflow setter, a {@code transitions:} button and
      * a {@code generates} completion hook publish {@code -transitioned} and never {@code -updated}.
+     * {@code onPhase} (with its sibling {@code phase}) is the enrichment channel - a write a listener
+     * makes event-silently announces its declared phase, which is the only moment a consumer of that
+     * value may observe.
      */
     private static final Set<String> GLUE_EVENT_KEYS =
-            Set.of("onCreate", "onUpdate", "onDelete", "onTransition", "onStepReached", "onStepCompleted", "when");
+            Set.of("onCreate", "onUpdate", "onDelete", "onTransition", "onPhase", "phase", "onStepReached", "onStepCompleted", "when");
 
     /**
      * Author-facing maps whose keys are a closed vocabulary, keyed by {@code <SimpleClassName>#<field>}
@@ -87,12 +90,12 @@ final class UnknownKeyValidator {
             Map.entry("IntegrationIntent#event.onStepCompleted", Set.of("process", "step")),
             Map.entry("OutboundIntent#event", GLUE_EVENT_KEYS), Map.entry("OutboundIntent#event.onStepReached", Set.of("process", "step")),
             Map.entry("OutboundIntent#event.onStepCompleted", Set.of("process", "step")),
-            Map.entry("PostingIntent#event", Set.of("onTransition", "onCreate", "when", "model")),
+            Map.entry("PostingIntent#event", Set.of("onTransition", "onCreate", "onPhase", "phase", "when", "model")),
             Map.entry("PostingIntent#rule", Set.of("entity", "match")),
             // Both axes plus the cardinality (#6800). Spelled out rather than reusing GLUE_EVENT_KEYS:
             // a create-from binds onTransition (which no other consumer has) and never onUpdate/onDelete.
             Map.entry("GeneratesIntent#event",
-                    Set.of("onTransition", "onCreate", "onStepReached", "onStepCompleted", "when", "mode", "model")),
+                    Set.of("onTransition", "onCreate", "onPhase", "phase", "onStepReached", "onStepCompleted", "when", "mode", "model")),
             Map.entry("GeneratesIntent#event.onStepReached", Set.of("process", "step")),
             Map.entry("GeneratesIntent#event.onStepCompleted", Set.of("process", "step")),
             Map.entry("GenerateChildIntent#forEach", Set.of("entity", "days", "model", "match")),

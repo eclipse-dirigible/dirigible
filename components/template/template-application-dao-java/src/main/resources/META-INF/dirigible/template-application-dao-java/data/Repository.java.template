@@ -649,6 +649,41 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // connection, before its commit, and recorded in the event outbox alongside it.
         return updateProperties(id, values, "${projectName}-${perspectiveName}-${name}-updated");
     }
+#if($phases && $phases != "")
+#foreach($phase in $phases.split(","))
+#set($Phase = "${phase.substring(0,1).toUpperCase()}${phase.substring(1)}")
+
+    /**
+     * Apply an enrichment and announce the "${phase}" phase of the row - the intent
+     * phases: [${phase}] declaration of this entity. Bind it with
+     * event: { onPhase: ${name}, phase: ${phase} }.
+     *
+     * <p>
+     * An enrichment a listener computes on create - a costing pool, a snapshot column, an external
+     * lookup - has to be written back without re-firing the onUpdate consumers, so it publishes nothing
+     * at all; a declarative consumer of the enriched value therefore had no moment to bind to. It could
+     * only bind the create, where the order of two listeners is undefined and the value may not be
+     * written yet, and the result was a plausible-looking record computed from a null with every step
+     * green. A phase is that write's own channel: the values and the notice travel in ONE targeted
+     * write, so they commit together and no consumer can observe one without the other.
+     *
+     * <p>
+     * Routed through {@link #updateProperties} like every other targeted write, so the checks gate, the
+     * stored display name, the change history and a document line's resum all still run.
+     *
+     * @param id the primary key of the row being enriched
+     * @param values the columns this phase completes; never empty - the write IS the announcement, and
+     *        a phase nothing wrote is a moment that did not happen
+     * @return the number of rows written
+     */
+    public int announce${Phase}(Object id, java.util.Map<String, Object> values) {
+        if (values == null || values.isEmpty()) {
+            throw new IllegalArgumentException("announce${Phase} requires the enriched values - the write carries the announcement");
+        }
+        return updateProperties(id, values, "${projectName}-${perspectiveName}-${name}-${phase}");
+    }
+#end
+#end
 #if($haveSubsets)
 
     /**

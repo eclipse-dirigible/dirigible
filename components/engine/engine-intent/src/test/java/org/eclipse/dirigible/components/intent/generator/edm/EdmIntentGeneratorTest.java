@@ -716,6 +716,29 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void declaredPhasesReachTheModelSoTheRepositoryCanAnnounceThem() {
+        String yaml = """
+                name: inventory
+                entities:
+                  - name: StockMovement
+                    phases: [costed, invoiced]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: costValue, type: decimal }
+                  - name: Warehouse
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "inventory");
+
+        assertEquals("costed,invoiced", entityByName(entities(model), "StockMovement").get("phases"));
+        // An entity that announces nothing carries nothing - a model that says nothing generates
+        // byte-identically to one written before the axis existed.
+        assertNull(entityByName(entities(model), "Warehouse").get("phases"));
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void guardCheckEmitsKeyedAggregateGuard() {
         String yaml = """

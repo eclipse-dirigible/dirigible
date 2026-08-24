@@ -23,6 +23,7 @@ import java.util.TreeSet;
 import javax.lang.model.SourceVersion;
 
 import org.eclipse.dirigible.components.intent.generator.ArrivalSupport;
+import org.eclipse.dirigible.components.intent.generator.EventBinding;
 import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.FileNameSupport;
@@ -169,6 +170,9 @@ public final class IntentParser {
      * system itself writes.
      */
     private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete", "onTransition");
+
+    /** Topic suffixes the platform itself publishes - an entity phase may not shadow one (#6929). */
+    private static final Set<String> RESERVED_PHASES = Set.of("updated", "deleted", "transitioned", "rekeyed");
     /**
      * The process-step half of the glue event axis - each names a <code>{ process, step }</code> pair
      * rather than an entity.
@@ -2043,10 +2047,65 @@ public final class IntentParser {
                 entity = validateStepEventBinding(event, kind, subject, model, issues);
             }
         }
+        Object phased = event.get(EventBinding.ON_PHASE);
+        if (phased != null) {
+            declared++;
+            entity = phased.toString();
+            if (!entityNames.contains(entity)) {
+                issues.add(subject + " " + EventBinding.ON_PHASE + " references unknown entity [" + phased + "]");
+                entity = null;
+            }
+        }
+        validatePhaseBinding(event, subject, entity == null ? null : entityByName(model, entity), issues);
         if (declared != 1) {
-            issues.add(subject + " must declare exactly one of onCreate/onUpdate/onDelete/onTransition/onStepReached/onStepCompleted");
+            issues.add(
+                    subject + " must declare exactly one of onCreate/onUpdate/onDelete/onTransition/onPhase/onStepReached/onStepCompleted");
         }
         return entity;
+    }
+
+    /**
+     * The {@code onPhase} half of an event binding (#6929): the phase the consumer observes must be one
+     * the entity DECLARES, and {@code phase:} belongs to that kind alone.
+     *
+     * <p>
+     * A phase is the channel of an enrichment a listener computes and writes back event-silently - the
+     * only moment at which a consumer of that value may read the row. Both halves are checked here
+     * because both fail the same silent way: a {@code phase:} on an {@code onCreate} binding would be
+     * dropped and the consumer would keep racing the enrichment, and an undeclared phase name would
+     * bind a topic nothing ever publishes to, so the consumer would simply never fire.
+     *
+     * @param event the binding map (may be {@code null})
+     * @param subject the issue prefix naming the consumer
+     * @param entity the bound entity when it is LOCAL, else {@code null} - a cross-model entity
+     *        declares its phases in its own model, so the name cannot be resolved from here (the same
+     *        limit a cross-model status nomenclature has)
+     * @param issues the collecting issue list
+     */
+    private static void validatePhaseBinding(Map<String, Object> event, String subject, EntityIntent entity, List<String> issues) {
+        if (event == null) {
+            return;
+        }
+        Object phase = event.get(EventBinding.PHASE_KEY);
+        if (event.get(EventBinding.ON_PHASE) == null) {
+            if (phase != null) {
+                issues.add(subject + " event declares `phase: " + phase + "` without `onPhase:` - a phase is the channel of"
+                        + " an enrichment write and only an onPhase binding observes it");
+            }
+            return;
+        }
+        String name = phase == null ? ""
+                : String.valueOf(phase)
+                        .trim();
+        if (name.isEmpty()) {
+            issues.add(subject + " event onPhase requires `phase: <name>` naming one of the entity's declared phases");
+            return;
+        }
+        if (entity != null && !entity.getPhases()
+                                     .contains(name)) {
+            issues.add(subject + " event binds phase [" + name + "] which entity [" + entity.getName()
+                    + "] does not declare - add it to that entity's `phases:`");
+        }
     }
 
     /** One {@code onStepReached}/{@code onStepCompleted} binding: the process, the step, the record. */
@@ -2871,8 +2930,47 @@ public final class IntentParser {
                        .isEmpty()) {
                 validateRelated(entity, byName, usesAliases, issues);
             }
+            if (!entity.getPhases()
+                       .isEmpty()) {
+                validatePhases(entity, issues);
+            }
         }
         return entityNames;
+    }
+
+    /**
+     * An entity's declared enrichment {@code phases:} (#6929) - the names its listeners announce and a
+     * consumer binds with {@code event: { onPhase: <Entity>, phase: <name> }}.
+     *
+     * <p>
+     * A phase name becomes both a topic suffix and the tail of the generated repository's
+     * {@code announce<Phase>} method, so it has to be a plain lower-camel identifier. The reserved
+     * names are the platform's OWN channels: announcing {@code updated} would publish {@code -updated}
+     * and re-fire every onUpdate consumer of a write the user never made, which is the exact loop the
+     * silent enrichment write exists to avoid.
+     */
+    private static void validatePhases(EntityIntent entity, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "]";
+        Set<String> seen = new LinkedHashSet<>();
+        for (String phase : entity.getPhases()) {
+            String name = phase == null ? "" : phase.trim();
+            if (name.isEmpty()) {
+                issues.add(subject + " declares an empty phase name");
+                continue;
+            }
+            if (!name.matches("[a-z][A-Za-z0-9]*")) {
+                issues.add(subject + " phase [" + name + "] must be a lower-camel identifier (e.g. costed, priced, enriched)");
+                continue;
+            }
+            if (RESERVED_PHASES.contains(name)) {
+                issues.add(subject + " phase [" + name + "] is a platform channel - a phase must be a name of its own,"
+                        + " or announcing it would re-fire the consumers of that channel");
+                continue;
+            }
+            if (!seen.add(name)) {
+                issues.add(subject + " declares phase [" + name + "] more than once");
+            }
+        }
     }
 
     /**
@@ -5467,22 +5565,29 @@ public final class IntentParser {
             }
             String subject = "posting [" + posting.getName() + "]";
             // event: exactly one trigger - `onTransition` (a status write; requires the `when`
-            // status guard) or `onCreate` (the source's insert - the trigger for a source with no
+            // status guard), `onCreate` (the source's insert - the trigger for a source with no
             // status lifecycle at all, e.g. a booked payment whose only event is being created;
-            // `when` stays optional there as a plain `<Property> == <number>` guard).
+            // `when` stays optional there as a plain `<Property> == <number>` guard) or `onPhase`
+            // (a declared enrichment phase - the moment a value a listener computes has been
+            // written, which is the only moment a posting reading that value may observe; the
+            // guard is optional there too, the phase already being one moment).
             Object onTransition = posting.getEvent() == null ? null
                     : posting.getEvent()
                              .get("onTransition");
             Object onCreate = posting.getEvent() == null ? null
                     : posting.getEvent()
                              .get("onCreate");
-            if (onTransition == null && onCreate == null) {
-                issues.add(subject + " requires `event: { onTransition: <SourceEntity>, ... }`"
-                        + " or `event: { onCreate: <SourceEntity>, ... }`");
-            } else if (onTransition != null && onCreate != null) {
-                issues.add(subject + " event declares both onTransition and onCreate - exactly one trigger is allowed");
+            Object onPhase = posting.getEvent() == null ? null
+                    : posting.getEvent()
+                             .get(EventBinding.ON_PHASE);
+            int triggers = (onTransition == null ? 0 : 1) + (onCreate == null ? 0 : 1) + (onPhase == null ? 0 : 1);
+            if (triggers == 0) {
+                issues.add(subject + " requires `event: { onTransition: <SourceEntity>, ... }`,"
+                        + " `event: { onCreate: <SourceEntity>, ... }` or `event: { onPhase: <SourceEntity>, phase: <name> }`");
+            } else if (triggers > 1) {
+                issues.add(subject + " event declares more than one of onTransition/onCreate/onPhase - exactly one trigger is allowed");
             } else {
-                String source = String.valueOf(onTransition != null ? onTransition : onCreate);
+                String source = String.valueOf(onTransition != null ? onTransition : onCreate != null ? onCreate : onPhase);
                 Object alias = posting.getEvent()
                                       .get("model");
                 if (alias != null && !usesAliases.contains(String.valueOf(alias))) {
@@ -5492,6 +5597,7 @@ public final class IntentParser {
                     issues.add(subject + " event source [" + source
                             + "] is not a declared entity (declare `model:` for a cross-model source)");
                 }
+                validatePhaseBinding(posting.getEvent(), subject, alias != null ? null : byName.get(source), issues);
                 Object when = posting.getEvent()
                                      .get("when");
                 if (onTransition != null) {
@@ -6082,8 +6188,9 @@ public final class IntentParser {
     /**
      * Validate the optional {@code event} trigger of a create-from (issues #6711, #6800): exactly one
      * of the source's lifecycle ({@code onTransition} - a status write, the {@code when} status guard
-     * is mandatory - or {@code onCreate} - the source's insert, the guard optional), naming the SAME
-     * entity {@code from} declares, or a process step ({@code onStepReached}/{@code onStepCompleted}:
+     * is mandatory - {@code onCreate} - the source's insert, the guard optional - or {@code onPhase} -
+     * a declared enrichment phase of it, the guard optional), naming the SAME entity {@code from}
+     * declares, or a process step ({@code onStepReached}/{@code onStepCompleted}:
      * <code>{ process, step }</code>) whose process runs ON that entity. The owning model is never
      * repeated here, {@code fromUses} declares it.
      *
@@ -6110,22 +6217,26 @@ public final class IntentParser {
         validateGeneratesEventMode(g, subject, issues);
         Object onTransition = event.get("onTransition");
         Object onCreate = event.get("onCreate");
+        Object onPhase = event.get(EventBinding.ON_PHASE);
+        validatePhaseBinding(event, subject, crossModelSource ? null : source, issues);
         String stepKind = null;
         for (String kind : STEP_EVENT_KINDS) {
             if (event.get(kind) != null) {
                 stepKind = kind;
             }
         }
+        int lifecycleTriggers = (onTransition == null ? 0 : 1) + (onCreate == null ? 0 : 1) + (onPhase == null ? 0 : 1);
         if (stepKind != null) {
-            validateGeneratesStepEvent(g, subject, stepKind, onTransition != null || onCreate != null, crossModelSource, model, issues);
-        } else if (onTransition == null && onCreate == null) {
+            validateGeneratesStepEvent(g, subject, stepKind, lifecycleTriggers > 0, crossModelSource, model, issues);
+        } else if (lifecycleTriggers == 0) {
             issues.add(subject + " event requires `onTransition: " + g.getFrom() + "` (a status write), `onCreate: " + g.getFrom()
-                    + "` (the source's insert) or `onStepReached`/`onStepCompleted: { process: <Process>, step: <step> }`"
+                    + "` (the source's insert), `onPhase: " + g.getFrom() + "` with `phase: <name>` (a declared enrichment phase)"
+                    + " or `onStepReached`/`onStepCompleted: { process: <Process>, step: <step> }`"
                     + " (a moment in a process that runs on it)");
-        } else if (onTransition != null && onCreate != null) {
-            issues.add(subject + " event declares both onTransition and onCreate - exactly one trigger is allowed");
+        } else if (lifecycleTriggers > 1) {
+            issues.add(subject + " event declares more than one of onTransition/onCreate/onPhase - exactly one trigger is allowed");
         } else {
-            String declared = String.valueOf(onTransition != null ? onTransition : onCreate)
+            String declared = String.valueOf(onTransition != null ? onTransition : onCreate != null ? onCreate : onPhase)
                                     .trim();
             if (g.getFrom() != null && !g.getFrom()
                                          .isBlank()

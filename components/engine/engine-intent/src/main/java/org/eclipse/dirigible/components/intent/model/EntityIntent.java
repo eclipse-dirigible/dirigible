@@ -227,6 +227,18 @@ public class EntityIntent {
     private LifecycleIntent lifecycle;
 
     /**
+     * Optional named enrichment PHASES this entity announces - the moments between "the row was
+     * inserted" and "the row is complete" that a declarative consumer can bind to. An enrichment a
+     * listener computes and writes back event-silently (a costing pool, a snapshot column, an external
+     * lookup) publishes nothing, so a consumer bound to {@code onCreate} races it and reads the
+     * un-enriched row. A phase is that write's own channel: the enriching listener applies the values
+     * through the generated repository's {@code announce<Phase>} method - one write, so the value and
+     * the notice commit together - and a consumer binds {@code event: { onPhase: <Entity>, phase:
+     * <name> }} to observe the ENRICHED row. Absent (the default) → the entity announces no phase.
+     */
+    private List<String> phases = new ArrayList<>();
+
+    /**
      * On a {@code function: Snapshot} child only: the fixed print-template language its generated
      * copies are rendered in (a {@code languages:} code, e.g. {@code bg}). Mutually exclusive with
      * {@link #languageFrom}; absent both, the mint falls back to the first entry of the tenant-resolved
@@ -516,6 +528,14 @@ public class EntityIntent {
      *
      * @return the unique declarations, never null
      */
+    public List<String> getPhases() {
+        return phases == null ? List.of() : phases;
+    }
+
+    public void setPhases(List<String> phases) {
+        this.phases = phases;
+    }
+
     public List<UniqueIntent> getUnique() {
         return unique == null ? List.of() : unique;
     }

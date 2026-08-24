@@ -370,7 +370,9 @@ field may declare:
   A failed document check aborts the transition (the workflow task completion fails with the
   authored message).
 - `postings:` (top-level) - **declarative posting**: when a (usually cross-model) source document
-  reaches a status - or, for a source with no status lifecycle, when it is created - create ONE
+  reaches a status - or, for a source with no status lifecycle, when it is created; or when it
+  reaches a declared enrichment `phases:` moment, the only trigger that may read an amount a
+  listener computes after the insert - create ONE
   local document with computed multi-line content (the accounting "source document -> balanced
   journal entry" shape, generalized):
   ```yaml
@@ -805,6 +807,55 @@ the moment it needs bridge fields (an amount, a valid-from), reverse navigation 
 `forEach` fan-out, roll-ups or reporting, it has outgrown a value - use `kind: manyToMany` or
 author the intermediate entity. With `history: true` the change trail records the raw key list
 (ids, not labels) - correct by construction.
+
+### phases - a named moment an enrichment announces
+
+**Use when:** a value a record needs is computed by a hand-written listener AFTER the insert (a
+moving-average cost pool, a snapshot column, an external lookup) and some declarative consumer - a
+posting, a notification, a create-from - has to read that value.
+
+That enrichment must be written back **without** an event, or it re-fires every onUpdate consumer of a
+change the user never made. So it publishes nothing at all, and a consumer bound to `onCreate` races
+it: two listeners on one event have no defined order, and the result is a plausible-looking record
+computed from a null with every step green. Declare the moment instead.
+
+```yaml
+entities:
+  - name: StockMovement
+    phases: [costed]            # the moments this entity announces
+    fields:
+      - { name: id,        type: integer, primaryKey: true, generated: true }
+      - { name: costValue, type: decimal, precision: 18, scale: 2 }
+
+postings:
+  - name: cogsPosting
+    event: { onPhase: StockMovement, phase: costed }    # the ENRICHED row, not the insert
+    creates: JournalEntry
+    backReference: StockMovement
+    rule: { entity: PostingRule, match: { documentType: "Goods Issue" } }
+    items:
+      - { Account: rule(costOfSalesAccount), debit: "CostValue" }
+      - { Account: rule(inventoryAccount),   credit: "CostValue" }
+```
+
+The generated repository gains one `announce<Phase>` method per declared phase, and the hand-written
+listener writes through it - one targeted write carrying both the values and the notice, so they
+commit together:
+
+```java
+new StockMovementRepository().announceCosted(movement.Id, java.util.Map.of("CostValue", cost));
+```
+
+**Rules:** a phase name is a lower-camel identifier and may not be one of the platform's own channels
+(`updated`, `deleted`, `transitioned`, `rekeyed`). `onPhase` is bindable by `postings`,
+`notifications`, `integrations`, `outbound` and an event-driven `generates`; its `when:` guard is
+optional, the phase already being one moment. A consumer binding a phase the entity does not declare
+fails the parse. A cross-model source declares its phases in its own model, so the name is not checked
+from the consumer's side there.
+
+**Do not declare a phase** for a value the platform already computes before the row is visible - a
+`calculatedOnCreate` expression, a `calculatedActionOnCreate` action, a `number:` stamp, a document's
+own totals. Those are in the row the create event carries; a phase is for what a listener adds after.
 
 ### function - the entity's presentation role (explicit template selection)
 
@@ -2549,6 +2600,7 @@ declare **exactly one** `event:`, either
 
 - an **entity lifecycle** event - `{ onCreate: <Entity> }` / `{ onUpdate: ... }` / `{ onDelete: ... }`;
 - an **entity status** event - `{ onTransition: <Entity> }`;
+- an **entity enrichment** event - `{ onPhase: <Entity>, phase: <name> }` (see `phases` below);
 - a **process step** event - `{ onStepReached: { process: <Process>, step: <step> } }` or
   `{ onStepCompleted: { process: <Process>, step: <step> } }`.
 
@@ -2637,11 +2689,18 @@ so before binding a reaction, check what the thing you care about publishes.
 | `generates` `sourceStatus:` flipping the source | `-transitioned` | the same three |
 | `generates` `sourceStatusOnRetire:` returning the source | `-transitioned` | the same three (this is how the reissue re-fires) |
 | A `userTask` / `serviceTask` being reached or completed | a per-step topic | `onStepReached` / `onStepCompleted` |
+| A hand-written listener announcing a declared `phases:` entry | that phase's own topic | `onPhase` |
 
 **Deliberately silent, and correct** - each of these would re-trigger its own handler if it published:
 the process trigger writing `ProcessId` back, an `expansions:` child-count write, and a `resolves:`
 lookup filling its relation (that one is what `outcome:` is for - stamp the attempt into a string
 field a list filter or a `decision` can read, instead of waiting for an event).
+
+**Silent, and a trap: an enrichment a hand-written listener computes on create.** A costing listener
+that computes a movement's cost and writes it back must not publish (it would re-fire every onUpdate
+consumer), so a consumer bound to `onCreate` RACES it - the order of two listeners on one event is
+undefined - and may read the row before the value is there. Never wire a posting, a notification or a
+create-from to a value a sibling listener computes; declare a **phase** and bind that instead.
 
 **Silent, and worth knowing:** a document's header totals recomputed from its line items. The line's
 own create / `-updated` / `-deleted` fires, so bind the reaction to the LINE, not to the header.
@@ -2984,6 +3043,7 @@ or a seeded name.
 - "send the invoice / payslip / document itself to its customer or employee by e-mail" -> a **notify block with `attach: print`** (on a `serviceTask` step, a `transitions[]`, or a `schedules[]`)
 - "every day/hour, check X and notify" -> **schedules** (`notify`)
 - "on a schedule / every month, create a Y for each X / recurring invoices / auto-generate timesheets" -> **schedules** (`generate`)
+- "post / notify / create from a value a listener computes AFTER the record is inserted (a moving-average cost, a snapshot column, an external lookup)" -> declare a **`phases:`** entry on the entity and bind **`event: { onPhase: <Entity>, phase: <name> }`** - never `onCreate`, which races the listener
 - "call an external API when X changes" -> **integrations**
 - "notify / call out when a task becomes available, or when a step is done" -> **notifications / integrations** with `event: { onStepReached | onStepCompleted: { process, step } }`
 - "append a log / protocol / activity row every time a step completes (or a status is set)" -> **generates** with `event: { onStepCompleted: { process, step }, mode: append }`
