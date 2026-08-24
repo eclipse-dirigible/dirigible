@@ -9,8 +9,8 @@
  */
 package org.eclipse.dirigible.components.dependencies;
 
-import nl.altindag.log.LogCaptor;
 import org.eclipse.dirigible.components.dependencies.MavenDependency.Scope;
+import org.eclipse.dirigible.components.dependencies.ProjectDependenciesCollector.Notice;
 import org.eclipse.dirigible.components.project.ProjectMetadata;
 import org.eclipse.dirigible.components.project.ProjectMetadataDependency;
 import org.eclipse.dirigible.components.project.ProjectMetadataUtils;
@@ -101,13 +101,15 @@ class ProjectMetadataParsingTest {
         Map<String, String> errors = new LinkedHashMap<>();
         Map<String, Set<String>> declaredBy = new LinkedHashMap<>();
 
-        try (LogCaptor logCaptor = LogCaptor.forClass(ProjectDependenciesCollector.class)) {
-            ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies, errors,
-                    declaredBy);
+        List<Notice> notices = ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies,
+                errors, declaredBy);
 
-            assertThat(logCaptor.getWarnLogs()).anySatisfy(message -> assertThat(message).contains("npm")
-                                                                                         .contains("my-project"));
-        }
+        assertThat(notices).singleElement()
+                           .satisfies(notice -> {
+                               assertThat(notice.error()).isFalse();
+                               assertThat(notice.message()).contains("npm")
+                                                           .contains("my-project");
+                           });
         assertThat(dependencies).isEmpty();
         assertThat(errors).isEmpty();
     }
@@ -126,13 +128,11 @@ class ProjectMetadataParsingTest {
         Map<String, String> errors = new LinkedHashMap<>();
         Map<String, Set<String>> declaredBy = new LinkedHashMap<>();
 
-        try (LogCaptor logCaptor = LogCaptor.forClass(ProjectDependenciesCollector.class)) {
-            ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies, errors,
-                    declaredBy);
+        List<Notice> notices = ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies,
+                errors, declaredBy);
 
-            // the watcher re-collects every few seconds - a legacy guid entry must not spam the log
-            assertThat(logCaptor.getWarnLogs()).isEmpty();
-        }
+        // the watcher re-collects every few seconds - a legacy guid entry must not spam the log
+        assertThat(notices).isEmpty();
         assertThat(dependencies).isEmpty();
         assertThat(errors).isEmpty();
         assertThat(declaredBy).isEmpty();
