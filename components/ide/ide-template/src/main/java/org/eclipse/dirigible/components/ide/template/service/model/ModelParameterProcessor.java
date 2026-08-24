@@ -637,9 +637,8 @@ final class ModelParameterProcessor {
             }
             boolean always = truthy(parent, "immutableAlways");
             String statusProperty = str(parent, "immutableStatusProperty");
-            boolean statusLock = always || (statusProperty != null && !statusProperty.isEmpty());
             Object parentPeriod = parent.get("periodLock");
-            if (!statusLock && parentPeriod == null) {
+            if (!always && (statusProperty == null || statusProperty.isEmpty()) && parentPeriod == null) {
                 continue;
             }
             String parentPerspective = NamingHelper.sanitizeJavaIdentifier(str(parentFk, "relationshipEntityPerspectiveName"));
@@ -651,9 +650,6 @@ final class ModelParameterProcessor {
             masterLock.put("entityClass", parentPackage + str(parent, "name") + "Entity");
             masterLock.put("repositoryClass", parentPackage + str(parent, "name") + "Repository");
             masterLock.put("always", always);
-            // Which halves are actually there: a master may be locked by its status, by its period, or
-            // by both, and the child's guard emits only the checks its master declares.
-            masterLock.put("statusLock", statusLock);
             masterLock.put("statusProperty", statusProperty);
             masterLock.put("statusValues", str(parent, "immutableStatusValues"));
             if (parentPeriod != null) {

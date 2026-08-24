@@ -416,8 +416,10 @@ class ModelParameterProcessorTest {
         ModelParameterProcessor.process(model(register, master, child), javaParameters());
 
         Map<String, Object> lock = masterLock(child);
-        // A master locked only by its period carries no status half, and the guard says so.
-        assertEquals(Boolean.FALSE, lock.get("statusLock"));
+        // A master locked only by its period carries no status half at all - the guard's status branch
+        // keys on exactly that, rather than on a flag that would have to be kept in step with it.
+        assertEquals(Boolean.FALSE, lock.get("always"));
+        assertNull(lock.get("statusProperty"));
         Map<String, Object> period = (Map<String, Object>) lock.get("period");
         assertEquals("IssueDate", period.get("dateProperty"));
         assertEquals("gen.sales_order.data.periods.AccountingPeriodRepository", period.get("repositoryClass"));

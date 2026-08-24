@@ -302,7 +302,7 @@ public class ${name}PartnerController {
         if (master == null) {
             return;
         }
-#if($masterLock.statusLock)
+#if($masterLock.always || $masterLock.statusProperty)
         if (!isMasterMutable(master)) {
 #if($masterLock.always)
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -320,7 +320,7 @@ public class ${name}PartnerController {
         }
 #end
     }
-#if($masterLock.statusLock)
+#if($masterLock.always || $masterLock.statusProperty)
 
     private static boolean isMasterMutable(${masterLock.entityClass} master) {
 #if($masterLock.always)
