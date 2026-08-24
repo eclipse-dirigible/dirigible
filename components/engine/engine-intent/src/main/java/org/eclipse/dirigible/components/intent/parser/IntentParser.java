@@ -33,6 +33,7 @@ import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
 import org.eclipse.dirigible.components.intent.generator.ScheduleSupport;
+import org.eclipse.dirigible.components.intent.generator.StatementSupport;
 import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
@@ -72,6 +73,7 @@ import org.eclipse.dirigible.components.intent.model.ResolveIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
+import org.eclipse.dirigible.components.intent.model.StatementLineIntent;
 import org.eclipse.dirigible.components.intent.model.ExpansionIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
@@ -7344,7 +7346,8 @@ public final class IntentParser {
                 issues.add(subject + " uses the reserved name [" + name
                         + "] - the platform binds it itself or the generated report controller declares it");
             }
-            if (report.isBalance() && BALANCE_REPORT_PARAMETERS.contains(name)) {
+            if (report.isLedgerKind() && BALANCE_REPORT_PARAMETERS.contains(name)) {
+                // A statement declares the same window on its own behalf as a balance report does.
                 issues.add(subject + " collides with the balance window parameter of the same name");
             }
             String op = parameter.getNormalizedOp();
@@ -7417,26 +7420,45 @@ public final class IntentParser {
      */
     private static void validateBalanceReport(IntentModel model, ReportIntent report, List<String> issues) {
         boolean balanceInputs = report.getDate() != null || report.getDebit() != null || report.getCredit() != null;
+        boolean statementInputs = report.getAccount() != null || !report.getLines()
+                                                                        .isEmpty();
         if (report.getKind() == null || report.getKind()
                                               .isBlank()) {
             if (balanceInputs) {
-                issues.add("report [" + report.getName() + "] declares date/debit/credit but is not kind: balance");
+                issues.add("report [" + report.getName() + "] declares date/debit/credit but is not kind: balance or kind: statement");
+            }
+            if (statementInputs) {
+                issues.add("report [" + report.getName() + "] declares account/lines but is not kind: statement");
             }
             return;
         }
-        if (!report.isBalance()) {
-            issues.add("report [" + report.getName() + "] has unknown kind [" + report.getKind() + "] - expected balance");
+        if (!report.isLedgerKind()) {
+            issues.add("report [" + report.getName() + "] has unknown kind [" + report.getKind() + "] - expected balance or statement");
             return;
         }
-        String prefix = "balance report [" + report.getName() + "]";
+        String prefix = (report.isStatement() ? "statement" : "balance") + " report [" + report.getName() + "]";
         if (!report.getMeasures()
                    .isEmpty()) {
             issues.add(prefix + " must not declare measures - it computes the opening/period/closing debit and credit totals");
         }
-        if (report.getDimensions()
-                  .stream()
-                  .noneMatch(d -> d != null && !d.isBlank())) {
-            issues.add(prefix + " needs at least one dimension to balance by");
+        if (report.isStatement()) {
+            // A statement's output rows are its lines; a dimension would multiply every line by the
+            // dimension's values and the line codes would stop being unique - which is the one thing a
+            // statement guarantees.
+            if (report.getDimensions()
+                      .stream()
+                      .anyMatch(d -> d != null && !d.isBlank())) {
+                issues.add(prefix + " must not declare dimensions - its rows are the declared lines");
+            }
+        } else {
+            if (report.getDimensions()
+                      .stream()
+                      .noneMatch(d -> d != null && !d.isBlank())) {
+                issues.add(prefix + " needs at least one dimension to balance by");
+            }
+            if (statementInputs) {
+                issues.add(prefix + " declares account/lines - those belong to kind: statement");
+            }
         }
         EntityIntent source = null;
         for (EntityIntent entity : model.getEntities()) {
@@ -7451,6 +7473,193 @@ public final class IntentParser {
         validateBalanceDate(model, source, report, issues, prefix);
         requireNumericBalanceField(source, report.getDebit(), "debit", issues, prefix);
         requireNumericBalanceField(source, report.getCredit(), "credit", issues, prefix);
+        if (report.isStatement()) {
+            validateStatementAccount(model, source, report, issues, prefix);
+            validateStatementLines(report, issues, prefix);
+        }
+    }
+
+    /**
+     * A statement's {@code account} must resolve to a {@code string} field - directly on the source or
+     * through a one-hop to-one {@code relation.field} path, exactly like the balance {@code date}. It
+     * is the code the line selectors match with, so a numeric or date field cannot carry it, and a
+     * cross-model target is checked at generation like every cross-model reference.
+     */
+    private static void validateStatementAccount(IntentModel model, EntityIntent source, ReportIntent report, List<String> issues,
+            String prefix) {
+        String reference = report.getAccount();
+        if (reference == null || reference.isBlank()) {
+            issues.add(prefix + " needs account: the account-code field the lines select on");
+            return;
+        }
+        reference = reference.trim();
+        FieldIntent field;
+        int dot = reference.indexOf('.');
+        if (dot > 0) {
+            RelationIntent relation = toOneRelation(source, reference.substring(0, dot));
+            if (relation == null) {
+                issues.add(prefix + " account [" + reference + "] does not start with a to-one relation of [" + source.getName() + "]");
+                return;
+            }
+            if (relation.isCrossModel()) {
+                return;
+            }
+            EntityIntent target = null;
+            for (EntityIntent entity : model.getEntities()) {
+                if (entity.getName() != null && entity.getName()
+                                                      .equals(relation.getTo())) {
+                    target = entity;
+                }
+            }
+            field = target == null ? null : fieldByName(target, reference.substring(dot + 1));
+        } else {
+            field = fieldByName(source, reference);
+        }
+        if (field == null) {
+            issues.add(prefix + " account [" + reference + "] does not resolve to a field");
+        } else if (!"string".equalsIgnoreCase(field.getType() == null ? "" : field.getType())) {
+            issues.add(prefix + " account [" + reference + "] must be a string field holding the account code (found [" + field.getType()
+                    + "])");
+        }
+    }
+
+    /**
+     * The statement's lines: every line is either a leaf reading the ledger ({@code accounts} +
+     * {@code measure}) or arithmetic over other lines ({@code sum} / {@code less}), never both and
+     * never neither. Line codes are unique, every referenced code exists, and the reference graph is
+     * acyclic - a cycle would flatten forever in the generator, and a code that resolves to nothing
+     * would render a line reading zero with nothing to say why.
+     */
+    private static void validateStatementLines(ReportIntent report, List<String> issues, String prefix) {
+        List<StatementLineIntent> lines = report.getLines();
+        if (lines.isEmpty()) {
+            issues.add(prefix + " needs lines: the statement's fixed line structure");
+            return;
+        }
+        Map<String, StatementLineIntent> byCode = new LinkedHashMap<>();
+        for (StatementLineIntent line : lines) {
+            String code = line.getCode() == null ? null
+                    : line.getCode()
+                          .trim();
+            if (code == null || code.isEmpty()) {
+                issues.add(prefix + " has a line without a code");
+                continue;
+            }
+            String linePrefix = prefix + " line [" + code + "]";
+            if (byCode.put(code, line) != null) {
+                issues.add(prefix + " declares the line code [" + code + "] twice");
+            }
+            if (!statementLiteral(code)) {
+                issues.add(linePrefix + " has a code carrying a quote or a control character - a line code is rendered"
+                        + " into the statement query as a literal");
+            }
+            if (line.getLabel() == null || line.getLabel()
+                                               .isBlank()) {
+                issues.add(linePrefix + " has no label");
+            } else if (!statementLiteral(line.getLabel())) {
+                issues.add(linePrefix + " has a label carrying a control character");
+            }
+            if (line.isLeaf() && line.isComputed()) {
+                issues.add(linePrefix + " both selects accounts and sums other lines - a line does one or the other,"
+                        + " else the same amount is counted twice");
+                continue;
+            }
+            if (line.isLeaf()) {
+                StatementSupport.selector(line.getAccounts(), issues, linePrefix);
+                if (line.getMeasure() == null || line.getMeasure()
+                                                     .isBlank()) {
+                    issues.add(linePrefix + " needs measure: which balance of the selected accounts the line takes - one of "
+                            + StatementSupport.measureNames());
+                } else if (StatementSupport.measure(line.getMeasure()) == null) {
+                    issues.add(linePrefix + " has unknown measure [" + line.getMeasure()
+                                                                           .trim()
+                            + "] - expected one of " + StatementSupport.measureNames());
+                }
+            } else if (line.isComputed()) {
+                if (line.getMeasure() != null && !line.getMeasure()
+                                                      .isBlank()) {
+                    issues.add(linePrefix + " is computed from other lines and cannot declare a measure -"
+                            + " each referenced line carries its own");
+                }
+            } else {
+                issues.add(linePrefix + " neither selects accounts (accounts + measure) nor sums other lines (sum / less)");
+            }
+        }
+        validateStatementReferences(byCode, issues, prefix);
+    }
+
+    /**
+     * Every {@code sum}/{@code less} code names a declared line, and the graph they form is acyclic.
+     */
+    private static void validateStatementReferences(Map<String, StatementLineIntent> byCode, List<String> issues, String prefix) {
+        for (Map.Entry<String, StatementLineIntent> entry : byCode.entrySet()) {
+            String linePrefix = prefix + " line [" + entry.getKey() + "]";
+            for (String reference : statementReferences(entry.getValue())) {
+                if (reference.equals(entry.getKey())) {
+                    issues.add(linePrefix + " references itself");
+                } else if (!byCode.containsKey(reference)) {
+                    issues.add(linePrefix + " references the line [" + reference + "], which the statement does not declare");
+                }
+            }
+        }
+        for (String code : byCode.keySet()) {
+            List<String> path = new ArrayList<>();
+            if (statementCycle(code, byCode, new HashSet<>(), path)) {
+                issues.add(prefix + " has a cycle in its line arithmetic: " + String.join(" -> ", path));
+                return; // one cycle report is enough - every line on it would repeat the same message
+            }
+        }
+    }
+
+    /** The codes a line references, in the authored order, ignoring blanks. */
+    private static List<String> statementReferences(StatementLineIntent line) {
+        List<String> references = new ArrayList<>();
+        for (String reference : line.getSum()) {
+            if (!isBlank(reference)) {
+                references.add(reference.trim());
+            }
+        }
+        for (String reference : line.getLess()) {
+            if (!isBlank(reference)) {
+                references.add(reference.trim());
+            }
+        }
+        return references;
+    }
+
+    /** Depth-first cycle search over the line references, recording the offending path. */
+    private static boolean statementCycle(String code, Map<String, StatementLineIntent> byCode, Set<String> onPath, List<String> path) {
+        if (!onPath.add(code)) {
+            path.add(code);
+            return true;
+        }
+        path.add(code);
+        StatementLineIntent line = byCode.get(code);
+        if (line != null) {
+            for (String reference : statementReferences(line)) {
+                if (byCode.containsKey(reference) && statementCycle(reference, byCode, onPath, path)) {
+                    return true;
+                }
+            }
+        }
+        onPath.remove(code);
+        path.remove(path.size() - 1);
+        return false;
+    }
+
+    /**
+     * Whether a value may be rendered into the statement query as a SQL string literal. Quotes and
+     * control characters are refused rather than escaped: a line code and a label are authored
+     * captions, and refusing them here keeps the generator's literal rendering trivially correct.
+     */
+    private static boolean statementLiteral(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            char character = value.charAt(i);
+            if (character == '\'' || character == '\\' || Character.isISOControl(character)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

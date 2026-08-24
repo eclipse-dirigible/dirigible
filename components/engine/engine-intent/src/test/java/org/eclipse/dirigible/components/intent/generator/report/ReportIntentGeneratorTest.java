@@ -368,6 +368,196 @@ class ReportIntentGeneratorTest {
         assertTrue(message.contains("unknown kind [pivot]"), message);
     }
 
+    private static final String STATEMENT_INTENT = """
+            name: ledger
+            entities:
+              - name: Account
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string }
+                  - { name: name, type: string }
+              - name: JournalEntry
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: entryDate, type: date }
+                relations:
+                  - { name: items, kind: oneToMany, to: JournalEntryItem }
+              - name: JournalEntryItem
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: debit, type: decimal }
+                  - { name: credit, type: decimal }
+                relations:
+                  - { name: journalEntry, kind: manyToOne, to: JournalEntry, composition: true }
+                  - { name: account, kind: manyToOne, to: Account, required: true }
+            reports:
+              - name: BalanceSheet
+                kind: statement
+                source: JournalEntryItem
+                date: journalEntry.entryDate
+                debit: debit
+                credit: credit
+                account: account.code
+                lines:
+                  - { code: A.I,  label: Fixed assets, accounts: "20*,21*", measure: closingNetDebit }
+                  - { code: A.II, label: Receivables,  accounts: "41*",     measure: closingNetDebit }
+                  - { code: A,    label: Total assets, sum: [A.I, A.II] }
+            """;
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void statementReportEmitsOneRowPerLineOverThePerAccountBalances() {
+        IntentModel model = IntentParser.parse(STATEMENT_INTENT);
+        Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                            .get(0));
+
+        assertEquals("statement", document.get("kind"));
+
+        String query = (String) document.get("query");
+        // The ledger is reduced to one balance per account FIRST: a net measure nets an account's two
+        // sides before a line sums it, so the reduction cannot happen per line.
+        assertTrue(query.contains("WITH \"ACCOUNT_BALANCES\" as (\nSELECT Account.\"ACCOUNT_CODE\" as \"ACCOUNT_CODE\""), query);
+        assertTrue(query.contains("GROUP BY Account.\"ACCOUNT_CODE\""), query);
+        // The windows are the balance report's, to the token.
+        assertTrue(query.contains(
+                "SUM(CASE WHEN JournalEntry.\"JOURNAL_ENTRY_ENTRY_DATE\" <= :toDate THEN COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) ELSE 0 END) as \"CLOSING_DEBIT\""),
+                query);
+        // A comma-separated selector is an OR of prefixes; a net measure floors the account at zero.
+        assertTrue(query.contains(
+                "COALESCE(SUM(CASE WHEN (\"ACCOUNT_CODE\" LIKE '20%' OR \"ACCOUNT_CODE\" LIKE '21%') THEN CASE WHEN \"CLOSING_DEBIT\" - \"CLOSING_CREDIT\" > 0 THEN \"CLOSING_DEBIT\" - \"CLOSING_CREDIT\" ELSE 0 END ELSE 0 END), 0)"),
+                query);
+        // A computed line is FLATTENED into its leaves' own terms, so no line waits for another.
+        assertTrue(query.contains(
+                "CAST('A' AS VARCHAR(255)) as \"Code\", CAST('Total assets' AS VARCHAR(4000)) as \"Label\", COALESCE(SUM(CASE WHEN (\"ACCOUNT_CODE\" LIKE '20%'"),
+                query);
+        assertTrue(query.contains("ELSE 0 END), 0) + COALESCE(SUM(CASE WHEN \"ACCOUNT_CODE\" LIKE '41%'"), query);
+        assertTrue(query.endsWith("ORDER BY \"STATEMENT_LINES\".\"Ordinal\""), query);
+
+        // Code / Label / Amount - the amount right-aligned and money-formatted like every decimal.
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) document.get("columns");
+        assertEquals(3, columns.size());
+        assertEquals(List.of("Code", "Label", "Amount"), columns.stream()
+                                                                .map(column -> column.get("alias"))
+                                                                .toList());
+        assertEquals("DECIMAL", columns.get(2)
+                                       .get("type"));
+        assertEquals("### ### ### ##0.00", columns.get(2)
+                                                  .get("pattern"));
+
+        // The window parameters are the balance report's, so a statement is queried the same way.
+        List<Map<String, Object>> parameters = (List<Map<String, Object>>) document.get("parameters");
+        assertEquals(2, parameters.size());
+        assertEquals("fromDate", parameters.get(0)
+                                           .get("name"));
+        assertEquals("toDate", parameters.get(1)
+                                         .get("name"));
+
+        // A statement's joins live inside its own subquery, so the builder-owned model is deliberately
+        // absent and the report editor opens it free-style rather than rewriting it into a flat SELECT.
+        assertFalse(document.containsKey("joins"), "a statement must not claim builder-owned joins");
+        assertFalse(document.containsKey("conditions"), "a statement must not claim builder-owned conditions");
+    }
+
+    @Test
+    void statementLinesMustBeWellFormed() {
+        IntentValidationException error = assertThrows(IntentValidationException.class, () -> IntentParser.parse("""
+                name: ledger
+                entities:
+                  - name: Account
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: code, type: integer }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal }
+                      - { name: credit, type: decimal }
+                      - { name: entryDate, type: date }
+                    relations:
+                      - { name: account, kind: manyToOne, to: Account, required: true }
+                reports:
+                  - name: BalanceSheet
+                    kind: statement
+                    source: JournalEntryItem
+                    date: entryDate
+                    debit: debit
+                    credit: credit
+                    account: account.code
+                    dimensions: [debit]
+                    lines:
+                      - { code: A, label: Assets, accounts: "20*", measure: closingBalance }
+                      - { code: A, label: Repeat, accounts: "21*", measure: closingNetDebit }
+                      - { code: B, label: Both,   accounts: "22*", measure: closingNetDebit, sum: [A] }
+                      - { code: C, label: Neither }
+                      - { code: D, label: Missing, sum: [Nope] }
+                      - { code: E, label: Bad range, accounts: "60-699", measure: closingNetDebit }
+                      - { code: F, label: Injected, accounts: "20';DROP", measure: closingNetDebit }
+                """));
+        String message = error.getMessage();
+        assertTrue(message.contains("must not declare dimensions"), message);
+        assertTrue(message.contains("account [account.code] must be a string field"), message);
+        assertTrue(message.contains("unknown measure [closingBalance]"), message);
+        assertTrue(message.contains("declares the line code [A] twice"), message);
+        assertTrue(message.contains("both selects accounts and sums other lines"), message);
+        assertTrue(message.contains("line [C] neither selects accounts"), message);
+        assertTrue(message.contains("references the line [Nope], which the statement does not declare"), message);
+        assertTrue(message.contains("bounds are of different length"), message);
+        assertTrue(message.contains("contains [']"), message);
+    }
+
+    @Test
+    void statementLineArithmeticMustNotFormACycle() {
+        IntentValidationException error = assertThrows(IntentValidationException.class, () -> IntentParser.parse("""
+                name: ledger
+                entities:
+                  - name: Account
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: code, type: string }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal }
+                      - { name: credit, type: decimal }
+                      - { name: entryDate, type: date }
+                    relations:
+                      - { name: account, kind: manyToOne, to: Account, required: true }
+                reports:
+                  - name: BalanceSheet
+                    kind: statement
+                    source: JournalEntryItem
+                    date: entryDate
+                    debit: debit
+                    credit: credit
+                    account: account.code
+                    lines:
+                      - { code: A, label: A, sum: [B] }
+                      - { code: B, label: B, sum: [A] }
+                """));
+        assertTrue(error.getMessage()
+                        .contains("cycle in its line arithmetic"),
+                error.getMessage());
+    }
+
+    @Test
+    void statementInputsWithoutTheKindAreRejected() {
+        IntentValidationException error = assertThrows(IntentValidationException.class, () -> IntentParser.parse("""
+                name: ledger
+                entities:
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: code, type: string }
+                reports:
+                  - name: Totals
+                    source: JournalEntryItem
+                    account: code
+                """));
+        assertTrue(error.getMessage()
+                        .contains("declares account/lines but is not kind: statement"),
+                error.getMessage());
+    }
+
     private static final String AGEING_INTENT = """
             name: billing
             entities:
