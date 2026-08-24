@@ -871,7 +871,10 @@ class GlueGenerator {
             Map<String, Object> parameters) throws IOException {
         Map<String, List<Map<String, Object>>> groups = new LinkedHashMap<>();
         for (Map<String, Object> rollup : asMaps(model.get("rollups"))) {
-            String key = str(rollup, "childEntity") + "|" + str(rollup, "fkProperty") + "|" + strOr(rollup, "topicSuffix", "");
+            // The child's MODEL is part of the key: a foreign child and a local one of the same name
+            // rolling up through the same relation are two handlers, not one coalesced group.
+            String key = strOr(rollup, "childModel", "") + "|" + str(rollup, "childEntity") + "|" + str(rollup, "fkProperty") + "|"
+                    + strOr(rollup, "topicSuffix", "");
             groups.computeIfAbsent(key, ignored -> new ArrayList<>())
                   .add(rollup);
         }
@@ -889,6 +892,11 @@ class GlueGenerator {
             // A cross-model roll-up writes into the owner model's generated package.
             context.put("parentGenFolder",
                     truthy(first, "parentCrossModel") ? sanitize(first, "parentModel") : str(parameters, "javaGenFolderName"));
+            // ... and reads a cross-model CHILD out of the package - and off the topic - of the project
+            // that owns it. Both fall back to this project, so a local roll-up renders unchanged.
+            boolean childCrossModel = truthy(first, "childCrossModel");
+            context.put("childGenFolder", childCrossModel ? sanitize(first, "childModel") : str(parameters, "javaGenFolderName"));
+            context.put("childProject", childCrossModel ? str(first, "childProject") : str(parameters, "projectName"));
             context.put("topicSuffix", strOr(first, "topicSuffix", ""));
             context.put("aggregateBlock", aggregateBlock.toString());
             files.add(render(source, content, ModelValues.cleaned(context)));

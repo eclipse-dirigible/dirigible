@@ -647,6 +647,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // child is the ordinary way that column moves. Without it here, only aggregate sources were
             // tracked and a re-parented roll-up child left its former parent's total stale forever (#6819).
             for (RollupIntent rollup : model.getRollups()) {
+                // A CROSS-MODEL child's grouping column belongs to the owner model's own .model - this
+                // one must not claim it off a local entity that merely shares the foreign child's name.
+                if (rollup.isCrossModelChild()) {
+                    continue;
+                }
                 if (rollup.getVia() != null && entity.getName()
                                                      .equals(rollup.getEntity())) {
                     addGroupingKey(groupingKeys, seenGroupingKeys, rollup.getVia());
@@ -834,6 +839,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             Map<String, String> compositionParents) {
         Map<String, Map<String, Object>> guards = new HashMap<>();
         for (RollupIntent rollup : model.getRollups()) {
+            // A cross-model child cannot carry a guard (the parser refuses capacity there) and must not
+            // be confused with a local entity of the same name.
+            if (rollup.isCrossModelChild()) {
+                continue;
+            }
             if (!"sum".equals(rollup.getOp()) || rollup.getCapacity() == null || rollup.getCapacity()
                                                                                        .isBlank()
                     || rollup.getOf() == null || rollup.getOf()

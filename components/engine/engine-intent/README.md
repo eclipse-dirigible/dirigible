@@ -548,6 +548,23 @@ rollups:
 Roll-ups compose transitively across a multi-level composition (leaf edit -> mid total -> top
 total); recomputation stops when values stop changing.
 
+Either end may be owned by another model. A cross-model PARENT is named by the `via` relation's own
+`model:` alias (the child is local and owns the event). A cross-model CHILD is named by the roll-up's
+`model:` plus a `parent:` naming the local entity the total lands on - the n:m allocation direction,
+where the link rows live with one side of the pairing and the other side's total belongs here:
+
+```yaml
+rollups:
+  - { name: paymentAllocated, entity: SalesInvoiceCustomerPayment, model: sales-invoices,
+      parent: CustomerPayment, via: CustomerPayment, field: allocated, op: sum, of: amount }
+```
+
+`capacity`/`balance`/`status` are refused for a cross-model PARENT (they read its own fields and
+seeds) but work for a cross-model CHILD, where they are writes on the local parent - except the
+overdraw guard, which belongs to the child's own DAO and is reported as not installed. The vacated
+side of a re-parented FOREIGN child is repaired only when the owner model marks that relation as a
+grouping key.
+
 ## settlements - payment allocation
 
 ```yaml
