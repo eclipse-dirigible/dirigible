@@ -323,7 +323,7 @@ public final class IntentParser {
         validateIntegrations(model, entityNames, issues);
         validateInbound(model, entityNames, issues);
         validateOutbound(model, entityNames, issues);
-        validateRollups(model, issues);
+        validateRollups(model, usesAliases, issues);
         validateExpansions(model, issues);
         validateSettlements(model, issues);
         validateResolves(model, entityNames, issues);
@@ -990,8 +990,14 @@ public final class IntentParser {
     /**
      * Each roll-up must have a unique name, a child entity, a {@code via} to-one relation of that child
      * pointing at a parent, and an integer {@code field} on the parent to maintain.
+     *
+     * <p>
+     * A roll-up whose CHILD is owned by another model ({@code model: <uses alias>}) is checked against
+     * that alias and its local {@code parent:} only - the foreign child's own relations and fields are
+     * not in this document, so {@code via} / {@code of} / {@code by} are resolved at GENERATION time
+     * against the owner's {@code .model}, the same design-time split every cross-model reference uses.
      */
-    private static void validateRollups(IntentModel model, List<String> issues) {
+    private static void validateRollups(IntentModel model, Set<String> usesAliases, List<String> issues) {
         java.util.Map<String, EntityIntent> byName = new java.util.HashMap<>();
         for (EntityIntent entity : model.getEntities()) {
             if (entity.getName() != null) {
@@ -1008,9 +1014,20 @@ public final class IntentParser {
             if (!names.add(name)) {
                 issues.add("duplicate rollup [" + name + "]");
             }
+            if (rollup.isCrossModelChild()) {
+                validateCrossModelChildRollup(rollup, name, byName, usesAliases, issues);
+                continue;
+            }
+            if (rollup.getParent() != null && !rollup.getParent()
+                                                     .isBlank()) {
+                issues.add("rollup [" + name + "] declares parent [" + rollup.getParent()
+                        + "], which belongs to a cross-model child only - a local roll-up's parent is the target of its via relation ["
+                        + rollup.getVia() + "]");
+            }
             EntityIntent child = byName.get(rollup.getEntity());
             if (child == null) {
-                issues.add("rollup [" + name + "] counts unknown entity [" + rollup.getEntity() + "]");
+                issues.add("rollup [" + name + "] counts unknown entity [" + rollup.getEntity()
+                        + "] (add model: <alias> when it is owned by another model)");
                 continue;
             }
             RelationIntent via = null;
@@ -1112,6 +1129,78 @@ public final class IntentParser {
     }
 
     /**
+     * A roll-up over a FOREIGN child: the link rows are owned by another model, the total lands on a
+     * local parent. Only what is in this document can be checked here - the alias, the local
+     * {@code parent:} and its target {@code field:}; {@code via} / {@code of} / {@code by} name
+     * properties of the foreign child and are resolved against the owner's {@code .model} at generation
+     * time, where a miss drops the roll-up loudly rather than emitting a handler that cannot compile.
+     *
+     * @param rollup the roll-up
+     * @param name the roll-up name (already validated as present)
+     * @param byName the local entities by name
+     * @param usesAliases the declared {@code uses:} aliases
+     * @param issues the collecting issue list
+     */
+    private static void validateCrossModelChildRollup(RollupIntent rollup, String name, java.util.Map<String, EntityIntent> byName,
+            Set<String> usesAliases, List<String> issues) {
+        if (!usesAliases.contains(rollup.getModel())) {
+            issues.add("rollup [" + name + "] counts entity [" + rollup.getEntity() + "] of model [" + rollup.getModel()
+                    + "], which is not a declared uses: alias (declare it under the model's uses:)");
+        }
+        if (isBlank(rollup.getEntity())) {
+            issues.add("rollup [" + name + "] declares model [" + rollup.getModel() + "] but no entity to count");
+        }
+        if (isBlank(rollup.getVia())) {
+            issues.add("rollup [" + name + "] with a cross-model child requires via - the [" + rollup.getEntity()
+                    + "] to-one relation that points at [" + rollup.getParent() + "]");
+        }
+        // The parent cannot be derived from `via` here (the foreign child's relations are elsewhere), so
+        // it is authored - and it must be LOCAL: a total that lands in a third model is that model's
+        // roll-up to declare, and writing it from here would invert the dependency edge.
+        EntityIntent parent = isBlank(rollup.getParent()) ? null : byName.get(rollup.getParent());
+        if (isBlank(rollup.getParent())) {
+            issues.add("rollup [" + name + "] counts the cross-model child [" + rollup.getModel() + ":" + rollup.getEntity()
+                    + "], so it must declare parent: <local entity> - the entity its [" + rollup.getField() + "] field belongs to");
+            return;
+        }
+        if (parent == null) {
+            issues.add("rollup [" + name + "] parent [" + rollup.getParent()
+                    + "] is not an entity of this model - the parent of a cross-model roll-up must be local");
+            return;
+        }
+        boolean sum = "sum".equals(rollup.getOp());
+        boolean latest = "latest".equals(rollup.getOp());
+        FieldIntent counter = fieldByName(parent, rollup.getField());
+        if (counter == null) {
+            issues.add("rollup [" + name + "] field [" + rollup.getField() + "] is not a field of parent [" + rollup.getParent() + "]");
+        } else if (sum && !NUMERIC_TYPES.contains(counter.getType())) {
+            issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be a numeric type to hold a sum");
+        } else if (!sum && !latest && !INTEGER_PK_TYPES.contains(counter.getType())) {
+            issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be an integer type to hold a count");
+        }
+        if (sum && isBlank(rollup.getOf())) {
+            issues.add("rollup [" + name + "] with op sum must declare `of` (the child field to sum)");
+        }
+        if (latest && (isBlank(rollup.getOf()) || isBlank(rollup.getBy()))) {
+            issues.add("rollup [" + name + "] with op latest must declare both `of` (the child field to copy) and `by` (the child"
+                    + " date/timestamp field that orders the rows)");
+        }
+        // capacity / balance / status are all writes on the LOCAL parent (the balance a payment still has
+        // unapplied, the status it reaches when it is fully applied), so they are validated here exactly
+        // as for a local child. What a foreign child cannot carry is the capacity GUARD - it lives in the
+        // child's own DAO, which the owner model generates - and the generator says so out loud rather
+        // than letting a capacity look like an enforced limit.
+        if (sum) {
+            requireNumericParentField(parent, rollup.getCapacity(), name, "capacity", rollup.getParent(), issues);
+            requireNumericParentField(parent, rollup.getBalance(), name, "balance", rollup.getParent(), issues);
+            if (!isBlank(rollup.getStatus()) && toOneRelationByName(parent, rollup.getStatus()) == null) {
+                issues.add("rollup [" + name + "] status [" + rollup.getStatus() + "] is not a to-one relation of [" + rollup.getParent()
+                        + "]");
+            }
+        }
+    }
+
+    /**
      * A derived field that sums or copies a {@code sensitive:} child field re-exposes on its target
      * exactly what the child hides whenever the target entity has a personal (my) surface - the leak
      * class where the leaf value is scrubbed from the personal wire but its total still travels it.
@@ -1131,7 +1220,10 @@ public final class IntentParser {
         }
         // rollups: the child's `of` field feeds the parent's `field`
         for (RollupIntent rollup : model.getRollups()) {
-            EntityIntent child = byName.get(rollup.getEntity());
+            // A cross-model child's fields are not in this document, so its flags cannot be read (nor
+            // could a same-named local entity stand in for it) - the local target field carries whatever
+            // its author declared.
+            EntityIntent child = rollup.isCrossModelChild() ? null : byName.get(rollup.getEntity());
             if (child == null) {
                 continue;
             }
@@ -1207,7 +1299,10 @@ public final class IntentParser {
             }
         }
         for (RollupIntent rollup : model.getRollups()) {
-            EntityIntent child = byName.get(rollup.getEntity());
+            // A cross-model child's fields are not in this document, so its flags cannot be read (nor
+            // could a same-named local entity stand in for it) - the local target field carries whatever
+            // its author declared.
+            EntityIntent child = rollup.isCrossModelChild() ? null : byName.get(rollup.getEntity());
             if (child == null) {
                 continue;
             }

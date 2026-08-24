@@ -2803,6 +2803,45 @@ Editing a leaf allocation recomputes its `EmployeeTimesheet.total`, which in tur
 the cascade stops at rest and never loops (composition is an acyclic tree). No UI is needed beyond the
 standard per-level master-detail: each level is its own record with its own detail rows.
 
+**A cross-model CHILD (`model:` + `parent:`).** When the rows being summed are owned by ANOTHER
+module, name that module with `model:` and the local entity the total lands on with `parent:`. That is
+the n:m allocation case: the link entity lives with the document that owns one side of the pairing,
+while the other side's total belongs to the module that owns it - a payment's allocated amount, a
+customer's unapplied credit:
+```yaml
+uses:
+  - { model: sales-invoices }
+rollups:
+  # CustomerPayment.allocated = the sum of the payment's allocation rows, which sales-invoices owns.
+  - { name: paymentAllocated, entity: SalesInvoiceCustomerPayment, model: sales-invoices,
+      parent: CustomerPayment, via: CustomerPayment, field: allocated, op: sum, of: amount }
+```
+`model:` must be a declared `uses:` alias, `parent:` must be a LOCAL entity (a total landing in a
+third model is that model's roll-up to declare), and `via:` names the FOREIGN child's to-one relation
+that points at the parent. The handler subscribes to the owner project's topic and reads the rows back
+through the owner's repository; the dependency edge stays one-way (this module already depends on the
+owner). `via` / `of` / `by` are checked against the owner's generated model at Generate time, so a
+misspelt one is reported there rather than at parse. Three limits, all deliberate:
+- **`capacity` / `balance` / `status` work, but the overdraw GUARD does not.** All three are writes on
+  the LOCAL parent, so `capacity: amount, balance: unapplied` keeps a payment's unapplied figure live
+  and a `status` reaches its fully-applied seed as usual. What a foreign child cannot carry is the
+  check that REFUSES a row overdrawing the parent - it is emitted into the child's own repository,
+  which the owner module generates - so Generate reports that the guard is not installed. Enforce the
+  limit where the rows are written (a `checks:` in the owner module) if it must be enforced.
+- **Re-parenting repairs the parent the event names.** Moving a foreign child row from one parent to
+  another is only repaired on BOTH sides when the OWNER model marks that relation as a grouping key
+  (it does so for its own roll-ups / aggregates over the same relation) - it is the owner's DAO that
+  publishes the `-rekeyed` notice. The parent the row moved *to* is always correct; the one it left is
+  corrected the next time one of its own rows changes. Deleting and re-creating the row is exact.
+- **A restricted foreign field does not propagate.** `sensitive:` / `visibleTo:` on the foreign `of`
+  field cannot be read from here, so declare the same restriction on the local target field when the
+  total must not be visible more widely than its source.
+
+**A cross-model PARENT** is the mirror direction and needs no new key: give the child's `via` relation
+its own `model:` alias (the child is local and owns the event, the total lands in the owner's model).
+There `capacity` / `balance` / `status` ARE refused - they read the foreign parent's own fields and
+status seeds, which this model does not own.
+
 **Rules:** `via` must be a to-one (`manyToOne` / `oneToOne`) relation of the child entity; `field`
 must be an existing field on the parent (**integer** for `count`, **numeric** for `sum`). For the sum
 extras: `capacity`/`balance` are numeric parent fields, `status` a to-one relation of the parent, and

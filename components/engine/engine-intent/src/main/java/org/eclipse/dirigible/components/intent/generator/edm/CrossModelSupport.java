@@ -78,6 +78,12 @@ public final class CrossModelSupport {
      *        the model was not resolved. A cross-model {@code generates} SOURCE needs it to render the
      *        {@code sourceStatus} completion hook, which reads the same fact off
      *        {@code RelationIntent.isEntityStatus()} in the local case
+     * @param propertyRelations the target's to-one property name → the entity it references (the
+     *        owner's {@code relationshipEntityName}); {@code null} when the model was not resolved. A
+     *        consumer that binds to a property of a FOREIGN entity as a foreign key (a roll-up over a
+     *        cross-model child) needs it to check that the property really points at the entity it
+     *        expects - a property that resolves but references something else would silently key the
+     *        aggregate on the wrong rows
      * @param translatedProperties the target's translatable property names (PascalCase) - the columns
      *        its sibling <code>&lt;TABLE&gt;_LANG</code> table carries, empty when the target is not
      *        {@code multilingual} or the model was not resolved. A consumer reading the target's
@@ -86,7 +92,8 @@ public final class CrossModelSupport {
      */
     public record TargetInfo(boolean resolved, String perspectiveName, String tableDataName, String keyField, String keyColumn,
             String labelField, String fkType, java.util.Set<String> propertyNames, String hierarchyProperty, String identityProperty,
-            java.util.Map<String, String> propertyWidgets, String statusProperty, java.util.Set<String> translatedProperties) {
+            java.util.Map<String, String> propertyWidgets, String statusProperty, java.util.Map<String, String> propertyRelations,
+            java.util.Set<String> translatedProperties) {
     }
 
     @SuppressWarnings("unchecked")
@@ -464,10 +471,12 @@ public final class CrossModelSupport {
                 String labelField = "Name";
                 java.util.Set<String> propertyNames = null;
                 java.util.Map<String, String> propertyWidgets = null;
+                java.util.Map<String, String> propertyRelations = null;
                 String statusProperty = null;
                 if (properties != null) {
                     propertyNames = new java.util.LinkedHashSet<>();
                     propertyWidgets = new java.util.LinkedHashMap<>();
+                    propertyRelations = new java.util.LinkedHashMap<>();
                     for (Map<String, Object> p : properties) {
                         if ("true".equals(String.valueOf(p.get("dataPrimaryKey")))) {
                             keyField = str(p.get("name"), keyField);
@@ -480,6 +489,10 @@ public final class CrossModelSupport {
                             String widget = str(p.get("widgetType"), null);
                             if (widget != null) {
                                 propertyWidgets.put(propertyName, widget);
+                            }
+                            String references = str(p.get("relationshipEntityName"), null);
+                            if (references != null) {
+                                propertyRelations.put(propertyName, references);
                             }
                             // The EntityStatus FK is the one the edm generator gave the DOCUMENT_STATUS
                             // widget (EdmIntentGenerator: isEntityStatus() ? DOCUMENT_STATUS : DROPDOWN),
@@ -494,7 +507,7 @@ public final class CrossModelSupport {
                 String hierarchyProperty = str(entity.get("hierarchyProperty"), null);
                 String identityProperty = str(entity.get("identityProperty"), null);
                 return new TargetInfo(true, perspective, tableDataName, keyField, keyColumn, labelField, fkType, propertyNames,
-                        hierarchyProperty, identityProperty, propertyWidgets, statusProperty,
+                        hierarchyProperty, identityProperty, propertyWidgets, statusProperty, propertyRelations,
                         translatedProperties("true".equals(String.valueOf(entity.get("multilingual"))), properties));
             }
         } catch (RuntimeException e) {
@@ -561,7 +574,7 @@ public final class CrossModelSupport {
     private static TargetInfo convention(String alias, String targetEntity) {
         String table = IntentNaming.upperSnake(alias) + "_" + IntentNaming.upperSnake(targetEntity);
         String keyColumn = IntentNaming.upperSnake(targetEntity) + "_ID";
-        return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null, null,
+        return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null, null, null,
                 java.util.Set.of());
     }
 
