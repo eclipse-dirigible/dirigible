@@ -42,6 +42,12 @@ import static org.eclipse.dirigible.components.ide.template.service.model.ModelV
  */
 class GlueGenerator {
 
+    /**
+     * The perspective every generated report backend is emitted under - the same literal the report
+     * model adapter sets, and what puts a report repository in {@code gen/<report>/data/Reports/}.
+     */
+    private static final String REPORT_PERSPECTIVE = "Reports";
+
     /** The names of the collections this generator handles. */
     private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
             "aborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles",
@@ -352,11 +358,12 @@ class GlueGenerator {
     private static void bindNotification(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "topicSuffix", "guardExpression", "toExpression",
                 "subjectExpression", "bodyExpression", "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression",
-                "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachFileNameExpression");
+                "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
         bindDeepLinks(item, context);
         bindAttachLanguage(item, context, parameters);
+        bindAttachReport(item, context);
     }
 
     /**
@@ -371,7 +378,7 @@ class GlueGenerator {
         boolean generates = "generate".equals(str(item, "action"));
         copy(context, item, "name", "className", "cron", "entity", "perspective", "criteriaExpression", "toExpression", "subjectExpression",
                 "bodyExpression", "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty",
-                "attachLanguageTargetEntity", "attachFileNameExpression", "genToEntity", "genToPk", "genFieldAssignments");
+                "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport", "genToEntity", "genToPk", "genFieldAssignments");
         context.put("javaPerspective", sanitize(item, "perspective"));
         // The source's generation folder is the owner model's when the source is cross-model, else
         // this project's - always supplied, so a local source stays unchanged.
@@ -381,6 +388,7 @@ class GlueGenerator {
         context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
         bindDeepLinks(item, context);
         bindAttachLanguage(item, context, parameters);
+        bindAttachReport(item, context);
         context.put("genToGenFolder",
                 generates ? (truthy(item, "genCrossModel") ? sanitize(item, "genToModel") : str(parameters, "javaGenFolderName")) : "");
         context.put("genToJavaPerspective", generates ? sanitize(item, "genToPerspective") : "");
@@ -673,12 +681,14 @@ class GlueGenerator {
         copy(context, item, "name", "className", "entity", "perspective", "attachKeyProperty", "statusProperty", "setStatus", "allowedExpr",
                 "fromStatuses", "guardExpr", "guardText", "notify", "forEach", "forEachFkProperty", "forEachKeyProperty",
                 "notifyToExpression", "notifySubjectExpression", "notifyBodyExpression", "notifyRecordScoped", "attach", "attachEntity",
-                "attachLanguageExpression", "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachFileNameExpression");
+                "attachLanguageExpression", "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachFileNameExpression",
+                "attachReport");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("notifyRelationLoads", relationLoads(item.get("notifyRelationLoads"), parameters));
         context.put("javaForEachPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "forEachPerspective", "")));
         bindDeepLinks(item, context);
         bindAttachLanguage(item, context, parameters);
+        bindAttachReport(item, context);
     }
 
     /**
@@ -692,12 +702,13 @@ class GlueGenerator {
         copy(context, item, "process", "step", "className", "entity", "perspective", "keyProperty", "keyAccessor", "forEach",
                 "forEachFkProperty", "forEachKeyProperty", "notifyToExpression", "notifySubjectExpression", "notifyBodyExpression",
                 "notifyRecordScoped", "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty",
-                "attachLanguageTargetEntity", "attachFileNameExpression");
+                "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("notifyRelationLoads", relationLoads(item.get("notifyRelationLoads"), parameters));
         context.put("javaForEachPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "forEachPerspective", "")));
         bindDeepLinks(item, context);
         bindAttachLanguage(item, context, parameters);
+        bindAttachReport(item, context);
     }
 
     /**
@@ -983,6 +994,24 @@ class GlueGenerator {
                 NamingHelper.sanitizeJavaIdentifier(strOr(item, "attachLanguageTargetPerspective", "")));
         context.put("attachLanguageJavaGenFolder", truthy(item, "attachLanguageCrossModel") ? sanitize(item, "attachLanguageTargetModel")
                 : str(parameters, "javaGenFolderName"));
+    }
+
+    /**
+     * Binds where a report attachment's generated repository lives. A {@code .report} is generated as
+     * its own model file, so its generation folder is the REPORT's name rather than this glue's, and
+     * its perspective is the fixed {@code Reports} every report backend is emitted under - the two
+     * facts that compose the package, resolved here because this is the layer that knows the generated
+     * layout (the intent descriptor carries only the report's name).
+     *
+     * @param item the descriptor
+     * @param context the template context
+     */
+    private static void bindAttachReport(Map<String, Object> item, Map<String, Object> context) {
+        String report = strOr(item, "attachReport", "");
+        context.put("attachReportGenFolder", report.isEmpty() ? "" : NamingHelper.sanitizeJavaIdentifier(report));
+        context.put("attachReportPerspective", report.isEmpty() ? "" : NamingHelper.sanitizeJavaIdentifier(REPORT_PERSPECTIVE));
+        context.put("attachReportBindings",
+                item.get("attachReportBindings") == null ? new ArrayList<>() : item.get("attachReportBindings"));
     }
 
     /**

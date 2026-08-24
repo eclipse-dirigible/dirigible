@@ -2254,6 +2254,21 @@ public final class IntentParser {
                                                                              .isBlank();
         boolean hasFileName = notify.getFileName() != null && !notify.getFileName()
                                                                      .isBlank();
+        if (NotificationIntent.ATTACH_REPORT.equals(attach)) {
+            // The report shape renders a REPORT, not the record's own document - so none of the
+            // document-master rules below apply, and every path (the bindings, the language, the name)
+            // resolves against the record the message is about.
+            validateReportAttachment(notify, subject, aboutEntity, model, issues);
+            if (hasLanguage && hasLanguageFrom) {
+                issues.add(subject + " declares both language and languageFrom - they are mutually exclusive");
+            } else if (hasLanguageFrom && aboutEntity != null) {
+                validateLanguageFromPath(notify.getLanguageFrom(), aboutEntity, subject + " languageFrom", model, issues);
+            }
+            if (hasFileName && aboutEntity != null) {
+                validateFileNamePattern(notify.getFileName(), aboutEntity, subject + " fileName", model, issues, true, false);
+            }
+            return;
+        }
         if (attach == null || attach.isBlank()) {
             if (hasLanguage || hasLanguageFrom) {
                 issues.add(subject + " declares language/languageFrom without attach: print - they select the attached render's language");
@@ -2270,7 +2285,8 @@ public final class IntentParser {
         // for `print`, the fan-out's anchor for `recordPrint` - one document, many recipients.
         String documentEntity = recordPrint ? anchorEntity : aboutEntity;
         if (!NOTIFY_ATTACHMENTS.contains(kind.toLowerCase(Locale.ROOT))) {
-            issues.add(subject + " has unsupported attach [" + attach + "] (supported: print, recordPrint)");
+            issues.add(subject + " has unsupported attach [" + attach
+                    + "] (supported: print, recordPrint, or { report: <name>, bind: { <parameter>: <field> } })");
         } else if (recordPrint && !fansOut) {
             issues.add(subject + " attach: recordPrint attaches the anchor record of a fan-out, so it needs a forEach"
                     + " - without one, attach: print already renders this very record");
@@ -2290,6 +2306,155 @@ public final class IntentParser {
             // so only fields of the anchor itself are readable there, exactly as the `record.` scope is
             // limited to one field of it.
             validateFileNamePattern(notify.getFileName(), documentEntity, subject + " fileName", model, issues, !recordPrint, false);
+        }
+    }
+
+    /**
+     * The report shape of {@code attach}: {@code { report: <name>, bind: { <parameter>: <field> } }}
+     * renders a declared report and attaches the PDF, each bound parameter resolved against the record
+     * the message is about - the customer statement, where what is mailed is a period's rows rather
+     * than one record's own document.
+     *
+     * <p>
+     * Two rules carry the weight, both of them ways a statement mail is quietly wrong rather than
+     * broken:
+     *
+     * <ul>
+     * <li><b>A parameter that declares an {@code initial} must be bound.</b> A parameter is bound on
+     * every call (#6911) and an unbound one rides its {@code initial} - one FIXED slice, identical for
+     * every recipient. That is the "whole ledger to one customer" failure mode: the mail goes out, the
+     * PDF is a report, and nothing about it says it is the wrong customer's. A parameter with no
+     * {@code initial} is one whose comparison has a neutral any-value default (a date window bound, a
+     * {@code like} search), so leaving it unbound legitimately means "the whole range".</li>
+     * <li><b>Every bound name must be a declared parameter of that report</b> - a typo would otherwise
+     * land in the request map as a key the generated repository never reads, and the report would mail
+     * unfiltered.</li>
+     * </ul>
+     *
+     * @param notify the notify block (its {@code attach} is the report shape)
+     * @param subject the message prefix identifying the call site
+     * @param aboutEntity the entity the message is about (a fan-out's ROW), or {@code null} when
+     *        unknown
+     * @param model the parsed model
+     * @param issues the collected issues
+     */
+    private static void validateReportAttachment(NotificationIntent notify, String subject, String aboutEntity, IntentModel model,
+            List<String> issues) {
+        NotificationIntent.ReportAttachment attachment = notify.getReportAttachment();
+        if (attachment == null || attachment.report() == null || attachment.report()
+                                                                           .isBlank()) {
+            issues.add(subject + " attach must name the report to render - attach: { report: <name>, bind: { <parameter>: <field> } }");
+            return;
+        }
+        ReportIntent report = null;
+        for (ReportIntent candidate : model.getReports()) {
+            if (attachment.report()
+                          .equals(candidate.getName())) {
+                report = candidate;
+            }
+        }
+        if (report == null) {
+            issues.add(subject + " attach references unknown report [" + attachment.report() + "]");
+            return;
+        }
+        // What the generated repository actually binds: the report's authored parameters, plus the
+        // window a balance report declares on its own behalf.
+        Map<String, ReportParameterIntent> declared = new LinkedHashMap<>();
+        for (ReportParameterIntent parameter : report.getParameters()) {
+            if (parameter.getName() != null && !parameter.getName()
+                                                         .isBlank()) {
+                declared.put(parameter.getName()
+                                      .trim(),
+                        parameter);
+            }
+        }
+        Set<String> bindable = new LinkedHashSet<>(declared.keySet());
+        if (report.isLedgerKind()) {
+            bindable.addAll(BALANCE_REPORT_PARAMETERS);
+        }
+        if (bindable.isEmpty()) {
+            issues.add(subject + " attaches report [" + report.getName()
+                    + "], which declares no parameters - a report with nothing to bind renders the same PDF for every recipient,"
+                    + " so declare the parameters that scope it (reports[].parameters) or attach it to a schedule that runs once");
+            return;
+        }
+        for (Map.Entry<String, String> bound : attachment.bind()
+                                                         .entrySet()) {
+            String parameter = bound.getKey();
+            String path = bound.getValue();
+            String where = subject + " attach bind [" + parameter + "]";
+            if (!bindable.contains(parameter)) {
+                issues.add(where + " is not a parameter of report [" + report.getName() + "]"
+                        + UnknownKeyValidator.suggestion(parameter, bindable));
+                continue;
+            }
+            if (path == null || path.isBlank()) {
+                issues.add(where + " has no source - name a field of [" + aboutEntity + "] or a one-hop relation.field path");
+                continue;
+            }
+            validateReportBindSource(path.trim(), where, aboutEntity, model, issues);
+        }
+        for (Map.Entry<String, ReportParameterIntent> parameter : declared.entrySet()) {
+            String initial = parameter.getValue()
+                                      .getInitial();
+            boolean fixed = initial != null && !initial.isBlank();
+            if (fixed && !attachment.bind()
+                                    .containsKey(parameter.getKey())) {
+                issues.add(subject + " attaches report [" + report.getName() + "] without binding its parameter [" + parameter.getKey()
+                        + "] - it is bound on every call, so unbound it stays at its initial [" + initial.trim()
+                        + "] and every recipient is mailed that same slice");
+            }
+        }
+    }
+
+    /**
+     * A {@code bind:} source: a direct field of the record the message is about, or a one-hop
+     * {@code relation.field} path on it - the same vocabulary a {@code {field}} placeholder resolves.
+     * The {@code record.} scope is deliberately not one of them: a fan-out's rows are the recipients
+     * and the report is scoped by the row, so reaching the anchor would be a report about something
+     * other than what the message is about.
+     */
+    private static void validateReportBindSource(String path, String where, String aboutEntity, IntentModel model, List<String> issues) {
+        if (aboutEntity == null) {
+            return; // an unresolvable call-site entity is reported by the caller
+        }
+        EntityIntent about = entityByName(model, aboutEntity);
+        if (about == null) {
+            return; // the dangling entity is reported by the structural checks
+        }
+        if (path.startsWith(RECORD_SCOPE + ".")) {
+            issues.add(where + " reads the [" + RECORD_SCOPE
+                    + "] scope, which a bind source cannot - the attached report is scoped by the record this message is about");
+            return;
+        }
+        int dot = path.indexOf('.');
+        if (dot < 0) {
+            if (fieldByName(about, path) == null) {
+                issues.add(where + " [" + path + "] is not a field of [" + aboutEntity + "]");
+            }
+            return;
+        }
+        if (dot == 0 || dot == path.length() - 1 || path.indexOf('.', dot + 1) >= 0) {
+            issues.add(where + " [" + path + "] must be a field or a one-hop relation.field path on [" + aboutEntity + "]");
+            return;
+        }
+        String relationName = path.substring(0, dot);
+        String fieldName = path.substring(dot + 1);
+        RelationIntent relation = relationByName(about, relationName);
+        if (relation == null || !("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+            issues.add(where + " [" + path + "]: [" + relationName + "] is not a to-one relation of [" + aboutEntity + "]");
+            return;
+        }
+        if (relation.getModel() != null && !relation.getModel()
+                                                    .isBlank()) {
+            return; // cross-model target: the field is checked at generation against the owner's model
+        }
+        EntityIntent target = entityByName(model, relation.getTo() == null ? "" : relation.getTo());
+        if (target == null) {
+            return; // the dangling relation target is reported by the relations check
+        }
+        if (fieldByName(target, fieldName) == null) {
+            issues.add(where + " [" + path + "]: [" + fieldName + "] is not a field of [" + relation.getTo() + "]");
         }
     }
 

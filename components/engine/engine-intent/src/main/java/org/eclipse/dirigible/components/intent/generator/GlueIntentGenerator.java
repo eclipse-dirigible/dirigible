@@ -457,6 +457,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (attachment == null && NotifySupport.attachesPrint(notification)) {
                 continue; // asked for the document but it cannot be rendered - reported above
             }
+            NotifySupport.ReportAttachment reportAttachment = reportAttachment(notification, byName.get(entity), model, byName,
+                    compositionParents, context, "Notification [" + notification.getName() + "]");
+            if (reportAttachment == null && NotifySupport.attachesReport(notification)) {
+                continue; // asked for the report but it cannot be scoped - reported above
+            }
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("name", notification.getName());
             entry.put("className", IntentNaming.pascalCase(notification.getName()));
@@ -467,12 +472,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // engine IT keys "no trigger was generated" on trigger-only keys being absent.
             entry.put("attachKeyProperty", IntentEntities.keyFieldName(byName.get(entity)));
             entry.put("topicSuffix", StepEventSupport.topicSuffix(notification.getEvent()));
-            entry.put("relationLoads", relationLoads(plan, attachment));
+            entry.put("relationLoads", relationLoads(plan, attachment, reportAttachment));
             entry.put("guardExpression", plan.guardExpression());
             entry.put("toExpression", plan.toExpression());
             entry.put("subjectExpression", plan.subjectExpression());
             entry.put("bodyExpression", plan.bodyExpression());
-            entry.putAll(NotifySupport.attachmentFields(attachment));
+            entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment));
             entry.putAll(NotifySupport.deepLinkFields(plan, byName.get(entity)));
             notifications.add(entry);
         }
@@ -1414,9 +1419,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         EntityIntent document = NotifySupport.attachesRecordPrint(notify) && fanOut != null ? entity : about;
         NotifySupport.PrintAttachment attachment =
                 plan == null ? null : printAttachment(notify, document, model, byName, compositionParents, context, subject);
-        boolean send = plan != null && (attachment != null || !NotifySupport.attachesPrint(notify));
+        // A report attachment is always scoped by the record the message is ABOUT (the ROW inside a
+        // fan-out): its bindings are what make the report this recipient's, so there is no anchor-scoped
+        // counterpart the way `recordPrint` is one for a document.
+        NotifySupport.ReportAttachment reportAttachment =
+                plan == null ? null : reportAttachment(notify, about, model, byName, compositionParents, context, subject);
+        boolean send = plan != null && (attachment != null || !NotifySupport.attachesPrint(notify))
+                && (reportAttachment != null || !NotifySupport.attachesReport(notify));
         fields.put("notify", String.valueOf(send));
-        fields.put("notifyRelationLoads", send ? relationLoads(plan, attachment) : new ArrayList<>());
+        fields.put("notifyRelationLoads", send ? relationLoads(plan, attachment, reportAttachment) : new ArrayList<>());
         fields.put("notifyToExpression", send ? plan.toExpression() : "null");
         fields.put("notifySubjectExpression", send ? plan.subjectExpression() : "\"\"");
         fields.put("notifyBodyExpression", send ? plan.bodyExpression() : "\"\"");
@@ -1424,7 +1435,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         // loaded record to their send method, and only then (an argument nothing reads is noise).
         fields.put("notifyRecordScoped", String.valueOf(send && fanOut != null && NotifySupport.usesRecordScope(notify)));
         fields.putAll(NotifySupport.fanOutFields(send ? fanOut : null));
-        fields.putAll(NotifySupport.attachmentFields(send ? attachment : null));
+        fields.putAll(NotifySupport.attachmentFields(send ? attachment : null, send ? reportAttachment : null));
         // The key the print feeder is fed with: the ROW's for `attach: print` (the loop variable is
         // named `entity` in the templates for exactly this reason, so one expression set serves both
         // shapes), the ANCHOR record's for `attach: recordPrint`.
@@ -3578,12 +3589,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 if (attachment == null && NotifySupport.attachesPrint(schedule.getNotify())) {
                     continue; // asked for the document but it cannot be rendered - reported above
                 }
+                NotifySupport.ReportAttachment reportAttachment = reportAttachment(schedule.getNotify(), byName.get(entity), model, byName,
+                        compositionParents, context, "Schedule [" + schedule.getName() + "] notify");
+                if (reportAttachment == null && NotifySupport.attachesReport(schedule.getNotify())) {
+                    continue; // asked for the report but it cannot be scoped - reported above
+                }
                 entry.put("action", "notify");
-                entry.put("relationLoads", relationLoads(plan, attachment));
+                entry.put("relationLoads", relationLoads(plan, attachment, reportAttachment));
                 entry.put("toExpression", plan.toExpression());
                 entry.put("subjectExpression", plan.subjectExpression());
                 entry.put("bodyExpression", plan.bodyExpression());
-                entry.putAll(NotifySupport.attachmentFields(attachment));
+                entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment));
                 entry.putAll(NotifySupport.deepLinkFields(plan, byName.get(entity)));
             }
             schedules.add(entry);
@@ -3833,6 +3849,31 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The report attachment of a notify block, or {@code null} when none was asked for or it cannot be
+     * resolved - in which case the drop is reported with the precise reason. A report attachment that
+     * cannot be resolved must never degrade to a plain-text mail: the parameters are what scope the
+     * report to its recipient, so a mail whose bindings did not resolve would carry the wrong rows.
+     *
+     * @param notify the notify block
+     * @param entity the entity the message is about
+     * @param model the parsed model
+     * @param byName all local entities by name
+     * @param compositionParents composition-parent map
+     * @param context the generation context (to surface the drop as a response issue)
+     * @param subject the call site, for the reported message
+     * @return the attachment, or {@code null}
+     */
+    private static NotifySupport.ReportAttachment reportAttachment(NotificationIntent notify, EntityIntent entity, IntentModel model,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context, String subject) {
+        try {
+            return NotifySupport.reportAttachment(notify, entity, model, byName, compositionParents, crossModelLookup(model, context));
+        } catch (IllegalArgumentException ex) {
+            reportDroppedGlue(context, subject + " " + ex.getMessage() + " - the mail was NOT generated");
+            return null;
+        }
+    }
+
+    /**
      * The relation loads a notify-bearing handler must declare: the ones the message text needs, plus
      * the ones an authored {@code fileName:} pattern reads on top of them. Both sides name their local
      * after the relation, so a relation referenced by both is loaded ONCE - declaring it twice would
@@ -3843,13 +3884,34 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @return the merged loads, message-text ones first
      */
     private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan, NotifySupport.PrintAttachment attachment) {
+        return relationLoads(plan, attachment, null);
+    }
+
+    /**
+     * The same merge with a report attachment's loads folded in - the bindings and the file name of a
+     * rendered report read the same one-hop relations the message text does, through the same locals.
+     *
+     * @param plan the translated notify block
+     * @param attachment the resolved print attachment, or {@code null}
+     * @param report the resolved report attachment, or {@code null}
+     * @return the merged loads, message-text ones first
+     */
+    private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan, NotifySupport.PrintAttachment attachment,
+            NotifySupport.ReportAttachment report) {
         List<NotificationSupport.RelationLoad> merged = new ArrayList<>(plan.loads());
+        Set<String> declared = new LinkedHashSet<>();
+        for (NotificationSupport.RelationLoad load : merged) {
+            declared.add(load.local());
+        }
         if (attachment != null) {
-            Set<String> declared = new LinkedHashSet<>();
-            for (NotificationSupport.RelationLoad load : merged) {
-                declared.add(load.local());
-            }
             for (NotificationSupport.RelationLoad load : attachment.fileNameLoads()) {
+                if (declared.add(load.local())) {
+                    merged.add(load);
+                }
+            }
+        }
+        if (report != null) {
+            for (NotificationSupport.RelationLoad load : report.loads()) {
                 if (declared.add(load.local())) {
                     merged.add(load);
                 }

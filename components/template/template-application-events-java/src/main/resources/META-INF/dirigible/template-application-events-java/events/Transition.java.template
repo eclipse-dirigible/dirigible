@@ -208,6 +208,32 @@ public class ${className}Transition {
             // attach: recordPrint - the transitioned record's own document, rendered once above and
             // attached to every row's message: one document, many recipients.
             parts.add(document);
+#elseif($attach == "report")
+            // attach: { report, bind } - run the declared report scoped to THIS recipient and attach the
+            // rendered PDF. The bindings ARE the report's parameters, which is what makes the rows this
+            // recipient's own: a customer statement is a period of rows, not one record's document.
+#if($attachLanguageFkProperty != "")
+            gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Entity attachLanguageSource =
+                    entity.${attachLanguageFkProperty} == null ? null
+                            : new gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+#end
+            java.util.Map<String, Object> reportFilter = new java.util.HashMap<>();
+#foreach($binding in $attachReportBindings)
+            reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));
+#end
+            java.util.Map<String, Object> reportData = new java.util.HashMap<>();
+            // The bound values double as the rendered header, so the PDF states which slice it is - a
+            // table of rows never does.
+            reportData.put("document", reportFilter);
+            reportData.put("items", new gen.${attachReportGenFolder}.data.${attachReportPerspective}.${attachReport}Repository()
+                    .findAll(null, null, reportFilter));
+            java.util.Map document = new java.util.HashMap();
+            document.put("type", "attachment");
+            document.put("contentType", "application/pdf");
+            document.put("fileName", ${attachFileNameExpression});
+            document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", ${attachLanguageExpression},
+                    org.eclipse.dirigible.sdk.utils.Json.stringify(reportData)));
+            parts.add(document);
 #end
             String from = org.eclipse.dirigible.sdk.core.Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
             org.eclipse.dirigible.sdk.mail.Mail.send(from, new String[] {to}, new String[0], new String[0], ${notifySubjectExpression},
@@ -225,5 +251,18 @@ public class ${className}Transition {
         }
     }
 #end
+#end
+
+#if($attach == "report")
+    /**
+     * A bound report parameter as the generated report repository reads one - a String, because the
+     * value is JSON-encoded for the named-parameter binder and only a JSON primitive is accepted
+     * there (a date arrives as its ISO text). Null is deliberate rather than defensive: an absent
+     * value is what makes the repository fall back to the parameter's declared initial, so a
+     * nullable source column widens the report instead of emptying it.
+     */
+    private static String reportValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
 #end
 }

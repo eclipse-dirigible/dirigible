@@ -1029,9 +1029,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: end, kind: end }
 
               # a SENDING step: the serviceTask's whole work is the mail about the trigger record.
-              # No attach here (the transition below covers the attachment), and the Bills this test
-              # creates carry no Person - so at runtime the delegate takes its no-recipient no-op
-              # path, which is exactly what must not stall a flow.
+              # It attaches a REPORT rather than the record's own document (the transition below
+              # covers that one), and the Bills this test creates carry no Person - so at runtime the
+              # delegate takes its no-recipient no-op path BEFORE any render, which is exactly what
+              # must not stall a flow.
               - name: BillFlow
                 trigger: { onCreate: Bill }
                 steps:
@@ -1042,6 +1043,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         to: Person.email
                         subject: "Bill {note}"
                         body: "Dear {Person.name}, your bill totals {amount}."
+                        # attach a parameterized REPORT (#6931): the report runs scoped to THIS
+                        # record's values and the rendered PDF rides along. `minTotal` declares an
+                        # `initial`, so binding it is REQUIRED - left unbound it would stay at that
+                        # one fixed slice and every recipient would be mailed the same rows.
+                        attach:
+                          report: ClaimsByUnit
+                          bind: { minTotal: amount, note: note }
                       next: shareBill
                   # the MIRROR of the per-row fan-out: the rows are only the recipient list, and the
                   # document is the BILL's - rendered once (and not at all when nobody is invited,
@@ -2580,6 +2588,30 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the recipient expression must be null-safe on an unset relation");
         assertTrue(billSend.contains("Mail.send("), "the sender must emit the actual send call");
         assertTrue(billSend.contains("no recipient"), "a record with nobody to mail must be a logged no-op, not a failure");
+        // attach: { report, bind } (#6931) - the report runs through its OWN generated repository,
+        // which lives in the report's gen folder rather than this one, and each declared parameter is
+        // bound from the record the message is about. This is also the compile proof for the branch:
+        // a wrong package or an undeclared local would fail the whole client-Java batch.
+        assertTrue(billSend.contains("new gen.claimsbyunit.data.reports.ClaimsByUnitRepository()"),
+                "the report render must go through the report's own generated repository, got: " + billSend);
+        assertTrue(
+                billSend.contains("reportFilter.put(\"minTotal\", reportValue(entity.Amount))")
+                        && billSend.contains("reportFilter.put(\"note\", reportValue(entity.Note))"),
+                "each bound parameter must read the record the message is about, got: " + billSend);
+        assertTrue(billSend.contains("reportData.put(\"items\", new gen.claimsbyunit.data.reports.ClaimsByUnitRepository()"),
+                "the report's rows are the print payload's items, got: " + billSend);
+        assertTrue(billSend.contains("Print.render(\"ClaimsByUnit\""),
+                "the render must resolve the REPORT's print template by the report's name, got: " + billSend);
+        // The bound values double as the rendered header, so the PDF states which slice it is.
+        assertTrue(billSend.contains("reportData.put(\"document\", reportFilter)"),
+                "the bound parameters must be the rendered document context, got: " + billSend);
+        // The scaffold the render resolves through, seeded under doc/ for the CMS - written for the
+        // report something MAILS, and binding the aliases that report's own query SELECTs.
+        String reportTemplate = contentOf("doc/Templates/ClaimsByUnit/Print/en/standard.print");
+        assertTrue(reportTemplate.contains("<table source=\"items\">"), "the report template must bind the rows as its table");
+        assertTrue(reportTemplate.contains("{{Count}}"), "the template must bind the report's own column alias, got: " + reportTemplate);
+        assertTrue(reportTemplate.contains("{{document.minTotal}}") && reportTemplate.contains("{{document.note}}"),
+                "the bound parameters must be the template's header, got: " + reportTemplate);
         String billBpmn = contentOf("BillFlow.bpmn");
         assertTrue(billBpmn.contains("gen.events.emission.BillFlowMailBillSend"),
                 "the BPMN service task must bind the generated sender delegate");

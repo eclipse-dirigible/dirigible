@@ -114,8 +114,9 @@ not as an apology.
 - **The notify block is ONE shape reused at four call sites** - a `notifications[]` entry, a
   `schedules[].notify`, a `transitions[].notify`, and a `serviceTask`'s `args.notify`. Everywhere it is
   `to` / `subject` / `body` (+ `channel: email`), with `{field}` / `{relation.field}` interpolation in
-  the subject and body, plus the optional **`attach: print`** that mails the record's own rendered
-  document - see *send a document by e-mail*.
+  the subject and body, plus the optional **`attach:`** that mails a render along - `print` for the
+  record's own document (see *send a document by e-mail*), or `{ report, bind }` for a parameterized
+  report scoped to the recipient (see *mail a REPORT*).
 - **`{recordUrl}` and `{inboxUrl}` are the ready-made deep links - prefer them.** `{recordUrl}` is the
   link to the record the message is about (`body: "Approve it here: {recordUrl}"`), `{inboxUrl}` the
   link to the recipient's process Inbox. Both are assembled for you, so **never hand-type a route** -
@@ -2317,6 +2318,64 @@ absent both, the first entry of the tenant's application language set is used at
   committed, so an SMTP problem is logged and the transition still returns success. A `serviceTask`
   send, whose whole purpose IS the message, fails the task instead so the engine retries.
 
+### mail a REPORT - `attach: { report, bind }`
+
+`attach: print` carries the record's OWN document. Its sibling carries a **report**: the mailed artifact
+is a period of rows rather than one record's document - the customer statement, the supplier activity
+list, the monthly usage summary. A notify block names a declared report and binds its `parameters:` from
+the recipient row:
+
+```yaml
+reports:
+  - name: CustomerStatement
+    source: SalesInvoice
+    dimensions: [issuedOn]
+    measures: ["sum(total)"]
+    parameters:
+      - { name: fromDate, target: issuedOn, op: ge }
+      - { name: toDate, target: issuedOn, op: le }
+      - { name: customer, target: Customer.name, op: eq, initial: "-" }
+
+schedules:
+  - name: monthly-statements
+    cron: "0 0 7 1 * ?"
+    entity: Customer
+    where: [{ field: openBalance, op: gt, value: 0 }]
+    notify:
+      to: email
+      subject: "Your statement"
+      body: "Please find attached your account statement."
+      attach:
+        report: CustomerStatement
+        bind: { customer: name, fromDate: periodStart, toDate: periodEnd }
+```
+
+`bind:` maps a **report parameter** to a field of the record the message is about, or a one-hop
+`relation.field` path on it - the same path vocabulary a `{placeholder}` uses, resolved against the same
+record (inside a `forEach`, against the ROW). The report runs once per recipient with those values bound,
+and the rendered PDF is attached.
+
+**Every parameter that declares an `initial` must be bound.** A report parameter is bound on every call,
+so an unbound one rides its `initial` - one FIXED slice, identical for every recipient. That is the
+failure mode the rule exists for: the mail goes out, the attachment IS a report, and nothing about it
+says it is the wrong customer's ledger. A parameter with no `initial` is one whose comparison has a
+neutral any-value default (a date window bound, a `like` search), so omitting it legitimately means "the
+whole range". A balance report's own `fromDate` / `toDate` are bindable and optional for the same reason.
+
+A bound name that is not a parameter of that report is a validation error, not a request key the
+repository ignores - a typo would otherwise mail the report unfiltered.
+
+**The layout is a `.print` template of its own**, seeded once per mailed report at
+`doc/Templates/<Report>/Print/en/standard.print` and developer-owned afterwards (exactly like the
+document scaffold - a statement sent to a customer is a formatted artifact, and a later Generate will not
+overwrite a designed one). The scaffold binds the **bound parameters as the header** and the report's rows
+as the table, with one `{{<column alias>}}` per column the report SELECTs - the header is what says which
+slice the PDF is, since a table of rows never does. It is written only for reports something actually
+mails.
+
+`language:` / `languageFrom:` / `fileName:` work as they do for a document attachment, all resolved
+against the record the message is about; absent a `fileName:`, the name is `<Report> <record>.pdf`.
+
 ### naming a rendered document - `fileName:`
 
 Both server-side renders - the snapshot copy a document mints on issue and the PDF a notify block
@@ -2998,7 +3057,7 @@ or a seeded name.
 | trigger `businessKeyStrategy` | `timestamp` |
 | entity event | `onCreate`, `onUpdate`, `onDelete`, `onTransition` (the STATUS channel - a workflow setter / `transitions:` button / `generates` completion hook publishes it, and `onUpdate` never sees those) |
 | notification `channel` | `email` |
-| notify `attach` | `print` (the record the block is about - inside a fan-out, the ROW), `recordPrint` (a fan-out's anchor record, rendered once); whichever is rendered must be a document |
+| notify `attach` | `print` (the record the block is about - inside a fan-out, the ROW), `recordPrint` (a fan-out's anchor record, rendered once); whichever is rendered must be a document. Or the map form `{ report: <name>, bind: { <parameter>: <field> } }` - a rendered REPORT, scoped to the recipient by its own parameters |
 | notify `forEach` | a declared entity with exactly ONE to-one relation back to the record (one message per row; every bare path resolves against the row, `{record.<field>}` against the anchor record) - on `transitions[].notify` and `serviceTask` `args.notify` only |
 | notify block sites | `notifications[]`, `schedules[].notify`, `transitions[].notify`, `serviceTask` `args.notify` |
 | schedule `where` `op` | `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `like` |
@@ -3039,6 +3098,7 @@ or a seeded name.
 - "preload these values" -> **seeds**
 - "email someone when X is created/updated/deleted" -> **notifications**
 - "send the invoice / payslip / document itself to its customer or employee by e-mail" -> a **notify block with `attach: print`** (on a `serviceTask` step, a `transitions[]`, or a `schedules[]`)
+- "mail each customer their statement / activity list for the period" -> a **notify block with `attach: { report, bind }`** over a report whose `parameters:` scope it to the recipient (a `schedules[]` for the periodic run, a `transitions[]` for on demand)
 - "every day/hour, check X and notify" -> **schedules** (`notify`)
 - "on a schedule / every month, create a Y for each X / recurring invoices / auto-generate timesheets" -> **schedules** (`generate`)
 - "call an external API when X changes" -> **integrations**

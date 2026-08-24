@@ -20,6 +20,7 @@ import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
+import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 
@@ -49,6 +50,12 @@ import org.eclipse.dirigible.components.intent.model.StepIntent;
  * Only a <b>document master</b> (an entity with a line-items child, hence a generated feeder and a
  * {@code .print} template) can be attached; {@link #printAttachment} returns {@code null} otherwise
  * and the caller reports the drop rather than sending a mail that claims an attachment it lacks.
+ *
+ * <p>
+ * The other attachment shape is a rendered <b>report</b> ({@code attach: { report, bind }},
+ * {@link #reportAttachment}): the mailed artifact is a period of rows rather than one record's own
+ * document - the customer statement - and the recipient row binds the report's declared
+ * {@code parameters:}, which is what scopes those rows to that recipient.
  */
 public final class NotifySupport {
 
@@ -63,6 +70,15 @@ public final class NotifySupport {
      * the same PDF rides on every message.
      */
     public static final String ATTACH_RECORD_PRINT = "recordPrint";
+
+    /**
+     * {@code attach: { report: <name>, bind: { <parameter>: <field> } }} - the rendered PDF of a
+     * declared REPORT rather than of a record's own {@code .print} template, with the record the
+     * message is about binding the report's parameters. The report-side sibling of
+     * {@link #ATTACH_PRINT}: where a dunning reminder carries the one invoice it is about, a customer
+     * statement carries a period of rows, which is a report and not a document.
+     */
+    public static final String ATTACH_REPORT = NotificationIntent.ATTACH_REPORT;
 
     /**
      * The reserved placeholder scope a fan-out addresses its <b>anchor record</b> with -
@@ -330,6 +346,47 @@ public final class NotifySupport {
     }
 
     /**
+     * @param notify a notify block, may be {@code null}
+     * @return whether it attaches a rendered REPORT ({@code attach: { report, bind }})
+     */
+    public static boolean attachesReport(NotificationIntent notify) {
+        return notify != null && notify.getReportAttachment() != null;
+    }
+
+    /**
+     * The reports every notify block in the model attaches - the set that needs a print template to
+     * render through, and nothing more. Collected across the four call sites a notify block is authored
+     * at, so the scaffold exists exactly where something renders it.
+     *
+     * @param model the parsed intent model
+     * @return the declared report names, in first-use order
+     */
+    public static java.util.Set<String> attachedReports(IntentModel model) {
+        java.util.Set<String> reports = new java.util.LinkedHashSet<>();
+        List<NotificationIntent> blocks = new ArrayList<>(model.getNotifications());
+        for (org.eclipse.dirigible.components.intent.model.ScheduleIntent schedule : model.getSchedules()) {
+            blocks.add(schedule.getNotify());
+        }
+        for (org.eclipse.dirigible.components.intent.model.TransitionIntent transition : model.getTransitions()) {
+            blocks.add(transition.getNotify());
+        }
+        for (ProcessIntent process : model.getProcesses()) {
+            for (StepIntent step : process.getSteps()) {
+                blocks.add(stepNotify(step));
+            }
+        }
+        for (NotificationIntent block : blocks) {
+            NotificationIntent.ReportAttachment attachment = block == null ? null : block.getReportAttachment();
+            if (attachment != null && attachment.report() != null && !attachment.report()
+                                                                                .isBlank()) {
+                reports.add(attachment.report()
+                                      .trim());
+            }
+        }
+        return reports;
+    }
+
+    /**
      * Whether the block's text addresses the fan-out's anchor record ({@code {record.<field>}}). The
      * generated per-row send method then takes the record as a parameter - it is passed only when a
      * message actually quotes it, so nothing carries an argument it never reads.
@@ -386,17 +443,140 @@ public final class NotifySupport {
         // record through the same local, and an unresolvable pattern must be reported before any of the
         // language shapes below can return an attachment.
         FileName fileName = fileName(notify, entity, local, anchorScoped, byName, compositionParents, crossModel);
+        Language language = language(notify, entity, byName, compositionParents, crossModel);
+        return new PrintAttachment(entity.getName(), language.expression(), fileName.expression(), fileName.loads(), language.load(),
+                anchorScoped);
+    }
+
+    /**
+     * A resolved <b>report attachment</b>: everything the generated code needs to run a declared report
+     * for one recipient and attach the rendered PDF.
+     *
+     * @param report the declared report rendered
+     * @param bindings the report's parameters bound from the record the message is about, in authored
+     *        order - each an entry the generated code puts into the repository's filter map
+     * @param languageExpression a Java expression yielding the print-template language code, resolved
+     *        exactly as a document attachment's is
+     * @param fileNameExpression a Java expression for the attachment file name
+     * @param loads the one-hop relation loads the bindings and the file name read, merged - the caller
+     *        adds them to the block's own loads (they share the local named after the relation)
+     * @param languageLoad the {@code languageFrom} relation load, or {@code null}
+     */
+    public record ReportAttachment(String report, List<Binding> bindings, String languageExpression, String fileNameExpression,
+            List<NotificationSupport.RelationLoad> loads, LanguageLoad languageLoad) {
+
+        /**
+         * One bound report parameter.
+         *
+         * @param parameter the report parameter's name (the repository's filter key and its SQL marker)
+         * @param expression the Java expression reading the value off the record the message is about
+         */
+        public record Binding(String parameter, String expression) {
+        }
+    }
+
+    /**
+     * Resolve the report attachment of a notify block against the entity it is about.
+     *
+     * <p>
+     * Unlike a document attachment there is no printable-shape test to fail: a report is rendered from
+     * its own generated repository, so what can go wrong is a binding that does not resolve - and that
+     * is an authoring error the parser has already reported, raised here as well so a generation
+     * reached by another route drops the block loudly rather than mailing an unscoped report.
+     *
+     * @param notify the notify block
+     * @param entity the entity the message is about (a fan-out's ROW)
+     * @param model the parsed intent model (to find the declared report)
+     * @param byName all LOCAL entities by name
+     * @param compositionParents composition-parent map (to resolve a relation target's perspective)
+     * @param crossModel resolver for a cross-model relation, or {@code null}
+     * @return the attachment, or {@code null} when no report was asked for
+     * @throws IllegalArgumentException when the report or a binding does not resolve
+     */
+    public static ReportAttachment reportAttachment(NotificationIntent notify, EntityIntent entity, IntentModel model,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
+        NotificationIntent.ReportAttachment authored = notify == null ? null : notify.getReportAttachment();
+        if (authored == null || entity == null) {
+            return null;
+        }
+        String name = authored.report();
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("attach names no report");
+        }
+        ReportIntent report = null;
+        for (ReportIntent candidate : model.getReports()) {
+            if (name.equals(candidate.getName())) {
+                report = candidate;
+            }
+        }
+        if (report == null) {
+            throw new IllegalArgumentException("attach references unknown report [" + name + "]");
+        }
+        // The bindings resolve exactly as a `{field}` placeholder does, through the same resolver, so
+        // the relation loads they need are the locals the message text already declares.
+        NotificationSupport.Resolver resolver = NotificationSupport.resolver(entity, byName, compositionParents, crossModel);
+        List<ReportAttachment.Binding> bindings = new ArrayList<>();
+        for (Map.Entry<String, String> bound : authored.bind()
+                                                       .entrySet()) {
+            String path = bound.getValue();
+            if (path == null || path.isBlank()) {
+                throw new IllegalArgumentException("attach bind [" + bound.getKey() + "] names no source field");
+            }
+            String expression = resolver.access(path.trim(), false);
+            if (expression == null) {
+                throw new IllegalArgumentException("attach bind [" + bound.getKey() + "] [" + path.trim()
+                        + "] is not a field or one-hop relation.field of [" + entity.getName() + "]");
+            }
+            bindings.add(new ReportAttachment.Binding(bound.getKey(), expression));
+        }
+        FileName fileName = reportFileName(notify, report.getName(), entity, byName, compositionParents, crossModel);
+        Language language = language(notify, entity, byName, compositionParents, crossModel);
+        Map<String, NotificationSupport.RelationLoad> loads = new LinkedHashMap<>();
+        for (NotificationSupport.RelationLoad load : resolver.loads()) {
+            loads.put(load.local(), load);
+        }
+        for (NotificationSupport.RelationLoad load : fileName.loads()) {
+            loads.put(load.local(), load);
+        }
+        return new ReportAttachment(report.getName(), bindings, language.expression(), fileName.expression(),
+                new ArrayList<>(loads.values()), language.load());
+    }
+
+    /**
+     * The name a rendered report arrives under: the authored {@code fileName:} pattern resolved against
+     * the record the message is about, or - absent one - the report's name plus that record's own
+     * number/id, so a mailbox of statements is self-describing rather than a pile of one name.
+     */
+    private static FileName reportFileName(NotificationIntent notify, String report, EntityIntent entity, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
+        FileNameSupport.Site site = new FileNameSupport.Site(entity, ENTITY_LOCAL, true, false);
+        FileNameSupport.Resolved resolved = FileNameSupport.resolve(notify.getFileName(), site, byName, compositionParents, crossModel);
+        if (resolved == null) {
+            return new FileName("\"" + report + " \" + " + FileNameSupport.numberOrId(entity, ENTITY_LOCAL) + " + \".pdf\"", List.of());
+        }
+        return new FileName(resolved.expression() + " + \".pdf\"", resolved.loads());
+    }
+
+    /** A resolved render language: the Java expression, plus the relation load it reads (if any). */
+    private record Language(String expression, LanguageLoad load) {
+    }
+
+    /**
+     * The render language of an attachment, in the three shapes the block can declare it: a fixed
+     * {@code language:} literal, a per-record {@code languageFrom: relation.field} read (the customer's
+     * own language), or - absent both - the run-time application-language fallback.
+     */
+    private static Language language(NotificationIntent notify, EntityIntent entity, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
         String literal = notify.getLanguage();
         if (literal != null && !literal.isBlank()) {
-            return new PrintAttachment(entity.getName(), "\"" + literal.trim() + "\"", fileName.expression(), fileName.loads(), null,
-                    anchorScoped);
+            return new Language("\"" + literal.trim() + "\"", null);
         }
         String path = notify.getLanguageFrom();
         if (path == null || path.isBlank()) {
-            return new PrintAttachment(entity.getName(), DEFAULT_LANGUAGE_EXPRESSION, fileName.expression(), fileName.loads(), null,
-                    anchorScoped);
+            return new Language(DEFAULT_LANGUAGE_EXPRESSION, null);
         }
-        return languageFromAttachment(path.trim(), entity, byName, compositionParents, crossModel, anchorScoped, local, fileName);
+        return languageFrom(path.trim(), entity, byName, compositionParents, crossModel);
     }
 
     /**
@@ -426,9 +606,8 @@ public final class NotifySupport {
      * an {@code attachLanguageSource} local and reads the language off it, falling back to the
      * application language set when the chain is null/blank.
      */
-    private static PrintAttachment languageFromAttachment(String path, EntityIntent entity, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel, boolean anchorScoped, String local,
-            FileName fileName) {
+    private static Language languageFrom(String path, EntityIntent entity, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
         int dot = path.indexOf('.');
         if (dot < 0) {
             throw new IllegalArgumentException(
@@ -474,7 +653,7 @@ public final class NotifySupport {
         }
         String expression = "attachLanguageSource == null || attachLanguageSource." + pascalField + " == null || attachLanguageSource."
                 + pascalField + ".isBlank() ? " + DEFAULT_LANGUAGE_EXPRESSION + " : attachLanguageSource." + pascalField + ".trim()";
-        return new PrintAttachment(entity.getName(), expression, fileName.expression(), fileName.loads(), load, anchorScoped);
+        return new Language(expression, load);
     }
 
     private static FieldIntent fieldOf(EntityIntent entity, String name) {
@@ -497,19 +676,50 @@ public final class NotifySupport {
      *         {@code attachFileNameExpression} keys plus the {@code attachLanguage*} load coordinates
      */
     public static Map<String, Object> attachmentFields(PrintAttachment attachment) {
+        return attachmentFields(attachment, null);
+    }
+
+    /**
+     * The same keys for either attachment shape - a rendered document, a rendered report, or neither.
+     * The two are mutually exclusive by authoring ({@code attach} is one value), so one builder emits
+     * the whole vocabulary and the templates branch on {@code attach} alone.
+     *
+     * @param attachment the resolved document attachment, or {@code null}
+     * @param report the resolved report attachment, or {@code null}
+     * @return the {@code attach} / {@code attachEntity} / {@code attachLanguage*} /
+     *         {@code attachFileNameExpression} keys, plus {@code attachReport} and
+     *         {@code attachReportBindings}
+     */
+    public static Map<String, Object> attachmentFields(PrintAttachment attachment, ReportAttachment report) {
         Map<String, Object> fields = new LinkedHashMap<>();
         // The authored kind, not a constant: the fan-out templates branch on it to render the anchor
-        // record's document once, outside the per-row loop.
-        fields.put("attach", attachment == null ? "" : attachment.kind());
+        // record's document once, outside the per-row loop, and a report is rendered through its own
+        // repository rather than through a print feeder.
+        fields.put("attach", attachment != null ? attachment.kind() : report != null ? ATTACH_REPORT : "");
         fields.put("attachEntity", attachment == null ? "" : attachment.entity());
-        fields.put("attachLanguageExpression", attachment == null ? "" : attachment.languageExpression());
-        fields.put("attachFileNameExpression", attachment == null ? "" : attachment.fileNameExpression());
-        LanguageLoad load = attachment == null ? null : attachment.languageLoad();
+        String languageExpression =
+                attachment != null ? attachment.languageExpression() : report == null ? "" : report.languageExpression();
+        String fileNameExpression =
+                attachment != null ? attachment.fileNameExpression() : report == null ? "" : report.fileNameExpression();
+        fields.put("attachLanguageExpression", languageExpression);
+        fields.put("attachFileNameExpression", fileNameExpression);
+        LanguageLoad load = attachment != null ? attachment.languageLoad() : report == null ? null : report.languageLoad();
         fields.put("attachLanguageFkProperty", load == null ? "" : load.fkProperty());
         fields.put("attachLanguageTargetEntity", load == null ? "" : load.targetEntity());
         fields.put("attachLanguageTargetPerspective", load == null ? "" : load.targetPerspective());
         fields.put("attachLanguageCrossModel", load != null && load.crossModel());
         fields.put("attachLanguageTargetModel", load == null ? "" : load.targetModel());
+        fields.put("attachReport", report == null ? "" : report.report());
+        List<Map<String, Object>> bindings = new ArrayList<>();
+        if (report != null) {
+            for (ReportAttachment.Binding binding : report.bindings()) {
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("parameter", binding.parameter());
+                entry.put("expression", binding.expression());
+                bindings.add(entry);
+            }
+        }
+        fields.put("attachReportBindings", bindings);
         return fields;
     }
 
