@@ -632,8 +632,9 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("written",
                                                          hasItems("orders.edm", "orders.model", "OrderApproval.bpmn", "ApproveOrder.form",
                                                                  "OrdersByCustomer.report", "OrderBalance.report", "OrderStatement.report",
-                                                                 "OrderItemCorrespondence.report", "orders.roles", "orders.glue",
-                                                                 "countries.csvim", "countries.csv",
+                                                                 "OrderStatementLines.view", "OrderItemCorrespondence.report",
+                                                                 "OrderItemCorrespondenceCorrespondence.view", "orders.roles",
+                                                                 "orders.glue", "countries.csvim", "countries.csv",
                                                                  "doc/Templates/Order/Print/en/standard.print", "orders.test"))
                                                  .body("scrubbed", hasSize(0))
                                                  // The model-to-code plan the editor replays: one entry per generated model with a
@@ -4265,33 +4266,55 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(balance.contains("\"initial\": \"1900-01-01\"") && balance.contains("\"initial\": \"9999-12-31\""),
                 "the window parameters should default to the all-time balance");
         // correspondence - the counter-side lines of the same document as an extra grouping bucket.
-        String correspondence = contentOf("OrderItemCorrespondence.report");
-        assertTrue(correspondence.contains(
+        // The parameter-free structure is a generated .view artifact (#6938): the self-join and the
+        // allocation live there, and the .report reads the view as its base table.
+        String correspondenceView = contentOf("OrderItemCorrespondenceCorrespondence.view");
+        assertTrue(correspondenceView.contains("\"name\": \"ORDERS_ORDER_ITEM_CORRESPONDENCE_CORRESPONDENCE\""),
+                "the correspondence structure should be a named database view");
+        assertTrue(correspondenceView.contains(
                 "LEFT JOIN \\\"ORDERS_ORDER_ITEM\\\" as OrderItemCorrespondent ON OrderItemCorrespondent.\\\"ORDER_ITEM_ORDER\\\" = OrderItem.\\\"ORDER_ITEM_ORDER\\\" AND OrderItemCorrespondent.\\\"ORDER_ITEM_ID\\\" <> OrderItem.\\\"ORDER_ITEM_ID\\\""),
                 "the correspondence axis should LEFT self-join the source on the document its lines share, excluding the line itself");
         assertTrue(
-                correspondence.contains("as OrderCorrespondent ON OrderItemCorrespondent.\\\"ORDER_ITEM_ORDER\\\" = OrderCorrespondent."),
+                correspondenceView.contains(
+                        "as OrderCorrespondent ON OrderItemCorrespondent.\\\"ORDER_ITEM_ORDER\\\" = OrderCorrespondent."),
                 "the bucket path should be resolved against the counter-side line, under its own alias");
-        assertTrue(correspondence.contains("as \\\"Correspondent Order Order Date\\\""),
-                "the correspondence bucket should be emitted as a grouping column of its own");
+        assertTrue(correspondenceView.contains("as \\\"CORRESPONDENT_ORDER_ORDER_DATE\\\""),
+                "the correspondence bucket should be exposed as a plain view column");
         assertTrue(
-                correspondence.contains("CAST(COALESCE(OrderItem.\\\"ORDER_ITEM_QUANTITY\\\", 0) AS DECIMAL(34,12))")
-                        && correspondence.contains("NULLIF((SELECT SUM(COALESCE(OrderItemDocumentTotal."),
-                "each amount should be allocated over the counter-side buckets of its own document");
+                correspondenceView.contains("CAST(COALESCE(OrderItem.\\\"ORDER_ITEM_QUANTITY\\\", 0) AS DECIMAL(34,12))")
+                        && correspondenceView.contains("NULLIF((SELECT SUM(COALESCE(OrderItemDocumentTotal."),
+                "each amount should be allocated over the counter-side buckets of its own document, inside the view");
+        String correspondence = contentOf("OrderItemCorrespondence.report");
+        assertTrue(correspondence.contains("\"table\": \"ORDERS_ORDER_ITEM_CORRESPONDENCE_CORRESPONDENCE\""),
+                "the .report should read the generated view as its base table");
+        assertTrue(correspondence.contains(
+                "SUM(CASE WHEN OrderItem.\\\"ENTRY_DATE\\\" >= :fromDate AND OrderItem.\\\"ENTRY_DATE\\\" <= :toDate THEN OrderItem.\\\"ALLOCATED_DEBIT\\\" ELSE 0 END) as \\\"Debit\\\""),
+                "the thin query should window the view's allocated amounts - the named parameters stay on the .report side");
+        assertTrue(correspondence.contains("as \\\"Correspondent Order Order Date\\\""),
+                "the correspondence bucket should still be a grouping column of the report");
+        assertFalse(correspondence.contains("OrderItemCorrespondent"), "the structure must not be re-shipped inside the .report query");
 
-        // kind: statement - the same window, but the rows are the declared lines: one subquery
-        // reducing the ledger to a balance per account code, then one row per line reading it.
+        // kind: statement - the same window, but the rows are the declared lines. The line
+        // classification is a generated .view (#6938); the .report keeps the subquery reducing the
+        // ledger to a balance per account code and a thin join decoding each view row's measure.
+        String statementView = contentOf("OrderStatementLines.view");
+        assertTrue(statementView.contains("\"name\": \"ORDERS_ORDER_STATEMENT_LINES\""),
+                "the statement's line classification should be a named database view");
+        assertTrue(
+                statementView.contains("CAST('A.I' AS VARCHAR(255))") && statementView.contains("CAST('Alpine markets' AS VARCHAR(4000))"),
+                "each line should carry its code and label in the view");
+        assertTrue(statementView.contains("(Country.\\\"COUNTRY_CODE2\\\" = 'AL' OR Country.\\\"COUNTRY_CODE2\\\" = 'AT')"),
+                "a comma-separated selector of exact codes should be an OR of equalities over the account nomenclature");
+        assertTrue(statementView.contains("SUBSTRING(Country.\\\"COUNTRY_CODE2\\\" FROM 1 FOR 1) >= 'B'"),
+                "a range selector should compare equally long code prefixes, not the whole code");
         String statement = contentOf("OrderStatement.report");
         assertTrue(statement.contains("\"kind\": \"statement\""), "the statement report should carry its kind");
         assertTrue(statement.contains("WITH \\\"ACCOUNT_BALANCES\\\" as (") && statement.contains("GROUP BY Country.\\\"COUNTRY_CODE2\\\""),
                 "the statement should reduce the ledger to one balance per account code before its lines read it");
-        assertTrue(statement.contains("CAST('A.I' AS VARCHAR(255))") && statement.contains("CAST('Alpine markets' AS VARCHAR(4000))"),
-                "each line should render its code and label as the statement's first two columns");
-        assertTrue(statement.contains("(\\\"ACCOUNT_CODE\\\" = 'AL' OR \\\"ACCOUNT_CODE\\\" = 'AT')"),
-                "a comma-separated selector of exact codes should be an OR of equalities");
-        assertTrue(statement.contains("SUBSTRING(\\\"ACCOUNT_CODE\\\" FROM 1 FOR 1) >= 'B'"),
-                "a range selector should compare equally long code prefixes, not the whole code");
-        assertTrue(statement.contains("ORDER BY \\\"STATEMENT_LINES\\\".\\\"Ordinal\\\""),
+        assertTrue(statement.contains("FROM \\\"ORDERS_ORDER_STATEMENT_LINES\\\" as \\\"STATEMENT_LINES\\\""),
+                "the thin query should read the generated lines view");
+        assertFalse(statement.contains("Alpine markets"), "the line labels belong to the view, not the .report query");
+        assertTrue(statement.contains("ORDER BY \\\"STATEMENT_LINES\\\".\\\"LINE_ORDINAL\\\""),
                 "the statement should render its lines in the authored order");
         assertTrue(statement.contains("\"alias\": \"Code\"") && statement.contains("\"alias\": \"Label\"")
                 && statement.contains("\"alias\": \"Amount\""), "a statement's columns are Code / Label / Amount");
