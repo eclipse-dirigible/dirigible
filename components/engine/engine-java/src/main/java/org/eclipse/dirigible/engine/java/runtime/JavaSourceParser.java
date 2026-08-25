@@ -18,17 +18,19 @@ import java.util.regex.Pattern;
  *
  * <p>
  * We deliberately avoid pulling in a full Java parser; the synchronizer only needs the binary class
- * name to key the artefact and request a compilation unit by name. Comments and string literals are
+ * name to key the artefact and request a compilation unit by name. Comments and literals are
  * stripped first so {@code //}- and {@code /* *}/-embedded {@code package} tokens don't trip up the
  * matcher.
+ *
+ * <p>
+ * The stripping is a single linear character scan, not a set of regex passes, for two reasons. A
+ * regex alternation under a quantifier ({@code "(?:\\.|[^"\\])*"}) costs Java's engine one stack
+ * frame per iteration, so a long enough string literal - a generated report's multi-kilobyte SQL
+ * constant full of escaped identifier quotes - overflows the thread stack; and running the comment
+ * passes before the literal pass gets the nesting backwards, so a {@code /*} inside a string
+ * literal opened a comment that swallowed real code up to the next {@code *}{@code /} in the file.
  */
 public final class JavaSourceParser {
-
-    // Strip /* ... */ block comments (non-greedy, multi-line) and // line comments.
-    private static final Pattern BLOCK_COMMENT = Pattern.compile("/\\*.*?\\*/", Pattern.DOTALL);
-    private static final Pattern LINE_COMMENT = Pattern.compile("//[^\\n]*");
-    private static final Pattern STRING_LITERAL = Pattern.compile("\"(?:\\\\.|[^\"\\\\])*\"");
-    private static final Pattern CHAR_LITERAL = Pattern.compile("'(?:\\\\.|[^'\\\\])'");
 
     private static final Pattern PACKAGE_DECL = Pattern.compile("(?m)^\\s*package\\s+([a-zA-Z_$][\\w$]*(?:\\.[a-zA-Z_$][\\w$]*)*)\\s*;");
 
@@ -66,16 +68,98 @@ public final class JavaSourceParser {
         return new ParsedSource(packageName, simpleName, fqn);
     }
 
+    /**
+     * Replace every comment and literal with an inert placeholder, in one left-to-right pass. Each
+     * construct is recognised where it starts, so a comment opener inside a literal is literal text and
+     * a quote inside a comment is comment text - the ordering a set of independent regex passes cannot
+     * express. Line structure outside block comments is preserved, which is what the {@code (?m)^\s*}
+     * anchor of {@link #PACKAGE_DECL} reads.
+     *
+     * @param source raw Java source
+     * @return the source with comments and literals neutralised
+     */
     private static String stripCommentsAndLiterals(String source) {
-        String s = BLOCK_COMMENT.matcher(source)
-                                .replaceAll(" ");
-        s = LINE_COMMENT.matcher(s)
-                        .replaceAll(" ");
-        s = STRING_LITERAL.matcher(s)
-                          .replaceAll("\"\"");
-        s = CHAR_LITERAL.matcher(s)
-                        .replaceAll("' '");
-        return s;
+        int length = source.length();
+        StringBuilder stripped = new StringBuilder(length);
+        int index = 0;
+        while (index < length) {
+            char current = source.charAt(index);
+            char following = index + 1 < length ? source.charAt(index + 1) : '\0';
+            if (current == '/' && following == '/') {
+                index = skipLineComment(source, index);
+                stripped.append(' ');
+            } else if (current == '/' && following == '*') {
+                index = skipBlockComment(source, index);
+                stripped.append(' ');
+            } else if (current == '"' && following == '"' && index + 2 < length && source.charAt(index + 2) == '"') {
+                index = skipTextBlock(source, index);
+                stripped.append("\"\"");
+            } else if (current == '"') {
+                index = skipQuoted(source, index, '"');
+                stripped.append("\"\"");
+            } else if (current == '\'') {
+                index = skipQuoted(source, index, '\'');
+                stripped.append("' '");
+            } else {
+                stripped.append(current);
+                index++;
+            }
+        }
+        return stripped.toString();
+    }
+
+    /** Index of the terminating newline, which the caller keeps, or the end of the source. */
+    private static int skipLineComment(String source, int start) {
+        int index = start + 2;
+        while (index < source.length() && source.charAt(index) != '\n') {
+            index++;
+        }
+        return index;
+    }
+
+    /** Index just past the closing delimiter, or the end of an unterminated comment. */
+    private static int skipBlockComment(String source, int start) {
+        int end = source.indexOf("*/", start + 2);
+        return end < 0 ? source.length() : end + 2;
+    }
+
+    /** Index just past the closing triple quote, or the end of an unterminated text block. */
+    private static int skipTextBlock(String source, int start) {
+        int length = source.length();
+        int index = start + 3;
+        while (index < length) {
+            char current = source.charAt(index);
+            if (current == '\\') {
+                index += 2;
+            } else if (current == '"' && index + 2 < length && source.charAt(index + 1) == '"' && source.charAt(index + 2) == '"') {
+                return index + 3;
+            } else {
+                index++;
+            }
+        }
+        return length;
+    }
+
+    /**
+     * Index just past the closing quote of a string or character literal. Neither may span a line, so
+     * an unterminated one stops at the newline rather than consuming the rest of the source.
+     */
+    private static int skipQuoted(String source, int start, char quote) {
+        int length = source.length();
+        int index = start + 1;
+        while (index < length) {
+            char current = source.charAt(index);
+            if (current == '\\') {
+                index += 2;
+            } else if (current == quote) {
+                return index + 1;
+            } else if (current == '\n') {
+                return index;
+            } else {
+                index++;
+            }
+        }
+        return length;
     }
 
     /** Parsed coordinates of a Java source. */

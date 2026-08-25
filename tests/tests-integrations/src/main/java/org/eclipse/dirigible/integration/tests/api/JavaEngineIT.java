@@ -110,6 +110,16 @@ class JavaEngineIT extends IntegrationTest {
     }
 
     @Test
+    void a_multi_kilobyte_escaped_string_literal_does_not_stop_synchronization() {
+        // The source shape of a generated report repository: one single-line SQL constant carrying a
+        // few thousand escaped identifier quotes. Parsing it used to overflow the stack, and the
+        // StackOverflowError escaped the whole SynchronizationJob - so this asserts far more than one
+        // file: if the pass had died, nothing would ever be compiled or registered again.
+        writeAndSync(handlerWithLongQueryConstant());
+        assertEndpointReturns(200, "hello from long-query");
+    }
+
+    @Test
     void broken_definition_self_heals_without_a_byte_change() {
         // A duplicate FQN breaks the SECOND source's parse (definition state BROKEN) - one
         // deterministic instance of the "transient parse failure" class. The regression this guards:
@@ -195,6 +205,34 @@ class JavaEngineIT extends IntegrationTest {
                     }
                 }
                 """.formatted(tag);
+    }
+
+    /**
+     * The same handler plus a ~36 KB single-line string constant full of escaped quotes. Kept under
+     * javac's 64 KB limit for a constant-pool string, which is the only ceiling on how far this can go.
+     */
+    private static String handlerWithLongQueryConstant() {
+        StringBuilder columns = new StringBuilder();
+        for (int i = 0; i < 2_000; i++) {
+            columns.append("\\\"COLUMN_")
+                   .append(i)
+                   .append("\\\", ");
+        }
+        return """
+                package demo;
+                import jakarta.servlet.http.HttpServletRequest;
+                import jakarta.servlet.http.HttpServletResponse;
+                import org.eclipse.dirigible.engine.java.handler.JavaHandler;
+                public class Hello implements JavaHandler {
+                    static final String QUERY = "SELECT %s 1";
+                    @Override
+                    public void handle(HttpServletRequest request, HttpServletResponse response) throws Exception {
+                        response.setContentType("application/json");
+                        response.getWriter()
+                                .write("{\\"message\\": \\"hello from long-query\\", \\"length\\": " + QUERY.length() + "}");
+                    }
+                }
+                """.formatted(columns);
     }
 
 }
