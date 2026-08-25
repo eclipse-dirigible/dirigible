@@ -1870,6 +1870,37 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String billHeaderRepository = contentOf("gen/emission/data/bill/BillRepository.java");
         assertTrue(billHeaderRepository.contains("totals.put(\"BalanceDue\", entity.BalanceDue)"),
                 "the totals recompute must persist the refreshed calculated field: " + billHeaderRepository);
+        // A full-row update() PRESERVES the system-owned columns over the payload - and reports the
+        // discard when the payload carried a value of its own that is not the stored one (#6937).
+        // Silence there made a system writer on the wrong path indistinguishable from a working one:
+        // it kept getting 200 while the column it computed never moved. A date is deliberately not
+        // reported (the form's own round-trip truncates it, so a difference means nothing) and an
+        // absent value never is - that is the partial payload the preservation exists for.
+        assertTrue(billRepository.contains("entity.Amount = existingRow.Amount;"),
+                "a full-row update must take the aggregate column from the stored row: " + billRepository);
+        assertTrue(
+                billRepository.contains("isDiscardedByPreservation(entity.Amount, existingRow.Amount)")
+                        && billRepository.contains("discarded.add(\"Amount=\" + entity.Amount)"),
+                "a discarded system-owned value must be collected for the report: " + billRepository);
+        assertTrue(billRepository.contains("carried system-owned {} - discarded"),
+                "the discard must be reported once per write, naming what was dropped: " + billRepository);
+        // ...on an AUDITED entity, where the two halves sit next to each other: the audit timestamps are
+        // preserved WITHOUT being reported (an <input type=datetime-local> round-trips a stored instant
+        // as whole minutes, so a difference there is the widget, not a writer), while the audit user and
+        // the platform identifiers next to them are reported like any other system-owned column.
+        String auditedClaimRepository = contentOf("gen/emission/data/claim/ClaimRepository.java");
+        assertTrue(
+                auditedClaimRepository.contains("isDiscardedByPreservation(entity.CreatedBy, existingRow.CreatedBy)")
+                        && auditedClaimRepository.contains("isDiscardedByPreservation(entity.ProcessId, existingRow.ProcessId)"),
+                "a non-date system-owned column must be reported: " + auditedClaimRepository);
+        assertTrue(
+                auditedClaimRepository.contains("entity.CreatedAt = existingRow.CreatedAt;")
+                        && auditedClaimRepository.contains("entity.UpdatedAt = existingRow.UpdatedAt;"),
+                "the audit timestamps must still be preserved: " + auditedClaimRepository);
+        assertFalse(
+                auditedClaimRepository.contains("isDiscardedByPreservation(entity.CreatedAt")
+                        || auditedClaimRepository.contains("isDiscardedByPreservation(entity.UpdatedAt"),
+                "a date's lossy UI round-trip must not be reported as a discard: " + auditedClaimRepository);
         String billLineRepository = contentOf("gen/emission/data/bill/BillLineRepository.java");
         assertTrue(billLineRepository.contains("new BillRepository().recalculate("),
                 "a line change must trigger the master's document-totals recompute");
@@ -4175,6 +4206,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(403));
 
+        assertPreservationReportsDiscardRuntime();
         assertManyToManyRuntime();
         assertInboundSourcesRuntime();
         assertOutboundDepartureRuntime();
@@ -4324,6 +4356,70 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             assertEquals(summaryId.get(), io.restassured.path.json.JsonPath.from(summary)
                                                                            .getInt("Id"),
                     "mode: once must still return the existing target on a second delivery");
+        });
+    }
+
+    /**
+     * The preservation REPORT end to end (#6937): a full-row {@code update()} carrying a DIFFERENT
+     * value for a system-owned column keeps the stored one - and now says so. Only this layer shows the
+     * part that matters: that an ordinary round-trip stays silent while a caller that computed its own
+     * value is named. A report that fired on every form save would be noise, and noise is how the
+     * original silence was survivable in the first place.
+     */
+    private void assertPreservationReportsDiscardRuntime() {
+        // Attached here rather than in a field: Spring re-initializes logback while it starts the
+        // context, which drops an appender attached any earlier.
+        LogsAsserter billLogs = new LogsAsserter("app.gen.emission.data.bill.BillRepository", Level.WARN);
+
+        AtomicInteger bill = new AtomicInteger();
+        restAssuredExecutor.execute(() -> bill.set(given().contentType("application/json")
+                                                          .body("{\"Note\":\"preserved bill\",\"Status\":1}")
+                                                          .when()
+                                                          .post(API + "/bill/BillController")
+                                                          .then()
+                                                          .statusCode(200)
+                                                          .extract()
+                                                          .path("Id")));
+        // The stored total is what the LINE says, written by the targeted recompute - never by a payload.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Amount\":100,\"Bill\":" + bill.get() + "}")
+                                                 .when()
+                                                 .post(API + "/bill/BillLineController")
+                                                 .then()
+                                                 .statusCode(200));
+
+        // The ordinary form round-trip: the header PUT carries the aggregate back exactly as it was
+        // read (scale included or not - a total is compared by amount, and a browser's number type
+        // drops the trailing zeros). Nothing is discarded, so nothing is reported.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + bill.get() + ",\"Note\":\"round-tripped\",\"Status\":1,\"Amount\":100}")
+                                                 .when()
+                                                 .put(API + "/bill/BillController/" + bill.get())
+                                                 .then()
+                                                 .statusCode(200));
+        assertFalse(billLogs.containsMessage("carried system-owned", Level.WARN),
+                "a payload carrying the stored value back must be preserved SILENTLY, logged: " + billLogs.getLoggedMessages());
+
+        // ...and the contract violation: a caller that computed a total of its own. The write still
+        // succeeds with the stored value kept - that is the protection - and the discard is named, so
+        // the writer's wrong path is visible the first time instead of after the data has frozen.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + bill.get()
+                                                         + ",\"Note\":\"computed elsewhere\",\"Status\":1,\"Amount\":999}")
+                                                 .when()
+                                                 .put(API + "/bill/BillController/" + bill.get())
+                                                 .then()
+                                                 .statusCode(200));
+        billLogs.assertLoggedMessage("carried system-owned [Amount=999]", Level.WARN);
+        restAssuredExecutor.execute(() -> {
+            Object amount = given().when()
+                                   .get(API + "/bill/BillController/" + bill.get())
+                                   .then()
+                                   .statusCode(200)
+                                   .extract()
+                                   .path("Amount");
+            assertTrue(amount instanceof Number && Math.abs(((Number) amount).doubleValue() - 100.0) < 0.001,
+                    "the discarded total must not have been persisted, got: " + amount);
         });
     }
 
