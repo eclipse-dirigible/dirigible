@@ -16,10 +16,9 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * application.
  *
  * Contract (the accounting posting semantics, generalized):
- * - binds the moment the source's own publisher raises (a create is unsuffixed, a workflow status
- *   write publishes -transitioned, an enrichment listener announces its declared phase) and RE-LOADS
- *   the source by id - the payload is as-of the event and lacks later-step data such as a stamped
- *   document number;
+ * - binds the topic the source's own publisher raises when it ${moment} (see destination() below)
+ *   and RE-LOADS the source by id - the payload is as-of the event and lacks later-step data such as
+ *   a stamped document number;
  * - idempotent + resumable via the ${backRefProperty} back-reference: a redelivery of a complete post
  *   is a no-op, and a redelivery of a half-post (an item write failed after the target was saved)
  *   rebuilds the items so the post completes - so it never throws or leaves a half-post. Concurrent
