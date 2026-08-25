@@ -35,11 +35,12 @@ import org.junit.jupiter.api.Test;
  * A statement is arithmetic: a selector that matches nothing, a netting that happens after the sum
  * instead of before it, or a subtotal that double-counts all produce well-formed SQL and a
  * plausible-looking wrong number. Only executing it and reading the figures off proves the
- * semantics, so this test builds the tables the generator names, posts entries, and checks each
- * line's amount. It also runs the two shapes the generated report repository wraps the query in -
- * the {@code COUNT(*)} wrap and the appended {@code LIMIT} - because a statement query is a
- * {@code WITH} and those wraps are where a common table expression would break if the database
- * refused it there.
+ * semantics, so this test builds the tables the generator names, installs the generated
+ * {@code <REPORT>_LINES} classification view the query reads (dirigible #6938 - the line selectors
+ * live there, not in the query), posts entries, and checks each line's amount. It also runs the two
+ * shapes the generated report repository wraps the query in - the {@code COUNT(*)} wrap and the
+ * appended {@code LIMIT} - because a statement query is a {@code WITH} and those wraps are where a
+ * common table expression would break if the database refused it there.
  */
 class StatementReportSqlTest {
 
@@ -83,6 +84,7 @@ class StatementReportSqlTest {
                   - { code: C,    label: Net assets,      sum: [A], less: [B.I] }
                   - { code: D,    label: Opening assets,  accounts: "2*",      measure: openingNetDebit }
                   - { code: E,    label: Period additions, accounts: "2*",     measure: periodNetDebit }
+                  - { code: F,    label: Intangibles,     accounts: "27*",     measure: closingNetDebit }
             """;
 
     /** The ledger the assertions below are read off. */
@@ -120,12 +122,17 @@ class StatementReportSqlTest {
         // The window: only the 2025-12-31 entry is opening, only the 2026-03-15 one is in the period.
         assertEquals(new BigDecimal("1000.00"), amounts.get("D"), "the opening measure should see only entries before :fromDate");
         assertEquals(new BigDecimal("250.00"), amounts.get("E"), "the period measure should see only entries inside the window");
+        // 27* matches no account at all - the line must still render, with 0, not vanish: its head
+        // row in the lines view is what keeps it (the old UNION-arm emission had the same property).
+        assertEquals(0, amounts.get("F")
+                               .compareTo(BigDecimal.ZERO),
+                "a line whose selector matches nothing should render with 0");
     }
 
     /** The lines are the statement's structure, so they come back in the authored order. */
     @Test
     void theStatementRendersItsLinesInTheAuthoredOrder() throws SQLException {
-        assertEquals(List.of("A.I", "A.II", "A", "B.I", "C", "D", "E"), new ArrayList<>(run(bound(query())).keySet()),
+        assertEquals(List.of("A.I", "A.II", "A", "B.I", "C", "D", "E", "F"), new ArrayList<>(run(bound(query())).keySet()),
                 "the statement should render its lines in the order they are declared");
     }
 
@@ -140,7 +147,7 @@ class StatementReportSqlTest {
         try (Connection connection = database(); Statement statement = connection.createStatement()) {
             try (ResultSet rows = statement.executeQuery("SELECT COUNT(*) FROM (" + query + ") AS \"REPORT_TOTAL\"")) {
                 rows.next();
-                assertEquals(7, rows.getInt(1), "the count wrap should see every line");
+                assertEquals(8, rows.getInt(1), "the count wrap should see every line");
             }
             try (ResultSet rows = statement.executeQuery(query + " LIMIT 3 OFFSET 1")) {
                 List<String> codes = new ArrayList<>();
@@ -158,6 +165,13 @@ class StatementReportSqlTest {
         return (String) ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
                                                                                              .get(0))
                                              .get("query");
+    }
+
+    /** The emitted structural views the query reads - the {@code <REPORT>_LINES} classification. */
+    private static Map<String, String> views() {
+        IntentModel model = IntentParser.parse(INTENT);
+        return ReportIntentGenerator.buildViewsForTest(TestContexts.context(model), model.getReports()
+                                                                                         .get(0));
     }
 
     /**
@@ -182,13 +196,19 @@ class StatementReportSqlTest {
         return amounts;
     }
 
-    /** A private in-memory ledger, created fresh for each connection. */
+    /**
+     * A private in-memory ledger, created fresh for each connection - tables first, then the generated
+     * lines view, exactly the order the synchronizers provision at runtime.
+     */
     private static Connection database() throws SQLException {
         Connection connection = DriverManager.getConnection("jdbc:h2:mem:statement;DB_CLOSE_DELAY=-1;INIT=SET SCHEMA PUBLIC");
         try (Statement statement = connection.createStatement()) {
             statement.execute("DROP ALL OBJECTS");
             for (String ddl : SCHEMA) {
                 statement.execute(ddl);
+            }
+            for (Map.Entry<String, String> view : views().entrySet()) {
+                statement.execute("CREATE VIEW \"" + view.getKey() + "\" AS " + view.getValue());
             }
         }
         return connection;

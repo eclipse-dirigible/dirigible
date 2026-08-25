@@ -97,6 +97,11 @@ class CorrespondenceReconciliationTest {
         try (Connection connection = DriverManager.getConnection("jdbc:h2:mem:correspondence;DB_CLOSE_DELAY=-1", "sa", "");
                 Statement statement = connection.createStatement()) {
             statement.execute(DDL);
+            // The correspondence query reads its generated structural view (dirigible #6938) - the
+            // self-join and the allocation live there; install it the way the ViewsSynchronizer would.
+            for (Map.Entry<String, String> view : views("correspondence: account.code").entrySet()) {
+                statement.execute("CREATE VIEW \"" + view.getKey() + "\" AS " + view.getValue());
+            }
 
             Map<String, BigDecimal> plain = totalsByAccount(statement, query(""), false);
             Map<String, BigDecimal> allocated = totalsByAccount(statement, query("correspondence: account.code"), false);
@@ -125,6 +130,13 @@ class CorrespondenceReconciliationTest {
         // The window is a pair of named parameters the generated repository binds; bind them here.
         return query.replace(":fromDate", "DATE '2026-01-01'")
                     .replace(":toDate", "DATE '2026-12-31'");
+    }
+
+    /** The structural views the report emits next to its query - parameter-free, installed verbatim. */
+    private static Map<String, String> views(String extra) {
+        IntentModel model = IntentParser.parse(LEDGER.replace("#EXTRA#", extra));
+        return ReportIntentGenerator.buildViewsForTest(TestContexts.context(model), model.getReports()
+                                                                                         .get(0));
     }
 
     /**
