@@ -98,7 +98,10 @@ App.services.api = {
     // browser's native login dialog never pops over a background poll.
     const headers = { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
     if (!isForm) headers['Content-Type'] = 'application/json';
-    const language = this.language();
+    // A caller may pin the request language for THIS call ({ language: 'bg' }) — e.g. Print, where the
+    // chosen print language must drive the multilingual data overlay, not the UI locale. Absent the
+    // override, the app's single language flag (the Region & Language store) applies as before.
+    const language = opts.language !== undefined ? opts.language : this.language();
     if (language) headers['Accept-Language'] = language;
 
     let r;
