@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -241,25 +242,32 @@ class ReportIntentGeneratorTest {
         IntentModel model = IntentParser.parse(GENERAL_LEDGER_INTENT);
         Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
                                                                                                             .get(0));
-        String query = (String) document.get("query");
+        Map<String, String> views = ReportIntentGenerator.buildViewsForTest(TestContexts.context(model), model.getReports()
+                                                                                                              .get(0));
+
+        // The parameter-free structure is a generated .view artifact (#6938): the .report reads it as
+        // its base table, so the self-join and the allocation never reach the generated repository.
+        assertEquals(List.of("LEDGER_TRIAL_BALANCE_CORRESPONDENCE"), new ArrayList<>(views.keySet()));
+        assertEquals("LEDGER_TRIAL_BALANCE_CORRESPONDENCE", document.get("table"));
+        String view = views.get("LEDGER_TRIAL_BALANCE_CORRESPONDENCE");
 
         // The counter-side line is a LEFT self-join on the document (the first hop of `date`), with the
         // line itself excluded by key and the pairing restricted to the opposite side - so no bucket is
         // emitted for a same-side sibling, and a document with no counter side keeps its row.
-        assertTrue(query.contains(
+        assertTrue(view.contains(
                 "LEFT JOIN \"LEDGER_JOURNAL_ENTRY_ITEM\" as JournalEntryItemCorrespondent ON JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_JOURNAL_ENTRY\" = JournalEntryItem.\"JOURNAL_ENTRY_ITEM_JOURNAL_ENTRY\""
                         + " AND JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_ID\" <> JournalEntryItem.\"JOURNAL_ENTRY_ITEM_ID\""
                         + " AND ((COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) <> 0 AND COALESCE(JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_CREDIT\", 0) <> 0)"
                         + " OR (COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_CREDIT\", 0) <> 0 AND COALESCE(JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) <> 0))"),
-                query);
+                view);
         // The bucket path is resolved a SECOND time, against that line - so the account it joins must
         // carry its own alias, or it would collide with the dimension's account and be dropped.
-        assertTrue(query.contains(
+        assertTrue(view.contains(
                 "LEFT JOIN \"LEDGER_ACCOUNT\" as AccountCorrespondent ON JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_ACCOUNT\" = AccountCorrespondent.\"ACCOUNT_ID\""),
-                query);
-        assertTrue(query.contains("AccountCorrespondent.\"ACCOUNT_CODE\" as \"Correspondent Account Code\""), query);
-        assertTrue(query.contains("GROUP BY Account.\"ACCOUNT_CODE\", Account.\"ACCOUNT_NAME\", AccountCorrespondent.\"ACCOUNT_CODE\""),
-                query);
+                view);
+        assertTrue(view.contains("AccountCorrespondent.\"ACCOUNT_CODE\" as \"CORRESPONDENT_ACCOUNT_CODE\""), view);
+        // Line-level rows: the entry date is a plain column the thin query windows over.
+        assertTrue(view.contains("JournalEntry.\"JOURNAL_ENTRY_ENTRY_DATE\" as \"ENTRY_DATE\""), view);
 
         // A debit line's share of a bucket is that bucket's CREDIT over the document's total credit
         // (excluding the line itself); the cast makes the share a fraction rather than integer division,
@@ -268,23 +276,33 @@ class ReportIntentGeneratorTest {
                 "(SELECT SUM(COALESCE(JournalEntryItemDocumentTotal.\"JOURNAL_ENTRY_ITEM_CREDIT\", 0)) FROM \"LEDGER_JOURNAL_ENTRY_ITEM\" as JournalEntryItemDocumentTotal"
                         + " WHERE JournalEntryItemDocumentTotal.\"JOURNAL_ENTRY_ITEM_JOURNAL_ENTRY\" = JournalEntryItem.\"JOURNAL_ENTRY_ITEM_JOURNAL_ENTRY\""
                         + " AND JournalEntryItemDocumentTotal.\"JOURNAL_ENTRY_ITEM_ID\" <> JournalEntryItem.\"JOURNAL_ENTRY_ITEM_ID\")";
-        assertTrue(query.contains(
-                "SUM(CASE WHEN JournalEntry.\"JOURNAL_ENTRY_ENTRY_DATE\" >= :fromDate AND JournalEntry.\"JOURNAL_ENTRY_ENTRY_DATE\" <= :toDate"
-                        + " THEN COALESCE(CAST(COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) AS DECIMAL(34,12))"
-                        + " * COALESCE(JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_CREDIT\", 0) / NULLIF(" + documentCredit + ", 0),"
-                        + " COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0)) ELSE 0 END) as \"Debit\""),
-                query);
+        assertTrue(view.contains("COALESCE(CAST(COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) AS DECIMAL(34,12))"
+                + " * COALESCE(JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_CREDIT\", 0) / NULLIF(" + documentCredit + ", 0),"
+                + " COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0)) as \"ALLOCATED_DEBIT\""), view);
         // ... and a credit line's share is the mirror image - the bucket's DEBIT over the total debit.
-        assertTrue(query.contains(
+        assertTrue(view.contains(
                 "* COALESCE(JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) / NULLIF((SELECT SUM(COALESCE(JournalEntryItemDocumentTotal.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0))"),
+                view);
+        // The split IS the parameter boundary: nothing in the view binds a named marker.
+        assertFalse(view.contains(":fromDate") || view.contains(":toDate") || view.contains(":language"), view);
+
+        // The .report keeps the thin windowed aggregation over the view.
+        String query = (String) document.get("query");
+        assertTrue(query.contains("FROM \"LEDGER_TRIAL_BALANCE_CORRESPONDENCE\" as JournalEntryItem"), query);
+        assertTrue(query.contains("SUM(CASE WHEN JournalEntryItem.\"ENTRY_DATE\" >= :fromDate AND JournalEntryItem.\"ENTRY_DATE\""
+                + " <= :toDate THEN JournalEntryItem.\"ALLOCATED_DEBIT\" ELSE 0 END) as \"Debit\""), query);
+        assertTrue(query.contains(
+                "GROUP BY JournalEntryItem.\"ACCOUNT_CODE\", JournalEntryItem.\"ACCOUNT_NAME\", JournalEntryItem.\"CORRESPONDENT_ACCOUNT_CODE\""),
                 query);
+        assertFalse(query.contains("JournalEntryItemCorrespondent"), "the structure must not be re-shipped in the query: " + query);
 
         // The correspondence bucket is a dimension: it groups, and it sits before the six totals.
         List<Map<String, Object>> columns = (List<Map<String, Object>>) document.get("columns");
         assertEquals(9, columns.size());
         Map<String, Object> bucket = columns.get(2);
         assertEquals("Correspondent Account Code", bucket.get("alias"));
-        assertEquals("AccountCorrespondent", bucket.get("table"));
+        assertEquals("JournalEntryItem", bucket.get("table"));
+        assertEquals("CORRESPONDENT_ACCOUNT_CODE", bucket.get("name"));
         assertEquals("NONE", bucket.get("aggregate"));
         assertEquals(Boolean.TRUE, bucket.get("grouping"));
         assertEquals("Debit", columns.get(5)
@@ -526,16 +544,43 @@ class ReportIntentGeneratorTest {
         assertTrue(query.contains(
                 "SUM(CASE WHEN JournalEntry.\"JOURNAL_ENTRY_ENTRY_DATE\" <= :toDate THEN COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) ELSE 0 END) as \"CLOSING_DEBIT\""),
                 query);
-        // A comma-separated selector is an OR of prefixes; a net measure floors the account at zero.
-        assertTrue(query.contains(
-                "COALESCE(SUM(CASE WHEN (\"ACCOUNT_CODE\" LIKE '20%' OR \"ACCOUNT_CODE\" LIKE '21%') THEN CASE WHEN \"CLOSING_DEBIT\" - \"CLOSING_CREDIT\" > 0 THEN \"CLOSING_DEBIT\" - \"CLOSING_CREDIT\" ELSE 0 END ELSE 0 END), 0)"),
+        // The line classification is a generated .view artifact (#6938): the query joins it LEFT (so a
+        // line whose accounts never posted still renders) and decodes each row's measure - a net one
+        // floors the account at zero. No selector and no label literal is left in the query.
+        assertTrue(query.contains("FROM \"LEDGER_BALANCE_SHEET_LINES\" as \"STATEMENT_LINES\""), query);
+        assertTrue(
+                query.contains(
+                        "LEFT JOIN \"ACCOUNT_BALANCES\" ON \"ACCOUNT_BALANCES\".\"ACCOUNT_CODE\" = \"STATEMENT_LINES\".\"ACCOUNT_CODE\""),
                 query);
+        assertTrue(query.contains("COALESCE(SUM(\"STATEMENT_LINES\".\"TERM_SIGN\" * CASE \"STATEMENT_LINES\".\"TERM_MEASURE\""
+                + " WHEN 'closingNetDebit' THEN CASE WHEN \"CLOSING_DEBIT\" - \"CLOSING_CREDIT\" > 0"
+                + " THEN \"CLOSING_DEBIT\" - \"CLOSING_CREDIT\" ELSE 0 END ELSE 0 END), 0) as \"Amount\""), query);
+        assertFalse(query.contains("LIKE"), "the selectors belong to the view, not the query: " + query);
+        assertFalse(query.contains("Total assets"), "the labels belong to the view, not the query: " + query);
+        assertTrue(query.endsWith("ORDER BY \"STATEMENT_LINES\".\"LINE_ORDINAL\""), query);
+
+        // The view: per line one head arm (what keeps an unmatched line rendering) plus one DISTINCT
+        // arm per flattened term, enumerating codes from the account nomenclature the account path
+        // points at. A comma-separated selector is an OR of prefixes.
+        Map<String, String> views = ReportIntentGenerator.buildViewsForTest(TestContexts.context(model), model.getReports()
+                                                                                                              .get(0));
+        assertEquals(List.of("LEDGER_BALANCE_SHEET_LINES"), new ArrayList<>(views.keySet()));
+        String view = views.get("LEDGER_BALANCE_SHEET_LINES");
+        assertTrue(view.contains("SELECT 1 as \"LINE_ORDINAL\", CAST('A.I' AS VARCHAR(255)) as \"LINE_CODE\","
+                + " CAST('Fixed assets' AS VARCHAR(4000)) as \"LINE_LABEL\", 0 as \"TERM_SIGN\","
+                + " CAST(NULL AS VARCHAR(255)) as \"TERM_MEASURE\", CAST(NULL AS VARCHAR(255)) as \"ACCOUNT_CODE\""), view);
+        assertTrue(view.contains("SELECT DISTINCT 1 as \"LINE_ORDINAL\", CAST('A.I' AS VARCHAR(255)) as \"LINE_CODE\","
+                + " CAST('Fixed assets' AS VARCHAR(4000)) as \"LINE_LABEL\", 1 as \"TERM_SIGN\","
+                + " CAST('closingNetDebit' AS VARCHAR(255)) as \"TERM_MEASURE\", Account.\"ACCOUNT_CODE\" as \"ACCOUNT_CODE\""
+                + "\nFROM \"LEDGER_ACCOUNT\" as Account"
+                + "\nWHERE (Account.\"ACCOUNT_CODE\" LIKE '20%' OR Account.\"ACCOUNT_CODE\" LIKE '21%')"), view);
         // A computed line is FLATTENED into its leaves' own terms, so no line waits for another.
-        assertTrue(query.contains(
-                "CAST('A' AS VARCHAR(255)) as \"Code\", CAST('Total assets' AS VARCHAR(4000)) as \"Label\", COALESCE(SUM(CASE WHEN (\"ACCOUNT_CODE\" LIKE '20%'"),
-                query);
-        assertTrue(query.contains("ELSE 0 END), 0) + COALESCE(SUM(CASE WHEN \"ACCOUNT_CODE\" LIKE '41%'"), query);
-        assertTrue(query.endsWith("ORDER BY \"STATEMENT_LINES\".\"Ordinal\""), query);
+        assertTrue(view.contains("SELECT DISTINCT 3 as \"LINE_ORDINAL\", CAST('A' AS VARCHAR(255)) as \"LINE_CODE\","
+                + " CAST('Total assets' AS VARCHAR(4000)) as \"LINE_LABEL\", 1 as \"TERM_SIGN\","
+                + " CAST('closingNetDebit' AS VARCHAR(255)) as \"TERM_MEASURE\", Account.\"ACCOUNT_CODE\" as \"ACCOUNT_CODE\""
+                + "\nFROM \"LEDGER_ACCOUNT\" as Account" + "\nWHERE Account.\"ACCOUNT_CODE\" LIKE '41%'"), view);
+        // ... and the split IS the parameter boundary: nothing in the view binds a named marker.
+        assertFalse(view.contains(":fromDate") || view.contains(":toDate"), view);
 
         // Code / Label / Amount - the amount right-aligned and money-formatted like every decimal.
         List<Map<String, Object>> columns = (List<Map<String, Object>>) document.get("columns");

@@ -102,6 +102,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     private static final String API = "/services/java/" + PROJECT + "/gen/emission/api";
     /** A standalone report owns its own gen folder, named after the report file. */
     private static final String REPORT_API = "/services/java/" + PROJECT + "/gen/claimsbyunit/api/reports";
+
+    /** The statement report's gen folder - same convention, its own folder. */
+    private static final String STATEMENT_API = "/services/java/" + PROJECT + "/gen/entrysheet/api/reports";
     /** What a {@code type: text} field's column is sized to (EdmIntentGenerator's TEXT_LENGTH). */
     private static final int TEXT_COLUMN_LENGTH = 4000;
 
@@ -1341,6 +1344,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 parameters:
                   - { name: minTotal, target: totalCost, op: ge, initial: "0" }
                   - { name: note, target: note, op: like }
+              # kind: statement (#6938): the line classification is emitted as a generated
+              # <REPORT>_LINES .view artifact - published with the project and provisioned by the
+              # ViewsSynchronizer AFTER the tables - and the .report keeps a thin windowed join over
+              # it, so the generated repository never carries the statement's structure as one giant
+              # Java literal (the #6936 class). MISS matches no account on purpose: a declared line
+              # renders (with 0) even when nothing selects into it; TOTAL is flattened arithmetic.
+              - name: EntrySheet
+                kind: statement
+                source: Entry
+                date: date
+                debit: debit
+                credit: credit
+                account: Account.name
+                lines:
+                  - { code: CASH,  label: Vault cash, accounts: "Vault*",   measure: closingNetDebit }
+                  - { code: MISS,  label: Missing,    accounts: "Nothing*", measure: closingNetDebit }
+                  - { code: TOTAL, label: Total,      sum: [CASH, MISS] }
 
             seeds:
               - name: people
@@ -1429,6 +1449,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 rows:
                   - { id: 1, name: Assets }
                   - { id: 2, name: Cash, Parent: 1 }
+                  # Vault exists for the EntrySheet statement report: only the seeded ledger rows
+                  # below reference it, so no runtime-created Entry can drift its figures.
+                  - { id: 3, name: Vault, Parent: 1 }
+              # The little ledger the EntrySheet statement reads: 100 debit against 40 credit on the
+              # same account - closingNetDebit must net the two BEFORE the line sums (= 60), which is
+              # the arithmetic a string assertion cannot vouch for.
+              - name: ledger-entries
+                entity: Entry
+                rows:
+                  - { id: 901, date: "2026-01-10", debit: 100, Account: 3, Status: 2 }
+                  - { id: 902, date: "2026-01-11", credit: 40, Account: 3, Status: 2 }
             """;
 
     @Autowired
@@ -1807,6 +1838,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the report repository must bind each authored parameter, typed from its target field");
         assertTrue(contentOf("gen/claimsbyunit/api/reports/ClaimsByUnitController.java").contains("@QueryParam(\"minTotal\")"),
                 "the report controller must expose each authored parameter as a query parameter");
+
+        // kind: statement (#6938): the line classification is a generated .view artifact next to the
+        // .report - the selectors and labels live THERE, as data the ViewsSynchronizer provisions,
+        // never inside the generated repository.
+        String entrySheetView = contentOf("EntrySheetLines.view");
+        assertTrue(entrySheetView.contains("\"name\": \"EMISSION_ENTRY_SHEET_LINES\""),
+                "the statement's lines view must be a named database object: " + entrySheetView);
+        assertTrue(entrySheetView.contains("LIKE 'Vault%'"), "the line selectors must live in the view: " + entrySheetView);
+        assertTrue(entrySheetView.contains("CAST(NULL AS VARCHAR(255)) as \\\"ACCOUNT_CODE\\\""),
+                "every line must carry a head arm, so an unmatched line still renders: " + entrySheetView);
+        String entrySheetReport = contentOf("EntrySheet.report");
+        assertTrue(entrySheetReport.contains("FROM \\\"EMISSION_ENTRY_SHEET_LINES\\\""),
+                "the .report query must read the generated view: " + entrySheetReport);
+        assertFalse(entrySheetReport.contains("LIKE"),
+                "the .report query must not re-ship the classification the view holds: " + entrySheetReport);
+        // ... and whatever SQL still reaches the repository is joined from PER-LINE literals - a
+        // multi-kilobyte single-line literal is what overflowed the source parser and took
+        // synchronization down platform-wide (#6936).
+        String entrySheetRepository = contentOf("gen/entrysheet/data/reports/EntrySheetRepository.java");
+        assertTrue(entrySheetRepository.contains("String.join(\"\\n\""),
+                "the repository QUERY must be joined from per-line literals: " + entrySheetRepository);
+        assertTrue(entrySheetRepository.contains("WITH \\\"ACCOUNT_BALANCES\\\""),
+                "the windowed ledger reduction stays in the repository - it binds the date parameters: " + entrySheetRepository);
 
         // The seed's RELATION key (Parent: 1) must survive into the CSV as the FK column - an
         // unknown/mis-cased key is dropped silently and CSVIM then skips the rows.
@@ -2961,13 +3015,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
     /** Layer 2 (the outermost): the published app enforces the features over REST. */
     private void assertRuntimeEnforcement() {
-        // Seeds imported COMPLETELY - both account rows incl. the one with the relation column
+        // Seeds imported COMPLETELY - all three account rows incl. the ones with the relation column
         // (regression: a dropped FK column made CSVIM skip every row with zero errors).
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(API + "/account/AccountController")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("$", hasSize(2)),
+                                                 .body("$", hasSize(3)),
                 30);
 
         // subset (#6878): the seeded value survived CSVIM - both bulletin rows imported, row 1
@@ -3058,6 +3112,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("$", hasSize(0)));
+
+        // kind: statement, end to end (#6938): the published .view artifact was provisioned by the
+        // ViewsSynchronizer AFTER the tables it reads, and the thin repository query joins it - so
+        // correct figures prove the whole split lifecycle, not just the emission tokens. Vault holds
+        // 100 debit against 40 credit: closingNetDebit nets per account BEFORE the line sums (60),
+        // the no-match line still renders (0), and the flattened total adds its leaves' own terms.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(STATEMENT_API + "/EntrySheetController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("[0].Code", equalTo("CASH"))
+                                                 .body("[0].Amount", equalTo(60.0F))
+                                                 .body("[1].Code", equalTo("MISS"))
+                                                 .body("[1].Amount", equalTo(0.0F))
+                                                 .body("[2].Code", equalTo("TOTAL"))
+                                                 .body("[2].Amount", equalTo(60.0F)));
 
         // calculatedActionOnCreate on a to-one relation, end to end: a create that OMITS the FK comes
         // back carrying the one the action resolved. Tariff 2 is the row flagged `base` - not the first

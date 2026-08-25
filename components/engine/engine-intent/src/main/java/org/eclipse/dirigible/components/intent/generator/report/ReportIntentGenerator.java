@@ -231,8 +231,18 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                         IntentNaming.baseName(context));
                 continue;
             }
-            Map<String, Object> document = build(context, report);
+            Emission emission = build(context, report);
+            Map<String, Object> document = emission.document();
             context.writeModelFile(fileName, REPORT_JSON.toJson(document));
+            // The report's structural views ride NEXT TO it: generator-owned .view artifacts the
+            // ViewsSynchronizer provisions per tenant (after the tables - SynchronizersOrder), holding
+            // the parameter-free SQL the .report query reads. Regenerated with the report, scrubbed
+            // with it (.view is an intent-owned extension).
+            for (ViewArtifact view : emission.views()) {
+                if (seenFiles.add(view.fileName())) {
+                    context.writeModelFile(view.fileName(), viewJson(view));
+                }
+            }
             if (mailed.contains(report.getName())) {
                 // The template is written from the columns THIS pass just resolved - the aliases the
                 // query actually SELECTs - so no placeholder in it can be dead. Written once and
@@ -254,10 +264,45 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
 
     /** Test hook: the assembled {@code .report} document for one report. */
     static Map<String, Object> buildForTest(IntentGenerationContext context, ReportIntent report) {
-        return build(context, report);
+        return build(context, report).document();
     }
 
-    private static Map<String, Object> build(IntentGenerationContext context, ReportIntent report) {
+    /**
+     * Test hook: the structural views one report emits, database view name to view SQL, in emission
+     * order. Empty for the kinds whose whole query stays on the {@code .report}.
+     */
+    static Map<String, String> buildViewsForTest(IntentGenerationContext context, ReportIntent report) {
+        Map<String, String> views = new LinkedHashMap<>();
+        for (ViewArtifact view : build(context, report).views()) {
+            views.put(view.viewName(), view.query());
+        }
+        return views;
+    }
+
+    /**
+     * One generated {@code .view} artifact riding with a report: the file it is written to, the
+     * database object it declares, and the parameter-free SQL that object holds.
+     */
+    private record ViewArtifact(String fileName, String viewName, String query) {
+    }
+
+    /** Everything one report emits: its {@code .report} document and the structural views it reads. */
+    private record Emission(Map<String, Object> document, List<ViewArtifact> views) {
+    }
+
+    /**
+     * The {@code .view} file content of one structural view - the shape {@code ViewsSynchronizer}
+     * parses.
+     */
+    private static String viewJson(ViewArtifact view) {
+        Map<String, Object> document = new LinkedHashMap<>();
+        document.put("name", view.viewName());
+        document.put("type", "VIEW");
+        document.put("query", view.query());
+        return REPORT_JSON.toJson(document);
+    }
+
+    private static Emission build(IntentGenerationContext context, ReportIntent report) {
         IntentModel model = context.getModel();
         EntityIntent source = entityByName(model, report.getSource());
         String baseAlias = report.getSource() == null ? report.getName() : report.getSource();
@@ -276,106 +321,90 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         // month(x)/year(x) dimension so the KPI runtime can resolve the `now` token type-aware.
         Map<String, WidgetDimension> dimensionColumns = new LinkedHashMap<>();
         Map<String, Map<String, Object>> measureColumns = new LinkedHashMap<>();
-
-        for (String dimension : report.getDimensions()) {
-            if (dimension == null || dimension.isBlank()) {
-                continue;
-            }
-            // A month(field)/year(field) dimension buckets a date for aggregation: month emits the
-            // sortable YYYYMM integer (EXTRACT(YEAR) * 100 + EXTRACT(MONTH) - e.g. 202607), year the
-            // plain year. EXTRACT is standard SQL (H2, PostgreSQL); SQL Server does not support it -
-            // date-bucketed reports are an H2/PostgreSQL feature for now.
-            Matcher bucket = DATE_BUCKET.matcher(dimension.trim());
-            if (bucket.matches()) {
-                String function = bucket.group(1)
-                                        .toLowerCase(Locale.ROOT);
-                String fieldReference = bucket.group(2)
-                                              .trim();
-                ColumnRef ref = resolve(context, model, source, baseAlias, fieldReference);
-                registerJoin(joins, ref);
-                String expression = "month".equals(function)
-                        ? "(EXTRACT(YEAR FROM " + ref.qualified() + ") * 100 + EXTRACT(MONTH FROM " + ref.qualified() + "))"
-                        : "EXTRACT(YEAR FROM " + ref.qualified() + ")";
-                String alias = humanize(function + " " + fieldReference.replace('.', ' '));
-                Map<String, Object> bucketColumn =
-                        column(ref.tableAlias, alias, ref.physicalColumn, "INTEGER", "NONE", aggregated, expression);
-                columns.add(bucketColumn);
-                dimensionColumns.put(expressionKey(dimension), new WidgetDimension(bucketColumn, function));
-                continue;
-            }
-            // An ageing(field, [30, 60, 90]) dimension buckets a date by how long ago it fell, so the
-            // receivables ageing family (0-30 / 31-60 / 61-90 / 90+) is a report definition instead of
-            // hand SQL. Emitted as a CASE over DATE BOUNDARIES (`field > CURRENT_DATE - INTERVAL 'n'
-            // DAY`), deliberately NOT as day-count arithmetic: `CURRENT_DATE - field` yields an integer
-            // on PostgreSQL but an INTERVAL on H2, so comparing it to a number is not portable - and the
-            // .report query is a static string with no dialect to switch on. The interval form is
-            // standard SQL and verified on both CI databases.
-            Matcher ageing = AGEING_BUCKET.matcher(dimension.trim());
-            if (ageing.matches()) {
-                String fieldReference = ageing.group(1)
-                                              .trim();
-                List<Integer> thresholds = ageingThresholds(ageing.group(2));
-                ColumnRef ageingRef = resolve(context, model, source, baseAlias, fieldReference);
-                registerJoin(joins, ageingRef);
-                String expression = ageingExpression(ageingRef.qualified(), thresholds);
-                String alias = humanize("ageing " + fieldReference.replace('.', ' '));
-                Map<String, Object> ageingColumn =
-                        column(ageingRef.tableAlias, alias, ageingRef.physicalColumn, "VARCHAR", "NONE", aggregated, expression);
-                columns.add(ageingColumn);
-                dimensionColumns.put(expressionKey(dimension), new WidgetDimension(ageingColumn, "ageing"));
-                continue;
-            }
-            ColumnRef ref = resolve(context, model, source, baseAlias, dimension.trim());
-            registerJoin(joins, ref);
-            Map<String, Object> dimensionColumn = column(ref.tableAlias, ref.displayAlias, ref.physicalColumn, ref.reportType, "NONE",
-                    aggregated, ref.translationExpression());
-            columns.add(dimensionColumn);
-            dimensionColumns.put(expressionKey(dimension), new WidgetDimension(dimensionColumn, null));
-        }
-        StatementQuery statementQuery = null;
-        if (balance) {
-            addBalanceMeasures(context, model, source, baseAlias, baseTable, report, joins, columns);
-        } else if (statement) {
-            // The ledger references are resolved (and their joins registered) BEFORE the filter's, so
-            // the emitted FROM introduces the statement's own tables first - the order the balance
-            // report already establishes.
-            statementQuery = prepareStatement(context, model, source, baseAlias, report, joins, columns);
-        } else {
-            for (String measure : report.getMeasures()) {
-                if (measure == null || measure.isBlank()) {
-                    continue;
-                }
-                int before = columns.size();
-                addMeasure(context, model, source, baseAlias, measure.trim(), joins, columns);
-                if (columns.size() > before) {
-                    measureColumns.put(expressionKey(measure), columns.get(before));
-                }
-            }
-        }
+        List<ViewArtifact> views = new ArrayList<>();
 
         warnOnRestrictedColumns(context, model, source, report);
-        String filter = buildWhere(context, model, source, baseAlias, joins, report.getFilter());
-        Map<String, Object> scope = scopeCondition(context, model, source, baseAlias, report, aggregated);
-        // A statement takes the balance window too: its ledger reduction is the balance report's,
-        // and the authored `parameters:` are appended to the same list below.
-        List<Map<String, Object>> parameters = report.isLedgerKind() ? balanceParameters() : new ArrayList<>();
-        List<Map<String, Object>> parameterConditions = parameterConditions(context, model, source, baseAlias, report, joins, parameters);
-        List<Map<String, Object>> conditions = conditions(filter, scope);
-        String where;
-        if (conditions == null) {
-            where = rawWhere(filter, scope, parameterConditions.isEmpty() ? null : predicate(parameterConditions));
-        } else {
-            conditions.addAll(parameterConditions);
-            where = predicate(conditions);
+
+        // The two heavy ledger kinds split their query at the PARAMETER BOUNDARY (dirigible #6938):
+        // everything static - the statement's line classification, the correspondence self-join and
+        // its allocation arithmetic, the report filter and lifecycle scope - is emitted as a generated
+        // .view artifact, and the .report keeps a thin SELECT binding the runtime inputs
+        // (:fromDate/:toDate, the authored parameters, :language) over that view. The giant Java
+        // literal the generated repository used to carry (the #6936 class) stops existing, and the
+        // structure becomes a named database object other reports and external tools can read.
+        CorrespondencePrepared correspondence = null;
+        if (balance && report.hasCorrespondence()) {
+            correspondence = prepareCorrespondence(context, model, source, baseAlias, baseTable, report, aggregated);
         }
-        List<Map<String, Object>> joinRows = joinRows(joins);
-        String query = statementQuery == null ? buildQuery(baseTable, baseAlias, joinRows, columns, where)
-                : statementQuery.sql(baseTable, baseAlias, joinRows, where);
+
+        StatementQuery statementQuery = null;
+        List<Map<String, Object>> parameters;
+        List<Map<String, Object>> conditions;
+        List<Map<String, Object>> joinRows;
+        String query;
+        if (correspondence != null) {
+            columns = correspondence.columns();
+            dimensionColumns = correspondence.dimensionColumns();
+            joinRows = correspondence.joinRows();
+            parameters = correspondence.parameters();
+            conditions = correspondence.conditions();
+            query = correspondence.query();
+            views.add(correspondence.view());
+        } else {
+            for (ResolvedDimension dimension : resolveDimensions(context, model, source, baseAlias, report, joins, aggregated)) {
+                columns.add(dimension.column());
+                dimensionColumns.put(expressionKey(dimension.authored()), new WidgetDimension(dimension.column(), dimension.bucket()));
+            }
+            if (balance) {
+                addBalanceMeasures(context, model, source, baseAlias, baseTable, report, joins, columns);
+            } else if (statement) {
+                // The ledger references are resolved (and their joins registered) BEFORE the filter's, so
+                // the emitted FROM introduces the statement's own tables first - the order the balance
+                // report already establishes.
+                statementQuery = prepareStatement(context, model, source, baseAlias, baseTable, report, joins, columns);
+                views.add(new ViewArtifact(report.getName() + "Lines.view", statementQuery.viewName(), statementQuery.linesViewSql()));
+            } else {
+                for (String measure : report.getMeasures()) {
+                    if (measure == null || measure.isBlank()) {
+                        continue;
+                    }
+                    int before = columns.size();
+                    addMeasure(context, model, source, baseAlias, measure.trim(), joins, columns);
+                    if (columns.size() > before) {
+                        measureColumns.put(expressionKey(measure), columns.get(before));
+                    }
+                }
+            }
+
+            String filter = buildWhere(context, model, source, baseAlias, joins, report.getFilter());
+            Map<String, Object> scope = scopeCondition(context, model, source, baseAlias, report, aggregated);
+            // A statement takes the balance window too: its ledger reduction is the balance report's,
+            // and the authored `parameters:` are appended to the same list below.
+            parameters = report.isLedgerKind() ? balanceParameters() : new ArrayList<>();
+            List<Map<String, Object>> parameterConditions =
+                    parameterConditions(context, model, source, baseAlias, report, joins, parameters);
+            conditions = conditions(filter, scope);
+            String where;
+            if (conditions == null) {
+                where = rawWhere(filter, scope, parameterConditions.isEmpty() ? null : predicate(parameterConditions));
+            } else {
+                conditions.addAll(parameterConditions);
+                where = predicate(conditions);
+            }
+            joinRows = joinRows(joins);
+            query = statementQuery == null ? buildQuery(baseTable, baseAlias, joinRows, columns, where)
+                    : statementQuery.sql(baseTable, baseAlias, joinRows, where);
+        }
 
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("name", report.getName());
         document.put("alias", baseAlias);
-        document.put("table", baseTable);
+        // A correspondence report's base "table" is its own structural view: the ledger, the
+        // self-join and the allocation live inside it, so the .report reads the view like any table -
+        // which is also what keeps the editor's visual builder owning the thin query.
+        document.put("table", correspondence != null ? correspondence.view()
+                                                                     .viewName()
+                : baseTable);
         String tId = translationId(report.getName());
         document.put("tId", tId);
         document.put("label", humanize(report.getName()));
@@ -425,7 +454,79 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             document.put("conditions", conditions);
         }
         document.put("security", security(context, report.getName()));
-        return document;
+        return new Emission(document, views);
+    }
+
+    /**
+     * One authored dimension, resolved: the authored expression, the emitted {@code columns} row, the
+     * reference it reads, and the bucket function ({@code month}/{@code year}/{@code ageing}) when it
+     * is a computed bucket rather than a plain column.
+     */
+    private record ResolvedDimension(String authored, Map<String, Object> column, ColumnRef ref, String bucket) {
+    }
+
+    /**
+     * Resolve the report's dimensions, registering the joins they cross. Kept as a list of
+     * {@link ResolvedDimension} rather than bare column rows because the correspondence split needs the
+     * underlying {@link ColumnRef} again - the translation overlay must stay OUT of the emitted view
+     * (it binds {@code :language}) and be re-applied over the view's base column.
+     */
+    private static List<ResolvedDimension> resolveDimensions(IntentGenerationContext context, IntentModel model, EntityIntent source,
+            String baseAlias, ReportIntent report, Map<String, Join> joins, boolean aggregated) {
+        List<ResolvedDimension> dimensions = new ArrayList<>();
+        for (String dimension : report.getDimensions()) {
+            if (dimension == null || dimension.isBlank()) {
+                continue;
+            }
+            // A month(field)/year(field) dimension buckets a date for aggregation: month emits the
+            // sortable YYYYMM integer (EXTRACT(YEAR) * 100 + EXTRACT(MONTH) - e.g. 202607), year the
+            // plain year. EXTRACT is standard SQL (H2, PostgreSQL); SQL Server does not support it -
+            // date-bucketed reports are an H2/PostgreSQL feature for now.
+            Matcher bucket = DATE_BUCKET.matcher(dimension.trim());
+            if (bucket.matches()) {
+                String function = bucket.group(1)
+                                        .toLowerCase(Locale.ROOT);
+                String fieldReference = bucket.group(2)
+                                              .trim();
+                ColumnRef ref = resolve(context, model, source, baseAlias, fieldReference);
+                registerJoin(joins, ref);
+                String expression = "month".equals(function)
+                        ? "(EXTRACT(YEAR FROM " + ref.qualified() + ") * 100 + EXTRACT(MONTH FROM " + ref.qualified() + "))"
+                        : "EXTRACT(YEAR FROM " + ref.qualified() + ")";
+                String alias = humanize(function + " " + fieldReference.replace('.', ' '));
+                Map<String, Object> bucketColumn =
+                        column(ref.tableAlias, alias, ref.physicalColumn, "INTEGER", "NONE", aggregated, expression);
+                dimensions.add(new ResolvedDimension(dimension, bucketColumn, ref, function));
+                continue;
+            }
+            // An ageing(field, [30, 60, 90]) dimension buckets a date by how long ago it fell, so the
+            // receivables ageing family (0-30 / 31-60 / 61-90 / 90+) is a report definition instead of
+            // hand SQL. Emitted as a CASE over DATE BOUNDARIES (`field > CURRENT_DATE - INTERVAL 'n'
+            // DAY`), deliberately NOT as day-count arithmetic: `CURRENT_DATE - field` yields an integer
+            // on PostgreSQL but an INTERVAL on H2, so comparing it to a number is not portable - and the
+            // .report query is a static string with no dialect to switch on. The interval form is
+            // standard SQL and verified on both CI databases.
+            Matcher ageing = AGEING_BUCKET.matcher(dimension.trim());
+            if (ageing.matches()) {
+                String fieldReference = ageing.group(1)
+                                              .trim();
+                List<Integer> thresholds = ageingThresholds(ageing.group(2));
+                ColumnRef ageingRef = resolve(context, model, source, baseAlias, fieldReference);
+                registerJoin(joins, ageingRef);
+                String expression = ageingExpression(ageingRef.qualified(), thresholds);
+                String alias = humanize("ageing " + fieldReference.replace('.', ' '));
+                Map<String, Object> ageingColumn =
+                        column(ageingRef.tableAlias, alias, ageingRef.physicalColumn, "VARCHAR", "NONE", aggregated, expression);
+                dimensions.add(new ResolvedDimension(dimension, ageingColumn, ageingRef, "ageing"));
+                continue;
+            }
+            ColumnRef ref = resolve(context, model, source, baseAlias, dimension.trim());
+            registerJoin(joins, ref);
+            Map<String, Object> dimensionColumn = column(ref.tableAlias, ref.displayAlias, ref.physicalColumn, ref.reportType, "NONE",
+                    aggregated, ref.translationExpression());
+            dimensions.add(new ResolvedDimension(dimension, dimensionColumn, ref, null));
+        }
+        return dimensions;
     }
 
     private static void addMeasure(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
@@ -536,9 +637,13 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         // The correspondence axis (the general ledger's "in correspondence with"): the counter-side
         // lines of the same document become an extra grouping dimension, and each amount is allocated
         // across them. It goes in BEFORE the totals so the dimension column precedes them in the
-        // SELECT, and its self-join precedes the joins its bucket path hangs off.
-        String correspondent = correspondenceAxis(context, model, source, baseAlias, baseTable, report, debit, credit, joins, columns);
-        if (correspondent != null) {
+        // SELECT, and its self-join precedes the joins its bucket path hangs off. (The axis normally
+        // takes the view split in prepareCorrespondence and never reaches this flat emission - this
+        // path still handles it for the unresolvable-document fallback, which only warns.)
+        CorrespondenceAxis axis = correspondenceAxis(context, model, source, baseAlias, baseTable, report, debit, credit, joins);
+        if (axis != null) {
+            columns.add(axis.bucketColumn());
+            String correspondent = axis.correspondentAlias();
             String counterDebit = "COALESCE(" + correspondent + "." + quote(debit.physicalColumn) + ", 0)";
             String counterCredit = "COALESCE(" + correspondent + "." + quote(credit.physicalColumn) + ", 0)";
             String documentDebit = documentTotal(source, baseAlias, baseTable, report, debit);
@@ -575,12 +680,11 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * report whose whole promise is that it reconciles with the plain balance. Such a line keeps one
      * row with an empty bucket, and {@link #allocated} gives it the full amount.
      *
-     * @return the alias of the counter-side line, or null when the report declares no correspondence
-     *         (or its document relation cannot be resolved)
+     * @return the resolved axis, or null when the report declares no correspondence (or its document
+     *         relation cannot be resolved)
      */
-    private static String correspondenceAxis(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
-            String baseTable, ReportIntent report, ColumnRef debit, ColumnRef credit, Map<String, Join> joins,
-            List<Map<String, Object>> columns) {
+    private static CorrespondenceAxis correspondenceAxis(IntentGenerationContext context, IntentModel model, EntityIntent source,
+            String baseAlias, String baseTable, ReportIntent report, ColumnRef debit, ColumnRef credit, Map<String, Join> joins) {
         if (!report.hasCorrespondence()) {
             return null;
         }
@@ -604,9 +708,248 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                             .trim();
         ColumnRef bucket = resolve(context, model, source, correspondent, path, CORRESPONDENT_SUFFIX, CORRESPONDENCE_JOIN_TYPE);
         registerJoin(joins, bucket);
-        columns.add(column(bucket.tableAlias, humanize("correspondent " + path.replace('.', ' ')), bucket.physicalColumn, bucket.reportType,
-                "NONE", true, bucket.translationExpression()));
-        return correspondent;
+        Map<String, Object> bucketColumn = column(bucket.tableAlias, humanize("correspondent " + path.replace('.', ' ')),
+                bucket.physicalColumn, bucket.reportType, "NONE", true, bucket.translationExpression());
+        return new CorrespondenceAxis(correspondent, bucket, bucketColumn);
+    }
+
+    /**
+     * The resolved correspondence axis: the counter-side line's alias, the bucket dimension it groups
+     * by, and the bucket's emitted column row.
+     */
+    private record CorrespondenceAxis(String correspondentAlias, ColumnRef bucket, Map<String, Object> bucketColumn) {
+    }
+
+    /** The entry-date column every generated correspondence view exposes - the window's driver. */
+    private static final String VIEW_ENTRY_DATE = "ENTRY_DATE";
+
+    /** The allocated line-level amounts every generated correspondence view exposes. */
+    private static final String VIEW_ALLOCATED_DEBIT = "ALLOCATED_DEBIT";
+    private static final String VIEW_ALLOCATED_CREDIT = "ALLOCATED_CREDIT";
+
+    /** The suffix of a view column exposing the key a translated dimension's language join matches. */
+    private static final String LANGUAGE_KEY_SUFFIX = "_LANGUAGE_KEY";
+
+    /** The prefix of a view column exposing an authored parameter's comparison target. */
+    private static final String PARAMETER_COLUMN_PREFIX = "PARAM_";
+
+    /**
+     * Everything the correspondence split hands to the document assembly: the emitted column rows, the
+     * (language-only) join rows, the declared parameters and their conditions, the thin query, the view
+     * artifact, and the widget dimension index.
+     */
+    private record CorrespondencePrepared(List<Map<String, Object>> columns, List<Map<String, Object>> joinRows,
+            List<Map<String, Object>> parameters, List<Map<String, Object>> conditions, String query, ViewArtifact view,
+            Map<String, WidgetDimension> dimensionColumns) {
+    }
+
+    /**
+     * Split a correspondence balance report at the parameter boundary (dirigible #6938).
+     *
+     * <p>
+     * Everything static - the ledger joins, the counter-side self-join, the proportional allocation
+     * with its correlated document totals, the report filter and the lifecycle scope - is emitted as
+     * the {@code <REPORT>_CORRESPONDENCE} view of ALLOCATED LINE-LEVEL rows, with the entry date as a
+     * plain column. The {@code .report} keeps a thin aggregation over that view: the six windowed sums
+     * binding {@code :fromDate}/{@code :toDate}, the translation overlay binding {@code :language}
+     * (re-keyed onto view-exposed base value + key columns, since a view cannot take a named
+     * parameter), and the authored parameters' comparisons over view-exposed target columns. The thin
+     * query is built by the same {@link #buildQuery} as every plain report, so the editor's visual
+     * builder still owns it.
+     *
+     * @return the prepared split, or null when the axis cannot resolve - the flat emission then runs
+     *         and warns, exactly as before
+     */
+    private static CorrespondencePrepared prepareCorrespondence(IntentGenerationContext context, IntentModel model, EntityIntent source,
+            String baseAlias, String baseTable, ReportIntent report, boolean aggregated) {
+        if (source == null || documentColumn(source, report) == null) {
+            return null;
+        }
+        Map<String, Join> viewJoins = new LinkedHashMap<>();
+        List<ResolvedDimension> dimensions =
+                new ArrayList<>(resolveDimensions(context, model, source, baseAlias, report, viewJoins, aggregated));
+
+        ColumnRef date = resolve(context, model, source, baseAlias, report.getDate()
+                                                                          .trim());
+        registerJoin(viewJoins, date);
+        ColumnRef debit = resolve(context, model, source, baseAlias, report.getDebit()
+                                                                           .trim());
+        registerJoin(viewJoins, debit);
+        ColumnRef credit = resolve(context, model, source, baseAlias, report.getCredit()
+                                                                            .trim());
+        registerJoin(viewJoins, credit);
+
+        CorrespondenceAxis axis = correspondenceAxis(context, model, source, baseAlias, baseTable, report, debit, credit, viewJoins);
+        if (axis == null) {
+            return null;
+        }
+        // The bucket is one more grouping dimension - after the authored ones, before the totals. It
+        // has no authored expression, so it never resolves a widget pin.
+        dimensions.add(new ResolvedDimension(null, axis.bucketColumn(), axis.bucket(), null));
+
+        String correspondent = axis.correspondentAlias();
+        String debitAmount = "COALESCE(" + debit.qualified() + ", 0)";
+        String creditAmount = "COALESCE(" + credit.qualified() + ", 0)";
+        String counterDebit = "COALESCE(" + correspondent + "." + quote(debit.physicalColumn) + ", 0)";
+        String counterCredit = "COALESCE(" + correspondent + "." + quote(credit.physicalColumn) + ", 0)";
+        // A debit line corresponds with the CREDIT side of its document, so its share of a bucket is
+        // that bucket's credit over the document's total credit - and vice versa.
+        String allocatedDebit = allocated(debitAmount, counterCredit, documentTotal(source, baseAlias, baseTable, report, credit));
+        String allocatedCredit = allocated(creditAmount, counterDebit, documentTotal(source, baseAlias, baseTable, report, debit));
+
+        List<String> viewSelects = new ArrayList<>();
+        List<Map<String, Object>> columns = new ArrayList<>();
+        Map<String, WidgetDimension> dimensionColumns = new LinkedHashMap<>();
+        Map<String, Join> repoJoins = new LinkedHashMap<>();
+        Map<String, String> exposedLanguageKeys = new LinkedHashMap<>();
+        // The fixed structural columns claim their names first, so a dimension that happens to
+        // humanize to one of them takes a suffixed name instead of colliding.
+        Set<String> usedNames = new LinkedHashSet<>(List.of(VIEW_ENTRY_DATE, VIEW_ALLOCATED_DEBIT, VIEW_ALLOCATED_CREDIT));
+
+        for (ResolvedDimension dimension : dimensions) {
+            Map<String, Object> emitted = dimension.column();
+            String alias = (String) emitted.get("alias");
+            String viewColumn = uniqueName(usedNames, columnName(alias));
+            ColumnRef ref = dimension.ref();
+            String repoExpression = null;
+            if (ref.translationExpression() != null) {
+                // The view exposes the BASE value plus the key the translation joins on; the .report
+                // re-applies the overlay over them, so :language stays where named parameters belong.
+                viewSelects.add(ref.qualified() + " as " + quote(viewColumn));
+                String keyColumn = exposedLanguageKeys.computeIfAbsent(ref.languageKey, key -> {
+                    String name = uniqueName(usedNames, viewColumn + LANGUAGE_KEY_SUFFIX);
+                    viewSelects.add(key + " as " + quote(name));
+                    return name;
+                });
+                String languageAlias = ref.tableAlias + LANGUAGE_TABLE_SUFFIX;
+                repoJoins.putIfAbsent(languageAlias,
+                        new Join(ref.languageTable, languageAlias,
+                                languageAlias + "." + quote(LANGUAGE_ID_COLUMN) + " = " + baseAlias + "." + quote(keyColumn) + " AND "
+                                        + languageAlias + "." + quote(LANGUAGE_CODE_COLUMN) + " = " + LANGUAGE_PARAMETER,
+                                LANGUAGE_JOIN_TYPE, true));
+                repoExpression =
+                        "COALESCE(" + languageAlias + "." + quote(ref.languageColumn) + ", " + baseAlias + "." + quote(viewColumn) + ")";
+            } else {
+                // A computed bucket (month/year/ageing) is parameter-free, so the computation itself
+                // moves into the view and the .report groups by the plain column.
+                String expression = (String) emitted.get("expression");
+                viewSelects.add((expression != null ? expression : ref.qualified()) + " as " + quote(viewColumn));
+            }
+            Map<String, Object> column = column(baseAlias, alias, viewColumn, (String) emitted.get("type"), "NONE", true, repoExpression);
+            columns.add(column);
+            if (dimension.authored() != null) {
+                dimensionColumns.put(expressionKey(dimension.authored()), new WidgetDimension(column, dimension.bucket()));
+            }
+        }
+
+        viewSelects.add(date.qualified() + " as " + quote(VIEW_ENTRY_DATE));
+        viewSelects.add(allocatedDebit + " as " + quote(VIEW_ALLOCATED_DEBIT));
+        viewSelects.add(allocatedCredit + " as " + quote(VIEW_ALLOCATED_CREDIT));
+
+        String dateColumn = baseAlias + "." + quote(VIEW_ENTRY_DATE);
+        String debitColumn = baseAlias + "." + quote(VIEW_ALLOCATED_DEBIT);
+        String creditColumn = baseAlias + "." + quote(VIEW_ALLOCATED_CREDIT);
+        String opening = dateColumn + " < :fromDate";
+        String period = dateColumn + " >= :fromDate AND " + dateColumn + " <= :toDate";
+        String closing = dateColumn + " <= :toDate";
+        columns.add(windowColumn(baseAlias, VIEW_ALLOCATED_DEBIT, opening, debitColumn, "Opening Debit"));
+        columns.add(windowColumn(baseAlias, VIEW_ALLOCATED_CREDIT, opening, creditColumn, "Opening Credit"));
+        columns.add(windowColumn(baseAlias, VIEW_ALLOCATED_DEBIT, period, debitColumn, "Debit"));
+        columns.add(windowColumn(baseAlias, VIEW_ALLOCATED_CREDIT, period, creditColumn, "Credit"));
+        columns.add(windowColumn(baseAlias, VIEW_ALLOCATED_DEBIT, closing, debitColumn, "Closing Debit"));
+        columns.add(windowColumn(baseAlias, VIEW_ALLOCATED_CREDIT, closing, creditColumn, "Closing Credit"));
+
+        List<Map<String, Object>> parameters = balanceParameters();
+        List<Map<String, Object>> conditions = new ArrayList<>();
+        for (ReportParameterIntent parameter : report.getParameters()) {
+            String name = parameter.getName();
+            String target = parameter.getNormalizedTarget();
+            String operation = SQL_OPERATIONS.get(parameter.getNormalizedOp());
+            if (name == null || name.isBlank() || target == null || operation == null) {
+                LOGGER.warn("Skipping incomplete parameter [{}] of report [{}]", name, report.getName());
+                continue;
+            }
+            ColumnRef ref = resolve(context, model, source, baseAlias, target);
+            // Only the entity join: the comparison reads the base value, like parameterConditions.
+            if (ref.join != null) {
+                viewJoins.putIfAbsent(ref.join.alias, ref.join);
+            }
+            boolean timestamp = "TIMESTAMP".equals(ref.reportType);
+            String type = timestamp ? DATE_TYPE : ref.reportType;
+            String left = timestamp ? "CAST(" + ref.qualified() + " AS DATE)" : ref.qualified();
+            if (ref.nullable) {
+                left = "COALESCE(" + left + ", " + emptyLiteral(type, operation) + ")";
+            }
+            // The whole left side is static, so it is baked into the view; the .report compares the
+            // exposed column against the named marker - a plain condition row the builder owns.
+            String viewColumn = uniqueName(usedNames, PARAMETER_COLUMN_PREFIX + IntentNaming.upperSnake(name.trim()));
+            viewSelects.add(left + " as " + quote(viewColumn));
+            String marker = ":" + name.trim();
+            String right = LIKE_OPERATION.equals(operation) ? "'%' || " + marker + " || '%'" : marker;
+            conditions.add(condition(baseAlias + "." + quote(viewColumn), operation, right));
+            parameters.add(reportParameter(name.trim(), type, initialValue(parameter, type, operation)));
+        }
+
+        // The report filter and the lifecycle scope are static predicates over the base tables, so
+        // they restrict the view itself - the .report's WHERE keeps only the parameter bindings.
+        String filter = buildWhere(context, model, source, baseAlias, viewJoins, report.getFilter());
+        Map<String, Object> scope = scopeCondition(context, model, source, baseAlias, report, aggregated);
+        List<Map<String, Object>> staticConditions = conditions(filter, scope);
+        String viewWhere = staticConditions == null ? rawWhere(filter, scope, null)
+                : (staticConditions.isEmpty() ? null : predicate(staticConditions));
+
+        StringBuilder view = new StringBuilder("SELECT ").append(String.join(", ", viewSelects));
+        view.append("\nFROM ")
+            .append(quote(baseTable))
+            .append(" as ")
+            .append(baseAlias);
+        for (Join join : viewJoins.values()) {
+            if (join.language) {
+                // A view cannot bind :language - the overlay is re-keyed onto the view above.
+                continue;
+            }
+            view.append('\n')
+                .append(join.type)
+                .append(" JOIN ")
+                .append(quote(join.table))
+                .append(" as ")
+                .append(join.alias)
+                .append(" ON ")
+                .append(join.on);
+        }
+        if (viewWhere != null && !viewWhere.isBlank()) {
+            view.append("\nWHERE ")
+                .append(viewWhere);
+        }
+
+        String viewName = IntentNaming.tableName(context, report.getName()) + "_CORRESPONDENCE";
+        List<Map<String, Object>> joinRows = joinRows(repoJoins);
+        String where = conditions.isEmpty() ? null : predicate(conditions);
+        String query = buildQuery(viewName, baseAlias, joinRows, columns, where);
+        ViewArtifact artifact = new ViewArtifact(report.getName() + "Correspondence.view", viewName, view.toString());
+        return new CorrespondencePrepared(columns, joinRows, parameters, conditions, query, artifact, dimensionColumns);
+    }
+
+    /** One of the six windowed totals over the view's allocated amounts. */
+    private static Map<String, Object> windowColumn(String baseAlias, String name, String window, String amount, String alias) {
+        return column(baseAlias, alias, name, "DECIMAL", "SUM", false, "CASE WHEN " + window + " THEN " + amount + " ELSE 0 END");
+    }
+
+    /** A view column name from a display alias: upper-cased, spaces to underscores. */
+    private static String columnName(String alias) {
+        return alias.trim()
+                    .toUpperCase(Locale.ROOT)
+                    .replace(' ', '_');
+    }
+
+    /** The candidate name, numbered until unused; the winner is recorded as used. */
+    private static String uniqueName(Set<String> used, String candidate) {
+        String name = candidate;
+        int counter = 2;
+        while (!used.add(name)) {
+            name = candidate + "_" + counter++;
+        }
+        return name;
     }
 
     /**
@@ -814,13 +1157,14 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * @param model the intent model
      * @param source the report's source entity
      * @param baseAlias the base-table alias
+     * @param baseTable the physical source table - the account enumeration fallback of the lines view
      * @param report the statement report
      * @param joins the joins collected so far, added to
      * @param columns the emitted columns, appended to
      * @return everything the query assembly needs afterwards
      */
     private static StatementQuery prepareStatement(IntentGenerationContext context, IntentModel model, EntityIntent source,
-            String baseAlias, ReportIntent report, Map<String, Join> joins, List<Map<String, Object>> columns) {
+            String baseAlias, String baseTable, ReportIntent report, Map<String, Join> joins, List<Map<String, Object>> columns) {
         ColumnRef date = resolve(context, model, source, baseAlias, report.getDate()
                                                                           .trim());
         registerJoin(joins, date);
@@ -841,7 +1185,13 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         columns.add(column(STATEMENT_LINES_ALIAS, "Code", "Code", "CHARACTER VARYING", "NONE", false));
         columns.add(column(STATEMENT_LINES_ALIAS, "Label", "Label", "CHARACTER VARYING", "NONE", false));
         columns.add(column(STATEMENT_LINES_ALIAS, "Amount", "Amount", "DECIMAL", "NONE", false));
-        return new StatementQuery(account.qualified(), balanceSums(date, debit, credit), statementLines(report));
+        // The lines view enumerates account codes from the nomenclature the account path points at -
+        // classification is a fact about accounts, not about postings - or from the source table
+        // itself when the code is a plain field on it.
+        AccountSource accounts = account.join != null ? new AccountSource(account.join.table, account.tableAlias, account.physicalColumn)
+                : new AccountSource(baseTable, account.tableAlias, account.physicalColumn);
+        String viewName = IntentNaming.tableName(context, report.getName()) + "_LINES";
+        return new StatementQuery(account.qualified(), balanceSums(date, debit, credit), statementLines(report), viewName, accounts);
     }
 
     /**
@@ -868,12 +1218,12 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The statement's lines, each resolved to the amount expression it selects from the per-account
+     * The statement's lines, each flattened to the signed account terms it selects from the per-account
      * balances. Computed lines are FLATTENED here - a line summing other lines is replaced by their own
-     * account terms, recursively - so every emitted line is one aggregate over the same subquery and no
-     * line has to be evaluated before another. The parser has already rejected a cycle and an unknown
-     * reference; the walk still carries its own path guard, because a cycle reaching the generator
-     * would recurse until the stack ran out rather than report anything.
+     * account terms, recursively - so every emitted line is a plain aggregation over the same rows and
+     * no line has to be evaluated before another. The parser has already rejected a cycle and an
+     * unknown reference; the walk still carries its own path guard, because a cycle reaching the
+     * generator would recurse until the stack ran out rather than report anything.
      *
      * @param report the statement report
      * @return the lines, in the authored order
@@ -890,14 +1240,13 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
         List<StatementLine> lines = new ArrayList<>();
         for (StatementLineIntent line : report.getLines()) {
-            List<String> terms = new ArrayList<>();
+            List<StatementTerm> terms = new ArrayList<>();
             collectStatementTerms(line, 1, byCode, terms, new LinkedHashSet<>());
-            String amount = terms.isEmpty() ? "0" : String.join(" ", terms);
             lines.add(new StatementLine(line.getCode()
                                             .trim(),
                     line.getLabel()
                         .trim(),
-                    amount));
+                    terms));
         }
         return lines;
     }
@@ -909,11 +1258,11 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * @param line the line to flatten
      * @param sign {@code 1} when the line is added, {@code -1} when it is subtracted
      * @param byCode the statement's lines by code
-     * @param terms the emitted terms, appended to - each carrying its own leading sign
+     * @param terms the collected terms, appended to
      * @param path the codes on the current walk, guarding against a cycle
      */
     private static void collectStatementTerms(StatementLineIntent line, int sign, Map<String, StatementLineIntent> byCode,
-            List<String> terms, Set<String> path) {
+            List<StatementTerm> terms, Set<String> path) {
         if (line == null) {
             return;
         }
@@ -931,8 +1280,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             StatementSupport.Selector selector = StatementSupport.selector(line.getAccounts(), reported, "");
             StatementSupport.Measure measure = StatementSupport.measure(line.getMeasure());
             if (selector != null && measure != null) {
-                terms.add((terms.isEmpty() && sign > 0 ? "" : (sign > 0 ? "+ " : "- ")) + "COALESCE(SUM(CASE WHEN "
-                        + selector.sql(ACCOUNT_CODE) + " THEN " + measure.sql() + " ELSE 0 END), 0)");
+                terms.add(new StatementTerm(sign, selector, measure));
             }
         } else {
             for (String reference : line.getSum()) {
@@ -951,29 +1299,59 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         return value == null ? null : value.trim();
     }
 
-    /** One emitted statement line: its code, its caption and the amount it selects. */
-    private record StatementLine(String code, String label, String amount) {
+    /**
+     * One flattened statement term: the sign it enters its line with, the accounts it selects, and the
+     * per-account balance it takes.
+     */
+    private record StatementTerm(int sign, StatementSupport.Selector selector, StatementSupport.Measure measure) {
+    }
+
+    /** One emitted statement line: its code, its caption and its flattened terms. */
+    private record StatementLine(String code, String label, List<StatementTerm> terms) {
     }
 
     /**
-     * A statement's query: the per-account balances it aggregates and the fixed lines it renders from
-     * them.
+     * Where the lines view enumerates account codes from: the physical table, the SQL alias it is read
+     * under, and the code column.
+     */
+    private record AccountSource(String table, String alias, String column) {
+    }
+
+    /**
+     * A statement's emission: the per-account balances the repository query aggregates, the declared
+     * lines, and the generated lines view carrying their classification.
+     *
+     * <p>
+     * The split is at the parameter boundary (dirigible #6938): the line arms with their account
+     * selectors are pure static classification and become the {@code <REPORT>_LINES} view -
+     * {@link #linesViewSql()} - while the windowed ledger reduction, which binds
+     * {@code :fromDate}/{@code :toDate} and the authored parameters, stays on the {@code .report} as
+     * the thin query {@link #sql} builds. A named parameter cannot live in a database view, which is
+     * why the boundary is exactly here.
      *
      * @param accountColumn the qualified account-code column of the source
      * @param balanceSums the six windowed per-account sums, as select terms
      * @param lines the statement's lines, already flattened
+     * @param viewName the database name of the generated lines view
+     * @param accounts where the lines view enumerates account codes from
      */
-    private record StatementQuery(String accountColumn, List<String> balanceSums, List<StatementLine> lines) {
+    private record StatementQuery(String accountColumn, List<String> balanceSums, List<StatementLine> lines, String viewName,
+            AccountSource accounts) {
 
         /**
-         * The statement SQL: one subquery reducing the ledger to a balance per account, then one row per
-         * declared line reading it.
+         * The thin statement SQL: one subquery reducing the ledger to a balance per account, joined to the
+         * generated lines view that classifies each account into the declared lines.
          *
          * <p>
          * The per-account level is not an optimisation, it is the semantics: a {@code Net} measure nets an
          * account's two sides before the line sums it, so the reduction has to happen per account and
          * exactly once. It is a common table expression for that reason - repeating the subquery per line
          * would re-scan the ledger once per statement line.
+         *
+         * <p>
+         * The join is LEFT from the view: every declared line owns a parameter-free head row there, so a
+         * line whose accounts have no postings - or whose selector matches no account at all - still
+         * renders, with 0, and the count wrap still sees every line.
          *
          * @param baseTable the physical source table
          * @param baseAlias the source alias
@@ -1009,42 +1387,133 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 sql.append("\nWHERE ")
                    .append(where);
             }
+            // The line's ordinal is what ORDERs the statement: a statement's rows are a structure,
+            // and its codes sort lexicographically wrong (A.II before A.X). It is grouped by but not
+            // projected - the reader gets Code / Label / Amount.
             sql.append("\nGROUP BY ")
                .append(accountColumn)
                .append("\n)\nSELECT ")
                .append(STATEMENT_LINES)
-               .append(".\"Code\" as \"Code\", ")
+               .append(".\"LINE_CODE\" as \"Code\", ")
                .append(STATEMENT_LINES)
-               .append(".\"Label\" as \"Label\", ")
+               .append(".\"LINE_LABEL\" as \"Label\", COALESCE(SUM(")
                .append(STATEMENT_LINES)
-               .append(".\"Amount\" as \"Amount\"\nFROM (");
-            for (int ordinal = 0; ordinal < lines.size(); ordinal++) {
-                StatementLine line = lines.get(ordinal);
-                if (ordinal > 0) {
-                    sql.append("\nUNION ALL");
+               .append(".\"TERM_SIGN\" * ")
+               .append(measureDecode())
+               .append("), 0) as \"Amount\"\nFROM ")
+               .append(quote(viewName))
+               .append(" as ")
+               .append(STATEMENT_LINES)
+               .append("\nLEFT JOIN ")
+               .append(ACCOUNT_BALANCES)
+               .append(" ON ")
+               .append(ACCOUNT_BALANCES)
+               .append(".")
+               .append(ACCOUNT_CODE)
+               .append(" = ")
+               .append(STATEMENT_LINES)
+               .append(".\"ACCOUNT_CODE\"")
+               .append("\nGROUP BY ")
+               .append(STATEMENT_LINES)
+               .append(".\"LINE_ORDINAL\", ")
+               .append(STATEMENT_LINES)
+               .append(".\"LINE_CODE\", ")
+               .append(STATEMENT_LINES)
+               .append(".\"LINE_LABEL\"")
+               .append("\nORDER BY ")
+               .append(STATEMENT_LINES)
+               .append(".\"LINE_ORDINAL\"");
+            return sql.toString();
+        }
+
+        /**
+         * The balance each view row takes from the joined per-account sums, decoded from the row's
+         * {@code TERM_MEASURE}. Only the measures the statement actually uses get a branch; a head row
+         * (NULL measure) and an account the window's ledger never saw both fall out as 0 or NULL, which the
+         * surrounding SUM ignores.
+         */
+        private String measureDecode() {
+            Map<String, String> used = new LinkedHashMap<>();
+            for (StatementLine line : lines) {
+                for (StatementTerm term : line.terms()) {
+                    used.putIfAbsent(term.measure()
+                                         .authored(),
+                            term.measure()
+                                .sql());
                 }
-                // The line's ordinal is what ORDERs the statement: a statement's rows are a structure,
-                // and its codes sort lexicographically wrong (A.II before A.X). It is selected but not
-                // projected - the reader gets Code / Label / Amount.
-                // Every literal is CAST, so the union's own column types are the declared ones rather
-                // than whatever the first branch's literal happened to be long enough for.
-                sql.append("\nSELECT ")
-                   .append(ordinal + 1)
-                   .append(" as \"Ordinal\", CAST('")
-                   .append(line.code())
-                   .append("' AS VARCHAR(255)) as \"Code\", CAST('")
-                   .append(line.label())
-                   .append("' AS VARCHAR(4000)) as \"Label\", ")
-                   .append(line.amount())
-                   .append(" as \"Amount\"\nFROM ")
-                   .append(ACCOUNT_BALANCES);
             }
-            return sql.append("\n) as ")
-                      .append(STATEMENT_LINES)
-                      .append("\nORDER BY ")
-                      .append(STATEMENT_LINES)
-                      .append(".\"Ordinal\"")
-                      .toString();
+            if (used.isEmpty()) {
+                return "0";
+            }
+            StringBuilder decode = new StringBuilder("CASE ").append(STATEMENT_LINES)
+                                                             .append(".\"TERM_MEASURE\"");
+            used.forEach((authored, sql) -> decode.append(" WHEN ")
+                                                  .append(sqlLiteral(authored))
+                                                  .append(" THEN ")
+                                                  .append(sql));
+            return decode.append(" ELSE 0 END")
+                         .toString();
+        }
+
+        /**
+         * The lines view: per declared line one parameter-free HEAD arm (so the line renders even when
+         * nothing matches its selector) plus one arm per flattened term, classifying every account code the
+         * selector matches. All the size of a statement lives here - as data the database plans as a named
+         * object, not as a Java literal any source scanner has to chew through (#6936).
+         */
+        String linesViewSql() {
+            String codeColumn = accounts.alias() + "." + quote(accounts.column());
+            StringBuilder sql = new StringBuilder();
+            for (int index = 0; index < lines.size(); index++) {
+                StatementLine line = lines.get(index);
+                int ordinal = index + 1;
+                if (index > 0) {
+                    sql.append("\nUNION ALL\n");
+                }
+                sql.append(lineArm(ordinal, line, "0", "CAST(NULL AS VARCHAR(255))", "CAST(NULL AS VARCHAR(255))", null, null));
+                for (StatementTerm term : line.terms()) {
+                    sql.append("\nUNION ALL\n")
+                       .append(lineArm(ordinal, line, String.valueOf(term.sign()), "CAST(" + sqlLiteral(term.measure()
+                                                                                                            .authored())
+                               + " AS VARCHAR(255))", codeColumn, quote(accounts.table()) + " as " + accounts.alias(),
+                               term.selector()
+                                   .sql(codeColumn)));
+                }
+            }
+            return sql.toString();
+        }
+
+        /**
+         * One arm of the lines view. Every literal is CAST, so the union's own column types are the
+         * declared ones rather than whatever the first arm's literal happened to be long enough for; a term
+         * arm selects DISTINCT, so a duplicated account code in the nomenclature cannot double its balance
+         * into the line.
+         */
+        private String lineArm(int ordinal, StatementLine line, String sign, String measure, String accountCode, String from,
+                String where) {
+            StringBuilder arm = new StringBuilder("SELECT ");
+            if (from != null) {
+                arm.append("DISTINCT ");
+            }
+            arm.append(ordinal)
+               .append(" as \"LINE_ORDINAL\", CAST(")
+               .append(sqlLiteral(line.code()))
+               .append(" AS VARCHAR(255)) as \"LINE_CODE\", CAST(")
+               .append(sqlLiteral(line.label()))
+               .append(" AS VARCHAR(4000)) as \"LINE_LABEL\", ")
+               .append(sign)
+               .append(" as \"TERM_SIGN\", ")
+               .append(measure)
+               .append(" as \"TERM_MEASURE\", ")
+               .append(accountCode)
+               .append(" as \"ACCOUNT_CODE\"");
+            if (from != null) {
+                arm.append("\nFROM ")
+                   .append(from)
+                   .append("\nWHERE ")
+                   .append(where);
+            }
+            return arm.toString();
         }
     }
 
@@ -1257,10 +1726,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
         String alias = ref.tableAlias + LANGUAGE_TABLE_SUFFIX;
         ref.languageColumn = property;
-        ref.languageJoin = new Join(
-                table + LANGUAGE_TABLE_SUFFIX, alias, alias + "." + quote(LANGUAGE_ID_COLUMN) + " = " + ref.tableAlias + "."
-                        + quote(keyColumn) + " AND " + alias + "." + quote(LANGUAGE_CODE_COLUMN) + " = " + LANGUAGE_PARAMETER,
-                LANGUAGE_JOIN_TYPE);
+        ref.languageTable = table + LANGUAGE_TABLE_SUFFIX;
+        ref.languageKey = ref.tableAlias + "." + quote(keyColumn);
+        ref.languageJoin = new Join(ref.languageTable, alias, alias + "." + quote(LANGUAGE_ID_COLUMN) + " = " + ref.languageKey + " AND "
+                + alias + "." + quote(LANGUAGE_CODE_COLUMN) + " = " + LANGUAGE_PARAMETER, LANGUAGE_JOIN_TYPE, true);
     }
 
     /**
@@ -1851,6 +2320,11 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         return "\"" + identifier + "\"";
     }
 
+    /** A string as a SQL literal - single quotes doubled, so an authored label cannot break the SQL. */
+    private static String sqlLiteral(String value) {
+        return "'" + value.replace("'", "''") + "'";
+    }
+
     private static EntityIntent entityByName(IntentModel model, String name) {
         if (name == null) {
             return null;
@@ -1985,6 +2459,15 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         private Join join;
         private Join languageJoin;
         private String languageColumn;
+        /**
+         * The physical language table, for a translatable column - {@code
+         *
+        <TABLE>
+         * _LANG}.
+         */
+        private String languageTable;
+        /** The qualified base key the language join matches on - {@code <alias>."<KEY>"}. */
+        private String languageKey;
 
         private String qualified() {
             return tableAlias + "." + quote(physicalColumn);
@@ -2009,16 +2492,27 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         private final String alias;
         private final String on;
         private final String type;
+        /**
+         * Whether this is a translation-table join. Its ON binds {@code :language}, so it is the one join
+         * kind that must never be emitted into a generated view - a database view cannot take a named
+         * parameter.
+         */
+        private final boolean language;
 
         private Join(String table, String alias, String on) {
             this(table, alias, on, JOIN_TYPE);
         }
 
         private Join(String table, String alias, String on, String type) {
+            this(table, alias, on, type, false);
+        }
+
+        private Join(String table, String alias, String on, String type, boolean language) {
             this.table = table;
             this.alias = alias;
             this.on = on;
             this.type = type;
+            this.language = language;
         }
     }
 }

@@ -273,6 +273,12 @@ class ReportEditorRoundTripTest {
                                                                                     .get(0));
     }
 
+    private static Map<String, String> ledgerViews(String extra) {
+        IntentModel model = IntentParser.parse(LEDGER.replace("#EXTRA#", extra));
+        return ReportIntentGenerator.buildViewsForTest(TestContexts.context(model), model.getReports()
+                                                                                         .get(0));
+    }
+
     /** The balance windows are expressions too, so the accounting reports round-trip as well. */
     @Test
     void aBalanceReportRoundTrips() {
@@ -282,32 +288,26 @@ class ReportEditorRoundTripTest {
     }
 
     /**
-     * The general ledger's correspondence axis is the one report shape that joins a table to ITSELF and
-     * hangs a second copy of a dimension's join off that - all of it through the same {@code joins}
-     * rows and column {@code expression}s, so the builder still owns the query.
+     * The general ledger's correspondence axis joins a table to ITSELF and hangs a second copy of a
+     * dimension's join off that - since dirigible #6938 all of that structure lives in the generated
+     * {@code <REPORT>_CORRESPONDENCE} view, which the {@code .report} reads as its base table. The
+     * builder then owns a plain windowed aggregation over one table, so the report still round-trips.
      */
     @Test
     void aCorrespondenceBalanceReportRoundTrips() {
         Map<String, Object> document = ledgerReport("correspondence: account.code");
         assertRoundTrips(document);
 
-        List<Map<String, Object>> joins = joins(document);
-        assertEquals(4, joins.size());
-        Map<String, Object> self = joins.get(2);
-        assertEquals("JournalEntryItemCorrespondent", self.get("alias"));
-        assertEquals("LEDGER_JOURNAL_ENTRY_ITEM", self.get("name"));
-        // LEFT, so a document with nothing on the counter side keeps its line - and its turnover.
-        assertEquals("LEFT", self.get("type"));
-        // The self-join must be introduced BEFORE the join that hangs off its alias.
-        assertEquals("AccountCorrespondent", joins.get(3)
-                                                  .get("alias"));
-        assertEquals("LEFT", joins.get(3)
-                                  .get("type"));
-        assertNotEquals(joins.get(0)
-                             .get("alias"),
-                joins.get(3)
-                     .get("alias"),
-                "the two copies of the account join must not share an alias, or one of them is dropped");
+        // The base table IS the generated view; the builder-owned model needs no joins at all.
+        assertEquals("LEDGER_TRIAL_BALANCE_CORRESPONDENCE", document.get("table"));
+        assertEquals(0, joins(document).size());
+
+        // The self-join and the second copy of the account join live in the view, aliased apart -
+        // the dimension's account keeps its own INNER join, so neither copy drops the other.
+        String view = ledgerViews("correspondence: account.code").get("LEDGER_TRIAL_BALANCE_CORRESPONDENCE");
+        assertTrue(view.contains("INNER JOIN \"LEDGER_ACCOUNT\" as Account "), view);
+        assertTrue(view.contains("LEFT JOIN \"LEDGER_JOURNAL_ENTRY_ITEM\" as JournalEntryItemCorrespondent"), view);
+        assertTrue(view.contains("LEFT JOIN \"LEDGER_ACCOUNT\" as AccountCorrespondent"), view);
     }
 
     /**
