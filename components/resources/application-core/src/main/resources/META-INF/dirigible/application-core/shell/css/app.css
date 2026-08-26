@@ -22,3 +22,22 @@ html, body { height: 100%; margin: 0; }
 :root {
   /* --primary: oklch(0.55 0.22 260); */
 }
+
+/*
+ * Cap Harmonia dialogs to the viewport and scroll their body.
+ * Harmonia's x-h-dialog is centred (top/left 50% + translate) with no max-height and
+ * no internal overflow, so a tall form dialog - e.g. the document line-item editor with
+ * many fields - grows past the screen and its header and Save/Cancel footer bleed off the
+ * top and bottom edges, unreachable. Capping the dialog and letting the content region
+ * (x-h-dialog-content) scroll keeps the header and footer pinned and on screen. Keyed on
+ * Harmonia's stable data-slot so it applies to every dialog on every shell.
+ */
+[data-slot="dialog"] {
+  max-height: calc(100vh - 2rem);
+}
+
+[data-slot="dialog"] [x-h-dialog-content] {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
