@@ -33,6 +33,10 @@ document.addEventListener('alpine:init', () => {
       let saved = null;
       try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) { /* storage unavailable */ }
       if (saved) this.value = saved;
+      // Stamp the document language BEFORE components mount: Harmonia's date/time/month pickers and
+      // x-h-date-format resolve their display locale as explicit -> <html lang> -> navigator.language,
+      // so without the stamp every date renders in the BROWSER's locale whatever this store says.
+      this.stamp();
       // Fire-and-forget: refresh the platform set (DIRIGIBLE_APPLICATION_LANGUAGES); on failure the
       // built-in default stands. A persisted value outside the set falls back to the first entry.
       fetch(LANGUAGES_URL, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
@@ -40,8 +44,14 @@ document.addEventListener('alpine:init', () => {
         .then((codes) => {
           if (Array.isArray(codes) && codes.length) this.supported = codes;
           if (!this.supported.includes(this.value)) this.value = this.supported[0];
+          this.stamp();
         })
         .catch(() => { /* platform default stands */ });
+    },
+
+    // Keep the document language in sync with the effective value (guarded for non-browser runs).
+    stamp() {
+      try { document.documentElement.lang = this.value; } catch (e) { /* no document */ }
     },
 
     // The platform's supported data-language codes (never per-module).
