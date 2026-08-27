@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.ai;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.http.HttpClient;
@@ -18,9 +19,12 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
@@ -29,9 +33,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 
 /**
  * The single bridge from this platform to the Anthropic Messages API.
@@ -42,6 +46,14 @@ import com.google.gson.JsonObject;
  * contract and the tool-call parsing exist once. The API key lives server-side
  * ({@link DirigibleConfig#INTENT_AI_API_KEY}) and is never sent to a browser; a blank key disables
  * every assistant ({@link AssistantNotConfiguredException}).
+ *
+ * <p>
+ * The call is <b>streamed</b> ({@code "stream": true}, consumed as server-sent events) and asks for
+ * <b>adaptive thinking</b>. Both are capacity decisions, not cosmetics: the tool contract re-emits
+ * the COMPLETE {@code app.intent} on every turn and every repair round, so a real application is
+ * thousands of output tokens - which a single blocking response with one fixed deadline could not
+ * hold, and which the model should reason about rather than emit cold. On the configured default
+ * model omitting {@code thinking} means running with no thinking at all, so it is sent explicitly.
  */
 @Component
 public class ModelClient {
@@ -56,6 +68,18 @@ public class ModelClient {
 
     /** The Anthropic Messages path, appended to the configured base URL. */
     private static final String MESSAGES_PATH = "/v1/messages";
+
+    /** The only line of a server-sent event this client reads; the payload carries its own type. */
+    private static final String DATA_PREFIX = "data:";
+
+    /**
+     * An outer bound on the whole exchange - deliberately generous, and deliberately not a window the
+     * answer has to fit into. The previous non-streamed call had to deliver the entire document within
+     * 120 seconds, which is the wall this bound replaces: a reasoning pass over a few hundred lines of
+     * structured YAML routinely outlives it, and a truncated-or-timed-out answer is the same failure to
+     * the user.
+     */
+    private static final Duration RESPONSE_TIMEOUT = Duration.ofMinutes(10);
 
     private final HttpClient httpClient = HttpClient.newBuilder()
                                                     .connectTimeout(Duration.ofSeconds(15))
@@ -120,7 +144,7 @@ public class ModelClient {
     }
 
     /**
-     * One upstream round-trip.
+     * One upstream round-trip, streamed.
      *
      * @param systemPrompt the assistant's guide
      * @param messages the conversation turns to send, oldest first
@@ -139,19 +163,27 @@ public class ModelClient {
 
         HttpRequest httpRequest = HttpRequest.newBuilder()
                                              .uri(messagesEndpoint())
-                                             .timeout(Duration.ofSeconds(120))
+                                             .timeout(RESPONSE_TIMEOUT)
                                              .header("content-type", "application/json")
+                                             .header("accept", "text/event-stream")
                                              .header("x-api-key", apiKey)
                                              .header("anthropic-version", DirigibleConfig.INTENT_AI_VERSION.getStringValue())
                                              .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
                                              .build();
         try {
-            HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                LOGGER.error("AI assistant upstream call failed with status [{}]: {}", response.statusCode(), response.body());
-                throw new AssistantUpstreamException("The AI assistant request failed (HTTP " + response.statusCode() + ").");
+            HttpResponse<Stream<String>> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofLines());
+            try (Stream<String> lines = response.body()) {
+                if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                    LOGGER.error("AI assistant upstream call failed with status [{}]: {}", response.statusCode(),
+                            lines.collect(Collectors.joining("\n")));
+                    throw new AssistantUpstreamException("The AI assistant request failed (HTTP " + response.statusCode() + ").");
+                }
+                return assembleReply(lines, tool.name());
             }
-            return parseReply(response.body(), tool.name());
+        } catch (JsonParseException ex) {
+            throw new AssistantUpstreamException("The AI assistant returned an unreadable event stream.", ex);
+        } catch (UncheckedIOException ex) {
+            throw new AssistantUpstreamException("The connection to the AI assistant was lost before the answer was complete.", ex);
         } catch (IOException ex) {
             throw new AssistantUpstreamException("Could not reach the AI assistant.", ex);
         } catch (InterruptedException ex) {
@@ -201,36 +233,147 @@ public class ModelClient {
                 + " but is [" + configured + "].";
     }
 
-    /** Shape the Anthropic Messages request: system prompt, the single proposal tool, and the turns. */
+    /**
+     * Shape the Anthropic Messages request: system prompt, the single proposal tool, and the turns -
+     * streamed, and with adaptive thinking on.
+     *
+     * <p>
+     * {@code thinking} is sent explicitly rather than left to the model's default because on the
+     * configured default model omitting it means running with no thinking at all. The reply is not
+     * rendered anywhere, so the display default ({@code omitted}) is left alone - the reasoning is
+     * wanted for the answer's sake, not for the user to read.
+     */
     private static Map<String, Object> requestBody(String systemPrompt, List<Map<String, Object>> messages, ToolSpec tool) {
         Map<String, Object> toolBody = Map.of("name", tool.name(), "description", tool.description(), "input_schema", tool.inputSchema());
-        return Map.of("model", DirigibleConfig.INTENT_AI_MODEL.getStringValue(), "max_tokens",
-                DirigibleConfig.INTENT_AI_MAX_TOKENS.getIntValue(), "system", systemPrompt, "tools", List.of(toolBody), "messages",
-                messages);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", DirigibleConfig.INTENT_AI_MODEL.getStringValue());
+        body.put("max_tokens", DirigibleConfig.INTENT_AI_MAX_TOKENS.getIntValue());
+        body.put("stream", Boolean.TRUE);
+        body.put("thinking", Map.of("type", "adaptive"));
+        body.put("system", systemPrompt);
+        body.put("tools", List.of(toolBody));
+        body.put("messages", messages);
+        return body;
     }
 
-    /** Collect the text blocks as the reply; a matching {@code tool_use} block carries the proposal. */
-    private static ModelReply parseReply(String responseBody, String toolName) {
-        JsonObject root = GSON.fromJson(responseBody, JsonObject.class);
-        JsonArray content = root.getAsJsonArray("content");
+    /**
+     * Assemble one reply out of the event stream: the text blocks concatenated as the answer, and the
+     * matching {@code tool_use} block's streamed input-JSON fragments re-joined into the proposal.
+     *
+     * <p>
+     * A {@code tool_use} block's {@code input} arrives as {@code input_json_delta} fragments of a
+     * partial JSON string - the granularity is per fragment, not per member - so the pieces are
+     * concatenated verbatim and parsed once the stream ends. They are matched by the block's
+     * {@code index}, so a fragment of some other block can never land in the proposal. Thinking deltas
+     * and the events that carry no content ({@code message_start}, {@code content_block_stop},
+     * {@code ping}, and whatever the API adds next) are skipped: the versioning policy is explicit that
+     * new event types may appear, so an unknown one is not an error.
+     */
+    private static ModelReply assembleReply(Stream<String> lines, String toolName) {
         StringBuilder text = new StringBuilder();
-        JsonObject toolInput = null;
-        if (content != null) {
-            for (JsonElement element : content) {
-                JsonObject block = element.getAsJsonObject();
-                String type = block.has("type") ? block.get("type")
-                                                       .getAsString()
-                        : "";
-                if ("text".equals(type) && block.has("text")) {
-                    text.append(block.get("text")
-                                     .getAsString());
-                } else if ("tool_use".equals(type) && block.has("name") && toolName.equals(block.get("name")
-                                                                                                .getAsString())) {
-                    toolInput = block.getAsJsonObject("input");
+        StringBuilder toolJson = new StringBuilder();
+        int toolBlockIndex = -1;
+        Iterator<String> events = lines.iterator();
+        while (events.hasNext()) {
+            JsonObject event = eventData(events.next());
+            if (event == null) {
+                continue;
+            }
+            switch (StringUtils.defaultString(member(event, "type"))) {
+                case "error" -> throw streamError(event);
+                case "content_block_start" -> {
+                    JsonObject block = event.getAsJsonObject("content_block");
+                    if (block != null && "tool_use".equals(member(block, "type")) && toolName.equals(member(block, "name"))) {
+                        toolBlockIndex = index(event);
+                    }
                 }
+                case "content_block_delta" -> {
+                    JsonObject delta = event.getAsJsonObject("delta");
+                    String deltaType = delta == null ? "" : StringUtils.defaultString(member(delta, "type"));
+                    if ("text_delta".equals(deltaType)) {
+                        text.append(StringUtils.defaultString(member(delta, "text")));
+                    } else if ("input_json_delta".equals(deltaType) && toolBlockIndex >= 0 && index(event) == toolBlockIndex) {
+                        toolJson.append(StringUtils.defaultString(member(delta, "partial_json")));
+                    }
+                }
+                case "message_delta" -> warnIfTruncated(event);
+                default -> LOGGER.trace("Skipping AI assistant stream event [{}].", member(event, "type"));
             }
         }
-        return new ModelReply(text.toString(), toolInput);
+        return new ModelReply(text.toString(), toolBlockIndex >= 0 ? toolInput(toolJson.toString()) : null);
+    }
+
+    /**
+     * The JSON payload of one server-sent event line, or {@code null} for every line that carries none
+     * (the {@code event:} name line, comments, and the blank line between events).
+     *
+     * <p>
+     * Server-sent events are line-framed and each Messages API event's payload is one JSON object on a
+     * single line, so a data line is parsed as it stands rather than re-assembled across lines.
+     */
+    private static JsonObject eventData(String line) {
+        if (line == null || !line.startsWith(DATA_PREFIX)) {
+            return null;
+        }
+        String payload = line.substring(DATA_PREFIX.length())
+                             .trim();
+        return payload.isEmpty() ? null : GSON.fromJson(payload, JsonObject.class);
+    }
+
+    /**
+     * The proposal, re-joined. An empty buffer is a tool called with no arguments - not a failure - but
+     * an unparseable one is the answer having been cut off mid-JSON, which is worth saying plainly:
+     * that is what the output ceiling looks like from here.
+     */
+    private static JsonObject toolInput(String accumulated) {
+        String json = StringUtils.trimToEmpty(accumulated);
+        if (json.isEmpty()) {
+            return new JsonObject();
+        }
+        try {
+            return GSON.fromJson(json, JsonObject.class);
+        } catch (JsonParseException ex) {
+            throw new AssistantUpstreamException("The AI assistant's proposal was cut off before it was complete."
+                    + " Raise DIRIGIBLE_INTENT_AI_MAX_TOKENS if this repeats.", ex);
+        }
+    }
+
+    /**
+     * An answer that stopped because it ran out of output tokens. Not fatal by itself - a text-only
+     * reply is still readable, and a truncated proposal fails validation in the repair loop - but the
+     * cause is invisible from either symptom, so it is named here.
+     */
+    private static void warnIfTruncated(JsonObject event) {
+        JsonObject delta = event.getAsJsonObject("delta");
+        if (delta != null && "max_tokens".equals(member(delta, "stop_reason"))) {
+            LOGGER.warn("The AI assistant's answer hit the output ceiling of [{}] tokens and was truncated;"
+                    + " raise DIRIGIBLE_INTENT_AI_MAX_TOKENS.", DirigibleConfig.INTENT_AI_MAX_TOKENS.getIntValue());
+        }
+    }
+
+    /**
+     * An {@code error} event mid-stream - an overload or a rate limit the API reports inside a 200
+     * response. Mapped to the same upstream failure a non-2xx status is, so the endpoints answer 502
+     * either way.
+     */
+    private static AssistantUpstreamException streamError(JsonObject event) {
+        JsonObject error = event.getAsJsonObject("error");
+        String type = error == null ? null : member(error, "type");
+        LOGGER.error("The AI assistant's event stream carried an error [{}]: {}", type, error == null ? null : member(error, "message"));
+        return new AssistantUpstreamException(
+                "The AI assistant request failed (" + StringUtils.defaultIfBlank(type, "stream error") + ").");
+    }
+
+    /** A string member, or {@code null} when it is absent or JSON null. */
+    private static String member(JsonObject object, String name) {
+        JsonElement value = object.get(name);
+        return value == null || value.isJsonNull() ? null : value.getAsString();
+    }
+
+    /** A content block's index, or {@code -1} when the event carries none. */
+    private static int index(JsonObject event) {
+        JsonElement value = event.get("index");
+        return value == null || value.isJsonNull() ? -1 : value.getAsInt();
     }
 
     /**
