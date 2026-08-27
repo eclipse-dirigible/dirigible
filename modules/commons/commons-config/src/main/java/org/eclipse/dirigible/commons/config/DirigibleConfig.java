@@ -243,8 +243,14 @@ public enum DirigibleConfig {
     /** Base URL of the Anthropic-compatible API the Intent assistant calls. */
     INTENT_AI_BASE_URL("DIRIGIBLE_INTENT_AI_BASE_URL", "https://api.anthropic.com"),
 
-    /** Maximum tokens the Intent assistant may generate in a single proposal. */
-    INTENT_AI_MAX_TOKENS("DIRIGIBLE_INTENT_AI_MAX_TOKENS", "8192"),
+    /**
+     * Maximum tokens the Intent assistant may generate in a single proposal. The tool contract re-emits
+     * the COMPLETE {@code app.intent} on every turn and every repair round, so the ceiling has to hold
+     * a whole application plus its explanation, not one edit - a few hundred lines of this YAML is
+     * thousands of tokens before the JSON string escaping, and the reasoning pass draws on the same
+     * budget.
+     */
+    INTENT_AI_MAX_TOKENS("DIRIGIBLE_INTENT_AI_MAX_TOKENS", "32768"),
 
     /** Anthropic API version header sent by the Intent assistant. */
     INTENT_AI_VERSION("DIRIGIBLE_INTENT_AI_VERSION", "2023-06-01"),

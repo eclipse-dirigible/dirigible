@@ -20,10 +20,12 @@
   const SHELLS = '/services/js/platform-core/extension-services/shells.js?extensionPoints=platform-shells';
   const PERSPECTIVES = '/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-perspectives';
 
-  // The agent endpoint makes up to three upstream model calls at 120s each (the first draft plus two
-  // server-side repair rounds), so the worst case is around six minutes. Anything less and a legitimately
-  // slow turn is reported to the user as a failure.
-  const AGENT_TIMEOUT_MS = 7 * 60 * 1000;
+  // The agent endpoint makes up to three upstream model calls (the first draft plus two server-side
+  // repair rounds), each of them streamed and each reasoning over the COMPLETE app.intent it has to
+  // re-emit - so there is no longer a fixed per-call ceiling to multiply, and the server's own outer
+  // bound is 10 minutes per call. This is deliberately generous: aborting here reports a turn that is
+  // still being generated as a failure, and the user has no way to tell the two apart.
+  const AGENT_TIMEOUT_MS = 20 * 60 * 1000;
   const DEFAULT_TIMEOUT_MS = 60 * 1000;
 
   /** A failed call, carrying the status and the parsed body so callers can act on 412 / 422 / 502. */
