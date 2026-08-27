@@ -399,7 +399,17 @@ public class UserFacade {
             if (language == null || language.isEmpty()) {
                 language = ANY_LANGUAGE;
             }
-            List<Locale.LanguageRange> ranges = Locale.LanguageRange.parse(language);
+            List<Locale.LanguageRange> ranges;
+            try {
+                ranges = Locale.LanguageRange.parse(language);
+            } catch (IllegalArgumentException e) {
+                // The header is client-controlled: a malformed value must degrade to "no language
+                // preference", never turn every localized read on this request into a 500.
+                if (logger.isWarnEnabled()) {
+                    logger.warn("Malformed Accept-Language header [{}] - ignoring it", language);
+                }
+                return "";
+            }
             return ranges == null || ranges.isEmpty() ? ""
                     : ranges.get(0)
                             .getRange();
