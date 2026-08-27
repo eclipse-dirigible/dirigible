@@ -910,6 +910,8 @@ public final class IntentParser {
                     + "] (add a uses: alias if the target lives in another model)");
         }
         validateMapSource(source, byName, g.getMap(), "schedule [" + name + "]", "generate map", true, issues);
+        validateMapTarget(crossModel || g.getTo() == null ? null : byName.get(g.getTo()), g.getMap(), "schedule [" + name + "]",
+                "generate map", issues);
         if (g.getItems() != null || (g.getItemLines() != null && !g.getItemLines()
                                                                    .isEmpty())) {
             issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
@@ -6336,6 +6338,8 @@ public final class IntentParser {
             }
             validateGeneratesEvent(g, name, source, crossModelSource, model, issues);
             validateMapSource(source, byName, g.getMap(), "generates [" + name + "]", "map", true, issues);
+            validateMapTarget(crossModel || g.getTo() == null ? null : byName.get(g.getTo()), g.getMap(), "generates [" + name + "]", "map",
+                    issues);
             if (g.getItems() != null) {
                 GeneratesItemsIntent items = g.getItems();
                 EntityIntent itemSource = null;
@@ -6355,6 +6359,10 @@ public final class IntentParser {
                     issues.add("generates [" + name + "] items has no to entity");
                 }
                 validateMapSource(itemSource, byName, items.getMap(), "generates [" + name + "]", "items map", false, issues);
+                // The item target lives in the SAME model as the header target, so a cross-model header
+                // implies a cross-model item - resolved in the owner's .model, not here.
+                validateMapTarget(crossModel || items.getTo() == null ? null : byName.get(items.getTo()), items.getMap(),
+                        "generates [" + name + "]", "items map", issues);
             }
             validateGeneratesItemLines(g, name, source, byName, crossModel, issues);
             validateGeneratesPrompt(g, name, byName, crossModel, issues);
@@ -7183,6 +7191,44 @@ public final class IntentParser {
                 continue;
             }
             validateMapHop(source, byName, sourceProp, dot, subject + " " + role + " [" + entry.getKey() + "]", issues);
+        }
+    }
+
+    /**
+     * The other half of a {@code map} entry (issue #6953): each <b>key</b> names a field or a to-one
+     * relation of the TARGET being created. The generator pascal-cases the key and emits
+     * {@code target.<Key> = ...}, so a key the target does not declare is not a mis-mapping that
+     * degrades at run time - it is Java that does not compile, and because client Java compiles as one
+     * registry-wide batch the failure takes every module's beans down with it.
+     *
+     * <p>
+     * {@code postings:} has always checked its {@code map} keys against its {@code creates} target; a
+     * {@code generates:} (and a schedule's {@code generate:}) checked only the value side. This closes
+     * that asymmetry, with the same message shape and the same case-insensitive match - the key is
+     * authored PascalCase by convention, the target's field camelCase.
+     *
+     * <p>
+     * Skipped when the target is unknown or CROSS-MODEL ({@code uses:}): a foreign target's property
+     * names live in the owner's {@code .model} and are resolved at generation time, the convention
+     * every cross-model reference follows.
+     *
+     * @param target the entity the map writes into, or {@code null} when it is not resolvable here
+     * @param map the authored {@code target property -> source property} map
+     * @param subject the message prefix naming the offending block
+     * @param role the map's role in that block ({@code map} / {@code items map} / {@code generate map})
+     * @param issues the collected issues
+     */
+    private static void validateMapTarget(EntityIntent target, Map<String, String> map, String subject, String role, List<String> issues) {
+        if (target == null || map == null) {
+            return;
+        }
+        for (String key : map.keySet()) {
+            if (key == null || key.isBlank()) {
+                continue;
+            }
+            if (!hasPropertyIgnoreCase(target, key)) {
+                issues.add(subject + " " + role + " [" + key + "] is not a field or to-one relation of [" + target.getName() + "]");
+            }
         }
     }
 

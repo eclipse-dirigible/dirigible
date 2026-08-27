@@ -1570,6 +1570,14 @@ through a **cross-model** relation is fine. The two ends are not type-checked, e
 
 A schedule's `generate.map` takes the same hop, off the row the cron query returned.
 
+**The KEY side is checked too.** Each `map:` key must name a field or a to-one relation of the
+target (`to:`) - the generator emits `target.<Key> = ...`, so a key the target does not declare is
+not a mis-mapping that shows up at run time, it is Java that does not compile, and client Java
+compiles as one registry-wide batch (one bad key takes every module's beans down). The same check
+applies to an `items:` map (against the items `to:`) and to a schedule's `generate.map`. A
+**cross-model** target (`uses:`) is exempt - its property names live in the owner's `.model` and are
+resolved at generation time.
+
 **Cross-model SOURCE (`fromUses:`) - author the create-from on the TARGET's module.** By default the
 `from` entity is local and the target may be foreign (`uses:`). `fromUses:` mirrors that: the SOURCE is
 owned by another model and the TARGET is the local one. Both directions describe the same button; they
