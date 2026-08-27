@@ -2000,6 +2000,8 @@ class IntentParserTest {
                 + "  - name: Claim\n" //
                 + "    fields:\n" //
                 + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "    relations:\n" //
+                + "      - { name: Person, kind: manyToOne, to: Person }\n" //
                 + "  - name: ClaimLine\n" //
                 + "    fields:\n" //
                 + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //

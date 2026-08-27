@@ -739,6 +739,7 @@ class GlueGeneratesTest {
                   - name: Declaration
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string }
                     relations:
                       - { name: Fine, kind: manyToOne, to: Fine, model: fines }
                 generates:

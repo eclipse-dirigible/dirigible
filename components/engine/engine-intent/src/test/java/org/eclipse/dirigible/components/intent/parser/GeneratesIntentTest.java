@@ -316,6 +316,7 @@ class GeneratesIntentTest {
                   - name: Order
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string }
                 generates:
                   - name: bad
                     from: Quote
@@ -1333,6 +1334,174 @@ class GeneratesIntentTest {
         assertEquals(2, model.getGenerates()
                              .get(0)
                              .getSourceStatusOnRetire());
+    }
+
+    /**
+     * Issue #6953: a {@code map} KEY names a property of the target. An unknown one is not a
+     * mis-mapping that degrades at run time - the generator emits {@code target.<Key> = ...}, so it is
+     * Java that does not compile, and client Java compiles as one registry-wide batch.
+     */
+    @Test
+    void rejectsMapKeyThatIsNotATargetProperty() {
+        String yaml = """
+                name: fines
+                entities:
+                  - name: Fine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: violationAt, type: timestamp }
+                    relations:
+                      - { name: Vehicle, kind: manyToOne, to: Vehicle }
+                  - name: Vehicle
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: plateNumber, type: string }
+                  - name: FineLog
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: plate, type: string }
+                generates:
+                  - name: identificationLog
+                    from: Fine
+                    to: FineLog
+                    map:
+                      Plate: Vehicle.plateNumber
+                      Vehicle: Vehicle.plateNumber
+                      violationAt: violationAt
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(
+                             i -> i.contains("generates [identificationLog] map [Vehicle] is not a field or to-one relation of [FineLog]")),
+                "got: " + ex.getIssues());
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(
+                             "generates [identificationLog] map [violationAt] is not a field or to-one relation of [FineLog]")),
+                "got: " + ex.getIssues());
+        // The key that IS a target field is not reported, hop-valued or not.
+        assertFalse(ex.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("map [Plate]")),
+                "got: " + ex.getIssues());
+    }
+
+    /**
+     * The same check on the {@code items} map, whose target is the items {@code to:} entity.
+     */
+    @Test
+    void rejectsItemsMapKeyThatIsNotATargetItemProperty() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Quote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: QuoteItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Quote, kind: manyToOne, to: Quote, composition: true, required: true }
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: OrderItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Order, kind: manyToOne, to: Order, composition: true, required: true }
+                generates:
+                  - name: order-from-quote
+                    from: Quote
+                    to: Order
+                    items:
+                      from: QuoteItem
+                      to: OrderItem
+                      map:
+                        Amount: amount
+                        Discount: amount
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(
+                             "generates [order-from-quote] items map [Discount] is not a field or to-one relation of [OrderItem]")),
+                "got: " + ex.getIssues());
+    }
+
+    /**
+     * And on a schedule's {@code generate} map, whose target is that generate's {@code to:}.
+     */
+    @Test
+    void rejectsScheduleGenerateMapKeyThatIsNotATargetProperty() {
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Person
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Claim
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Person, kind: manyToOne, to: Person }
+                schedules:
+                  - name: monthly
+                    cron: "0 0 4 1 * *"
+                    entity: Person
+                    generate:
+                      to: Claim
+                      map: { Person: id, Note: name }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("schedule [monthly] generate map [Note] is not a field or to-one relation of [Claim]")),
+                "got: " + ex.getIssues());
+    }
+
+    /**
+     * A CROSS-MODEL target is skipped: its property names live in the owner's {@code .model} and are
+     * resolved at generation time, the convention every cross-model reference follows. Both maps - the
+     * header's and the items' - since a cross-model header implies a cross-model item target.
+     */
+    @Test
+    void aCrossModelTargetSkipsTheMapKeyCheck() {
+        IntentModel model = IntentParser.parse("""
+                name: timesheets
+                uses:
+                  - { model: sales }
+                entities:
+                  - name: ProjectTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string }
+                  - name: ProjectTimesheetLine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: hours, type: decimal }
+                    relations:
+                      - { name: ProjectTimesheet, kind: manyToOne, to: ProjectTimesheet, composition: true, required: true }
+                generates:
+                  - name: invoice-from-timesheet
+                    from: ProjectTimesheet
+                    to: SalesInvoice
+                    uses: sales
+                    map:
+                      NothingCheckableHere: note
+                    items:
+                      from: ProjectTimesheetLine
+                      to: SalesInvoiceItem
+                      map:
+                        NorHere: hours
+                """);
+        assertEquals("SalesInvoice", model.getGenerates()
+                                          .get(0)
+                                          .getTo());
     }
 
 }
