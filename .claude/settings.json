@@ -5,7 +5,13 @@
       "Bash(git status *)",
       "Bash(git diff *)",
       "Bash(mvn formatter:format *)",
-      "Bash(mvn -P release *)"
+      "Bash(mvn -P release *)",
+      "Bash(git fetch)",
+      "Bash(git fetch *)",
+      "Bash(gh search *)",
+      "Bash(mvn formatter:validate *)",
+      "Bash(mvn -T 1C formatter:validate)",
+      "Bash(mvn -T 1C formatter:validate *)"
     ]
   }
 }
