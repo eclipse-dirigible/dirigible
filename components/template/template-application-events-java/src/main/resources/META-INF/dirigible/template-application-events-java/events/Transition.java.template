@@ -137,12 +137,23 @@ public class ${className}Transition {
                 source.${attachLanguageFkProperty} == null ? null
                         : new gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Repository().findById(source.${attachLanguageFkProperty});
 #end
+        String language = ${attachLanguageExpression};
         java.util.Map document = new java.util.HashMap();
         document.put("type", "attachment");
         document.put("contentType", "application/pdf");
         document.put("fileName", ${attachFileNameExpression});
-        document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
-                new ${attachEntity}PrintFeeder().feed(source.${attachKeyProperty})));
+        // Bind the render language to the thread so the feeder's multilingual overlay resolves nomenclature
+        // values in the SAME language as the template - there is no request here to carry Accept-Language
+        // (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
+        byte[] data;
+        org.eclipse.dirigible.sdk.security.User.setLanguage(language);
+        try {
+            data = org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", language,
+                    new ${attachEntity}PrintFeeder().feed(source.${attachKeyProperty}));
+        } finally {
+            org.eclipse.dirigible.sdk.security.User.clearLanguage();
+        }
+        document.put("data", data);
         return document;
     }
 #end
@@ -197,12 +208,23 @@ public class ${className}Transition {
                     entity.${attachLanguageFkProperty} == null ? null
                             : new gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
 #end
+            String language = ${attachLanguageExpression};
             java.util.Map document = new java.util.HashMap();
             document.put("type", "attachment");
             document.put("contentType", "application/pdf");
             document.put("fileName", ${attachFileNameExpression});
-            document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
-                    new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
+            // Bind the render language to the thread so the feeder's multilingual overlay resolves nomenclature
+            // values in the SAME language as the template - there is no request here to carry Accept-Language
+            // (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
+            byte[] data;
+            org.eclipse.dirigible.sdk.security.User.setLanguage(language);
+            try {
+                data = org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", language,
+                        new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty}));
+            } finally {
+                org.eclipse.dirigible.sdk.security.User.clearLanguage();
+            }
+            document.put("data", data);
             parts.add(document);
 #elseif($attach == "recordPrint")
             // attach: recordPrint - the transitioned record's own document, rendered once above and
@@ -217,22 +239,33 @@ public class ${className}Transition {
                     entity.${attachLanguageFkProperty} == null ? null
                             : new gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
 #end
+            String language = ${attachLanguageExpression};
             java.util.Map<String, Object> reportFilter = new java.util.HashMap<>();
 #foreach($binding in $attachReportBindings)
             reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));
 #end
-            java.util.Map<String, Object> reportData = new java.util.HashMap<>();
-            // The bound values double as the rendered header, so the PDF states which slice it is - a
-            // table of rows never does.
-            reportData.put("document", reportFilter);
-            reportData.put("items", new gen.${attachReportGenFolder}.data.${attachReportPerspective}.${attachReport}Repository()
-                    .findAll(null, null, reportFilter));
             java.util.Map document = new java.util.HashMap();
             document.put("type", "attachment");
             document.put("contentType", "application/pdf");
             document.put("fileName", ${attachFileNameExpression});
-            document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", ${attachLanguageExpression},
-                    org.eclipse.dirigible.sdk.utils.Json.stringify(reportData)));
+            // Bind the render language to the thread so the report query's :language overlay resolves the
+            // translatable dimensions in the SAME language as the template - there is no request here to carry
+            // Accept-Language (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
+            byte[] data;
+            org.eclipse.dirigible.sdk.security.User.setLanguage(language);
+            try {
+                java.util.Map<String, Object> reportData = new java.util.HashMap<>();
+                // The bound values double as the rendered header, so the PDF states which slice it is - a
+                // table of rows never does.
+                reportData.put("document", reportFilter);
+                reportData.put("items", new gen.${attachReportGenFolder}.data.${attachReportPerspective}.${attachReport}Repository()
+                        .findAll(null, null, reportFilter));
+                data = org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", language,
+                        org.eclipse.dirigible.sdk.utils.Json.stringify(reportData));
+            } finally {
+                org.eclipse.dirigible.sdk.security.User.clearLanguage();
+            }
+            document.put("data", data);
             parts.add(document);
 #end
             String from = org.eclipse.dirigible.sdk.core.Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
