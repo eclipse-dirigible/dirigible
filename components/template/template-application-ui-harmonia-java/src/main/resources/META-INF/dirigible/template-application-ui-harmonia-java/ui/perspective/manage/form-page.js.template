@@ -717,8 +717,11 @@ document.addEventListener('alpine:init', () => {
         // graph through the repositories and returns the { document, items } payload the template binds
         // - so {{document.<Relation>.<Field>}} resolves. It is called as the logged-in user (auth +
         // tenant + i18n are the caller's).
+        // Pin the feeder's language to the CHOSEN print language, not the UI locale: the repositories'
+        // multilingual overlay reads Accept-Language, so without this the nomenclature values (Payment
+        // Method, Status, ...) would render in the UI locale while the template is in the print language.
         const payload = await App.services.api.get(
-          '/services/java/${projectName}/gen/events/${javaGenFolderName}/${name}PrintFeeder/' + encodeURIComponent(this.id), { baseUrl: '' });
+          '/services/java/${projectName}/gen/events/${javaGenFolderName}/${name}PrintFeeder/' + encodeURIComponent(this.id), { baseUrl: '', language: lang });
         const response = await fetch('/services/print/${name}?lang=' + encodeURIComponent(lang), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

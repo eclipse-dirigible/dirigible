@@ -47,10 +47,17 @@ uploaded). The Print button asks which to use when several exist.
   (404 with a clear message when absent), then `DocumentParser → DataBinder → XslFoRenderer →
   PDFFacade.generate(fo, "<data/>")`.
 
-**The client supplies the data.** The Harmonia document page POSTs the record + items it already
-loaded, with dropdown FKs resolved to display labels (`printPayload()` in
-`document-page.js.template`). Deliberate: no server-side entity fetching, no auth forwarding, and
-the printout matches exactly what the user sees. The JSON body is parsed with a **plain Gson**
+**The client feeds this endpoint from a server-side feeder, not from its own screen state.** The
+Harmonia document/manage page first GETs the generated `…PrintFeeder/{id}` (client-Java), which
+loads the record + its related graph through the generated repositories and returns the nested
+`{ document, items }` payload — so `{{document.<Relation>.<Field>}}` resolves and validations, events
+and the **multilingual translation overlay** all apply. The page then POSTs that payload here. The
+feeder is called as the logged-in user (auth + tenant are the caller's). **Language:** the print
+dialog's chosen language drives BOTH halves — it is the `?lang=` that selects the CMS template folder
+(labels) AND is sent as the feeder GET's `Accept-Language` (via `api.get(url, { language: lang })`),
+because the repositories' multilingual overlay reads `User.getLanguage()`/`Accept-Language`; without
+that pin the nomenclature VALUES would translate to the UI locale while the template is in the print
+language (dirigible #6945). The JSON body is parsed with a **plain Gson**
 (`ToNumberPolicy.LONG_OR_DOUBLE`) — never `JsonHelper`/`GsonHelper` (the `@Expose` trap; and
 LONG_OR_DOUBLE keeps integers integral while decimals arrive as `Double`, which `DataBinder`
 formats in the form money pattern `### ### ### ##0.00`).
