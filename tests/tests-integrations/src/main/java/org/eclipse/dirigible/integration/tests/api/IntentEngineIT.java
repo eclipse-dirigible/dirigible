@@ -220,6 +220,34 @@ class IntentEngineIT extends IntegrationTest {
                 debit: total
                 credit: creditSnapshot
                 dimensions: [customer]
+              # correspondence - the general ledger axis: the counter-side lines of the same document
+              # become one more bucket, and each amount is allocated proportionally across them. The
+              # document the lines share is the first hop of `date`.
+              - name: OrderItemCorrespondence
+                kind: balance
+                source: OrderItem
+                date: order.orderDate
+                debit: quantity
+                credit: creditSnapshot
+                dimensions: [order]
+                correspondence: order.orderDate
+              # kind: statement - the statutory shape over the SAME signed ledger: instead of one row
+              # per dimension value, a fixed line structure where each line is a formula over the
+              # account codes, plus arithmetic over other lines. (The ledger here is the balance
+              # report's; the country code stands in for the chart-of-accounts code.)
+              - name: OrderStatement
+                kind: statement
+                source: Order
+                date: orderDate
+                debit: total
+                credit: creditSnapshot
+                account: country.code2
+                lines:
+                  - { code: A.I,  label: Alpine markets, accounts: "AL,AT", measure: closingNetDebit }
+                  - { code: A.II, label: Other markets,  accounts: "B-Z",   measure: closingNetDebit }
+                  - { code: A,    label: Total markets,  sum: [A.I, A.II] }
+                  - { code: B,    label: Owed to markets, accounts: "A-Z",  measure: closingNetCredit }
+                  - { code: C,    label: Net position,   sum: [A], less: [B] }
 
             # Custom dashboard widgets - developer-supplied content: a REST KPI (the url returns
             # {value, description?}) and an embedded page tile.
@@ -359,7 +387,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("processes", hasSize(1))
                                                  .body("processes[0].steps", hasSize(6))
                                                  .body("forms", hasSize(1))
-                                                 .body("reports", hasSize(4))
+                                                 .body("reports", hasSize(6))
                                                  .body("permissions", hasSize(2))
                                                  .body("seeds[0].rows", hasSize(2)));
     }
@@ -603,7 +631,9 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("project", equalTo(PROJECT))
                                                  .body("written",
                                                          hasItems("orders.edm", "orders.model", "OrderApproval.bpmn", "ApproveOrder.form",
-                                                                 "OrdersByCustomer.report", "OrderBalance.report", "orders.roles",
+                                                                 "OrdersByCustomer.report", "OrderBalance.report", "OrderStatement.report",
+                                                                 "OrderStatementLines.view", "OrderItemCorrespondence.report",
+                                                                 "OrderItemCorrespondenceCorrespondence.view", "orders.roles",
                                                                  "orders.glue", "countries.csvim", "countries.csv",
                                                                  "doc/Templates/Order/Print/en/standard.print", "orders.test"))
                                                  .body("scrubbed", hasSize(0))
@@ -3149,6 +3179,21 @@ class IntentEngineIT extends IntegrationTest {
                 "the report table should align and format cells from the column metadata");
         assertTrue(page.contains("align: 'right'"), "decimal measures should be right-aligned");
         assertTrue(page.contains("pattern: '### ### ### ##0.00'"), "the page metadata should carry the money pattern for decimal columns");
+        assertTrue(page.contains("limit: 20"), "an ordinary report should page in twenties");
+
+        // A statement's rows ARE its structure, so its page fetches the whole statement rather than
+        // splitting a balance sheet across pages.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(payload)
+                                                 .when()
+                                                 .post("/services/ide/generate/model/" + WORKSPACE + "/" + PROJECT
+                                                         + "?path=OrderStatement.report")
+                                                 .then()
+                                                 .statusCode(201));
+        String statementPage = contentOf("gen/OrderStatement/reports/OrderStatement/report.js");
+        assertTrue(statementPage.contains("limit: 500"), "a statement page should fetch the whole line structure at once");
+        assertTrue(statementPage.contains("{ key: 'Code', kind: 'text'") && statementPage.contains("{ key: 'Amount', kind: 'number'"),
+                "the statement page should carry the Code / Label / Amount column metadata");
     }
 
     @Test
@@ -3220,6 +3265,85 @@ class IntentEngineIT extends IntegrationTest {
                 "Beans should be imported for the action call-out");
         assertTrue(repository.contains("entity.Number = Beans.get(InvoiceNumberAction.class).calculate(entity);"),
                 "the calculated field should be assigned by calling the action via Beans");
+    }
+
+    @Test
+    void a_declared_phase_gives_an_enrichment_its_own_channel_a_posting_can_bind() {
+        // #6929: the costing listener computes CostValue from a moving-average pool and writes it back
+        // WITHOUT an event (an enrichment must not re-fire the onUpdate consumers), so a posting bound
+        // to onCreate raced it and could post a journal entry for a null amount with every step green.
+        // The phase is that write's own channel: the listener announces it through the generated
+        // repository, and the posting binds the announcement instead of the insert.
+        writeIntent("""
+                name: inventory
+                entities:
+                  - name: Account
+                    kind: setting
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                  - name: PostingRule
+                    kind: setting
+                    fields:
+                      - { name: id,           type: integer, primaryKey: true, generated: true }
+                      - { name: documentType, type: string }
+                    relations:
+                      - { name: CostOfSalesAccount, kind: manyToOne, to: Account }
+                      - { name: InventoryAccount,   kind: manyToOne, to: Account }
+                  - name: StockMovement
+                    phases: [costed]
+                    fields:
+                      - { name: id,        type: integer, primaryKey: true, generated: true }
+                      - { name: movedOn,   type: date }
+                      - { name: costValue, type: decimal, precision: 18, scale: 2 }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id,        type: integer, primaryKey: true, generated: true }
+                      - { name: entryDate, type: date }
+                    relations:
+                      - { name: StockMovement, kind: manyToOne, to: StockMovement }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: debit,  type: decimal, precision: 18, scale: 2 }
+                      - { name: credit, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                      - { name: Account,      kind: manyToOne, to: Account, required: true }
+                postings:
+                  - name: cogsPosting
+                    event: { onPhase: StockMovement, phase: costed }
+                    creates: JournalEntry
+                    backReference: StockMovement
+                    map: { entryDate: movedOn }
+                    rule: { entity: PostingRule, match: { documentType: "Goods Issue" } }
+                    items:
+                      - { Account: rule(costOfSalesAccount), debit: "CostValue" }
+                      - { Account: rule(inventoryAccount), credit: "CostValue" }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        assertTrue(contentOf("inventory.model").contains("\"phases\": \"costed\""),
+                "the declared phase must reach the .model - it is what the DAO template turns into announceCosted");
+
+        // The write half: one targeted write carries the enrichment AND the announcement, so the value
+        // and the notice commit together and no consumer can observe one without the other.
+        generateFromModel("template-application-dao-java/template/template.js", "inventory.model");
+        String repository = codeOf("gen/inventory/data/stockmovement/StockMovementRepository.java");
+        assertTrue(repository.contains("public int announceCosted(Object id, java.util.Map<String, Object> values)"),
+                "the repository should expose the declared phase as a method, so a typo is a compile error: " + repository);
+        assertTrue(repository.contains("updateProperties(id, values, \"" + PROJECT + "-StockMovement-StockMovement-costed\")"),
+                "the announcement must ride the enrichment write, on the phase's own topic: " + repository);
+        assertFalse(codeOf("gen/inventory/data/journalentry/JournalEntryRepository.java").contains("announce"),
+                "an entity that declares no phase must generate exactly what it always did");
+
+        // The read half: the posting listens on the phase topic, not on the insert.
+        generateFromModel("template-application-events-java/template/template.js", "inventory.glue");
+        String posting = contentOf("gen/events/inventory/CogsPostingPosting.java");
+        assertTrue(posting.contains("return \"" + PROJECT + "-StockMovement-StockMovement-costed\";"),
+                "the posting must bind the enrichment moment, not the raw insert: " + posting);
     }
 
     @Test
@@ -4136,10 +4260,66 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(balance.contains(
                 "SUM(CASE WHEN Order.\\\"ORDER_ORDER_DATE\\\" <= :toDate THEN COALESCE(Order.\\\"ORDER_TOTAL\\\", 0) ELSE 0 END) as \\\"Closing Debit\\\""),
                 "the closing debit should sum everything up to and including :toDate");
+
         assertTrue(balance.contains("\"name\": \"fromDate\"") && balance.contains("\"name\": \"toDate\""),
                 "the balance report should declare the two window parameters");
         assertTrue(balance.contains("\"initial\": \"1900-01-01\"") && balance.contains("\"initial\": \"9999-12-31\""),
                 "the window parameters should default to the all-time balance");
+        // correspondence - the counter-side lines of the same document as an extra grouping bucket.
+        // The parameter-free structure is a generated .view artifact (#6938): the self-join and the
+        // allocation live there, and the .report reads the view as its base table.
+        String correspondenceView = contentOf("OrderItemCorrespondenceCorrespondence.view");
+        assertTrue(correspondenceView.contains("\"name\": \"ORDERS_ORDER_ITEM_CORRESPONDENCE_CORRESPONDENCE\""),
+                "the correspondence structure should be a named database view");
+        assertTrue(correspondenceView.contains(
+                "LEFT JOIN \\\"ORDERS_ORDER_ITEM\\\" as OrderItemCorrespondent ON OrderItemCorrespondent.\\\"ORDER_ITEM_ORDER\\\" = OrderItem.\\\"ORDER_ITEM_ORDER\\\" AND OrderItemCorrespondent.\\\"ORDER_ITEM_ID\\\" <> OrderItem.\\\"ORDER_ITEM_ID\\\""),
+                "the correspondence axis should LEFT self-join the source on the document its lines share, excluding the line itself");
+        assertTrue(
+                correspondenceView.contains(
+                        "as OrderCorrespondent ON OrderItemCorrespondent.\\\"ORDER_ITEM_ORDER\\\" = OrderCorrespondent."),
+                "the bucket path should be resolved against the counter-side line, under its own alias");
+        assertTrue(correspondenceView.contains("as \\\"CORRESPONDENT_ORDER_ORDER_DATE\\\""),
+                "the correspondence bucket should be exposed as a plain view column");
+        assertTrue(
+                correspondenceView.contains("CAST(COALESCE(OrderItem.\\\"ORDER_ITEM_QUANTITY\\\", 0) AS DECIMAL(34,12))")
+                        && correspondenceView.contains("NULLIF((SELECT SUM(COALESCE(OrderItemDocumentTotal."),
+                "each amount should be allocated over the counter-side buckets of its own document, inside the view");
+        String correspondence = contentOf("OrderItemCorrespondence.report");
+        assertTrue(correspondence.contains("\"table\": \"ORDERS_ORDER_ITEM_CORRESPONDENCE_CORRESPONDENCE\""),
+                "the .report should read the generated view as its base table");
+        assertTrue(correspondence.contains(
+                "SUM(CASE WHEN OrderItem.\\\"ENTRY_DATE\\\" >= :fromDate AND OrderItem.\\\"ENTRY_DATE\\\" <= :toDate THEN OrderItem.\\\"ALLOCATED_DEBIT\\\" ELSE 0 END) as \\\"Debit\\\""),
+                "the thin query should window the view's allocated amounts - the named parameters stay on the .report side");
+        assertTrue(correspondence.contains("as \\\"Correspondent Order Order Date\\\""),
+                "the correspondence bucket should still be a grouping column of the report");
+        assertFalse(correspondence.contains("OrderItemCorrespondent"), "the structure must not be re-shipped inside the .report query");
+
+        // kind: statement - the same window, but the rows are the declared lines. The line
+        // classification is a generated .view (#6938); the .report keeps the subquery reducing the
+        // ledger to a balance per account code and a thin join decoding each view row's measure.
+        String statementView = contentOf("OrderStatementLines.view");
+        assertTrue(statementView.contains("\"name\": \"ORDERS_ORDER_STATEMENT_LINES\""),
+                "the statement's line classification should be a named database view");
+        assertTrue(
+                statementView.contains("CAST('A.I' AS VARCHAR(255))") && statementView.contains("CAST('Alpine markets' AS VARCHAR(4000))"),
+                "each line should carry its code and label in the view");
+        assertTrue(statementView.contains("(Country.\\\"COUNTRY_CODE2\\\" = 'AL' OR Country.\\\"COUNTRY_CODE2\\\" = 'AT')"),
+                "a comma-separated selector of exact codes should be an OR of equalities over the account nomenclature");
+        assertTrue(statementView.contains("SUBSTRING(Country.\\\"COUNTRY_CODE2\\\" FROM 1 FOR 1) >= 'B'"),
+                "a range selector should compare equally long code prefixes, not the whole code");
+        String statement = contentOf("OrderStatement.report");
+        assertTrue(statement.contains("\"kind\": \"statement\""), "the statement report should carry its kind");
+        assertTrue(statement.contains("WITH \\\"ACCOUNT_BALANCES\\\" as (") && statement.contains("GROUP BY Country.\\\"COUNTRY_CODE2\\\""),
+                "the statement should reduce the ledger to one balance per account code before its lines read it");
+        assertTrue(statement.contains("FROM \\\"ORDERS_ORDER_STATEMENT_LINES\\\" as \\\"STATEMENT_LINES\\\""),
+                "the thin query should read the generated lines view");
+        assertFalse(statement.contains("Alpine markets"), "the line labels belong to the view, not the .report query");
+        assertTrue(statement.contains("ORDER BY \\\"STATEMENT_LINES\\\".\\\"LINE_ORDINAL\\\""),
+                "the statement should render its lines in the authored order");
+        assertTrue(statement.contains("\"alias\": \"Code\"") && statement.contains("\"alias\": \"Label\"")
+                && statement.contains("\"alias\": \"Amount\""), "a statement's columns are Code / Label / Amount");
+        assertTrue(statement.contains("\"name\": \"fromDate\"") && statement.contains("\"name\": \"toDate\""),
+                "a statement should declare the same window parameters as a balance report");
     }
 
     private void assertRoles() {

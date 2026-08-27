@@ -95,6 +95,16 @@ Which write to use:
   computed: a full-row write of a snapshot you loaded earlier silently reverts any column somebody
   else changed in between.
 
+- **`announce<Phase>(id, values)`** - present only on an entity whose intent declares
+  `phases: [<name>]`. Use it for an ENRICHMENT the record needs after its insert: a value you compute
+  in an `onCreate` listener and write back. It is a targeted write that also publishes the phase's own
+  topic, in the write's own transaction, so the value and the notice commit together. This is the ONLY
+  correct way to write back a value some declarative consumer (a `postings:` block, a notification, a
+  create-from) reads: a plain `updateWithoutEvent` / `updateProperties` publishes nothing, and a
+  consumer bound to `onCreate` then races your listener - two listeners on one event have no defined
+  order - and may post from a null. If the intent declares no phase for the moment you are enriching,
+  say so: the intent must declare it, the Java cannot invent the channel.
+
 Reserve targeted writes for system/derived columns; user data goes through the normal write path.
 
 A reusable helper that touches a *specific* entity must live in that entity's own project, because

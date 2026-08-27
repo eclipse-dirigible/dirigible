@@ -9,8 +9,8 @@
  */
 package org.eclipse.dirigible.components.dependencies;
 
-import nl.altindag.log.LogCaptor;
 import org.eclipse.dirigible.components.dependencies.MavenDependency.Scope;
+import org.eclipse.dirigible.components.dependencies.ProjectDependenciesCollector.Notice;
 import org.eclipse.dirigible.components.project.ProjectMetadata;
 import org.eclipse.dirigible.components.project.ProjectMetadataDependency;
 import org.eclipse.dirigible.components.project.ProjectMetadataUtils;
@@ -25,9 +25,9 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The project.json parsing contract of the maven dependency type - maven entries parse, git entries
- * keep their exact current meaning, and unknown types are tolerated with a warning so an older
- * platform accepts a newer descriptor.
+ * The project.json parsing contract of the maven dependency type - maven entries parse, git and
+ * typeless project-to-project entries keep their exact current meaning, and unknown types are
+ * tolerated with a warning so an older platform accepts a newer descriptor.
  */
 class ProjectMetadataParsingTest {
 
@@ -101,15 +101,41 @@ class ProjectMetadataParsingTest {
         Map<String, String> errors = new LinkedHashMap<>();
         Map<String, Set<String>> declaredBy = new LinkedHashMap<>();
 
-        try (LogCaptor logCaptor = LogCaptor.forClass(ProjectDependenciesCollector.class)) {
-            ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies, errors,
-                    declaredBy);
+        List<Notice> notices = ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies,
+                errors, declaredBy);
 
-            assertThat(logCaptor.getWarnLogs()).anySatisfy(message -> assertThat(message).contains("npm")
-                                                                                         .contains("my-project"));
-        }
+        assertThat(notices).singleElement()
+                           .satisfies(notice -> {
+                               assertThat(notice.error()).isFalse();
+                               assertThat(notice.message()).contains("npm")
+                                                           .contains("my-project");
+                           });
         assertThat(dependencies).isEmpty();
         assertThat(errors).isEmpty();
+    }
+
+    @Test
+    void a_typeless_project_dependency_is_skipped_without_a_warning() {
+        String json = """
+                {
+                    "guid": "my-project",
+                    "dependencies": [
+                        { "guid": "template-application-dao-java" }
+                    ]
+                }
+                """;
+        Set<MavenDependency> dependencies = new LinkedHashSet<>();
+        Map<String, String> errors = new LinkedHashMap<>();
+        Map<String, Set<String>> declaredBy = new LinkedHashMap<>();
+
+        List<Notice> notices = ProjectDependenciesCollector.collectDeclared("my-project", ProjectMetadataUtils.fromJson(json), dependencies,
+                errors, declaredBy);
+
+        // the watcher re-collects every few seconds - a legacy guid entry must not spam the log
+        assertThat(notices).isEmpty();
+        assertThat(dependencies).isEmpty();
+        assertThat(errors).isEmpty();
+        assertThat(declaredBy).isEmpty();
     }
 
     @Test

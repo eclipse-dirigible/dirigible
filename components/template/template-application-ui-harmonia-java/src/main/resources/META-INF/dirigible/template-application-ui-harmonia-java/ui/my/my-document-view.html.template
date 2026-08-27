@@ -24,10 +24,10 @@
 #if($statusProp != "")
     <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="mode === 'edit' && statusText()" x-text="statusText()"></span>
 #end
-#if($immutableStatusProperty || $immutableAlways)
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
     <!-- Immutability pre-check: the document refuses user edits/deletes in its current status, so the
          page renders read-only and says so (the controller's 409 stays authoritative). -->
-    <span x-h-badge class="shrink-0" data-variant="warning" x-show="!mutable" :title="T('$projectName:${tprefix}.messages.immutable', 'This record is read-only in its current status - corrections go through the workflow.')" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
+    <span x-h-badge class="shrink-0" data-variant="warning" x-show="!mutable" :title="T('$projectName:${tprefix}.messages.immutable', '#if($periodLock && !$immutableStatusProperty && !$immutableAlways)This record is read-only - its accounting period is closed; book the correction in an open period.#{else}This record is read-only in its current status - corrections go through the workflow.#end')" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
 #end
     <div x-h-toolbar-spacer></div>
     <button x-h-button data-variant="transparent" @click="goBack()" x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
@@ -39,7 +39,7 @@
   <div x-show="state === 'default'" class="p-4 vbox gap-4 overflow-auto">
     <!-- Header form (aggregate totals + document number + status are excluded - number/status show in
          the title bar, totals in the footer). -->
-#if($immutableStatusProperty || $immutableAlways)
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
     <!-- One switch makes every header control read-only when the document is immutable
          (display:contents keeps the grid layout intact). -->
     <fieldset :disabled="!mutable" style="display: contents;">
@@ -119,7 +119,7 @@
 #end
 #end
     </div>
-#if($immutableStatusProperty || $immutableAlways)
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
     </fieldset>
 #end
 
@@ -154,7 +154,7 @@
         <div x-show="items.length === 0" x-h-text.muted class="p-2" x-text="T('$projectName:${tprefix}.messages.noData', 'No messages yet.')"></div>
       </div>
 #if(!$personalReadOnly)
-      <div class="vbox gap-2"#if($immutableStatusProperty || $immutableAlways) x-show="mutable"#end>
+      <div class="vbox gap-2"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end>
 #if($chatInternalProperty)
         <label class="hbox items-center gap-2 text-sm">
           <span x-h-switch data-size="sm"><input type="checkbox" x-model="chatInternal" /></span>
@@ -177,13 +177,13 @@
         <span x-h-toolbar-title class="shrink-0" x-text="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'"></span>
         <div x-h-toolbar-spacer></div>
 #if(!$personalReadOnly)
-        <button x-h-button data-variant="primary" data-size="sm"#if($immutableStatusProperty || $immutableAlways) x-show="mutable"#end @click="openItem(null)">
+        <button x-h-button data-variant="primary" data-size="sm"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end @click="openItem(null)">
           <i role="img" x-h-lucide data-lucide="plus"></i>
           <span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span>
         </button>
         <!-- Fill Month: one dialog fill -> a line per working day. Offered only when the line item
              carries an editable plain DATE column (the fill target). -->
-        <button x-h-button data-variant="outline" data-size="sm" x-show="#if($immutableStatusProperty || $immutableAlways)mutable && #{end}fillDateColumn()" @click="openFillMonth()">
+        <button x-h-button data-variant="outline" data-size="sm" x-show="#if($immutableStatusProperty || $immutableAlways || $periodLock)mutable && #{end}fillDateColumn()" @click="openFillMonth()">
           <i role="img" x-h-lucide data-lucide="calendar-plus"></i>
           <span x-text="T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month')"></span>
         </button>
@@ -199,13 +199,13 @@
         <span x-h-toolbar-title class="shrink-0" x-text="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'"></span>
         <div x-h-toolbar-spacer></div>
 #if(!$personalReadOnly)
-        <button x-h-button data-variant="primary" data-size="sm"#if($immutableStatusProperty || $immutableAlways) x-show="mutable"#end @click="openItem(null)">
+        <button x-h-button data-variant="primary" data-size="sm"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end @click="openItem(null)">
           <i role="img" x-h-lucide data-lucide="plus"></i>
           <span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span>
         </button>
         <!-- Fill Month: one dialog fill -> a line per working day. Offered only when the line item
              carries an editable plain DATE column (the fill target). -->
-        <button x-h-button data-variant="outline" data-size="sm" x-show="#if($immutableStatusProperty || $immutableAlways)mutable && #{end}fillDateColumn()" @click="openFillMonth()">
+        <button x-h-button data-variant="outline" data-size="sm" x-show="#if($immutableStatusProperty || $immutableAlways || $periodLock)mutable && #{end}fillDateColumn()" @click="openFillMonth()">
           <i role="img" x-h-lucide data-lucide="calendar-plus"></i>
           <span x-text="T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month')"></span>
         </button>
@@ -226,13 +226,13 @@
           </thead>
           <tbody x-h-table-body>
             <template x-for="row in items" :key="row[itemsDef.primaryKey]">
-              <tr x-h-table-row data-hoverable="true" class="cursor-pointer" @click="#if($immutableStatusProperty || $immutableAlways)mutable && #{end}openItem(row)">
+              <tr x-h-table-row data-hoverable="true" class="cursor-pointer" @click="#if($immutableStatusProperty || $immutableAlways || $periodLock)mutable && #{end}openItem(row)">
                 <template x-for="col in tableColumns()" :key="col.name">
                   <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="displayItem(row, col)"></td>
                 </template>
 #if(!$personalReadOnly)
                 <td x-h-table-cell class="text-right">
-                  <button x-h-button data-variant="transparent" data-size="icon-sm"#if($immutableStatusProperty || $immutableAlways) x-show="mutable"#end aria-label="Delete" @click.stop="deleteItem(row)"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
+                  <button x-h-button data-variant="transparent" data-size="icon-sm"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end aria-label="Delete" @click.stop="deleteItem(row)"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
                 </td>
 #end
               </tr>
@@ -291,7 +291,7 @@
               <span x-h-card-title x-text="child.label"></span>
               <div class="grow"></div>
 #if(!$personalReadOnly)
-              <button x-h-button data-variant="primary" data-size="sm"#if($immutableStatusProperty || $immutableAlways) x-show="mutable"#end @click="addChild(child)">
+              <button x-h-button data-variant="primary" data-size="sm"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end @click="addChild(child)">
                 <i role="img" x-h-lucide data-lucide="plus"></i>
                 <span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span>
               </button>
@@ -340,12 +340,12 @@
       <button x-h-button data-variant="transparent" @click="goBack()"
               x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
 #else
-      <button x-h-button data-variant="negative" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways) &amp;&amp; mutable#end" @click="deleteOpen = true"
+      <button x-h-button data-variant="negative" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="deleteOpen = true"
               x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
       <div class="grow"></div>
       <button x-h-button data-variant="transparent" @click="goBack()" :disabled="saving"
               x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
-      <button x-h-button data-variant="primary"#if($immutableStatusProperty || $immutableAlways) x-show="mutable"#end @click="save()" :disabled="saving">
+      <button x-h-button data-variant="primary"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end @click="save()" :disabled="saving">
         <span x-show="saving" x-h-spinner></span>
         <span x-text="T('$projectName:${tprefix}.defaults.save', 'Save')"></span>
       </button>

@@ -78,6 +78,7 @@
                 "perspectiveName": "Books",
                 "perspectiveOrder": "100",
                 "perspectiveRole": "",
+                "phases": "costed",
                 "title": "Book",
                 "tooltip": "Book",
                 "type": "PRIMARY"

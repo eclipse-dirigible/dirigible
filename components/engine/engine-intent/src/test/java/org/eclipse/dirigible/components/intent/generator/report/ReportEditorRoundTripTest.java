@@ -235,43 +235,79 @@ class ReportEditorRoundTripTest {
                         .toString());
     }
 
+    private static final String LEDGER = """
+            name: ledger
+            entities:
+              - name: Account
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string }
+              - name: JournalEntry
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: entryDate, type: date }
+                relations:
+                  - { name: items, kind: oneToMany, to: JournalEntryItem }
+              - name: JournalEntryItem
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: debit, type: decimal }
+                  - { name: credit, type: decimal }
+                relations:
+                  - { name: journalEntry, kind: manyToOne, to: JournalEntry, composition: true }
+                  - { name: account, kind: manyToOne, to: Account, required: true }
+            reports:
+              - name: TrialBalance
+                kind: balance
+                source: JournalEntryItem
+                date: journalEntry.entryDate
+                debit: debit
+                credit: credit
+                dimensions: [account.code]
+                #EXTRA#
+            """;
+
+    private static Map<String, Object> ledgerReport(String extra) {
+        IntentModel model = IntentParser.parse(LEDGER.replace("#EXTRA#", extra));
+        return ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                    .get(0));
+    }
+
+    private static Map<String, String> ledgerViews(String extra) {
+        IntentModel model = IntentParser.parse(LEDGER.replace("#EXTRA#", extra));
+        return ReportIntentGenerator.buildViewsForTest(TestContexts.context(model), model.getReports()
+                                                                                         .get(0));
+    }
+
     /** The balance windows are expressions too, so the accounting reports round-trip as well. */
     @Test
     void aBalanceReportRoundTrips() {
-        IntentModel model = IntentParser.parse("""
-                name: ledger
-                entities:
-                  - name: Account
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: code, type: string }
-                  - name: JournalEntry
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: entryDate, type: date }
-                    relations:
-                      - { name: items, kind: oneToMany, to: JournalEntryItem }
-                  - name: JournalEntryItem
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: debit, type: decimal }
-                      - { name: credit, type: decimal }
-                    relations:
-                      - { name: journalEntry, kind: manyToOne, to: JournalEntry, composition: true }
-                      - { name: account, kind: manyToOne, to: Account, required: true }
-                reports:
-                  - name: TrialBalance
-                    kind: balance
-                    source: JournalEntryItem
-                    date: journalEntry.entryDate
-                    debit: debit
-                    credit: credit
-                    dimensions: [account.code]
-                """);
-        Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
-                                                                                                            .get(0));
+        Map<String, Object> document = ledgerReport("");
         assertRoundTrips(document);
         assertEquals(2, joins(document).size());
+    }
+
+    /**
+     * The general ledger's correspondence axis joins a table to ITSELF and hangs a second copy of a
+     * dimension's join off that - since dirigible #6938 all of that structure lives in the generated
+     * {@code <REPORT>_CORRESPONDENCE} view, which the {@code .report} reads as its base table. The
+     * builder then owns a plain windowed aggregation over one table, so the report still round-trips.
+     */
+    @Test
+    void aCorrespondenceBalanceReportRoundTrips() {
+        Map<String, Object> document = ledgerReport("correspondence: account.code");
+        assertRoundTrips(document);
+
+        // The base table IS the generated view; the builder-owned model needs no joins at all.
+        assertEquals("LEDGER_TRIAL_BALANCE_CORRESPONDENCE", document.get("table"));
+        assertEquals(0, joins(document).size());
+
+        // The self-join and the second copy of the account join live in the view, aliased apart -
+        // the dimension's account keeps its own INNER join, so neither copy drops the other.
+        String view = ledgerViews("correspondence: account.code").get("LEDGER_TRIAL_BALANCE_CORRESPONDENCE");
+        assertTrue(view.contains("INNER JOIN \"LEDGER_ACCOUNT\" as Account "), view);
+        assertTrue(view.contains("LEFT JOIN \"LEDGER_JOURNAL_ENTRY_ITEM\" as JournalEntryItemCorrespondent"), view);
+        assertTrue(view.contains("LEFT JOIN \"LEDGER_ACCOUNT\" as AccountCorrespondent"), view);
     }
 
     /**

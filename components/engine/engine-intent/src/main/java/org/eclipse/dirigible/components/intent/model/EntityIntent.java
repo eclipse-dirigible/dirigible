@@ -163,6 +163,18 @@ public class EntityIntent {
      */
     private Boolean immutable;
     /**
+     * Optional date-based immutability: while the period covering the named date of this record is
+     * closed, user writes are refused (409), exactly as for {@code immutableWhen}. Composes with the
+     * status-scoped guard rather than replacing it - a record can be frozen by what it IS and by WHEN
+     * it falls, independently.
+     */
+    private PeriodLockIntent immutableInPeriod;
+    /**
+     * Optional period-register marker: this entity's rows ARE the dated windows other entities are
+     * locked by, and this names its two bounds and the statuses that mean CLOSED.
+     */
+    private PeriodIntent period;
+    /**
      * Whether this composition child freezes together with its master ({@code locksWithMaster}, default
      * true). A master's {@code immutableWhen} locks the document's own CONTENT; it says nothing about a
      * child collection that is a different entity with its own controller and its own rules. Declaring
@@ -225,6 +237,18 @@ public class EntityIntent {
      * {@code transitions:} button. See {@link LifecycleIntent}.
      */
     private LifecycleIntent lifecycle;
+
+    /**
+     * Optional named enrichment PHASES this entity announces - the moments between "the row was
+     * inserted" and "the row is complete" that a declarative consumer can bind to. An enrichment a
+     * listener computes and writes back event-silently (a costing pool, a snapshot column, an external
+     * lookup) publishes nothing, so a consumer bound to {@code onCreate} races it and reads the
+     * un-enriched row. A phase is that write's own channel: the enriching listener applies the values
+     * through the generated repository's {@code announce<Phase>} method - one write, so the value and
+     * the notice commit together - and a consumer binds {@code event: { onPhase: <Entity>, phase:
+     * <name> }} to observe the ENRICHED row. Absent (the default) → the entity announces no phase.
+     */
+    private List<String> phases = new ArrayList<>();
 
     /**
      * On a {@code function: Snapshot} child only: the fixed print-template language its generated
@@ -503,6 +527,22 @@ public class EntityIntent {
         this.immutable = immutable;
     }
 
+    public PeriodLockIntent getImmutableInPeriod() {
+        return immutableInPeriod;
+    }
+
+    public void setImmutableInPeriod(PeriodLockIntent immutableInPeriod) {
+        this.immutableInPeriod = immutableInPeriod;
+    }
+
+    public PeriodIntent getPeriod() {
+        return period;
+    }
+
+    public void setPeriod(PeriodIntent period) {
+        this.period = period;
+    }
+
     public String getHierarchy() {
         return hierarchy;
     }
@@ -516,6 +556,14 @@ public class EntityIntent {
      *
      * @return the unique declarations, never null
      */
+    public List<String> getPhases() {
+        return phases == null ? List.of() : phases;
+    }
+
+    public void setPhases(List<String> phases) {
+        this.phases = phases;
+    }
+
     public List<UniqueIntent> getUnique() {
         return unique == null ? List.of() : unique;
     }

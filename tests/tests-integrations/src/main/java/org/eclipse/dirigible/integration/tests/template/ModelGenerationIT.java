@@ -125,6 +125,12 @@ class ModelGenerationIT extends IntegrationTest {
      * {@code derived.put("X", parent.)} - which is what an emitted-code helper produces when the field
      * name it interpolates is empty. Deliberately same-line only: generated code breaks a chained call
      * after the dot, so a dot at end of line is normal and its member is on the next one.
+     *
+     * <p>
+     * Matched against {@link #code(String)} rather than the raw file: outside code the same three
+     * characters are ordinary prose. A parenthetical remark that ends in a full stop - "(... a flow
+     * that never runs.)" - reads as {@code s.)}, and a template comment worded that way turned master
+     * red for two days (#6862) while the generated code it described was perfectly sound.
      */
     private static final Pattern DANGLING_MEMBER_ACCESS = Pattern.compile("\\w\\.[ \\t]*[=;),!]");
 
@@ -183,7 +189,7 @@ class ModelGenerationIT extends IntegrationTest {
      */
     @Test
     void everyTemplateRendersItsModel() throws IOException {
-        List<String> problems = new ArrayList<>();
+        List<String> problems = new ArrayList<>(danglingDetectorProblems());
         for (Case testCase : CASES) {
             problems.addAll(check(testCase));
         }
@@ -387,7 +393,7 @@ class ModelGenerationIT extends IntegrationTest {
         while (reference.find()) {
             problems.add("[" + label + "] " + path + " kept an unresolved template reference: " + reference.group());
         }
-        Matcher dangling = DANGLING_MEMBER_ACCESS.matcher(content);
+        Matcher dangling = DANGLING_MEMBER_ACCESS.matcher(code(content));
         while (dangling.find()) {
             problems.add("[" + label + "] " + path + " emitted a member access with no member, so an interpolated field name was"
                     + " empty: " + dangling.group()
@@ -405,6 +411,98 @@ class ModelGenerationIT extends IntegrationTest {
                     + " of its surrounding separators in the output");
         }
         return problems;
+    }
+
+    /**
+     * What {@link #DANGLING_MEMBER_ACCESS} must and must not see, pinned on literal samples.
+     *
+     * <p>
+     * The detector reports a defect in someone else's template, so a false positive costs whoever wrote
+     * that template a red master and a hunt through generated code that turns out to be correct - which
+     * is exactly what a comment reading "(... a flow that never runs.)" did (#6862). Checked here
+     * rather than in a test of its own because the base class discards the application context per
+     * method, and these two samples do not need an application at all.
+     *
+     * @return the problems found, empty when the detector draws the line where it should
+     */
+    private static List<String> danglingDetectorProblems() {
+        List<String> problems = new ArrayList<>();
+        for (String prose : List.of("        // duplicate start rather than a flow that never runs.)",
+                "        LOG.warn(\"the record's own flow ended.\");", "        /* a remark that ends in a full stop. */")) {
+            if (DANGLING_MEMBER_ACCESS.matcher(code(prose))
+                                      .find()) {
+                problems.add("[detector] a comment or a string literal was read as a dangling member access: " + prose.trim());
+            }
+        }
+        for (String broken : List.of("        if (entity. == null) {", "        target. = row.X;",
+                "        derived.put(\"X\", parent.);")) {
+            if (!DANGLING_MEMBER_ACCESS.matcher(code(broken))
+                                       .find()) {
+                problems.add("[detector] an empty interpolated field name went unnoticed: " + broken.trim());
+            }
+        }
+        return problems;
+    }
+
+    /**
+     * The file with its comments and its string/character literals blanked out, so a pattern that
+     * describes CODE is not matched against prose.
+     *
+     * <p>
+     * Blanked rather than removed: every remaining character keeps its offset and every line keeps its
+     * length, so what a match reports still lines up with the file the reader opens.
+     *
+     * @param content the rendered file
+     * @return the same text with everything that is not code replaced by spaces
+     */
+    private static String code(String content) {
+        char[] out = content.toCharArray();
+        int index = 0;
+        while (index < out.length) {
+            char current = content.charAt(index);
+            char next = index + 1 < out.length ? content.charAt(index + 1) : 0;
+            if (current == '/' && next == '/') {
+                while (index < out.length && content.charAt(index) != '\n') {
+                    out[index++] = ' ';
+                }
+            } else if (current == '/' && next == '*') {
+                out[index++] = ' ';
+                out[index++] = ' ';
+                while (index < out.length
+                        && !(content.charAt(index) == '*' && index + 1 < out.length && content.charAt(index + 1) == '/')) {
+                    blank(out, content, index++);
+                }
+                // An unterminated block comment runs to the end of the file; there is no closer to skip.
+                if (index + 1 < out.length) {
+                    out[index++] = ' ';
+                    out[index++] = ' ';
+                }
+            } else if (current == '"' || current == '\'') {
+                // A quote inside a comment never reaches here - the comment consumed it - so a string
+                // opened here is a real literal, and an escaped quote inside it does not close it.
+                out[index++] = ' ';
+                while (index < out.length && content.charAt(index) != current) {
+                    boolean escape = content.charAt(index) == '\\' && index + 1 < out.length;
+                    blank(out, content, index++);
+                    if (escape) {
+                        blank(out, content, index++);
+                    }
+                }
+                if (index < out.length) {
+                    out[index++] = ' ';
+                }
+            } else {
+                index++;
+            }
+        }
+        return new String(out);
+    }
+
+    /** Blanks one character, keeping newlines so line numbers and line lengths survive. */
+    private static void blank(char[] out, String content, int index) {
+        if (content.charAt(index) != '\n') {
+            out[index] = ' ';
+        }
     }
 
 }

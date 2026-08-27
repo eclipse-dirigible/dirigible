@@ -1,6 +1,7 @@
 package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
 #set($preservedOnUpdate = [])
+#set($reportedOnUpdate = [])
 #foreach ($property in $properties)
     #if($property.dataPrimaryKey)
         #set($pkPropertyName = $property.name)
@@ -33,6 +34,15 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## flag, so a user's edit of it is respected.
     #if(!$property.dataPrimaryKey && ($property.isReadOnlyProperty || ($property.aggregate && !$property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)))
         #set($ignore = $preservedOnUpdate.add($property))
+## ...and the subset of those whose discard is REPORTED when the payload carried a different value
+## (#6937). A date is deliberately not reported: the form's own round-trip is lossy (the widget shapes
+## a timestamp to whole minutes, a date to midnight), so a differing date says nothing about who wrote
+## it - while a number, a text or a foreign key round-trips exactly, which is what makes the report a
+## signal. Those are also the columns a system writer computes: the roll-up and aggregate targets, the
+## document number, uuid, ProcessId.
+        #if(!$property.isDateType)
+            #set($ignore = $reportedOnUpdate.add($property))
+        #end
     #end
 #end
 ## Decimal places of a calculated property: its own scale, else 2 for floating-point types, else 0.
@@ -176,6 +186,10 @@ import org.eclipse.dirigible.sdk.utils.Calc;
 #if($haveCalculatedPropertyAction)
 import org.eclipse.dirigible.sdk.component.Beans;
 #end
+#if($reportedOnUpdate.size() > 0)
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+#end
 #if($documentMaster)
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import java.math.BigDecimal;
@@ -214,6 +228,11 @@ ${importsCode}
 @Component("${javaGenFolderName}_${name}Repository")
 public class ${name}Repository extends JavaRepository<${name}Entity> {
 
+#if($reportedOnUpdate.size() > 0)
+    /** Reports a system-owned column a full-row update() carried a different value for - see update(). */
+    private static final Logger LOG = Logging.getLogger("gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository");
+
+#end
 #if($history == "true")
     /** The base table whose shadow ${tablePrefix}${dataName}_HISTORY table carries the change trail. */
     private static final String HISTORY_TABLE = "${tablePrefix}${dataName}";
@@ -318,8 +337,31 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // updateProperties / updateDerived), so this preservation cannot fight a workflow write.
         ${name}Entity existingRow = entity.${pkPropertyName} == null ? null : findById(entity.${pkPropertyName});
         if (existingRow != null) {
+#if($reportedOnUpdate.size() > 0)
+            // ...but a caller that computed a DIFFERENT value for one of them is not sending a partial
+            // payload - it is a system writer on the wrong path, and its work is being thrown away.
+            // Preserving silently made that indistinguishable from success: a hand-written listener
+            // maintaining a pool via full-row update() kept returning 200 while the column stayed at
+            // its created value forever (#6937). So the discard is reported, once per write, naming
+            // what was dropped; a payload that carries the stored value back - every ordinary form
+            // round-trip - says nothing.
+            java.util.List<String> discarded = new java.util.ArrayList<>();
+#end
 #foreach($property in $preservedOnUpdate)
+#if(!$property.isDateType)
+            if (isDiscardedByPreservation(entity.${property.name}, existingRow.${property.name})) {
+                discarded.add("${property.name}=" + entity.${property.name});
+            }
+#end
             entity.${property.name} = existingRow.${property.name};
+#end
+#if($reportedOnUpdate.size() > 0)
+            if (!discarded.isEmpty()) {
+                LOG.warn("A full-row update of ${name} {} carried system-owned {} - discarded, the stored"
+                        + " values were kept. update() never writes these columns; a writer that computes"
+                        + " them must use the targeted updateProperty / updateProperties / updateDerived.",
+                        entity.${pkPropertyName}, discarded);
+            }
 #end
         }
 #end
@@ -649,6 +691,41 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // connection, before its commit, and recorded in the event outbox alongside it.
         return updateProperties(id, values, "${projectName}-${perspectiveName}-${name}-updated");
     }
+#if($phases && $phases != "")
+#foreach($phase in $phases.split(","))
+#set($Phase = "${phase.substring(0,1).toUpperCase()}${phase.substring(1)}")
+
+    /**
+     * Apply an enrichment and announce the "${phase}" phase of the row - the intent
+     * phases: [${phase}] declaration of this entity. Bind it with
+     * event: { onPhase: ${name}, phase: ${phase} }.
+     *
+     * <p>
+     * An enrichment a listener computes on create - a costing pool, a snapshot column, an external
+     * lookup - has to be written back without re-firing the onUpdate consumers, so it publishes nothing
+     * at all; a declarative consumer of the enriched value therefore had no moment to bind to. It could
+     * only bind the create, where the order of two listeners is undefined and the value may not be
+     * written yet, and the result was a plausible-looking record computed from a null with every step
+     * green. A phase is that write's own channel: the values and the notice travel in ONE targeted
+     * write, so they commit together and no consumer can observe one without the other.
+     *
+     * <p>
+     * Routed through {@link #updateProperties} like every other targeted write, so the checks gate, the
+     * stored display name, the change history and a document line's resum all still run.
+     *
+     * @param id the primary key of the row being enriched
+     * @param values the columns this phase completes; never empty - the write IS the announcement, and
+     *        a phase nothing wrote is a moment that did not happen
+     * @return the number of rows written
+     */
+    public int announce${Phase}(Object id, java.util.Map<String, Object> values) {
+        if (values == null || values.isEmpty()) {
+            throw new IllegalArgumentException("announce${Phase} requires the enriched values - the write carries the announcement");
+        }
+        return updateProperties(id, values, "${projectName}-${perspectiveName}-${name}-${phase}");
+    }
+#end
+#end
 #if($haveSubsets)
 
     /**
@@ -697,6 +774,34 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             normalized.append(key);
         }
         return normalized.toString();
+    }
+#end
+#if($reportedOnUpdate.size() > 0)
+
+    /**
+     * Whether the preservation of a system-owned column is DISCARDING work: the payload carried a
+     * value of its own and it is not the stored one.
+     *
+     * <p>
+     * An absent value is the ordinary case the preservation exists for - a form PUTs only the fields it
+     * edits - and is never reported. A numeric value is compared by amount, not by representation:
+     * {@code 120.00} and {@code 120} are the same total, and a JSON round-trip through the browser's
+     * number type routinely changes the scale. Everything else is compared by value, arrays included
+     * (a BLOB column's identity would differ on every round-trip).
+     *
+     * @param payloadValue the value the caller sent, may be null
+     * @param storedValue the value the stored row holds, may be null
+     * @return true when the payload value is present and differs from the stored one
+     */
+    private static boolean isDiscardedByPreservation(Object payloadValue, Object storedValue) {
+        if (payloadValue == null || java.util.Objects.deepEquals(payloadValue, storedValue)) {
+            return false;
+        }
+        if (payloadValue instanceof Number payloadNumber && storedValue instanceof Number storedNumber) {
+            return new java.math.BigDecimal(String.valueOf(payloadNumber))
+                    .compareTo(new java.math.BigDecimal(String.valueOf(storedNumber))) != 0;
+        }
+        return true;
     }
 #end
 #if($lifecycleEdges)

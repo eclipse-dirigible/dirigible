@@ -676,6 +676,51 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void periodLockEmitsBothHalvesOnTheEntitiesThatDeclareThem() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: PeriodStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: AccountingPeriod
+                    period: { start: startDate, end: endDate, closedWhen: "Status == CLOSED" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: startDate, type: date }
+                      - { name: endDate, type: date }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: 1 }
+                  - name: JournalEntry
+                    immutableInPeriod: { period: AccountingPeriod, date: entryDate }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: entryDate, type: date }
+                seeds:
+                  - name: period-statuses
+                    entity: PeriodStatus
+                    rows:
+                      - { id: 1, name: OPEN }
+                      - { id: 2, name: CLOSED }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
+        // The register contributes its own shape...
+        Map<String, Object> period = entityByName(entities(model), "AccountingPeriod");
+        assertEquals("StartDate", period.get("periodStartProperty"));
+        assertEquals("EndDate", period.get("periodEndProperty"));
+        assertEquals("Status", period.get("periodStatusProperty"));
+        assertEquals("2", period.get("periodClosedValues"));
+        // ...the guarded entity only which register locks it and which of its dates decides.
+        Map<String, Object> entry = entityByName(entities(model), "JournalEntry");
+        assertEquals("AccountingPeriod", entry.get("periodLockEntity"));
+        assertEquals("EntryDate", entry.get("periodLockDateProperty"));
+        assertNull(entry.get("periodStartProperty"));
+        assertNull(period.get("periodLockEntity"));
+    }
+
+    @Test
     void lifecycleEmitsTheStateMachineTheRepositoryEnforces() {
         String yaml = """
                 name: ledger
@@ -713,6 +758,29 @@ class EdmIntentGeneratorTest {
         assertEquals("1", entry.get("lifecycleInitialStatus"));
         // An entity without a lifecycle carries none of it.
         assertNull(entityByName(entities(model), "EntryStatus").get("lifecycleEdges"));
+    }
+
+    @Test
+    void declaredPhasesReachTheModelSoTheRepositoryCanAnnounceThem() {
+        String yaml = """
+                name: inventory
+                entities:
+                  - name: StockMovement
+                    phases: [costed, invoiced]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: costValue, type: decimal }
+                  - name: Warehouse
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "inventory");
+
+        assertEquals("costed,invoiced", entityByName(entities(model), "StockMovement").get("phases"));
+        // An entity that announces nothing carries nothing - a model that says nothing generates
+        // byte-identically to one written before the axis existed.
+        assertNull(entityByName(entities(model), "Warehouse").get("phases"));
     }
 
     @Test

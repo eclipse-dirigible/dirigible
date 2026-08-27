@@ -68,8 +68,11 @@ import ch.qos.logback.classic.Level;
  * generated token at minimum, the runtime behavior where reachable), never only the parsed model.
  * Covered here: {@code immutableWhen} / {@code immutable} (409 on write/delete, and the lock
  * inherited by a composition child - a line of a locked document is refused while a child that
- * declared {@code locksWithMaster: false} keeps its writes), {@code checks} (exactlyOne / itemsMin
- * / itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual} (the read-time overlay
+ * declared {@code locksWithMaster: false} keeps its writes), {@code immutableInPeriod} (the same
+ * 409 keyed on a period register's status instead - a record booked into an open period stops being
+ * writable when the period around it closes, a create into or a move into a closed one is refused,
+ * and a date no period covers stays writable), {@code checks} (exactlyOne / itemsMin /
+ * itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual} (the read-time overlay
  * on an entity read, and its SQL counterpart on a report grouping by that nomenclature - the two
  * must agree on the same value in the same language), seed rows carrying a RELATION column,
  * aggregate totals, first-class {@code number:} stamping from an authored {@code .numbers} series
@@ -99,6 +102,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     private static final String API = "/services/java/" + PROJECT + "/gen/emission/api";
     /** A standalone report owns its own gen folder, named after the report file. */
     private static final String REPORT_API = "/services/java/" + PROJECT + "/gen/claimsbyunit/api/reports";
+
+    /** The statement report's gen folder - same convention, its own folder. */
+    private static final String STATEMENT_API = "/services/java/" + PROJECT + "/gen/entrysheet/api/reports";
     /** What a {@code type: text} field's column is sized to (EdmIntentGenerator's TEXT_LENGTH). */
     private static final int TEXT_COLUMN_LENGTH = 4000;
 
@@ -164,6 +170,33 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: note, type: string, length: 200 }
                 relations:
                   - { name: Tariff, kind: manyToOne, to: Tariff, calculatedActionOnCreate: QuoteTariffAction }
+
+              # Date-based immutability (immutableInPeriod:). The register declares its own two
+              # bounds and what CLOSED means; a record dated inside a closed window is frozen for
+              # user writes whatever status it carries - and unlike immutableWhen, a CREATE into a
+              # closed period is refused too, which is what closing one means.
+              - name: PeriodStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string,  required: true, length: 100 }
+
+              - name: AccountingPeriod
+                period: { start: startDate, end: endDate, closedWhen: "Status == CLOSED" }
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: name,      type: string, length: 100 }
+                  - { name: startDate, type: date, required: true }
+                  - { name: endDate,   type: date, required: true }
+                relations:
+                  - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: 1 }
+
+              - name: LedgerBooking
+                immutableInPeriod: { period: AccountingPeriod, date: bookedOn }
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: bookedOn, type: date, required: true }
+                  - { name: amount,   type: decimal }
 
               # Append-only (immutable: true): e.g. the snapshot stored when a document is sent -
               # user writes and deletes are rejected from the moment a record is created.
@@ -999,9 +1032,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: end, kind: end }
 
               # a SENDING step: the serviceTask's whole work is the mail about the trigger record.
-              # No attach here (the transition below covers the attachment), and the Bills this test
-              # creates carry no Person - so at runtime the delegate takes its no-recipient no-op
-              # path, which is exactly what must not stall a flow.
+              # It attaches a REPORT rather than the record's own document (the transition below
+              # covers that one), and the Bills this test creates carry no Person - so at runtime the
+              # delegate takes its no-recipient no-op path BEFORE any render, which is exactly what
+              # must not stall a flow.
               - name: BillFlow
                 trigger: { onCreate: Bill }
                 steps:
@@ -1012,6 +1046,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         to: Person.email
                         subject: "Bill {note}"
                         body: "Dear {Person.name}, your bill totals {amount}."
+                        # attach a parameterized REPORT (#6931): the report runs scoped to THIS
+                        # record's values and the rendered PDF rides along. `minTotal` declares an
+                        # `initial`, so binding it is REQUIRED - left unbound it would stay at that
+                        # one fixed slice and every recipient would be mailed the same rows.
+                        attach:
+                          report: ClaimsByUnit
+                          bind: { minTotal: amount, note: note }
                       next: shareBill
                   # the MIRROR of the per-row fan-out: the rows are only the recipient list, and the
                   # document is the BILL's - rendered once (and not at all when nobody is invited,
@@ -1296,6 +1337,30 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 source: Claim
                 dimensions: [Unit]
                 measures: ["count(*)"]
+                # User-set parameters: rendered above the report and bound into its WHERE. Both
+                # targets are NULLABLE and unset on the seeded claims, so the unparameterized call
+                # below is the assertion that a declared parameter does not narrow the report before
+                # anyone touches it - a plain `>= :minTotal` would drop both rows on a NULL total.
+                parameters:
+                  - { name: minTotal, target: totalCost, op: ge, initial: "0" }
+                  - { name: note, target: note, op: like }
+              # kind: statement (#6938): the line classification is emitted as a generated
+              # <REPORT>_LINES .view artifact - published with the project and provisioned by the
+              # ViewsSynchronizer AFTER the tables - and the .report keeps a thin windowed join over
+              # it, so the generated repository never carries the statement's structure as one giant
+              # Java literal (the #6936 class). MISS matches no account on purpose: a declared line
+              # renders (with 0) even when nothing selects into it; TOTAL is flattened arithmetic.
+              - name: EntrySheet
+                kind: statement
+                source: Entry
+                date: date
+                debit: debit
+                credit: credit
+                account: Account.name
+                lines:
+                  - { code: CASH,  label: Vault cash, accounts: "Vault*",   measure: closingNetDebit }
+                  - { code: MISS,  label: Missing,    accounts: "Nothing*", measure: closingNetDebit }
+                  - { code: TOTAL, label: Total,      sum: [CASH, MISS] }
 
             seeds:
               - name: people
@@ -1306,6 +1371,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # The base tariff is row 2, NOT row 1: a calculated FK that resolved to 1 could be a
               # coincidence (a first row, a stray default), one that resolves to 2 can only be the
               # action having run and matched on `base`.
+              - name: period-statuses
+                entity: PeriodStatus
+                rows:
+                  - { id: 1, name: OPEN }
+                  - { id: 2, name: CLOSED }
               - name: tariffs
                 entity: Tariff
                 rows:
@@ -1379,6 +1449,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 rows:
                   - { id: 1, name: Assets }
                   - { id: 2, name: Cash, Parent: 1 }
+                  # Vault exists for the EntrySheet statement report: only the seeded ledger rows
+                  # below reference it, so no runtime-created Entry can drift its figures.
+                  - { id: 3, name: Vault, Parent: 1 }
+              # The little ledger the EntrySheet statement reads: 100 debit against 40 credit on the
+              # same account - closingNetDebit must net the two BEFORE the line sums (= 60), which is
+              # the arithmetic a string assertion cannot vouch for.
+              - name: ledger-entries
+                entity: Entry
+                rows:
+                  - { id: 901, date: "2026-01-10", debit: 100, Account: 3, Status: 2 }
+                  - { id: 902, date: "2026-01-11", credit: 40, Account: 3, Status: 2 }
             """;
 
     @Autowired
@@ -1598,6 +1679,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String entryMasterPage = contentOf("gen/emission/js/components/pages/Entry/EntryMasterPage.js");
         assertTrue(entryMasterPage.contains("isRowImmutable"),
                 "the browse page must gate row Edit/Delete on the baked per-row immutability check");
+        // Date-based immutability: the guard queries the register the intent named, and the same
+        // pre-check endpoint the status lock exposes now answers for it too.
+        String ledgerBookingController = contentOf("gen/emission/api/ledgerbooking/LedgerBookingController.java");
+        assertTrue(ledgerBookingController.contains("requirePeriodOpen(") && ledgerBookingController.contains("AccountingPeriodRepository"),
+                "immutableInPeriod must emit the period guard querying the declared register");
+        assertTrue(ledgerBookingController.contains("/{id}/mutable"),
+                "immutableInPeriod must emit the GET /{id}/mutable pre-check endpoint in the REST controller");
         assertTrue(entryController.contains("must reference a leaf"),
                 "leafOnly must emit the server-side children check in the REST controller");
 
@@ -1742,6 +1830,37 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the report repository must bind the language parameter its query uses");
         assertTrue(claimsByUnitRepository.contains("User.getLanguage()"),
                 "the report's language must come from the caller's Accept-Language, like every entity read");
+        // Authored parameters: declared on the .report with the value they bind when the request
+        // carries none, bound by the repository, and exposed as query parameters by the controller.
+        assertTrue(claimsByUnitReport.contains("\"name\": \"minTotal\"") && claimsByUnitReport.contains("\"initial\": \"0\""),
+                "an authored report parameter must be declared on the .report with its initial value: " + claimsByUnitReport);
+        assertTrue(claimsByUnitRepository.contains("parameter(\"minTotal\", \"DECIMAL\", value(filter, \"minTotal\", \"0\"))"),
+                "the report repository must bind each authored parameter, typed from its target field");
+        assertTrue(contentOf("gen/claimsbyunit/api/reports/ClaimsByUnitController.java").contains("@QueryParam(\"minTotal\")"),
+                "the report controller must expose each authored parameter as a query parameter");
+
+        // kind: statement (#6938): the line classification is a generated .view artifact next to the
+        // .report - the selectors and labels live THERE, as data the ViewsSynchronizer provisions,
+        // never inside the generated repository.
+        String entrySheetView = contentOf("EntrySheetLines.view");
+        assertTrue(entrySheetView.contains("\"name\": \"EMISSION_ENTRY_SHEET_LINES\""),
+                "the statement's lines view must be a named database object: " + entrySheetView);
+        assertTrue(entrySheetView.contains("LIKE 'Vault%'"), "the line selectors must live in the view: " + entrySheetView);
+        assertTrue(entrySheetView.contains("CAST(NULL AS VARCHAR(255)) as \\\"ACCOUNT_CODE\\\""),
+                "every line must carry a head arm, so an unmatched line still renders: " + entrySheetView);
+        String entrySheetReport = contentOf("EntrySheet.report");
+        assertTrue(entrySheetReport.contains("FROM \\\"EMISSION_ENTRY_SHEET_LINES\\\""),
+                "the .report query must read the generated view: " + entrySheetReport);
+        assertFalse(entrySheetReport.contains("LIKE"),
+                "the .report query must not re-ship the classification the view holds: " + entrySheetReport);
+        // ... and whatever SQL still reaches the repository is joined from PER-LINE literals - a
+        // multi-kilobyte single-line literal is what overflowed the source parser and took
+        // synchronization down platform-wide (#6936).
+        String entrySheetRepository = contentOf("gen/entrysheet/data/reports/EntrySheetRepository.java");
+        assertTrue(entrySheetRepository.contains("String.join(\"\\n\""),
+                "the repository QUERY must be joined from per-line literals: " + entrySheetRepository);
+        assertTrue(entrySheetRepository.contains("WITH \\\"ACCOUNT_BALANCES\\\""),
+                "the windowed ledger reduction stays in the repository - it binds the date parameters: " + entrySheetRepository);
 
         // The seed's RELATION key (Parent: 1) must survive into the CSV as the FK column - an
         // unknown/mis-cased key is dropped silently and CSVIM then skips the rows.
@@ -1805,6 +1924,37 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String billHeaderRepository = contentOf("gen/emission/data/bill/BillRepository.java");
         assertTrue(billHeaderRepository.contains("totals.put(\"BalanceDue\", entity.BalanceDue)"),
                 "the totals recompute must persist the refreshed calculated field: " + billHeaderRepository);
+        // A full-row update() PRESERVES the system-owned columns over the payload - and reports the
+        // discard when the payload carried a value of its own that is not the stored one (#6937).
+        // Silence there made a system writer on the wrong path indistinguishable from a working one:
+        // it kept getting 200 while the column it computed never moved. A date is deliberately not
+        // reported (the form's own round-trip truncates it, so a difference means nothing) and an
+        // absent value never is - that is the partial payload the preservation exists for.
+        assertTrue(billRepository.contains("entity.Amount = existingRow.Amount;"),
+                "a full-row update must take the aggregate column from the stored row: " + billRepository);
+        assertTrue(
+                billRepository.contains("isDiscardedByPreservation(entity.Amount, existingRow.Amount)")
+                        && billRepository.contains("discarded.add(\"Amount=\" + entity.Amount)"),
+                "a discarded system-owned value must be collected for the report: " + billRepository);
+        assertTrue(billRepository.contains("carried system-owned {} - discarded"),
+                "the discard must be reported once per write, naming what was dropped: " + billRepository);
+        // ...on an AUDITED entity, where the two halves sit next to each other: the audit timestamps are
+        // preserved WITHOUT being reported (an <input type=datetime-local> round-trips a stored instant
+        // as whole minutes, so a difference there is the widget, not a writer), while the audit user and
+        // the platform identifiers next to them are reported like any other system-owned column.
+        String auditedClaimRepository = contentOf("gen/emission/data/claim/ClaimRepository.java");
+        assertTrue(
+                auditedClaimRepository.contains("isDiscardedByPreservation(entity.CreatedBy, existingRow.CreatedBy)")
+                        && auditedClaimRepository.contains("isDiscardedByPreservation(entity.ProcessId, existingRow.ProcessId)"),
+                "a non-date system-owned column must be reported: " + auditedClaimRepository);
+        assertTrue(
+                auditedClaimRepository.contains("entity.CreatedAt = existingRow.CreatedAt;")
+                        && auditedClaimRepository.contains("entity.UpdatedAt = existingRow.UpdatedAt;"),
+                "the audit timestamps must still be preserved: " + auditedClaimRepository);
+        assertFalse(
+                auditedClaimRepository.contains("isDiscardedByPreservation(entity.CreatedAt")
+                        || auditedClaimRepository.contains("isDiscardedByPreservation(entity.UpdatedAt"),
+                "a date's lossy UI round-trip must not be reported as a discard: " + auditedClaimRepository);
         String billLineRepository = contentOf("gen/emission/data/bill/BillLineRepository.java");
         assertTrue(billLineRepository.contains("new BillRepository().recalculate("),
                 "a line change must trigger the master's document-totals recompute");
@@ -2523,6 +2673,30 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the recipient expression must be null-safe on an unset relation");
         assertTrue(billSend.contains("Mail.send("), "the sender must emit the actual send call");
         assertTrue(billSend.contains("no recipient"), "a record with nobody to mail must be a logged no-op, not a failure");
+        // attach: { report, bind } (#6931) - the report runs through its OWN generated repository,
+        // which lives in the report's gen folder rather than this one, and each declared parameter is
+        // bound from the record the message is about. This is also the compile proof for the branch:
+        // a wrong package or an undeclared local would fail the whole client-Java batch.
+        assertTrue(billSend.contains("new gen.claimsbyunit.data.reports.ClaimsByUnitRepository()"),
+                "the report render must go through the report's own generated repository, got: " + billSend);
+        assertTrue(
+                billSend.contains("reportFilter.put(\"minTotal\", reportValue(entity.Amount))")
+                        && billSend.contains("reportFilter.put(\"note\", reportValue(entity.Note))"),
+                "each bound parameter must read the record the message is about, got: " + billSend);
+        assertTrue(billSend.contains("reportData.put(\"items\", new gen.claimsbyunit.data.reports.ClaimsByUnitRepository()"),
+                "the report's rows are the print payload's items, got: " + billSend);
+        assertTrue(billSend.contains("Print.render(\"ClaimsByUnit\""),
+                "the render must resolve the REPORT's print template by the report's name, got: " + billSend);
+        // The bound values double as the rendered header, so the PDF states which slice it is.
+        assertTrue(billSend.contains("reportData.put(\"document\", reportFilter)"),
+                "the bound parameters must be the rendered document context, got: " + billSend);
+        // The scaffold the render resolves through, seeded under doc/ for the CMS - written for the
+        // report something MAILS, and binding the aliases that report's own query SELECTs.
+        String reportTemplate = contentOf("doc/Templates/ClaimsByUnit/Print/en/standard.print");
+        assertTrue(reportTemplate.contains("<table source=\"items\">"), "the report template must bind the rows as its table");
+        assertTrue(reportTemplate.contains("{{Count}}"), "the template must bind the report's own column alias, got: " + reportTemplate);
+        assertTrue(reportTemplate.contains("{{document.minTotal}}") && reportTemplate.contains("{{document.note}}"),
+                "the bound parameters must be the template's header, got: " + reportTemplate);
         String billBpmn = contentOf("BillFlow.bpmn");
         assertTrue(billBpmn.contains("gen.events.emission.BillFlowMailBillSend"),
                 "the BPMN service task must bind the generated sender delegate");
@@ -2579,7 +2753,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // status guard.
         String createPosting = contentOf("gen/events/emission/PaymentPostingPosting.java");
         assertTrue(createPosting.contains("-Payment\";"), "an onCreate posting must bind the source's bare create topic");
-        assertTrue(!createPosting.contains("-transitioned"), "an onCreate posting must not bind the -transitioned topic");
+        // Anchored on the destination()'s return literal, like the positive assertion above: what must
+        // not happen is BINDING the status channel, and a whole-file scan also trips on any prose that
+        // happens to name it.
+        assertTrue(!createPosting.contains("-transitioned\";"), "an onCreate posting must not bind the -transitioned topic");
         assertTrue(!createPosting.contains("source.Status"), "an onCreate posting without a when guard must not emit a status guard");
         assertTrue(createPosting.contains("target.Payment = source.Id;"), "the onCreate posting must stamp its back-reference");
 
@@ -2838,13 +3015,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
     /** Layer 2 (the outermost): the published app enforces the features over REST. */
     private void assertRuntimeEnforcement() {
-        // Seeds imported COMPLETELY - both account rows incl. the one with the relation column
+        // Seeds imported COMPLETELY - all three account rows incl. the ones with the relation column
         // (regression: a dropped FK column made CSVIM skip every row with zero errors).
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(API + "/account/AccountController")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("$", hasSize(2)),
+                                                 .body("$", hasSize(3)),
                 30);
 
         // subset (#6878): the seeded value survived CSVIM - both bulletin rows imported, row 1
@@ -2918,6 +3095,39 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("[0].Unit", equalTo("Piece")));
+
+        // Authored report parameters, end to end. The two calls above already proved the half that is
+        // easy to get wrong: both claims are counted although the report declares a `>= :minTotal`
+        // bound over a totalCost neither of them has - an unset parameter must not narrow anything.
+        // Here the values are actually supplied, which is what proves the generated SQL runs: the
+        // contains-search concatenation (LIKE '%' || :note || '%') and the bound numeric comparison,
+        // on whichever database the suite runs against.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(REPORT_API + "/ClaimsByUnitController?note=mine")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("[0].Count", equalTo(1.0F)));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(REPORT_API + "/ClaimsByUnitController?minTotal=1000")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(0)));
+
+        // kind: statement, end to end (#6938): the published .view artifact was provisioned by the
+        // ViewsSynchronizer AFTER the tables it reads, and the thin repository query joins it - so
+        // correct figures prove the whole split lifecycle, not just the emission tokens. Vault holds
+        // 100 debit against 40 credit: closingNetDebit nets per account BEFORE the line sums (60),
+        // the no-match line still renders (0), and the flattened total adds its leaves' own terms.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(STATEMENT_API + "/EntrySheetController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("[0].Code", equalTo("CASH"))
+                                                 .body("[0].Amount", equalTo(60.0F))
+                                                 .body("[1].Code", equalTo("MISS"))
+                                                 .body("[1].Amount", equalTo(0.0F))
+                                                 .body("[2].Code", equalTo("TOTAL"))
+                                                 .body("[2].Amount", equalTo(60.0F)));
 
         // calculatedActionOnCreate on a to-one relation, end to end: a create that OMITS the FK comes
         // back carrying the one the action resolved. Tariff 2 is the row flagged `base` - not the first
@@ -3442,6 +3652,98 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("mutable", equalTo(false)));
+
+        // immutableInPeriod: the lock is DATA-driven, so it has to be exercised over the register's
+        // own lifecycle - a record booked into an open period is writable, and the very same record
+        // stops being writable the moment the accountant closes the period around it.
+        AtomicInteger fiscalPeriod = new AtomicInteger();
+        restAssuredExecutor.execute(() -> fiscalPeriod.set(given().contentType("application/json")
+                                                                  .body("{\"Name\":\"2026-03\",\"StartDate\":\"2026-03-01\",\"EndDate\":\"2026-03-31\",\"Status\":1}")
+                                                                  .when()
+                                                                  .post(API + "/accountingperiod/AccountingPeriodController")
+                                                                  .then()
+                                                                  .statusCode(200)
+                                                                  .extract()
+                                                                  .path("Id")));
+        AtomicInteger ledgerBooking = new AtomicInteger();
+        restAssuredExecutor.execute(() -> ledgerBooking.set(given().contentType("application/json")
+                                                                   .body("{\"BookedOn\":\"2026-03-10\",\"Amount\":100}")
+                                                                   .when()
+                                                                   .post(API + "/ledgerbooking/LedgerBookingController")
+                                                                   .then()
+                                                                   .statusCode(200)
+                                                                   .extract()
+                                                                   .path("Id")));
+        // A date no period covers at all stays writable - periods are opened as they are needed, and
+        // an undeclared month must not freeze what is booked into it.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"BookedOn\":\"2027-07-04\",\"Amount\":5}")
+                                                 .when()
+                                                 .post(API + "/ledgerbooking/LedgerBookingController")
+                                                 .then()
+                                                 .statusCode(200));
+        // Close March.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + fiscalPeriod.get()
+                                                         + ",\"Name\":\"2026-03\",\"StartDate\":\"2026-03-01\",\"EndDate\":\"2026-03-31\",\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/accountingperiod/AccountingPeriodController/" + fiscalPeriod.get())
+                                                 .then()
+                                                 .statusCode(200));
+        // The stored record is frozen - edit, delete, and a new record dated inside the closed window.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + ledgerBooking.get() + ",\"BookedOn\":\"2026-03-10\",\"Amount\":999}")
+                                                 .when()
+                                                 .put(API + "/ledgerbooking/LedgerBookingController/" + ledgerBooking.get())
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(API + "/ledgerbooking/LedgerBookingController/" + ledgerBooking.get())
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"BookedOn\":\"2026-03-20\",\"Amount\":7}")
+                                                 .when()
+                                                 .post(API + "/ledgerbooking/LedgerBookingController")
+                                                 .then()
+                                                 .statusCode(409));
+        // Moving a record INTO the closed period is refused as well - otherwise the guard would only
+        // protect what was already there.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"BookedOn\":\"2026-04-02\",\"Amount\":11}")
+                                                 .when()
+                                                 .post(API + "/ledgerbooking/LedgerBookingController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .extract()
+                                                 .path("Id"));
+        AtomicInteger april = new AtomicInteger();
+        restAssuredExecutor.execute(() -> april.set(given().contentType("application/json")
+                                                           .body("{\"BookedOn\":\"2026-04-03\",\"Amount\":12}")
+                                                           .when()
+                                                           .post(API + "/ledgerbooking/LedgerBookingController")
+                                                           .then()
+                                                           .statusCode(200)
+                                                           .extract()
+                                                           .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + april.get() + ",\"BookedOn\":\"2026-03-15\",\"Amount\":12}")
+                                                 .when()
+                                                 .put(API + "/ledgerbooking/LedgerBookingController/" + april.get())
+                                                 .then()
+                                                 .statusCode(409));
+        // ...and the pre-check endpoint reports it, so the form opens read-only rather than 409-ing
+        // on Save.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/ledgerbooking/LedgerBookingController/" + ledgerBooking.get() + "/mutable")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("mutable", equalTo(false)));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/ledgerbooking/LedgerBookingController/" + april.get() + "/mutable")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("mutable", equalTo(true)));
 
         // transitions: a fresh DRAFT entry cancels (200, status CANCELLED)...
         String transitionRun = "/services/java/" + PROJECT + "/gen/events/emission/CancelEntryTransition/run";
@@ -3974,6 +4276,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(403));
 
+        assertPreservationReportsDiscardRuntime();
         assertManyToManyRuntime();
         assertInboundSourcesRuntime();
         assertOutboundDepartureRuntime();
@@ -4123,6 +4426,70 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             assertEquals(summaryId.get(), io.restassured.path.json.JsonPath.from(summary)
                                                                            .getInt("Id"),
                     "mode: once must still return the existing target on a second delivery");
+        });
+    }
+
+    /**
+     * The preservation REPORT end to end (#6937): a full-row {@code update()} carrying a DIFFERENT
+     * value for a system-owned column keeps the stored one - and now says so. Only this layer shows the
+     * part that matters: that an ordinary round-trip stays silent while a caller that computed its own
+     * value is named. A report that fired on every form save would be noise, and noise is how the
+     * original silence was survivable in the first place.
+     */
+    private void assertPreservationReportsDiscardRuntime() {
+        // Attached here rather than in a field: Spring re-initializes logback while it starts the
+        // context, which drops an appender attached any earlier.
+        LogsAsserter billLogs = new LogsAsserter("app.gen.emission.data.bill.BillRepository", Level.WARN);
+
+        AtomicInteger bill = new AtomicInteger();
+        restAssuredExecutor.execute(() -> bill.set(given().contentType("application/json")
+                                                          .body("{\"Note\":\"preserved bill\",\"Status\":1}")
+                                                          .when()
+                                                          .post(API + "/bill/BillController")
+                                                          .then()
+                                                          .statusCode(200)
+                                                          .extract()
+                                                          .path("Id")));
+        // The stored total is what the LINE says, written by the targeted recompute - never by a payload.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Amount\":100,\"Bill\":" + bill.get() + "}")
+                                                 .when()
+                                                 .post(API + "/bill/BillLineController")
+                                                 .then()
+                                                 .statusCode(200));
+
+        // The ordinary form round-trip: the header PUT carries the aggregate back exactly as it was
+        // read (scale included or not - a total is compared by amount, and a browser's number type
+        // drops the trailing zeros). Nothing is discarded, so nothing is reported.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + bill.get() + ",\"Note\":\"round-tripped\",\"Status\":1,\"Amount\":100}")
+                                                 .when()
+                                                 .put(API + "/bill/BillController/" + bill.get())
+                                                 .then()
+                                                 .statusCode(200));
+        assertFalse(billLogs.containsMessage("carried system-owned", Level.WARN),
+                "a payload carrying the stored value back must be preserved SILENTLY, logged: " + billLogs.getLoggedMessages());
+
+        // ...and the contract violation: a caller that computed a total of its own. The write still
+        // succeeds with the stored value kept - that is the protection - and the discard is named, so
+        // the writer's wrong path is visible the first time instead of after the data has frozen.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + bill.get()
+                                                         + ",\"Note\":\"computed elsewhere\",\"Status\":1,\"Amount\":999}")
+                                                 .when()
+                                                 .put(API + "/bill/BillController/" + bill.get())
+                                                 .then()
+                                                 .statusCode(200));
+        billLogs.assertLoggedMessage("carried system-owned [Amount=999]", Level.WARN);
+        restAssuredExecutor.execute(() -> {
+            Object amount = given().when()
+                                   .get(API + "/bill/BillController/" + bill.get())
+                                   .then()
+                                   .statusCode(200)
+                                   .extract()
+                                   .path("Amount");
+            assertTrue(amount instanceof Number && Math.abs(((Number) amount).doubleValue() - 100.0) < 0.001,
+                    "the discarded total must not have been persisted, got: " + amount);
         });
     }
 

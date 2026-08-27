@@ -114,8 +114,9 @@ not as an apology.
 - **The notify block is ONE shape reused at four call sites** - a `notifications[]` entry, a
   `schedules[].notify`, a `transitions[].notify`, and a `serviceTask`'s `args.notify`. Everywhere it is
   `to` / `subject` / `body` (+ `channel: email`), with `{field}` / `{relation.field}` interpolation in
-  the subject and body, plus the optional **`attach: print`** that mails the record's own rendered
-  document - see *send a document by e-mail*.
+  the subject and body, plus the optional **`attach:`** that mails a render along - `print` for the
+  record's own document (see *send a document by e-mail*), or `{ report, bind }` for a parameterized
+  report scoped to the recipient (see *mail a REPORT*).
 - **`{recordUrl}` and `{inboxUrl}` are the ready-made deep links - prefer them.** `{recordUrl}` is the
   link to the record the message is about (`body: "Approve it here: {recordUrl}"`), `{inboxUrl}` the
   link to the recipient's process Inbox. Both are assembled for you, so **never hand-type a route** -
@@ -306,6 +307,24 @@ field may declare:
   snapshot entity (e.g. the frozen copy stored when an invoice is SENT): written once by the flow,
   never editable. System writes through the repository stay possible. Mutually exclusive with
   `immutableWhen` (always-immutable subsumes any status scope); needs no EntityStatus relation.
+- `period: { start: <date field>, end: <date field>, closedWhen: "<Status> == <seed id>" }`
+  (entity-level) - **marks the entity a PERIOD REGISTER**: its rows are the dated windows other
+  entities are locked by. A fiscal period is an ordinary entity - a row with two dates and a
+  lifecycle - so this only names which fields are the bounds (both `date`, the end inclusive) and
+  which statuses mean CLOSED (the `immutableWhen` grammar over the register's own EntityStatus
+  relation, seeded names accepted). Closing a period is a plain status transition, authored with the
+  machinery that already exists; nothing here writes the register.
+- `immutableInPeriod: { period: <Register>, date: <own date field> }` (entity-level) - **date-based
+  user-write immutability**: while the register row covering the named date is closed, the record is
+  rejected with 409 on the REST surface. `immutableWhen` freezes a record for what it IS; this
+  freezes it for WHEN it falls, and the two compose (an entity may declare either, both or neither).
+  Unlike the status guard it also refuses a **create** dated inside a closed window and an update
+  that would MOVE a record into one - once March is closed, nothing dated in March may appear,
+  change or vanish. Workflow/system writes through the repository stay possible, as always. A date
+  covered by no period is open (periods are opened as they are needed) and an unset date falls in
+  none. The lock reaches composition CHILDREN exactly as the status one does. Boundary: the register
+  must be an entity of the SAME model - the guard is generated into this model's controllers, which
+  can only query a repository generated alongside them.
 - `lifecycle: { edges: [ { from: <status>, to: [<status>, ...] }, ... ] }` (entity-level) - **the
   declarative state machine**: the WHOLE set of legal status moves, declared once and enforced on
   EVERY status write. Without it the status machinery is a set of point constructs - `init:` names
@@ -370,7 +389,9 @@ field may declare:
   A failed document check aborts the transition (the workflow task completion fails with the
   authored message).
 - `postings:` (top-level) - **declarative posting**: when a (usually cross-model) source document
-  reaches a status - or, for a source with no status lifecycle, when it is created - create ONE
+  reaches a status - or, for a source with no status lifecycle, when it is created; or when it
+  reaches a declared enrichment `phases:` moment, the only trigger that may read an amount a
+  listener computes after the insert - create ONE
   local document with computed multi-line content (the accounting "source document -> balanced
   journal entry" shape, generalized):
   ```yaml
@@ -805,6 +826,55 @@ the moment it needs bridge fields (an amount, a valid-from), reverse navigation 
 `forEach` fan-out, roll-ups or reporting, it has outgrown a value - use `kind: manyToMany` or
 author the intermediate entity. With `history: true` the change trail records the raw key list
 (ids, not labels) - correct by construction.
+
+### phases - a named moment an enrichment announces
+
+**Use when:** a value a record needs is computed by a hand-written listener AFTER the insert (a
+moving-average cost pool, a snapshot column, an external lookup) and some declarative consumer - a
+posting, a notification, a create-from - has to read that value.
+
+That enrichment must be written back **without** an event, or it re-fires every onUpdate consumer of a
+change the user never made. So it publishes nothing at all, and a consumer bound to `onCreate` races
+it: two listeners on one event have no defined order, and the result is a plausible-looking record
+computed from a null with every step green. Declare the moment instead.
+
+```yaml
+entities:
+  - name: StockMovement
+    phases: [costed]            # the moments this entity announces
+    fields:
+      - { name: id,        type: integer, primaryKey: true, generated: true }
+      - { name: costValue, type: decimal, precision: 18, scale: 2 }
+
+postings:
+  - name: cogsPosting
+    event: { onPhase: StockMovement, phase: costed }    # the ENRICHED row, not the insert
+    creates: JournalEntry
+    backReference: StockMovement
+    rule: { entity: PostingRule, match: { documentType: "Goods Issue" } }
+    items:
+      - { Account: rule(costOfSalesAccount), debit: "CostValue" }
+      - { Account: rule(inventoryAccount),   credit: "CostValue" }
+```
+
+The generated repository gains one `announce<Phase>` method per declared phase, and the hand-written
+listener writes through it - one targeted write carrying both the values and the notice, so they
+commit together:
+
+```java
+new StockMovementRepository().announceCosted(movement.Id, java.util.Map.of("CostValue", cost));
+```
+
+**Rules:** a phase name is a lower-camel identifier and may not be one of the platform's own channels
+(`updated`, `deleted`, `transitioned`, `rekeyed`). `onPhase` is bindable by `postings`,
+`notifications`, `integrations`, `outbound` and an event-driven `generates`; its `when:` guard is
+optional, the phase already being one moment. A consumer binding a phase the entity does not declare
+fails the parse. A cross-model source declares its phases in its own model, so the name is not checked
+from the consumer's side there.
+
+**Do not declare a phase** for a value the platform already computes before the row is visible - a
+`calculatedOnCreate` expression, a `calculatedActionOnCreate` action, a `number:` stamp, a document's
+own totals. Those are in the row the create event carries; a phase is for what a listener adds after.
 
 ### function - the entity's presentation role (explicit template selection)
 
@@ -1779,6 +1849,45 @@ A dimension may bucket a date for aggregation: `month(field)` (a sortable YYYYMM
 for monthly income/VAT. (Uses standard-SQL `EXTRACT` — H2/PostgreSQL; not SQL Server.)
 `relation.field` joins to a related field, `field` is a plain column.
 
+#### reports[].parameters - user-set inputs
+
+**Use when:** the report is read for a period, a threshold or a name the user chooses - a from/to date
+range, "invoices over 1000", a customer search. Without them the only way to narrow a report is the
+per-column filter panel, which can only reach the columns the report already shows.
+
+Each parameter is rendered as an input above the report and bound into the query's `WHERE`:
+
+```yaml
+reports:
+  - name: Revenue
+    source: SalesInvoice
+    dimensions: [date, Customer.name]
+    measures: ["sum(total)"]
+    parameters:
+      - { name: fromDate, target: date, op: ge }                        # From picker
+      - { name: toDate, target: date, op: le }                          # To picker
+      - { name: minTotal, target: total, op: ge, initial: "0" }         # amount threshold
+      - { name: customer, target: Customer.name, op: like }             # name search
+```
+
+`target` is the filtered field - a field of the source or a one-hop `relation.field` path, which joins
+exactly like a dimension, so a parameter may filter by a field the report does not display. `op` is
+`ge` | `le` | `eq` | `like`. `initial` is the value bound when the user leaves the input empty, i.e.
+what the report shows before anyone touches it.
+
+**Rules:** a parameter is bound on **every** call, so `initial` is required unless the comparison has a
+neutral "any value" default - a date `ge`/`le` bound (widened to all time) and `like` (the empty
+pattern, which matches everything). An `eq` selector and a numeric bound have none: declare the
+default the report opens with (`initial: "0"` for an amount threshold). The target field types the
+parameter; an authored `type:` (`date`|`timestamp`|`number`|`string`) is a declaration checked against
+it, not a conversion. `like` matches anywhere in the value and needs a string target. A `timestamp`
+target is compared as a date, so a `le` bound includes the chosen day. The target must be a **field**
+- a relation itself is not one (name a field of it: `Customer.name`), `boolean` and `text` fields are
+not parameterizable, and the name must be a plain, non-keyword identifier that is not one the
+platform already binds (`language`) or the generated controller declares (`filter`, `limit`,
+`offset`, `repository`). `kind: balance` and `kind: statement` declare their own
+`fromDate`/`toDate`, so either may add further parameters but not redeclare those two.
+
 #### reports[].scope - which lifecycle rows an aggregate counts
 
 **Use when:** the report aggregates over an entity that carries a `function: EntityStatus`, i.e. one
@@ -1878,6 +1987,114 @@ a `date`-typed field (a `timestamp` is rejected — the window bounds are dates)
 must be numeric fields of the source; at least one dimension; `measures` must be empty. Restrict to
 posted entries with a `filter` on the source's (or its master's) status FK — the report itself does
 not filter.
+
+##### correspondence - turnovers per corresponding account (the general ledger)
+
+**Use when:** the user needs the double-entry **general ledger** (главна книга) rather than the trial
+balance — per account, the turnover split by the accounts on the OPPOSITE side of the same document
+(account 411 Customers' debit turnover in correspondence with 702 Revenue and 4532 VAT on sales).
+
+```yaml
+reports:
+  - name: GeneralLedger
+    kind: balance
+    source: JournalEntryItem
+    date: journalEntry.entryDate           # its FIRST HOP is the document the lines share
+    debit: debit
+    credit: credit
+    dimensions: [account.code, account.name]
+    correspondence: account.code           # bucket the counter-side lines of the same entry by this
+    filter: "journalEntry.status == 2"
+```
+
+The correspondent account is not on the source row — it sits on a **sibling line of the same journal
+entry** — so `correspondence` is resolved a second time against that sibling and added as one more
+grouping dimension (`Correspondent Account Code`). It takes the same shapes a dimension does: a field
+of the source, a `relation.field` path, or a bare to-one relation. The document the lines share is
+the **first hop of `date`**, which is why a correspondence report must take its date over the
+relation to its journal entry / voucher rather than off a line-local date column.
+
+Amounts are allocated **proportionally**: a debit line's share of a bucket is that bucket's credit
+over the document's total credit, and the mirror image for a credit line. A simple entry (one line on
+at least one side) therefore attributes its full amount to the single counter-account, a compound
+entry (M debit lines against N credit lines) splits it by the counter-side amounts, and a line whose
+document has nothing on the counter side keeps its full amount in one **empty bucket** rather than
+disappearing. So each account's totals across its correspondence buckets add up to exactly the
+figures the plain balance report shows for the same window — that reconciliation is the property to
+check when in doubt.
+
+**Rules:** `correspondence` belongs to `kind: balance` only — a `kind: statement` report has no
+account axis to bucket (its rows are the declared lines) and declaring it there is an error. The
+source needs a `primaryKey` (a line is excluded from its own bucket by key), and a subset relation is
+as wrong here as it is on a dimension.
+
+#### reports[].kind: statement - the statutory financial statement
+
+**Use when:** the user needs a balance sheet, an income statement, or any other fixed line structure
+over the same signed ledger — a form where every line is a formula over the chart of accounts and
+some lines are subtotals of others. A `kind: balance` report gives one row per dimension value; a
+statement gives the *lines of the form*.
+
+```yaml
+reports:
+  - name: BalanceSheet
+    kind: statement
+    source: JournalEntryItem              # the ledger line items (same as a balance report)
+    date: journalEntry.entryDate          # the date driving the window (field or one-hop relation.field)
+    debit: debit                          # the numeric debit amount field of the source
+    credit: credit                        # the numeric credit amount field of the source
+    account: account.code                 # the account CODE the lines select on (a string field)
+    filter: "journalEntry.status == 2"    # only POSTED entries count
+    lines:
+      - { code: A.I,  label: Fixed assets,   accounts: "20*,21*", measure: closingNetDebit }
+      - { code: A.II, label: Receivables,    accounts: "41*",     measure: closingNetDebit }
+      - { code: A,    label: Total assets,   sum: [A.I, A.II] }
+      - { code: B.I,  label: Payables,       accounts: "40-49",   measure: closingNetCredit }
+      - { code: B,    label: Net assets,     sum: [A], less: [B.I] }
+```
+
+The report's rows are the declared `lines`, in the authored order, as three columns — **Code**,
+**Label**, **Amount** — and the window is the same pair of runtime From/To date parameters a balance
+report declares.
+
+**A line is either a leaf or computed, never both.** A leaf reads the ledger: `accounts` selects the
+accounts and `measure` says which of their balances to take. A computed line is arithmetic over
+other lines of the same statement, referenced by their `code` — `sum:` adds them, `less:` subtracts
+them; both may appear on one line.
+
+**`accounts` — the selector**, comma-separated, matching the account code:
+
+| term      | means                                                                  |
+| --------- | ---------------------------------------------------------------------- |
+| `20*`     | every account whose code starts with `20`                              |
+| `4110`    | exactly that account                                                   |
+| `60-69`   | every account starting inside the range — the bounds are equally long prefixes, so this takes `601` and `6999` too |
+
+A code may hold letters, digits, dot and underscore; the hyphen is the range separator and a
+trailing asterisk makes a prefix.
+
+**`measure` — which balance the line takes**, one of the twelve:
+`openingDebit`, `openingCredit`, `openingNetDebit`, `openingNetCredit`,
+`periodDebit`, `periodCredit`, `periodNetDebit`, `periodNetCredit`,
+`closingDebit`, `closingCredit`, `closingNetDebit`, `closingNetCredit`.
+
+The plain ones sum the raw side (turnover). **The `Net` ones net an account's two sides before the
+line sums it and keep only what is left on the named side** — that is what puts a both-type account
+on the side its actual balance puts it on, and it is what a balance sheet line almost always wants:
+a settlement account in debit is a receivable, the same account in credit is a payable, and
+`closingNetDebit` on the asset line together with `closingNetCredit` on the liability line files each
+one where it belongs without the author having to know which way it went. Use a plain measure only
+when the line really is a turnover (an income statement's gross movements).
+
+**Rules:** `date` must be a `date` field (a `timestamp` is rejected — the window bounds are dates);
+`debit`/`credit` must be numeric fields of the source; `account` must be a `string` field (own or
+one-hop) holding the code; `dimensions` and `measures` must be empty (the lines ARE the rows); line
+codes are unique, every `sum`/`less` code must be a declared line, and the references must not form
+a cycle. Restrict to posted entries with a `filter`, exactly as for a balance report.
+
+**Boundary:** a statement report computes the statement's *numbers*. The legally mandated print
+layout stays a hand-authored `.print` template over that result — the platform's standing contract
+for statutory form.
 
 #### reports[].chart - render as a chart
 
@@ -2152,6 +2369,64 @@ absent both, the first entry of the tenant's application language set is used at
   committed, so an SMTP problem is logged and the transition still returns success. A `serviceTask`
   send, whose whole purpose IS the message, fails the task instead so the engine retries.
 
+### mail a REPORT - `attach: { report, bind }`
+
+`attach: print` carries the record's OWN document. Its sibling carries a **report**: the mailed artifact
+is a period of rows rather than one record's document - the customer statement, the supplier activity
+list, the monthly usage summary. A notify block names a declared report and binds its `parameters:` from
+the recipient row:
+
+```yaml
+reports:
+  - name: CustomerStatement
+    source: SalesInvoice
+    dimensions: [issuedOn]
+    measures: ["sum(total)"]
+    parameters:
+      - { name: fromDate, target: issuedOn, op: ge }
+      - { name: toDate, target: issuedOn, op: le }
+      - { name: customer, target: Customer.name, op: eq, initial: "-" }
+
+schedules:
+  - name: monthly-statements
+    cron: "0 0 7 1 * ?"
+    entity: Customer
+    where: [{ field: openBalance, op: gt, value: 0 }]
+    notify:
+      to: email
+      subject: "Your statement"
+      body: "Please find attached your account statement."
+      attach:
+        report: CustomerStatement
+        bind: { customer: name, fromDate: periodStart, toDate: periodEnd }
+```
+
+`bind:` maps a **report parameter** to a field of the record the message is about, or a one-hop
+`relation.field` path on it - the same path vocabulary a `{placeholder}` uses, resolved against the same
+record (inside a `forEach`, against the ROW). The report runs once per recipient with those values bound,
+and the rendered PDF is attached.
+
+**Every parameter that declares an `initial` must be bound.** A report parameter is bound on every call,
+so an unbound one rides its `initial` - one FIXED slice, identical for every recipient. That is the
+failure mode the rule exists for: the mail goes out, the attachment IS a report, and nothing about it
+says it is the wrong customer's ledger. A parameter with no `initial` is one whose comparison has a
+neutral any-value default (a date window bound, a `like` search), so omitting it legitimately means "the
+whole range". A balance report's own `fromDate` / `toDate` are bindable and optional for the same reason.
+
+A bound name that is not a parameter of that report is a validation error, not a request key the
+repository ignores - a typo would otherwise mail the report unfiltered.
+
+**The layout is a `.print` template of its own**, seeded once per mailed report at
+`doc/Templates/<Report>/Print/en/standard.print` and developer-owned afterwards (exactly like the
+document scaffold - a statement sent to a customer is a formatted artifact, and a later Generate will not
+overwrite a designed one). The scaffold binds the **bound parameters as the header** and the report's rows
+as the table, with one `{{<column alias>}}` per column the report SELECTs - the header is what says which
+slice the PDF is, since a table of rows never does. It is written only for reports something actually
+mails.
+
+`language:` / `languageFrom:` / `fileName:` work as they do for a document attachment, all resolved
+against the record the message is about; absent a `fileName:`, the name is `<Report> <record>.pdf`.
+
 ### naming a rendered document - `fileName:`
 
 Both server-side renders - the snapshot copy a document mints on issue and the PDF a notify block
@@ -2402,6 +2677,7 @@ declare **exactly one** `event:`, either
 
 - an **entity lifecycle** event - `{ onCreate: <Entity> }` / `{ onUpdate: ... }` / `{ onDelete: ... }`;
 - an **entity status** event - `{ onTransition: <Entity> }`;
+- an **entity enrichment** event - `{ onPhase: <Entity>, phase: <name> }` (see `phases` below);
 - a **process step** event - `{ onStepReached: { process: <Process>, step: <step> } }` or
   `{ onStepCompleted: { process: <Process>, step: <step> } }`.
 
@@ -2490,11 +2766,18 @@ so before binding a reaction, check what the thing you care about publishes.
 | `generates` `sourceStatus:` flipping the source | `-transitioned` | the same three |
 | `generates` `sourceStatusOnRetire:` returning the source | `-transitioned` | the same three (this is how the reissue re-fires) |
 | A `userTask` / `serviceTask` being reached or completed | a per-step topic | `onStepReached` / `onStepCompleted` |
+| A hand-written listener announcing a declared `phases:` entry | that phase's own topic | `onPhase` |
 
 **Deliberately silent, and correct** - each of these would re-trigger its own handler if it published:
 the process trigger writing `ProcessId` back, an `expansions:` child-count write, and a `resolves:`
 lookup filling its relation (that one is what `outcome:` is for - stamp the attempt into a string
 field a list filter or a `decision` can read, instead of waiting for an event).
+
+**Silent, and a trap: an enrichment a hand-written listener computes on create.** A costing listener
+that computes a movement's cost and writes it back must not publish (it would re-fire every onUpdate
+consumer), so a consumer bound to `onCreate` RACES it - the order of two listeners on one event is
+undefined - and may read the row before the value is there. Never wire a posting, a notification or a
+create-from to a value a sibling listener computes; declare a **phase** and bind that instead.
 
 **Silent, and worth knowing:** a document's header totals recomputed from its line items. The line's
 own create / `-updated` / `-deleted` fires, so bind the reaction to the LINE, not to the header.
@@ -2656,6 +2939,45 @@ Editing a leaf allocation recomputes its `EmployeeTimesheet.total`, which in tur
 the cascade stops at rest and never loops (composition is an acyclic tree). No UI is needed beyond the
 standard per-level master-detail: each level is its own record with its own detail rows.
 
+**A cross-model CHILD (`model:` + `parent:`).** When the rows being summed are owned by ANOTHER
+module, name that module with `model:` and the local entity the total lands on with `parent:`. That is
+the n:m allocation case: the link entity lives with the document that owns one side of the pairing,
+while the other side's total belongs to the module that owns it - a payment's allocated amount, a
+customer's unapplied credit:
+```yaml
+uses:
+  - { model: sales-invoices }
+rollups:
+  # CustomerPayment.allocated = the sum of the payment's allocation rows, which sales-invoices owns.
+  - { name: paymentAllocated, entity: SalesInvoiceCustomerPayment, model: sales-invoices,
+      parent: CustomerPayment, via: CustomerPayment, field: allocated, op: sum, of: amount }
+```
+`model:` must be a declared `uses:` alias, `parent:` must be a LOCAL entity (a total landing in a
+third model is that model's roll-up to declare), and `via:` names the FOREIGN child's to-one relation
+that points at the parent. The handler subscribes to the owner project's topic and reads the rows back
+through the owner's repository; the dependency edge stays one-way (this module already depends on the
+owner). `via` / `of` / `by` are checked against the owner's generated model at Generate time, so a
+misspelt one is reported there rather than at parse. Three limits, all deliberate:
+- **`capacity` / `balance` / `status` work, but the overdraw GUARD does not.** All three are writes on
+  the LOCAL parent, so `capacity: amount, balance: unapplied` keeps a payment's unapplied figure live
+  and a `status` reaches its fully-applied seed as usual. What a foreign child cannot carry is the
+  check that REFUSES a row overdrawing the parent - it is emitted into the child's own repository,
+  which the owner module generates - so Generate reports that the guard is not installed. Enforce the
+  limit where the rows are written (a `checks:` in the owner module) if it must be enforced.
+- **Re-parenting repairs the parent the event names.** Moving a foreign child row from one parent to
+  another is only repaired on BOTH sides when the OWNER model marks that relation as a grouping key
+  (it does so for its own roll-ups / aggregates over the same relation) - it is the owner's DAO that
+  publishes the `-rekeyed` notice. The parent the row moved *to* is always correct; the one it left is
+  corrected the next time one of its own rows changes. Deleting and re-creating the row is exact.
+- **A restricted foreign field does not propagate.** `sensitive:` / `visibleTo:` on the foreign `of`
+  field cannot be read from here, so declare the same restriction on the local target field when the
+  total must not be visible more widely than its source.
+
+**A cross-model PARENT** is the mirror direction and needs no new key: give the child's `via` relation
+its own `model:` alias (the child is local and owns the event, the total lands in the owner's model).
+There `capacity` / `balance` / `status` ARE refused - they read the foreign parent's own fields and
+status seeds, which this model does not own.
+
 **Rules:** `via` must be a to-one (`manyToOne` / `oneToOne`) relation of the child entity; `field`
 must be an existing field on the parent (**integer** for `count`, **numeric** for `sum`). For the sum
 extras: `capacity`/`balance` are numeric parent fields, `status` a to-one relation of the parent, and
@@ -2794,7 +3116,7 @@ or a seeded name.
 | trigger `businessKeyStrategy` | `timestamp` |
 | entity event | `onCreate`, `onUpdate`, `onDelete`, `onTransition` (the STATUS channel - a workflow setter / `transitions:` button / `generates` completion hook publishes it, and `onUpdate` never sees those) |
 | notification `channel` | `email` |
-| notify `attach` | `print` (the record the block is about - inside a fan-out, the ROW), `recordPrint` (a fan-out's anchor record, rendered once); whichever is rendered must be a document |
+| notify `attach` | `print` (the record the block is about - inside a fan-out, the ROW), `recordPrint` (a fan-out's anchor record, rendered once); whichever is rendered must be a document. Or the map form `{ report: <name>, bind: { <parameter>: <field> } }` - a rendered REPORT, scoped to the recipient by its own parameters |
 | notify `forEach` | a declared entity with exactly ONE to-one relation back to the record (one message per row; every bare path resolves against the row, `{record.<field>}` against the anchor record) - on `transitions[].notify` and `serviceTask` `args.notify` only |
 | notify block sites | `notifications[]`, `schedules[].notify`, `transitions[].notify`, `serviceTask` `args.notify` |
 | schedule `where` `op` | `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `like` |
@@ -2835,8 +3157,10 @@ or a seeded name.
 - "preload these values" -> **seeds**
 - "email someone when X is created/updated/deleted" -> **notifications**
 - "send the invoice / payslip / document itself to its customer or employee by e-mail" -> a **notify block with `attach: print`** (on a `serviceTask` step, a `transitions[]`, or a `schedules[]`)
+- "mail each customer their statement / activity list for the period" -> a **notify block with `attach: { report, bind }`** over a report whose `parameters:` scope it to the recipient (a `schedules[]` for the periodic run, a `transitions[]` for on demand)
 - "every day/hour, check X and notify" -> **schedules** (`notify`)
 - "on a schedule / every month, create a Y for each X / recurring invoices / auto-generate timesheets" -> **schedules** (`generate`)
+- "post / notify / create from a value a listener computes AFTER the record is inserted (a moving-average cost, a snapshot column, an external lookup)" -> declare a **`phases:`** entry on the entity and bind **`event: { onPhase: <Entity>, phase: <name> }`** - never `onCreate`, which races the listener
 - "call an external API when X changes" -> **integrations**
 - "notify / call out when a task becomes available, or when a step is done" -> **notifications / integrations** with `event: { onStepReached | onStepCompleted: { process, step } }`
 - "append a log / protocol / activity row every time a step completes (or a status is set)" -> **generates** with `event: { onStepCompleted: { process, step }, mode: append }`

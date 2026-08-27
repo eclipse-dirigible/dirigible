@@ -24,7 +24,9 @@ filters) are covered at the generation layer by `IntentEngineIT` and the parser 
 | [`function`](#function--presentation-role) | explicit presentation role (Document, Setting, ...) |
 | [`checks`](#checks--declarative-validations) | cross-field / cross-line validations |
 | [`immutableWhen` / `immutable`](#immutablewhen--immutable---user-write-immutability) | 409 on user writes in a status / append-only snapshots |
+| [`period` / `immutableInPeriod`](#period--immutableinperiod---date-based-immutability) | 409 on user writes to a record dated in a closed fiscal period |
 | [`lifecycle`](#lifecycle---the-legal-status-graph) | the whole legal status graph, enforced on every status write |
+| [`phases`](#phases--the-enrichment-channel) | a named moment a listener's silent enrichment announces, which a consumer can bind |
 | [`hierarchy` / `leafOnly`](#hierarchy--leafonly--tree-entities) | tree entities, leaf-only references |
 | [`multilingual` / `languages`](#multilingual--translated-master-data) | `_LANG` tables + read-time translation overlay |
 | [calculated fields](#calculated-fields--actions) | server+UI-evaluated expressions, date functions, Java call-outs |
@@ -142,6 +144,41 @@ seed ids (terms joined with `||`). `immutable: true` is the unconditional append
 exclusive with `immutableWhen`. Workflow/system writes through the repository stay possible -
 corrections are flow-generated reversals, never edits.
 
+## period / immutableInPeriod - date-based immutability
+
+```yaml
+- name: AccountingPeriod
+  period:
+    start: startDate
+    end: endDate                       # inclusive
+    closedWhen: "Status == CLOSED"     # the immutableWhen grammar; seeded names or ids
+  fields:
+    - { name: id,        type: integer, primaryKey: true, generated: true }
+    - { name: startDate, type: date }
+    - { name: endDate,   type: date }
+  relations:
+    - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: OPEN }
+
+- name: JournalEntry
+  immutableInPeriod: { period: AccountingPeriod, date: entryDate }
+```
+
+`immutableWhen` freezes a record for what it IS; this freezes it for WHEN it falls. Once the period
+covering the named date is closed, that record can no longer be created, edited or deleted through
+the REST surface (409) - including a CREATE dated inside the closed window and an update that would
+MOVE a record into one. Workflow / system writes through the repository stay possible, exactly as for
+the status guard: a correction to a closed period is a reversal booked in an open one.
+
+The register is an ordinary entity, so closing a period is a plain status transition (a
+`transitions:` button, a `lifecycle:` edge, a workflow step) - `period:` only names the two bounds
+and what CLOSED means, once, where the period lives.
+
+A date covered by **no** period is open (periods are opened as they are needed, and an undeclared
+month must not freeze what is booked into it), and a record whose date is unset falls in none. The
+lock reaches a composition CHILD of a guarded master, as the status lock does, since a line write
+recomputes the document's totals. The register must be an entity of the SAME model - the guard is
+generated into this model's controllers, which can only query a repository generated alongside them.
+
 ## lifecycle - the legal status graph
 
 ```yaml
@@ -164,6 +201,56 @@ controller's targeted write, a workflow `setRelationField`, a hand-written actio
 declared, a record must also be created in that status. At authoring time the graph is what
 `transitions:`, a status-setting workflow step and a check's rejection are validated against, so the
 buttons and the graph cannot disagree.
+
+## phases - the enrichment channel
+
+An enrichment a listener computes on create - a costing pool, a snapshot column, an external lookup -
+has to be written back **without** an event, or it would re-fire every onUpdate consumer of a change
+the user never made. So it publishes nothing at all, and a declarative consumer of the enriched value
+had no moment to bind: bound to `onCreate` it races the listener (the order of two listeners on one
+event is undefined) and reads the un-enriched row - a plausible journal entry posted for a null
+amount, with every pipeline step green.
+
+A phase is that write's own channel. The entity declares the moments it announces:
+
+```yaml
+entities:
+  - name: StockMovement
+    phases: [costed]
+    fields:
+      - { name: id,        type: integer, primaryKey: true, generated: true }
+      - { name: costValue, type: decimal, precision: 18, scale: 2 }
+```
+
+The generated repository gains one `announce<Phase>` method per declared phase. The enriching
+listener writes **through it** - the values and the notice travel in ONE targeted write, so they
+commit together and nobody can observe one without the other:
+
+```java
+new StockMovementRepository().announceCosted(movement.Id, java.util.Map.of("CostValue", cost));
+```
+
+Any glue consumer then binds the phase instead of the insert:
+
+```yaml
+postings:
+  - name: cogsPosting
+    event: { onPhase: StockMovement, phase: costed }
+    creates: JournalEntry
+    backReference: StockMovement
+    rule: { entity: PostingRule, match: { documentType: "Goods Issue" } }
+    items:
+      - { Account: rule(costOfSalesAccount), debit: "CostValue" }
+      - { Account: rule(inventoryAccount),   credit: "CostValue" }
+```
+
+`onPhase` is accepted by `postings:`, `notifications:`, `integrations:`, `outbound:` and an
+event-driven `generates:`; the `when:` guard stays optional there, the phase already being one moment.
+A phase name is a lower-camel identifier and may not be one of the platform's own channels
+(`updated` / `deleted` / `transitioned` / `rekeyed`). A consumer binding a phase the entity does not
+declare fails the parse - it would otherwise bind a topic nothing publishes to and simply never fire.
+A cross-model source declares its phases in its own model, so the name cannot be checked from here
+(the same limit a cross-model status nomenclature has).
 
 ## hierarchy / leafOnly - tree entities
 
@@ -470,7 +557,7 @@ unposted worklist), never throws.
 ```yaml
 postings:
   - name: salesInvoicePosting
-    event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 3" }
+    event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 3" }   # or onCreate, or onPhase
     creates: JournalEntry
     backReference: SalesInvoice
     map: { entryDate: date, reason: "Sales invoice {number}" }
@@ -511,6 +598,23 @@ rollups:
 
 Roll-ups compose transitively across a multi-level composition (leaf edit -> mid total -> top
 total); recomputation stops when values stop changing.
+
+Either end may be owned by another model. A cross-model PARENT is named by the `via` relation's own
+`model:` alias (the child is local and owns the event). A cross-model CHILD is named by the roll-up's
+`model:` plus a `parent:` naming the local entity the total lands on - the n:m allocation direction,
+where the link rows live with one side of the pairing and the other side's total belongs here:
+
+```yaml
+rollups:
+  - { name: paymentAllocated, entity: SalesInvoiceCustomerPayment, model: sales-invoices,
+      parent: CustomerPayment, via: CustomerPayment, field: allocated, op: sum, of: amount }
+```
+
+`capacity`/`balance`/`status` are refused for a cross-model PARENT (they read its own fields and
+seeds) but work for a cross-model CHILD, where they are writes on the local parent - except the
+overdraw guard, which belongs to the child's own DAO and is reported as not installed. The vacated
+side of a re-parented FOREIGN child is repaired only when the owner model marks that relation as a
+grouping key.
 
 ## settlements - payment allocation
 
@@ -556,6 +660,14 @@ reports:
     credit: credit
     dimensions: [account.code, account.name]
     filter: "journalEntry.status == 2"
+  - name: GeneralLedger
+    kind: balance
+    source: JournalEntryItem
+    date: journalEntry.entryDate              # its first hop is the document the lines share
+    debit: debit
+    credit: credit
+    dimensions: [account.code, account.name]
+    correspondence: account.code              # turnovers per corresponding account, allocated
 ```
 
 In `filter:`, reference relations via `relation.field` (translated to a JOIN); a bare relation

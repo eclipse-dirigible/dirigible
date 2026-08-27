@@ -399,8 +399,11 @@ window.IntentDiagrams = (() => {
         return (integration.method || 'POST') + ' ' + eventVerb(integration.event) + (declared ? ' • payload' : '');
     };
 
-    // The roll-up's parent entity is the target of its `via` to-one relation on the counted child entity.
+    // The roll-up's parent entity is the target of its `via` to-one relation on the counted child entity
+    // - except when the CHILD is owned by another model, where the parent is named outright (its
+    // relations are not in this document to walk).
     const rollupParent = (model, rollup) => {
+        if (rollup.model) return rollup.parent || null;
         const child = model.entities.find(e => e && e.name === rollup.entity);
         const relation = child && (child.relations || []).find(r => r && r.name === rollup.via);
         return relation ? relation.to : null;
@@ -424,7 +427,9 @@ window.IntentDiagrams = (() => {
             { list: model.integrations, icon: ICON.integration, color: COLOR.glue, entity: i => eventEntity(model, i.event), detail: integrationDetail },
             { list: model.inbound, icon: ICON.inbound, color: COLOR.glue, entity: w => w.create, detail: inboundDetail },
             { list: model.outbound, icon: ICON.outbound, color: COLOR.glue, entity: o => eventEntity(model, o.event), detail: outboundDetail },
-            { list: model.rollups, icon: ICON.rollup, color: COLOR.glue, entity: r => r.entity, detail: r => '→ ' + (rollupParent(model, r) || '?') + '.' + (r.field || '') }
+            // A cross-model child has no node here, so the card anchors to the LOCAL parent it feeds and
+            // names the foreign child in its detail line (the same shape a cross-model schedule uses).
+            { list: model.rollups, icon: ICON.rollup, color: COLOR.glue, entity: r => r.model ? r.parent : r.entity, detail: r => (r.model ? r.model + '.' + (r.entity || '') + ' ' : '') + '→ ' + (rollupParent(model, r) || '?') + '.' + (r.field || '') }
         ];
 
         const items = [];

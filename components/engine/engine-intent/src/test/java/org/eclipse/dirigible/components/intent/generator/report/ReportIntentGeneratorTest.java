@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -235,6 +236,119 @@ class ReportIntentGeneratorTest {
         assertTrue(!query.contains(" Status "), query);
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void correspondenceBucketsTheCounterSideOfTheSameDocumentAndAllocatesProportionally() {
+        IntentModel model = IntentParser.parse(GENERAL_LEDGER_INTENT);
+        Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                            .get(0));
+        Map<String, String> views = ReportIntentGenerator.buildViewsForTest(TestContexts.context(model), model.getReports()
+                                                                                                              .get(0));
+
+        // The parameter-free structure is a generated .view artifact (#6938): the .report reads it as
+        // its base table, so the self-join and the allocation never reach the generated repository.
+        assertEquals(List.of("LEDGER_TRIAL_BALANCE_CORRESPONDENCE"), new ArrayList<>(views.keySet()));
+        assertEquals("LEDGER_TRIAL_BALANCE_CORRESPONDENCE", document.get("table"));
+        String view = views.get("LEDGER_TRIAL_BALANCE_CORRESPONDENCE");
+
+        // The counter-side line is a LEFT self-join on the document (the first hop of `date`), with the
+        // line itself excluded by key and the pairing restricted to the opposite side - so no bucket is
+        // emitted for a same-side sibling, and a document with no counter side keeps its row.
+        assertTrue(view.contains(
+                "LEFT JOIN \"LEDGER_JOURNAL_ENTRY_ITEM\" as JournalEntryItemCorrespondent ON JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_JOURNAL_ENTRY\" = JournalEntryItem.\"JOURNAL_ENTRY_ITEM_JOURNAL_ENTRY\""
+                        + " AND JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_ID\" <> JournalEntryItem.\"JOURNAL_ENTRY_ITEM_ID\""
+                        + " AND ((COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) <> 0 AND COALESCE(JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_CREDIT\", 0) <> 0)"
+                        + " OR (COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_CREDIT\", 0) <> 0 AND COALESCE(JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) <> 0))"),
+                view);
+        // The bucket path is resolved a SECOND time, against that line - so the account it joins must
+        // carry its own alias, or it would collide with the dimension's account and be dropped.
+        assertTrue(view.contains(
+                "LEFT JOIN \"LEDGER_ACCOUNT\" as AccountCorrespondent ON JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_ACCOUNT\" = AccountCorrespondent.\"ACCOUNT_ID\""),
+                view);
+        assertTrue(view.contains("AccountCorrespondent.\"ACCOUNT_CODE\" as \"CORRESPONDENT_ACCOUNT_CODE\""), view);
+        // Line-level rows: the entry date is a plain column the thin query windows over.
+        assertTrue(view.contains("JournalEntry.\"JOURNAL_ENTRY_ENTRY_DATE\" as \"ENTRY_DATE\""), view);
+
+        // A debit line's share of a bucket is that bucket's CREDIT over the document's total credit
+        // (excluding the line itself); the cast makes the share a fraction rather than integer division,
+        // and the outer COALESCE gives a line with no counter side its full amount in the empty bucket.
+        String documentCredit =
+                "(SELECT SUM(COALESCE(JournalEntryItemDocumentTotal.\"JOURNAL_ENTRY_ITEM_CREDIT\", 0)) FROM \"LEDGER_JOURNAL_ENTRY_ITEM\" as JournalEntryItemDocumentTotal"
+                        + " WHERE JournalEntryItemDocumentTotal.\"JOURNAL_ENTRY_ITEM_JOURNAL_ENTRY\" = JournalEntryItem.\"JOURNAL_ENTRY_ITEM_JOURNAL_ENTRY\""
+                        + " AND JournalEntryItemDocumentTotal.\"JOURNAL_ENTRY_ITEM_ID\" <> JournalEntryItem.\"JOURNAL_ENTRY_ITEM_ID\")";
+        assertTrue(view.contains("COALESCE(CAST(COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) AS DECIMAL(34,12))"
+                + " * COALESCE(JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_CREDIT\", 0) / NULLIF(" + documentCredit + ", 0),"
+                + " COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0)) as \"ALLOCATED_DEBIT\""), view);
+        // ... and a credit line's share is the mirror image - the bucket's DEBIT over the total debit.
+        assertTrue(view.contains(
+                "* COALESCE(JournalEntryItemCorrespondent.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) / NULLIF((SELECT SUM(COALESCE(JournalEntryItemDocumentTotal.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0))"),
+                view);
+        // The split IS the parameter boundary: nothing in the view binds a named marker.
+        assertFalse(view.contains(":fromDate") || view.contains(":toDate") || view.contains(":language"), view);
+
+        // The .report keeps the thin windowed aggregation over the view.
+        String query = (String) document.get("query");
+        assertTrue(query.contains("FROM \"LEDGER_TRIAL_BALANCE_CORRESPONDENCE\" as JournalEntryItem"), query);
+        assertTrue(query.contains("SUM(CASE WHEN JournalEntryItem.\"ENTRY_DATE\" >= :fromDate AND JournalEntryItem.\"ENTRY_DATE\""
+                + " <= :toDate THEN JournalEntryItem.\"ALLOCATED_DEBIT\" ELSE 0 END) as \"Debit\""), query);
+        assertTrue(query.contains(
+                "GROUP BY JournalEntryItem.\"ACCOUNT_CODE\", JournalEntryItem.\"ACCOUNT_NAME\", JournalEntryItem.\"CORRESPONDENT_ACCOUNT_CODE\""),
+                query);
+        assertFalse(query.contains("JournalEntryItemCorrespondent"), "the structure must not be re-shipped in the query: " + query);
+
+        // The correspondence bucket is a dimension: it groups, and it sits before the six totals.
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) document.get("columns");
+        assertEquals(9, columns.size());
+        Map<String, Object> bucket = columns.get(2);
+        assertEquals("Correspondent Account Code", bucket.get("alias"));
+        assertEquals("JournalEntryItem", bucket.get("table"));
+        assertEquals("CORRESPONDENT_ACCOUNT_CODE", bucket.get("name"));
+        assertEquals("NONE", bucket.get("aggregate"));
+        assertEquals(Boolean.TRUE, bucket.get("grouping"));
+        assertEquals("Debit", columns.get(5)
+                                     .get("alias"));
+    }
+
+    @Test
+    void correspondenceNeedsADocumentReachingDateAndAResolvablePath() {
+        IntentValidationException error = assertThrows(IntentValidationException.class, () -> IntentParser.parse("""
+                name: ledger
+                entities:
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: entryDate, type: date }
+                      - { name: debit, type: decimal }
+                      - { name: credit, type: decimal }
+                reports:
+                  - name: GeneralLedger
+                    kind: balance
+                    source: JournalEntryItem
+                    date: entryDate
+                    debit: debit
+                    credit: credit
+                    dimensions: [debit]
+                    correspondence: account.code
+                """));
+        String message = error.getMessage();
+        // The document the lines share IS the first hop of `date`, so a line-local date has none.
+        assertTrue(message.contains("correspondence needs the document its lines share"), message);
+        assertTrue(message.contains("correspondence [account.code] does not start with a to-one relation of [JournalEntryItem]"), message);
+    }
+
+    /**
+     * A statement's rows are its declared lines, so it has no account axis to bucket - declaring the
+     * general ledger's correspondence there is a mistake, not a silently ignored key.
+     */
+    @Test
+    void correspondenceOnAStatementIsRejected() {
+        IntentValidationException error = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(GENERAL_LEDGER_INTENT.replace("kind: balance", "kind: statement")));
+        assertTrue(error.getMessage()
+                        .contains("must not declare correspondence - the general ledger axis belongs to kind: balance"),
+                error.getMessage());
+    }
+
     private static final String LEDGER_INTENT = """
             name: ledger
             entities:
@@ -267,6 +381,14 @@ class ReportIntentGeneratorTest {
                 dimensions: [account.code, account.name]
                 filter: "credit == 0"
             """;
+
+    private static final String GENERAL_LEDGER_INTENT = LEDGER_INTENT.replace("""
+                dimensions: [account.code, account.name]
+                filter: "credit == 0"
+            """, """
+                dimensions: [account.code, account.name]
+                correspondence: account.code
+            """);
 
     @Test
     @SuppressWarnings("unchecked")
@@ -364,8 +486,225 @@ class ReportIntentGeneratorTest {
                     source: JournalEntryItem
                 """));
         String message = error.getMessage();
-        assertTrue(message.contains("declares date/debit/credit but is not kind: balance"), message);
+        assertTrue(message.contains("declares date/debit/credit/correspondence but is not kind: balance"), message);
         assertTrue(message.contains("unknown kind [pivot]"), message);
+    }
+
+    private static final String STATEMENT_INTENT = """
+            name: ledger
+            entities:
+              - name: Account
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string }
+                  - { name: name, type: string }
+              - name: JournalEntry
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: entryDate, type: date }
+                relations:
+                  - { name: items, kind: oneToMany, to: JournalEntryItem }
+              - name: JournalEntryItem
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: debit, type: decimal }
+                  - { name: credit, type: decimal }
+                relations:
+                  - { name: journalEntry, kind: manyToOne, to: JournalEntry, composition: true }
+                  - { name: account, kind: manyToOne, to: Account, required: true }
+            reports:
+              - name: BalanceSheet
+                kind: statement
+                source: JournalEntryItem
+                date: journalEntry.entryDate
+                debit: debit
+                credit: credit
+                account: account.code
+                lines:
+                  - { code: A.I,  label: Fixed assets, accounts: "20*,21*", measure: closingNetDebit }
+                  - { code: A.II, label: Receivables,  accounts: "41*",     measure: closingNetDebit }
+                  - { code: A,    label: Total assets, sum: [A.I, A.II] }
+            """;
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void statementReportEmitsOneRowPerLineOverThePerAccountBalances() {
+        IntentModel model = IntentParser.parse(STATEMENT_INTENT);
+        Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                            .get(0));
+
+        assertEquals("statement", document.get("kind"));
+
+        String query = (String) document.get("query");
+        // The ledger is reduced to one balance per account FIRST: a net measure nets an account's two
+        // sides before a line sums it, so the reduction cannot happen per line.
+        assertTrue(query.contains("WITH \"ACCOUNT_BALANCES\" as (\nSELECT Account.\"ACCOUNT_CODE\" as \"ACCOUNT_CODE\""), query);
+        assertTrue(query.contains("GROUP BY Account.\"ACCOUNT_CODE\""), query);
+        // The windows are the balance report's, to the token.
+        assertTrue(query.contains(
+                "SUM(CASE WHEN JournalEntry.\"JOURNAL_ENTRY_ENTRY_DATE\" <= :toDate THEN COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) ELSE 0 END) as \"CLOSING_DEBIT\""),
+                query);
+        // The line classification is a generated .view artifact (#6938): the query joins it LEFT (so a
+        // line whose accounts never posted still renders) and decodes each row's measure - a net one
+        // floors the account at zero. No selector and no label literal is left in the query.
+        assertTrue(query.contains("FROM \"LEDGER_BALANCE_SHEET_LINES\" as \"STATEMENT_LINES\""), query);
+        assertTrue(
+                query.contains(
+                        "LEFT JOIN \"ACCOUNT_BALANCES\" ON \"ACCOUNT_BALANCES\".\"ACCOUNT_CODE\" = \"STATEMENT_LINES\".\"ACCOUNT_CODE\""),
+                query);
+        assertTrue(query.contains("COALESCE(SUM(\"STATEMENT_LINES\".\"TERM_SIGN\" * CASE \"STATEMENT_LINES\".\"TERM_MEASURE\""
+                + " WHEN 'closingNetDebit' THEN CASE WHEN \"CLOSING_DEBIT\" - \"CLOSING_CREDIT\" > 0"
+                + " THEN \"CLOSING_DEBIT\" - \"CLOSING_CREDIT\" ELSE 0 END ELSE 0 END), 0) as \"Amount\""), query);
+        assertFalse(query.contains("LIKE"), "the selectors belong to the view, not the query: " + query);
+        assertFalse(query.contains("Total assets"), "the labels belong to the view, not the query: " + query);
+        assertTrue(query.endsWith("ORDER BY \"STATEMENT_LINES\".\"LINE_ORDINAL\""), query);
+
+        // The view: per line one head arm (what keeps an unmatched line rendering) plus one DISTINCT
+        // arm per flattened term, enumerating codes from the account nomenclature the account path
+        // points at. A comma-separated selector is an OR of prefixes.
+        Map<String, String> views = ReportIntentGenerator.buildViewsForTest(TestContexts.context(model), model.getReports()
+                                                                                                              .get(0));
+        assertEquals(List.of("LEDGER_BALANCE_SHEET_LINES"), new ArrayList<>(views.keySet()));
+        String view = views.get("LEDGER_BALANCE_SHEET_LINES");
+        assertTrue(view.contains("SELECT 1 as \"LINE_ORDINAL\", CAST('A.I' AS VARCHAR(255)) as \"LINE_CODE\","
+                + " CAST('Fixed assets' AS VARCHAR(4000)) as \"LINE_LABEL\", 0 as \"TERM_SIGN\","
+                + " CAST(NULL AS VARCHAR(255)) as \"TERM_MEASURE\", CAST(NULL AS VARCHAR(255)) as \"ACCOUNT_CODE\""), view);
+        assertTrue(view.contains("SELECT DISTINCT 1 as \"LINE_ORDINAL\", CAST('A.I' AS VARCHAR(255)) as \"LINE_CODE\","
+                + " CAST('Fixed assets' AS VARCHAR(4000)) as \"LINE_LABEL\", 1 as \"TERM_SIGN\","
+                + " CAST('closingNetDebit' AS VARCHAR(255)) as \"TERM_MEASURE\", Account.\"ACCOUNT_CODE\" as \"ACCOUNT_CODE\""
+                + "\nFROM \"LEDGER_ACCOUNT\" as Account"
+                + "\nWHERE (Account.\"ACCOUNT_CODE\" LIKE '20%' OR Account.\"ACCOUNT_CODE\" LIKE '21%')"), view);
+        // A computed line is FLATTENED into its leaves' own terms, so no line waits for another.
+        assertTrue(view.contains("SELECT DISTINCT 3 as \"LINE_ORDINAL\", CAST('A' AS VARCHAR(255)) as \"LINE_CODE\","
+                + " CAST('Total assets' AS VARCHAR(4000)) as \"LINE_LABEL\", 1 as \"TERM_SIGN\","
+                + " CAST('closingNetDebit' AS VARCHAR(255)) as \"TERM_MEASURE\", Account.\"ACCOUNT_CODE\" as \"ACCOUNT_CODE\""
+                + "\nFROM \"LEDGER_ACCOUNT\" as Account" + "\nWHERE Account.\"ACCOUNT_CODE\" LIKE '41%'"), view);
+        // ... and the split IS the parameter boundary: nothing in the view binds a named marker.
+        assertFalse(view.contains(":fromDate") || view.contains(":toDate"), view);
+
+        // Code / Label / Amount - the amount right-aligned and money-formatted like every decimal.
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) document.get("columns");
+        assertEquals(3, columns.size());
+        assertEquals(List.of("Code", "Label", "Amount"), columns.stream()
+                                                                .map(column -> column.get("alias"))
+                                                                .toList());
+        assertEquals("DECIMAL", columns.get(2)
+                                       .get("type"));
+        assertEquals("### ### ### ##0.00", columns.get(2)
+                                                  .get("pattern"));
+
+        // The window parameters are the balance report's, so a statement is queried the same way.
+        List<Map<String, Object>> parameters = (List<Map<String, Object>>) document.get("parameters");
+        assertEquals(2, parameters.size());
+        assertEquals("fromDate", parameters.get(0)
+                                           .get("name"));
+        assertEquals("toDate", parameters.get(1)
+                                         .get("name"));
+
+        // A statement's joins live inside its own subquery, so the builder-owned model is deliberately
+        // absent and the report editor opens it free-style rather than rewriting it into a flat SELECT.
+        assertFalse(document.containsKey("joins"), "a statement must not claim builder-owned joins");
+        assertFalse(document.containsKey("conditions"), "a statement must not claim builder-owned conditions");
+    }
+
+    @Test
+    void statementLinesMustBeWellFormed() {
+        IntentValidationException error = assertThrows(IntentValidationException.class, () -> IntentParser.parse("""
+                name: ledger
+                entities:
+                  - name: Account
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: code, type: integer }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal }
+                      - { name: credit, type: decimal }
+                      - { name: entryDate, type: date }
+                    relations:
+                      - { name: account, kind: manyToOne, to: Account, required: true }
+                reports:
+                  - name: BalanceSheet
+                    kind: statement
+                    source: JournalEntryItem
+                    date: entryDate
+                    debit: debit
+                    credit: credit
+                    account: account.code
+                    dimensions: [debit]
+                    lines:
+                      - { code: A, label: Assets, accounts: "20*", measure: closingBalance }
+                      - { code: A, label: Repeat, accounts: "21*", measure: closingNetDebit }
+                      - { code: B, label: Both,   accounts: "22*", measure: closingNetDebit, sum: [A] }
+                      - { code: C, label: Neither }
+                      - { code: D, label: Missing, sum: [Nope] }
+                      - { code: E, label: Bad range, accounts: "60-699", measure: closingNetDebit }
+                      - { code: F, label: Injected, accounts: "20';DROP", measure: closingNetDebit }
+                """));
+        String message = error.getMessage();
+        assertTrue(message.contains("must not declare dimensions"), message);
+        assertTrue(message.contains("account [account.code] must be a string field"), message);
+        assertTrue(message.contains("unknown measure [closingBalance]"), message);
+        assertTrue(message.contains("declares the line code [A] twice"), message);
+        assertTrue(message.contains("both selects accounts and sums other lines"), message);
+        assertTrue(message.contains("line [C] neither selects accounts"), message);
+        assertTrue(message.contains("references the line [Nope], which the statement does not declare"), message);
+        assertTrue(message.contains("bounds are of different length"), message);
+        assertTrue(message.contains("contains [']"), message);
+    }
+
+    @Test
+    void statementLineArithmeticMustNotFormACycle() {
+        IntentValidationException error = assertThrows(IntentValidationException.class, () -> IntentParser.parse("""
+                name: ledger
+                entities:
+                  - name: Account
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: code, type: string }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal }
+                      - { name: credit, type: decimal }
+                      - { name: entryDate, type: date }
+                    relations:
+                      - { name: account, kind: manyToOne, to: Account, required: true }
+                reports:
+                  - name: BalanceSheet
+                    kind: statement
+                    source: JournalEntryItem
+                    date: entryDate
+                    debit: debit
+                    credit: credit
+                    account: account.code
+                    lines:
+                      - { code: A, label: A, sum: [B] }
+                      - { code: B, label: B, sum: [A] }
+                """));
+        assertTrue(error.getMessage()
+                        .contains("cycle in its line arithmetic"),
+                error.getMessage());
+    }
+
+    @Test
+    void statementInputsWithoutTheKindAreRejected() {
+        IntentValidationException error = assertThrows(IntentValidationException.class, () -> IntentParser.parse("""
+                name: ledger
+                entities:
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: code, type: string }
+                reports:
+                  - name: Totals
+                    source: JournalEntryItem
+                    account: code
+                """));
+        assertTrue(error.getMessage()
+                        .contains("declares account/lines but is not kind: statement"),
+                error.getMessage());
     }
 
     private static final String AGEING_INTENT = """

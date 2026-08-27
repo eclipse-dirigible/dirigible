@@ -31,7 +31,9 @@ import org.eclipse.dirigible.sdk.utils.Json;
  */
 public class ${name}Repository {
 
-    private static final String QUERY = ${queryJava};
+    /** The report query, joined from per-line literals - never one long single-line literal (#6936). */
+    private static final String QUERY = String.join("\n"#foreach($line in $queryJavaLines),
+            ${line}#end);
 
     /** The report's output columns (result-set alias -> SQL type) - the filterable surface. */
     private static final Map<String, String> FILTER_COLUMNS = Map.ofEntries(

@@ -62,6 +62,11 @@ import gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspec
  * assembles the { document, items } payload and sdk.print.Print renders it) and the same bytes go out
  * with every message. A render failure therefore fails the step before anything is mailed, which is
  * safe to retry: nobody has received a copy yet.
+#elseif($attach == "report")
+ *
+ * The ${attachReport} report rides along as a PDF attachment, run per recipient with its declared
+ * parameters bound from the record this message is about - so what each one receives is their own rows
+ * (a statement), not a record's own document. The layout is the report's own .print template in the CMS.
 #end
  *
  * A row with no recipient is a no-op (log + skip): it simply has nobody to mail, which must not stall
@@ -196,6 +201,31 @@ public class ${className} implements JavaDelegate {
 #elseif($attach == "recordPrint")
         // The record's document, rendered once for every recipient of this fan-out.
         parts.add(document);
+#elseif($attach == "report")
+        // attach: { report, bind } - run the declared report scoped to THIS recipient and attach the
+        // rendered PDF. The bindings ARE the report's parameters, which is what makes the rows this
+        // recipient's own: a customer statement is a period of rows, not one record's document.
+#if($attachLanguageFkProperty != "")
+        ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+#end
+        Map<String, Object> reportFilter = new HashMap<>();
+#foreach($binding in $attachReportBindings)
+        reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));
+#end
+        Map<String, Object> reportData = new HashMap<>();
+        // The bound values double as the rendered header, so the PDF states which slice it is - a
+        // table of rows never does.
+        reportData.put("document", reportFilter);
+        reportData.put("items", new gen.${attachReportGenFolder}.data.${attachReportPerspective}.${attachReport}Repository()
+                .findAll(null, null, reportFilter));
+        Map document = new HashMap();
+        document.put("type", "attachment");
+        document.put("contentType", "application/pdf");
+        document.put("fileName", ${attachFileNameExpression});
+        document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", ${attachLanguageExpression},
+                org.eclipse.dirigible.sdk.utils.Json.stringify(reportData)));
+        parts.add(document);
 #end
         String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
 #if($forEach != "")
@@ -214,4 +244,17 @@ public class ${className} implements JavaDelegate {
         }
 #end
     }
+
+#if($attach == "report")
+    /**
+     * A bound report parameter as the generated report repository reads one - a String, because the
+     * value is JSON-encoded for the named-parameter binder and only a JSON primitive is accepted
+     * there (a date arrives as its ISO text). Null is deliberate rather than defensive: an absent
+     * value is what makes the repository fall back to the parameter's declared initial, so a
+     * nullable source column widens the report instead of emptying it.
+     */
+    private static String reportValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+#end
 }

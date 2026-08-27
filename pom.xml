@@ -121,7 +121,7 @@
         <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
         <maven-jacoco-plugin.version>0.8.15</maven-jacoco-plugin.version>
-        <maven-spotbugs-plugin.version>4.10.3.0</maven-spotbugs-plugin.version>
+        <maven-spotbugs-plugin.version>4.10.4.0</maven-spotbugs-plugin.version>
         <maven-formatter-plugin.version>2.29.0</maven-formatter-plugin.version>
         <maven-exec-plugin.version>3.6.3</maven-exec-plugin.version>
         <maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
@@ -206,7 +206,7 @@
         <!-- JDBC -->
         <mongodb.version>3.12.14</mongodb.version>
         <ngdbc.version>2.29.7</ngdbc.version>
-        <snowflake.version>4.3.2</snowflake.version>
+        <snowflake.version>4.3.3</snowflake.version>
         <mysql.version>8.4.0</mysql.version>
 
         <!-- QLDB -->
@@ -220,7 +220,7 @@
         <c3p0.version>0.14.1</c3p0.version>
         <guava.version>33.7.1-jre</guava.version>
         <icu4j.version>78.3</icu4j.version>
-        <classgraph.version>4.8.192</classgraph.version>
+        <classgraph.version>4.8.193</classgraph.version>
         <logcaptor.version>2.12.6</logcaptor.version>
 
         <!-- UI -->
@@ -251,7 +251,7 @@
         <pinecone-router.version>7.5.2</pinecone-router.version>
         <!-- Tests -->
         <testcontainers.version>2.0.5</testcontainers.version>
-        <selenide.version>7.17.0</selenide.version>
+        <selenide.version>7.18.0</selenide.version>
         <rest-assured.version>6.0.1</rest-assured.version>
 
         <antlr4-maven-plugin.version>4.13.2</antlr4-maven-plugin.version>
@@ -649,7 +649,7 @@
                             <dependency>
                                 <groupId><![CDATA[com.github.spotbugs]]></groupId>
                                 <artifactId>spotbugs</artifactId>
-                                <version>4.10.3</version>
+                                <version>4.10.4</version>
                             </dependency>
                         </dependencies>
                     </plugin>
@@ -985,7 +985,7 @@
             <dependency>
                 <groupId>io.opentelemetry.instrumentation</groupId>
                 <artifactId>opentelemetry-instrumentation-bom</artifactId>
-                <version>2.30.0</version>
+                <version>2.31.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

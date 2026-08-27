@@ -12,7 +12,6 @@ package org.eclipse.dirigible.components.ide.template.service.model;
 import org.eclipse.dirigible.commons.api.helpers.NamingHelper;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -211,10 +210,17 @@ final class ModelTemplateAdapters {
             }
         }
         String query = strOr(model, "query", "");
-        model.put("queryLines", new ArrayList<>(Arrays.asList(query.split("\n", -1))));
-        // The report's query pre-escaped as one Java string literal, for the generated repository to
-        // embed verbatim.
-        model.put("queryJava", JavaScriptJson.compact(query));
+        // The report's query pre-escaped as PER-LINE Java string literals, for the generated
+        // repository to join back with newlines. Deliberately never one single-line literal: a
+        // multi-kilobyte escaped-quote-dense literal is exactly what overflowed the platform's
+        // literal-scanning source parser and took synchronization down instance-wide (#6936) - and
+        // since the heavy report kinds keep their structural SQL in a generated .view (#6938), each
+        // line here stays short by construction.
+        List<Object> queryJavaLines = new ArrayList<>();
+        for (String line : query.split("\n", -1)) {
+            queryJavaLines.add(JavaScriptJson.compact(line));
+        }
+        model.put("queryJavaLines", queryJavaLines);
         if (!parameters.containsKey("extensionPoint")) {
             parameters.put("extensionPoint", parameters.get("projectName"));
         }

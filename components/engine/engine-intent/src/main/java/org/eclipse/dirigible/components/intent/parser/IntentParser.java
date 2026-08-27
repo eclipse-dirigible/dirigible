@@ -20,7 +20,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+import javax.lang.model.SourceVersion;
+
 import org.eclipse.dirigible.components.intent.generator.ArrivalSupport;
+import org.eclipse.dirigible.components.intent.generator.EventBinding;
 import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.FileNameSupport;
@@ -31,6 +34,7 @@ import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
 import org.eclipse.dirigible.components.intent.generator.ScheduleSupport;
+import org.eclipse.dirigible.components.intent.generator.StatementSupport;
 import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
@@ -60,6 +64,8 @@ import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.OutboundIntent;
 import org.eclipse.dirigible.components.intent.model.OutboundTargetIntent;
+import org.eclipse.dirigible.components.intent.model.PeriodIntent;
+import org.eclipse.dirigible.components.intent.model.PeriodLockIntent;
 import org.eclipse.dirigible.components.intent.model.PermissionIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessVarIntent;
@@ -69,6 +75,8 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ResolveIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
+import org.eclipse.dirigible.components.intent.model.StatementLineIntent;
 import org.eclipse.dirigible.components.intent.model.ExpansionIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
@@ -164,6 +172,9 @@ public final class IntentParser {
      * system itself writes.
      */
     private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete", "onTransition");
+
+    /** Topic suffixes the platform itself publishes - an entity phase may not shadow one (#6929). */
+    private static final Set<String> RESERVED_PHASES = Set.of("updated", "deleted", "transitioned", "rekeyed");
     /**
      * The process-step half of the glue event axis - each names a <code>{ process, step }</code> pair
      * rather than an entity.
@@ -318,7 +329,7 @@ public final class IntentParser {
         validateIntegrations(model, entityNames, issues);
         validateInbound(model, entityNames, issues);
         validateOutbound(model, entityNames, issues);
-        validateRollups(model, issues);
+        validateRollups(model, usesAliases, issues);
         validateExpansions(model, issues);
         validateSettlements(model, issues);
         validateResolves(model, entityNames, issues);
@@ -985,8 +996,14 @@ public final class IntentParser {
     /**
      * Each roll-up must have a unique name, a child entity, a {@code via} to-one relation of that child
      * pointing at a parent, and an integer {@code field} on the parent to maintain.
+     *
+     * <p>
+     * A roll-up whose CHILD is owned by another model ({@code model: <uses alias>}) is checked against
+     * that alias and its local {@code parent:} only - the foreign child's own relations and fields are
+     * not in this document, so {@code via} / {@code of} / {@code by} are resolved at GENERATION time
+     * against the owner's {@code .model}, the same design-time split every cross-model reference uses.
      */
-    private static void validateRollups(IntentModel model, List<String> issues) {
+    private static void validateRollups(IntentModel model, Set<String> usesAliases, List<String> issues) {
         java.util.Map<String, EntityIntent> byName = new java.util.HashMap<>();
         for (EntityIntent entity : model.getEntities()) {
             if (entity.getName() != null) {
@@ -1003,9 +1020,20 @@ public final class IntentParser {
             if (!names.add(name)) {
                 issues.add("duplicate rollup [" + name + "]");
             }
+            if (rollup.isCrossModelChild()) {
+                validateCrossModelChildRollup(rollup, name, byName, usesAliases, issues);
+                continue;
+            }
+            if (rollup.getParent() != null && !rollup.getParent()
+                                                     .isBlank()) {
+                issues.add("rollup [" + name + "] declares parent [" + rollup.getParent()
+                        + "], which belongs to a cross-model child only - a local roll-up's parent is the target of its via relation ["
+                        + rollup.getVia() + "]");
+            }
             EntityIntent child = byName.get(rollup.getEntity());
             if (child == null) {
-                issues.add("rollup [" + name + "] counts unknown entity [" + rollup.getEntity() + "]");
+                issues.add("rollup [" + name + "] counts unknown entity [" + rollup.getEntity()
+                        + "] (add model: <alias> when it is owned by another model)");
                 continue;
             }
             RelationIntent via = null;
@@ -1107,6 +1135,78 @@ public final class IntentParser {
     }
 
     /**
+     * A roll-up over a FOREIGN child: the link rows are owned by another model, the total lands on a
+     * local parent. Only what is in this document can be checked here - the alias, the local
+     * {@code parent:} and its target {@code field:}; {@code via} / {@code of} / {@code by} name
+     * properties of the foreign child and are resolved against the owner's {@code .model} at generation
+     * time, where a miss drops the roll-up loudly rather than emitting a handler that cannot compile.
+     *
+     * @param rollup the roll-up
+     * @param name the roll-up name (already validated as present)
+     * @param byName the local entities by name
+     * @param usesAliases the declared {@code uses:} aliases
+     * @param issues the collecting issue list
+     */
+    private static void validateCrossModelChildRollup(RollupIntent rollup, String name, java.util.Map<String, EntityIntent> byName,
+            Set<String> usesAliases, List<String> issues) {
+        if (!usesAliases.contains(rollup.getModel())) {
+            issues.add("rollup [" + name + "] counts entity [" + rollup.getEntity() + "] of model [" + rollup.getModel()
+                    + "], which is not a declared uses: alias (declare it under the model's uses:)");
+        }
+        if (isBlank(rollup.getEntity())) {
+            issues.add("rollup [" + name + "] declares model [" + rollup.getModel() + "] but no entity to count");
+        }
+        if (isBlank(rollup.getVia())) {
+            issues.add("rollup [" + name + "] with a cross-model child requires via - the [" + rollup.getEntity()
+                    + "] to-one relation that points at [" + rollup.getParent() + "]");
+        }
+        // The parent cannot be derived from `via` here (the foreign child's relations are elsewhere), so
+        // it is authored - and it must be LOCAL: a total that lands in a third model is that model's
+        // roll-up to declare, and writing it from here would invert the dependency edge.
+        EntityIntent parent = isBlank(rollup.getParent()) ? null : byName.get(rollup.getParent());
+        if (isBlank(rollup.getParent())) {
+            issues.add("rollup [" + name + "] counts the cross-model child [" + rollup.getModel() + ":" + rollup.getEntity()
+                    + "], so it must declare parent: <local entity> - the entity its [" + rollup.getField() + "] field belongs to");
+            return;
+        }
+        if (parent == null) {
+            issues.add("rollup [" + name + "] parent [" + rollup.getParent()
+                    + "] is not an entity of this model - the parent of a cross-model roll-up must be local");
+            return;
+        }
+        boolean sum = "sum".equals(rollup.getOp());
+        boolean latest = "latest".equals(rollup.getOp());
+        FieldIntent counter = fieldByName(parent, rollup.getField());
+        if (counter == null) {
+            issues.add("rollup [" + name + "] field [" + rollup.getField() + "] is not a field of parent [" + rollup.getParent() + "]");
+        } else if (sum && !NUMERIC_TYPES.contains(counter.getType())) {
+            issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be a numeric type to hold a sum");
+        } else if (!sum && !latest && !INTEGER_PK_TYPES.contains(counter.getType())) {
+            issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be an integer type to hold a count");
+        }
+        if (sum && isBlank(rollup.getOf())) {
+            issues.add("rollup [" + name + "] with op sum must declare `of` (the child field to sum)");
+        }
+        if (latest && (isBlank(rollup.getOf()) || isBlank(rollup.getBy()))) {
+            issues.add("rollup [" + name + "] with op latest must declare both `of` (the child field to copy) and `by` (the child"
+                    + " date/timestamp field that orders the rows)");
+        }
+        // capacity / balance / status are all writes on the LOCAL parent (the balance a payment still has
+        // unapplied, the status it reaches when it is fully applied), so they are validated here exactly
+        // as for a local child. What a foreign child cannot carry is the capacity GUARD - it lives in the
+        // child's own DAO, which the owner model generates - and the generator says so out loud rather
+        // than letting a capacity look like an enforced limit.
+        if (sum) {
+            requireNumericParentField(parent, rollup.getCapacity(), name, "capacity", rollup.getParent(), issues);
+            requireNumericParentField(parent, rollup.getBalance(), name, "balance", rollup.getParent(), issues);
+            if (!isBlank(rollup.getStatus()) && toOneRelationByName(parent, rollup.getStatus()) == null) {
+                issues.add("rollup [" + name + "] status [" + rollup.getStatus() + "] is not a to-one relation of [" + rollup.getParent()
+                        + "]");
+            }
+        }
+    }
+
+    /**
      * A derived field that sums or copies a {@code sensitive:} child field re-exposes on its target
      * exactly what the child hides whenever the target entity has a personal (my) surface - the leak
      * class where the leaf value is scrubbed from the personal wire but its total still travels it.
@@ -1126,7 +1226,10 @@ public final class IntentParser {
         }
         // rollups: the child's `of` field feeds the parent's `field`
         for (RollupIntent rollup : model.getRollups()) {
-            EntityIntent child = byName.get(rollup.getEntity());
+            // A cross-model child's fields are not in this document, so its flags cannot be read (nor
+            // could a same-named local entity stand in for it) - the local target field carries whatever
+            // its author declared.
+            EntityIntent child = rollup.isCrossModelChild() ? null : byName.get(rollup.getEntity());
             if (child == null) {
                 continue;
             }
@@ -1202,7 +1305,10 @@ public final class IntentParser {
             }
         }
         for (RollupIntent rollup : model.getRollups()) {
-            EntityIntent child = byName.get(rollup.getEntity());
+            // A cross-model child's fields are not in this document, so its flags cannot be read (nor
+            // could a same-named local entity stand in for it) - the local target field carries whatever
+            // its author declared.
+            EntityIntent child = rollup.isCrossModelChild() ? null : byName.get(rollup.getEntity());
             if (child == null) {
                 continue;
             }
@@ -2038,10 +2144,65 @@ public final class IntentParser {
                 entity = validateStepEventBinding(event, kind, subject, model, issues);
             }
         }
+        Object phased = event.get(EventBinding.ON_PHASE);
+        if (phased != null) {
+            declared++;
+            entity = phased.toString();
+            if (!entityNames.contains(entity)) {
+                issues.add(subject + " " + EventBinding.ON_PHASE + " references unknown entity [" + phased + "]");
+                entity = null;
+            }
+        }
+        validatePhaseBinding(event, subject, entity == null ? null : entityByName(model, entity), issues);
         if (declared != 1) {
-            issues.add(subject + " must declare exactly one of onCreate/onUpdate/onDelete/onTransition/onStepReached/onStepCompleted");
+            issues.add(
+                    subject + " must declare exactly one of onCreate/onUpdate/onDelete/onTransition/onPhase/onStepReached/onStepCompleted");
         }
         return entity;
+    }
+
+    /**
+     * The {@code onPhase} half of an event binding (#6929): the phase the consumer observes must be one
+     * the entity DECLARES, and {@code phase:} belongs to that kind alone.
+     *
+     * <p>
+     * A phase is the channel of an enrichment a listener computes and writes back event-silently - the
+     * only moment at which a consumer of that value may read the row. Both halves are checked here
+     * because both fail the same silent way: a {@code phase:} on an {@code onCreate} binding would be
+     * dropped and the consumer would keep racing the enrichment, and an undeclared phase name would
+     * bind a topic nothing ever publishes to, so the consumer would simply never fire.
+     *
+     * @param event the binding map (may be {@code null})
+     * @param subject the issue prefix naming the consumer
+     * @param entity the bound entity when it is LOCAL, else {@code null} - a cross-model entity
+     *        declares its phases in its own model, so the name cannot be resolved from here (the same
+     *        limit a cross-model status nomenclature has)
+     * @param issues the collecting issue list
+     */
+    private static void validatePhaseBinding(Map<String, Object> event, String subject, EntityIntent entity, List<String> issues) {
+        if (event == null) {
+            return;
+        }
+        Object phase = event.get(EventBinding.PHASE_KEY);
+        if (event.get(EventBinding.ON_PHASE) == null) {
+            if (phase != null) {
+                issues.add(subject + " event declares `phase: " + phase + "` without `onPhase:` - a phase is the channel of"
+                        + " an enrichment write and only an onPhase binding observes it");
+            }
+            return;
+        }
+        String name = phase == null ? ""
+                : String.valueOf(phase)
+                        .trim();
+        if (name.isEmpty()) {
+            issues.add(subject + " event onPhase requires `phase: <name>` naming one of the entity's declared phases");
+            return;
+        }
+        if (entity != null && !entity.getPhases()
+                                     .contains(name)) {
+            issues.add(subject + " event binds phase [" + name + "] which entity [" + entity.getName()
+                    + "] does not declare - add it to that entity's `phases:`");
+        }
     }
 
     /** One {@code onStepReached}/{@code onStepCompleted} binding: the process, the step, the record. */
@@ -2152,6 +2313,21 @@ public final class IntentParser {
                                                                              .isBlank();
         boolean hasFileName = notify.getFileName() != null && !notify.getFileName()
                                                                      .isBlank();
+        if (NotificationIntent.ATTACH_REPORT.equals(attach)) {
+            // The report shape renders a REPORT, not the record's own document - so none of the
+            // document-master rules below apply, and every path (the bindings, the language, the name)
+            // resolves against the record the message is about.
+            validateReportAttachment(notify, subject, aboutEntity, model, issues);
+            if (hasLanguage && hasLanguageFrom) {
+                issues.add(subject + " declares both language and languageFrom - they are mutually exclusive");
+            } else if (hasLanguageFrom && aboutEntity != null) {
+                validateLanguageFromPath(notify.getLanguageFrom(), aboutEntity, subject + " languageFrom", model, issues);
+            }
+            if (hasFileName && aboutEntity != null) {
+                validateFileNamePattern(notify.getFileName(), aboutEntity, subject + " fileName", model, issues, true, false);
+            }
+            return;
+        }
         if (attach == null || attach.isBlank()) {
             if (hasLanguage || hasLanguageFrom) {
                 issues.add(subject + " declares language/languageFrom without attach: print - they select the attached render's language");
@@ -2168,7 +2344,8 @@ public final class IntentParser {
         // for `print`, the fan-out's anchor for `recordPrint` - one document, many recipients.
         String documentEntity = recordPrint ? anchorEntity : aboutEntity;
         if (!NOTIFY_ATTACHMENTS.contains(kind.toLowerCase(Locale.ROOT))) {
-            issues.add(subject + " has unsupported attach [" + attach + "] (supported: print, recordPrint)");
+            issues.add(subject + " has unsupported attach [" + attach
+                    + "] (supported: print, recordPrint, or { report: <name>, bind: { <parameter>: <field> } })");
         } else if (recordPrint && !fansOut) {
             issues.add(subject + " attach: recordPrint attaches the anchor record of a fan-out, so it needs a forEach"
                     + " - without one, attach: print already renders this very record");
@@ -2188,6 +2365,155 @@ public final class IntentParser {
             // so only fields of the anchor itself are readable there, exactly as the `record.` scope is
             // limited to one field of it.
             validateFileNamePattern(notify.getFileName(), documentEntity, subject + " fileName", model, issues, !recordPrint, false);
+        }
+    }
+
+    /**
+     * The report shape of {@code attach}: {@code { report: <name>, bind: { <parameter>: <field> } }}
+     * renders a declared report and attaches the PDF, each bound parameter resolved against the record
+     * the message is about - the customer statement, where what is mailed is a period's rows rather
+     * than one record's own document.
+     *
+     * <p>
+     * Two rules carry the weight, both of them ways a statement mail is quietly wrong rather than
+     * broken:
+     *
+     * <ul>
+     * <li><b>A parameter that declares an {@code initial} must be bound.</b> A parameter is bound on
+     * every call (#6911) and an unbound one rides its {@code initial} - one FIXED slice, identical for
+     * every recipient. That is the "whole ledger to one customer" failure mode: the mail goes out, the
+     * PDF is a report, and nothing about it says it is the wrong customer's. A parameter with no
+     * {@code initial} is one whose comparison has a neutral any-value default (a date window bound, a
+     * {@code like} search), so leaving it unbound legitimately means "the whole range".</li>
+     * <li><b>Every bound name must be a declared parameter of that report</b> - a typo would otherwise
+     * land in the request map as a key the generated repository never reads, and the report would mail
+     * unfiltered.</li>
+     * </ul>
+     *
+     * @param notify the notify block (its {@code attach} is the report shape)
+     * @param subject the message prefix identifying the call site
+     * @param aboutEntity the entity the message is about (a fan-out's ROW), or {@code null} when
+     *        unknown
+     * @param model the parsed model
+     * @param issues the collected issues
+     */
+    private static void validateReportAttachment(NotificationIntent notify, String subject, String aboutEntity, IntentModel model,
+            List<String> issues) {
+        NotificationIntent.ReportAttachment attachment = notify.getReportAttachment();
+        if (attachment == null || attachment.report() == null || attachment.report()
+                                                                           .isBlank()) {
+            issues.add(subject + " attach must name the report to render - attach: { report: <name>, bind: { <parameter>: <field> } }");
+            return;
+        }
+        ReportIntent report = null;
+        for (ReportIntent candidate : model.getReports()) {
+            if (attachment.report()
+                          .equals(candidate.getName())) {
+                report = candidate;
+            }
+        }
+        if (report == null) {
+            issues.add(subject + " attach references unknown report [" + attachment.report() + "]");
+            return;
+        }
+        // What the generated repository actually binds: the report's authored parameters, plus the
+        // window a balance report declares on its own behalf.
+        Map<String, ReportParameterIntent> declared = new LinkedHashMap<>();
+        for (ReportParameterIntent parameter : report.getParameters()) {
+            if (parameter.getName() != null && !parameter.getName()
+                                                         .isBlank()) {
+                declared.put(parameter.getName()
+                                      .trim(),
+                        parameter);
+            }
+        }
+        Set<String> bindable = new LinkedHashSet<>(declared.keySet());
+        if (report.isLedgerKind()) {
+            bindable.addAll(BALANCE_REPORT_PARAMETERS);
+        }
+        if (bindable.isEmpty()) {
+            issues.add(subject + " attaches report [" + report.getName()
+                    + "], which declares no parameters - a report with nothing to bind renders the same PDF for every recipient,"
+                    + " so declare the parameters that scope it (reports[].parameters) or attach it to a schedule that runs once");
+            return;
+        }
+        for (Map.Entry<String, String> bound : attachment.bind()
+                                                         .entrySet()) {
+            String parameter = bound.getKey();
+            String path = bound.getValue();
+            String where = subject + " attach bind [" + parameter + "]";
+            if (!bindable.contains(parameter)) {
+                issues.add(where + " is not a parameter of report [" + report.getName() + "]"
+                        + UnknownKeyValidator.suggestion(parameter, bindable));
+                continue;
+            }
+            if (path == null || path.isBlank()) {
+                issues.add(where + " has no source - name a field of [" + aboutEntity + "] or a one-hop relation.field path");
+                continue;
+            }
+            validateReportBindSource(path.trim(), where, aboutEntity, model, issues);
+        }
+        for (Map.Entry<String, ReportParameterIntent> parameter : declared.entrySet()) {
+            String initial = parameter.getValue()
+                                      .getInitial();
+            boolean fixed = initial != null && !initial.isBlank();
+            if (fixed && !attachment.bind()
+                                    .containsKey(parameter.getKey())) {
+                issues.add(subject + " attaches report [" + report.getName() + "] without binding its parameter [" + parameter.getKey()
+                        + "] - it is bound on every call, so unbound it stays at its initial [" + initial.trim()
+                        + "] and every recipient is mailed that same slice");
+            }
+        }
+    }
+
+    /**
+     * A {@code bind:} source: a direct field of the record the message is about, or a one-hop
+     * {@code relation.field} path on it - the same vocabulary a {@code {field}} placeholder resolves.
+     * The {@code record.} scope is deliberately not one of them: a fan-out's rows are the recipients
+     * and the report is scoped by the row, so reaching the anchor would be a report about something
+     * other than what the message is about.
+     */
+    private static void validateReportBindSource(String path, String where, String aboutEntity, IntentModel model, List<String> issues) {
+        if (aboutEntity == null) {
+            return; // an unresolvable call-site entity is reported by the caller
+        }
+        EntityIntent about = entityByName(model, aboutEntity);
+        if (about == null) {
+            return; // the dangling entity is reported by the structural checks
+        }
+        if (path.startsWith(RECORD_SCOPE + ".")) {
+            issues.add(where + " reads the [" + RECORD_SCOPE
+                    + "] scope, which a bind source cannot - the attached report is scoped by the record this message is about");
+            return;
+        }
+        int dot = path.indexOf('.');
+        if (dot < 0) {
+            if (fieldByName(about, path) == null) {
+                issues.add(where + " [" + path + "] is not a field of [" + aboutEntity + "]");
+            }
+            return;
+        }
+        if (dot == 0 || dot == path.length() - 1 || path.indexOf('.', dot + 1) >= 0) {
+            issues.add(where + " [" + path + "] must be a field or a one-hop relation.field path on [" + aboutEntity + "]");
+            return;
+        }
+        String relationName = path.substring(0, dot);
+        String fieldName = path.substring(dot + 1);
+        RelationIntent relation = relationByName(about, relationName);
+        if (relation == null || !("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+            issues.add(where + " [" + path + "]: [" + relationName + "] is not a to-one relation of [" + aboutEntity + "]");
+            return;
+        }
+        if (relation.getModel() != null && !relation.getModel()
+                                                    .isBlank()) {
+            return; // cross-model target: the field is checked at generation against the owner's model
+        }
+        EntityIntent target = entityByName(model, relation.getTo() == null ? "" : relation.getTo());
+        if (target == null) {
+            return; // the dangling relation target is reported by the relations check
+        }
+        if (fieldByName(target, fieldName) == null) {
+            issues.add(where + " [" + path + "]: [" + fieldName + "] is not a field of [" + relation.getTo() + "]");
         }
     }
 
@@ -2853,6 +3179,12 @@ public final class IntentParser {
                                                                    .isBlank()) {
                 validateImmutableWhen(entity, issues);
             }
+            if (entity.getPeriod() != null) {
+                validatePeriod(entity, issues);
+            }
+            if (entity.getImmutableInPeriod() != null) {
+                validateImmutableInPeriod(entity, byName, issues);
+            }
             if (entity.getChecks() != null) {
                 for (CheckIntent check : entity.getChecks()) {
                     validateCheck(entity, check, byName, model.getAggregates(), issues);
@@ -2866,8 +3198,47 @@ public final class IntentParser {
                        .isEmpty()) {
                 validateRelated(entity, byName, usesAliases, issues);
             }
+            if (!entity.getPhases()
+                       .isEmpty()) {
+                validatePhases(entity, issues);
+            }
         }
         return entityNames;
+    }
+
+    /**
+     * An entity's declared enrichment {@code phases:} (#6929) - the names its listeners announce and a
+     * consumer binds with {@code event: { onPhase: <Entity>, phase: <name> }}.
+     *
+     * <p>
+     * A phase name becomes both a topic suffix and the tail of the generated repository's
+     * {@code announce<Phase>} method, so it has to be a plain lower-camel identifier. The reserved
+     * names are the platform's OWN channels: announcing {@code updated} would publish {@code -updated}
+     * and re-fire every onUpdate consumer of a write the user never made, which is the exact loop the
+     * silent enrichment write exists to avoid.
+     */
+    private static void validatePhases(EntityIntent entity, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "]";
+        Set<String> seen = new LinkedHashSet<>();
+        for (String phase : entity.getPhases()) {
+            String name = phase == null ? "" : phase.trim();
+            if (name.isEmpty()) {
+                issues.add(subject + " declares an empty phase name");
+                continue;
+            }
+            if (!name.matches("[a-z][A-Za-z0-9]*")) {
+                issues.add(subject + " phase [" + name + "] must be a lower-camel identifier (e.g. costed, priced, enriched)");
+                continue;
+            }
+            if (RESERVED_PHASES.contains(name)) {
+                issues.add(subject + " phase [" + name + "] is a platform channel - a phase must be a name of its own,"
+                        + " or announcing it would re-fire the consumers of that channel");
+                continue;
+            }
+            if (!seen.add(name)) {
+                issues.add(subject + " declares phase [" + name + "] more than once");
+            }
+        }
     }
 
     /**
@@ -3177,22 +3548,95 @@ public final class IntentParser {
      * relation by its authored name, and the seed ids must be positive integers.
      */
     private static void validateImmutableWhen(EntityIntent entity, List<String> issues) {
-        String subject = "entity [" + entity.getName() + "] immutableWhen";
+        validateStatusExpression(entity, "entity [" + entity.getName() + "] immutableWhen", entity.getImmutableWhen(), issues);
+    }
+
+    /**
+     * A {@code period:} marker makes the entity a period register: its rows are the dated windows other
+     * entities are locked by. The two bounds must be its own {@code date} fields - a timestamp would
+     * make "the period covering this date" depend on a time of day nobody authored - and
+     * {@code closedWhen} must be a status expression over its own {@code function: EntityStatus}
+     * relation, since closing a period is a status transition like any other.
+     */
+    private static void validatePeriod(EntityIntent entity, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] period";
+        PeriodIntent period = entity.getPeriod();
+        validatePeriodBound(entity, subject, "start", period.getStart(), issues);
+        validatePeriodBound(entity, subject, "end", period.getEnd(), issues);
+        if (period.getClosedWhen() == null || period.getClosedWhen()
+                                                    .isBlank()) {
+            issues.add(subject + " declares no closedWhen - nothing would ever close the period");
+            return;
+        }
+        validateStatusExpression(entity, subject + " closedWhen", period.getClosedWhen(), issues);
+    }
+
+    /** One bound of a period register: a declared {@code date} field of the register itself. */
+    private static void validatePeriodBound(EntityIntent entity, String subject, String key, String name, List<String> issues) {
+        if (name == null || name.isBlank()) {
+            issues.add(subject + " declares no " + key + " - a period is bounded on both sides");
+            return;
+        }
+        FieldIntent bound = fieldByName(entity, name);
+        if (bound == null) {
+            issues.add(subject + " " + key + " [" + name + "] is not a field of [" + entity.getName() + "]");
+        } else if (!"date".equals(bound.getType())) {
+            issues.add(subject + " " + key + " [" + name + "] must be a date field - it is [" + bound.getType() + "]");
+        }
+    }
+
+    /**
+     * {@code immutableInPeriod: { period: <Register>, date: <own date field> }} refuses USER writes
+     * while the register row covering that date is closed. The register must be an entity of THIS model
+     * declaring {@code period:} - the guard is generated into this model's controllers, which can only
+     * query a repository generated alongside them - and the date must be this entity's own {@code date}
+     * field, matching the register's own bounds.
+     */
+    private static void validateImmutableInPeriod(EntityIntent entity, Map<String, EntityIntent> byName, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] immutableInPeriod";
+        PeriodLockIntent lock = entity.getImmutableInPeriod();
+        if (lock.getPeriod() == null || lock.getPeriod()
+                                            .isBlank()) {
+            issues.add(subject + " declares no period - name the entity that declares period:");
+        } else {
+            EntityIntent register = byName.get(lock.getPeriod());
+            if (register == null) {
+                issues.add(subject + " period [" + lock.getPeriod()
+                        + "] is not an entity of this model - a period register must be generated alongside what it locks");
+            } else if (register.getPeriod() == null) {
+                issues.add(subject + " period [" + lock.getPeriod() + "] does not declare period: - it is not a period register");
+            }
+        }
+        if (lock.getDate() == null || lock.getDate()
+                                          .isBlank()) {
+            issues.add(subject + " declares no date - name the field whose value decides the period");
+            return;
+        }
+        FieldIntent date = fieldByName(entity, lock.getDate());
+        if (date == null) {
+            issues.add(subject + " date [" + lock.getDate() + "] is not a field of [" + entity.getName() + "]");
+        } else if (!"date".equals(date.getType())) {
+            issues.add(subject + " date [" + lock.getDate() + "] must be a date field - it is [" + date.getType() + "]");
+        }
+    }
+
+    /**
+     * A boolean expression over an entity's own {@code function: EntityStatus} relation - the
+     * {@code immutableWhen} grammar, reused wherever a status condition is authored as text.
+     */
+    private static void validateStatusExpression(EntityIntent entity, String subject, String expression, List<String> issues) {
         RelationIntent status = null;
-        if (entity.getRelations() != null) {
-            for (RelationIntent relation : entity.getRelations()) {
-                if (relation.isEntityStatus()) {
-                    status = relation;
-                    break;
-                }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.isEntityStatus()) {
+                status = relation;
+                break;
             }
         }
         if (status == null) {
-            issues.add(subject + " requires a `function: EntityStatus` relation - immutability keys on the status");
+            issues.add(subject + " requires a `function: EntityStatus` relation on [" + entity.getName() + "]");
             return;
         }
-        for (String term : entity.getImmutableWhen()
-                                 .split("\\|\\|")) {
+        for (String term : expression.split("\\|\\|")) {
             java.util.regex.Matcher matcher = IMMUTABLE_WHEN_TERM.matcher(term);
             if (!matcher.matches()) {
                 issues.add(subject + " term [" + term.trim() + "] must be `<Status relation> == <seed id>` (terms joined with ||)");
@@ -5462,22 +5906,29 @@ public final class IntentParser {
             }
             String subject = "posting [" + posting.getName() + "]";
             // event: exactly one trigger - `onTransition` (a status write; requires the `when`
-            // status guard) or `onCreate` (the source's insert - the trigger for a source with no
+            // status guard), `onCreate` (the source's insert - the trigger for a source with no
             // status lifecycle at all, e.g. a booked payment whose only event is being created;
-            // `when` stays optional there as a plain `<Property> == <number>` guard).
+            // `when` stays optional there as a plain `<Property> == <number>` guard) or `onPhase`
+            // (a declared enrichment phase - the moment a value a listener computes has been
+            // written, which is the only moment a posting reading that value may observe; the
+            // guard is optional there too, the phase already being one moment).
             Object onTransition = posting.getEvent() == null ? null
                     : posting.getEvent()
                              .get("onTransition");
             Object onCreate = posting.getEvent() == null ? null
                     : posting.getEvent()
                              .get("onCreate");
-            if (onTransition == null && onCreate == null) {
-                issues.add(subject + " requires `event: { onTransition: <SourceEntity>, ... }`"
-                        + " or `event: { onCreate: <SourceEntity>, ... }`");
-            } else if (onTransition != null && onCreate != null) {
-                issues.add(subject + " event declares both onTransition and onCreate - exactly one trigger is allowed");
+            Object onPhase = posting.getEvent() == null ? null
+                    : posting.getEvent()
+                             .get(EventBinding.ON_PHASE);
+            int triggers = (onTransition == null ? 0 : 1) + (onCreate == null ? 0 : 1) + (onPhase == null ? 0 : 1);
+            if (triggers == 0) {
+                issues.add(subject + " requires `event: { onTransition: <SourceEntity>, ... }`,"
+                        + " `event: { onCreate: <SourceEntity>, ... }` or `event: { onPhase: <SourceEntity>, phase: <name> }`");
+            } else if (triggers > 1) {
+                issues.add(subject + " event declares more than one of onTransition/onCreate/onPhase - exactly one trigger is allowed");
             } else {
-                String source = String.valueOf(onTransition != null ? onTransition : onCreate);
+                String source = String.valueOf(onTransition != null ? onTransition : onCreate != null ? onCreate : onPhase);
                 Object alias = posting.getEvent()
                                       .get("model");
                 if (alias != null && !usesAliases.contains(String.valueOf(alias))) {
@@ -5487,6 +5938,7 @@ public final class IntentParser {
                     issues.add(subject + " event source [" + source
                             + "] is not a declared entity (declare `model:` for a cross-model source)");
                 }
+                validatePhaseBinding(posting.getEvent(), subject, alias != null ? null : byName.get(source), issues);
                 Object when = posting.getEvent()
                                      .get("when");
                 if (onTransition != null) {
@@ -6077,8 +6529,9 @@ public final class IntentParser {
     /**
      * Validate the optional {@code event} trigger of a create-from (issues #6711, #6800): exactly one
      * of the source's lifecycle ({@code onTransition} - a status write, the {@code when} status guard
-     * is mandatory - or {@code onCreate} - the source's insert, the guard optional), naming the SAME
-     * entity {@code from} declares, or a process step ({@code onStepReached}/{@code onStepCompleted}:
+     * is mandatory - {@code onCreate} - the source's insert, the guard optional - or {@code onPhase} -
+     * a declared enrichment phase of it, the guard optional), naming the SAME entity {@code from}
+     * declares, or a process step ({@code onStepReached}/{@code onStepCompleted}:
      * <code>{ process, step }</code>) whose process runs ON that entity. The owning model is never
      * repeated here, {@code fromUses} declares it.
      *
@@ -6105,22 +6558,26 @@ public final class IntentParser {
         validateGeneratesEventMode(g, subject, issues);
         Object onTransition = event.get("onTransition");
         Object onCreate = event.get("onCreate");
+        Object onPhase = event.get(EventBinding.ON_PHASE);
+        validatePhaseBinding(event, subject, crossModelSource ? null : source, issues);
         String stepKind = null;
         for (String kind : STEP_EVENT_KINDS) {
             if (event.get(kind) != null) {
                 stepKind = kind;
             }
         }
+        int lifecycleTriggers = (onTransition == null ? 0 : 1) + (onCreate == null ? 0 : 1) + (onPhase == null ? 0 : 1);
         if (stepKind != null) {
-            validateGeneratesStepEvent(g, subject, stepKind, onTransition != null || onCreate != null, crossModelSource, model, issues);
-        } else if (onTransition == null && onCreate == null) {
+            validateGeneratesStepEvent(g, subject, stepKind, lifecycleTriggers > 0, crossModelSource, model, issues);
+        } else if (lifecycleTriggers == 0) {
             issues.add(subject + " event requires `onTransition: " + g.getFrom() + "` (a status write), `onCreate: " + g.getFrom()
-                    + "` (the source's insert) or `onStepReached`/`onStepCompleted: { process: <Process>, step: <step> }`"
+                    + "` (the source's insert), `onPhase: " + g.getFrom() + "` with `phase: <name>` (a declared enrichment phase)"
+                    + " or `onStepReached`/`onStepCompleted: { process: <Process>, step: <step> }`"
                     + " (a moment in a process that runs on it)");
-        } else if (onTransition != null && onCreate != null) {
-            issues.add(subject + " event declares both onTransition and onCreate - exactly one trigger is allowed");
+        } else if (lifecycleTriggers > 1) {
+            issues.add(subject + " event declares more than one of onTransition/onCreate/onPhase - exactly one trigger is allowed");
         } else {
-            String declared = String.valueOf(onTransition != null ? onTransition : onCreate)
+            String declared = String.valueOf(onTransition != null ? onTransition : onCreate != null ? onCreate : onPhase)
                                     .trim();
             if (g.getFrom() != null && !g.getFrom()
                                          .isBlank()
@@ -6942,6 +7399,7 @@ public final class IntentParser {
                         + REPORT_CHART_KINDS);
             }
             validateAgeingDimensions(model, report, issues);
+            validateReportParameters(model, report, issues);
             validateBalanceReport(model, report, issues);
             validateReportScope(model, report, issues);
             validateSubsetReportReferences(model, report, issues);
@@ -6989,6 +7447,18 @@ public final class IntentParser {
             if (reference != null) {
                 issues.add("report [" + report.getName() + "] measure [" + measure.trim() + "] references the subset relation ["
                         + reference.name() + "]" + reference.on() + rowAlternative);
+            }
+        }
+        if (!isBlank(report.getCorrespondence())) {
+            // The correspondence bucket is a dimension read off a sibling line, so a subset relation is
+            // as wrong there as it is on a dimension - it would GROUP BY the stored key list.
+            SubsetReference reference = subsetReferenced(model, source, referencedPath(report.getCorrespondence()));
+            if (reference != null) {
+                issues.add("report [" + report.getName() + "] correspondence [" + report.getCorrespondence()
+                                                                                        .trim()
+                        + "] " + (reference.joinedEntity() == null ? "is a subset relation"
+                                : "references the subset relation [" + reference.name() + "]" + reference.on())
+                        + rowAlternative);
             }
         }
         if (!isBlank(report.getFilter())) {
@@ -7202,53 +7672,209 @@ public final class IntentParser {
      * The bucketed field: an own {@code date}/{@code timestamp} of the source, or a one-hop relation's.
      */
     private static void validateAgeingField(IntentModel model, ReportIntent report, String subject, String path, List<String> issues) {
-        EntityIntent source = null;
-        for (EntityIntent entity : model.getEntities()) {
-            if (entity.getName() != null && entity.getName()
-                                                  .equals(report.getSource())) {
-                source = entity;
-            }
-        }
+        EntityIntent source = reportSource(model, report);
         if (source == null) {
             return; // an unknown source is reported separately
         }
+        FieldIntent field = reportPathField(model, source, subject, path, issues);
+        if (field == null) {
+            return;
+        }
+        String type = fieldType(field);
+        if (!"date".equals(type) && !"timestamp".equals(type)) {
+            issues.add(subject + " buckets by age, so [" + path + "] must be a date/timestamp field - got [" + field.getType() + "]");
+        }
+    }
+
+    /** The report's source entity, or null when it is missing or unknown (reported separately). */
+    private static EntityIntent reportSource(IntentModel model, ReportIntent report) {
+        return report.getSource() == null ? null : entityByName(model, report.getSource());
+    }
+
+    /** A field's declared type, lower-cased, or the empty string when it declares none. */
+    private static String fieldType(FieldIntent field) {
+        return field.getType() == null ? ""
+                : field.getType()
+                       .toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * The field a report path names: a field of the report's source, or a field of the entity ONE
+     * to-one relation hop away - the same reach a dimension and a measure resolve against.
+     *
+     * @param model the intent model
+     * @param source the report's source entity
+     * @param subject the authoring site, for the issue message
+     * @param path the authored field path
+     * @param issues the collecting issue list
+     * @return the field, or null when the path does not resolve here - either an issue was reported, or
+     *         the hop crosses into another model, where the field is resolved at generation time
+     */
+    private static FieldIntent reportPathField(IntentModel model, EntityIntent source, String subject, String path, List<String> issues) {
         String[] segments = path.split("\\.");
         if (segments.length > 2) {
             issues.add(subject + " field [" + path + "] may reference the source or ONE relation hop");
-            return;
+            return null;
         }
         EntityIntent owner = source;
         if (segments.length == 2) {
             RelationIntent hop = toOneRelationByName(source, segments[0]);
             if (hop == null) {
                 issues.add(subject + " [" + segments[0] + "] is not a to-one relation of [" + source.getName() + "]");
-                return;
+                return null;
             }
             if (hop.isCrossModel()) {
-                return; // resolved at generation against the owner model
+                return null; // resolved at generation against the owner model
             }
-            owner = null;
-            for (EntityIntent entity : model.getEntities()) {
-                if (entity.getName() != null && entity.getName()
-                                                      .equals(hop.getTo())) {
-                    owner = entity;
-                }
-            }
+            owner = hop.getTo() == null ? null : entityByName(model, hop.getTo());
             if (owner == null) {
-                return; // the dangling relation target is reported separately
+                return null; // the dangling relation target is reported separately
             }
         }
         FieldIntent field = fieldByName(owner, segments[segments.length - 1]);
         if (field == null) {
             issues.add(subject + " field [" + path + "] is not a field of [" + owner.getName() + "]");
-            return;
         }
-        String type = field.getType() == null ? ""
-                : field.getType()
-                       .toLowerCase();
-        if (!"date".equals(type) && !"timestamp".equals(type)) {
-            issues.add(subject + " buckets by age, so [" + path + "] must be a date/timestamp field - got [" + field.getType() + "]");
+        return field;
+    }
+
+    /** The comparisons an authored report parameter may bind with. */
+    private static final Set<String> REPORT_PARAMETER_OPS = Set.of("ge", "le", "eq", "like");
+
+    /** The types an authored report parameter may declare - the families the report page renders. */
+    private static final Set<String> REPORT_PARAMETER_TYPES = Set.of("date", "timestamp", "number", "string");
+
+    /** A target field's own type as the parameter family it belongs to. */
+    private static final Map<String, String> REPORT_PARAMETER_FAMILIES = Map.ofEntries(Map.entry("date", "date"),
+            Map.entry("timestamp", "timestamp"), Map.entry("integer", "number"), Map.entry("int", "number"), Map.entry("long", "number"),
+            Map.entry("decimal", "number"), Map.entry("double", "number"), Map.entry("string", "string"), Map.entry("uuid", "string"));
+
+    /** A parameter name is a SQL named marker and a request key, so it stays a plain identifier. */
+    private static final java.util.regex.Pattern REPORT_PARAMETER_NAME = java.util.regex.Pattern.compile("[A-Za-z][A-Za-z0-9_]*");
+
+    /**
+     * Names a report parameter cannot take. {@code language} is the multilingual overlay's own bound
+     * parameter; the others are the identifiers the generated report controller declares around it -
+     * its {@code repository} field, the {@code filter} map it fills and its paging locals - which a
+     * same-named parameter would shadow into code that does not compile.
+     */
+    private static final Set<String> RESERVED_REPORT_PARAMETERS = Set.of("language", "limit", "offset", "filter", "repository");
+
+    /** The window bounds {@code kind: balance} declares on its own behalf. */
+    private static final Set<String> BALANCE_REPORT_PARAMETERS = Set.of("fromDate", "toDate");
+
+    /**
+     * A report's authored {@code parameters:} - the user-set inputs bound into its {@code WHERE}.
+     *
+     * <p>
+     * A parameter is bound on EVERY call: when the request carries no value the generated repository
+     * binds the declared {@code initial}, which is therefore what the report shows unparameterized.
+     * That is why {@code initial} is required unless the comparison has a neutral "any value" default -
+     * a date window bound (widened to all time) and a {@code like} search (the empty pattern, which
+     * matches every value). An {@code eq} selector and a numeric bound have none: without a declared
+     * default they would silently show an empty or arbitrarily narrowed report, so they are refused
+     * here instead.
+     *
+     * <p>
+     * The target is a field of the source or a field one to-one relation hop away, and its own type
+     * types the parameter - an authored {@code type:} is a declaration checked against it, never a
+     * conversion. A relation itself is not a target: the value would be its raw foreign key and the
+     * report page has no picker to choose one, so the message points at the report's own per-column
+     * filters instead.
+     */
+    private static void validateReportParameters(IntentModel model, ReportIntent report, List<String> issues) {
+        EntityIntent source = reportSource(model, report);
+        Set<String> names = new HashSet<>();
+        for (ReportParameterIntent parameter : report.getParameters()) {
+            String name = parameter.getName() == null ? null
+                    : parameter.getName()
+                               .trim();
+            if (name == null || name.isEmpty()) {
+                issues.add("report [" + report.getName() + "] has a parameter with no name");
+                continue;
+            }
+            String subject = "report [" + report.getName() + "] parameter [" + name + "]";
+            if (!REPORT_PARAMETER_NAME.matcher(name)
+                                      .matches()
+                    || SourceVersion.isKeyword(name)) {
+                // The generated report controller declares the parameter as a Java method parameter and
+                // binds it as a SQL named marker, so a name that is not an identifier in both - or is a
+                // Java keyword - is caught here rather than as a javac error in generated code.
+                issues.add(subject + " must be named as a plain identifier - letters, digits and underscore, starting with a letter,"
+                        + " and not a Java keyword");
+            }
+            if (!names.add(name)) {
+                issues.add(subject + " is declared twice");
+            }
+            if (RESERVED_REPORT_PARAMETERS.contains(name)) {
+                issues.add(subject + " uses the reserved name [" + name
+                        + "] - the platform binds it itself or the generated report controller declares it");
+            }
+            if (report.isLedgerKind() && BALANCE_REPORT_PARAMETERS.contains(name)) {
+                // A statement declares the same window on its own behalf as a balance report does.
+                issues.add(subject + " collides with the balance window parameter of the same name");
+            }
+            String op = parameter.getNormalizedOp();
+            if (op == null) {
+                issues.add(subject + " has no op - expected one of " + REPORT_PARAMETER_OPS);
+            } else if (!REPORT_PARAMETER_OPS.contains(op)) {
+                issues.add(subject + " has unknown op [" + parameter.getOp() + "] - expected one of " + REPORT_PARAMETER_OPS);
+                op = null;
+            }
+            String declared = parameter.getNormalizedType();
+            if (declared != null && !REPORT_PARAMETER_TYPES.contains(declared)) {
+                issues.add(subject + " has unknown type [" + parameter.getType() + "] - expected one of " + REPORT_PARAMETER_TYPES);
+                declared = null;
+            }
+            String family = validateReportParameterTarget(model, source, parameter, subject, declared, issues);
+            String kind = family != null ? family : declared;
+            if ("like".equals(op) && kind != null && !"string".equals(kind)) {
+                issues.add(subject + " compares with op: like, which matches text - [" + parameter.getNormalizedTarget() + "] is a [" + kind
+                        + "] field");
+            }
+            boolean neutral =
+                    "like".equals(op) || (("date".equals(kind) || "timestamp".equals(kind)) && ("ge".equals(op) || "le".equals(op)));
+            if (!neutral && op != null && (parameter.getInitial() == null || parameter.getInitial()
+                                                                                      .isBlank())) {
+                issues.add(subject + " needs an initial value - it is bound on every call and [" + op
+                        + "] has no neutral default, so declare what the report shows before the user sets it");
+            }
         }
+    }
+
+    /**
+     * The parameter target's field family, or null when the target does not resolve to a field of this
+     * model (a cross-model hop, or an issue already reported).
+     */
+    private static String validateReportParameterTarget(IntentModel model, EntityIntent source, ReportParameterIntent parameter,
+            String subject, String declared, List<String> issues) {
+        String target = parameter.getNormalizedTarget();
+        if (target == null) {
+            issues.add(subject + " has no target field to filter");
+            return null;
+        }
+        if (source == null) {
+            return null; // an unknown source is reported separately
+        }
+        if (relationByName(source, target) != null) {
+            issues.add(subject + " targets the relation [" + target
+                    + "] - a parameter filters a field, so name one of it (<relation>.<field>) or filter by the related column on the report itself");
+            return null;
+        }
+        FieldIntent field = reportPathField(model, source, subject, target, issues);
+        if (field == null) {
+            return null;
+        }
+        String family = REPORT_PARAMETER_FAMILIES.get(fieldType(field));
+        if (family == null) {
+            issues.add(subject + " filters [" + target + "], a [" + field.getType()
+                    + "] field - a parameter binds a date, timestamp, number or string");
+            return null;
+        }
+        if (declared != null && !declared.equals(family)) {
+            issues.add(subject + " declares type [" + declared + "] but [" + target + "] is a [" + field.getType() + "] field");
+        }
+        return family;
     }
 
     /**
@@ -7257,27 +7883,53 @@ public final class IntentParser {
      * {@code measures} because the six opening / period / closing totals ARE the measures.
      */
     private static void validateBalanceReport(IntentModel model, ReportIntent report, List<String> issues) {
-        boolean balanceInputs = report.getDate() != null || report.getDebit() != null || report.getCredit() != null;
+        boolean balanceInputs =
+                report.getDate() != null || report.getDebit() != null || report.getCredit() != null || report.getCorrespondence() != null;
+        boolean statementInputs = report.getAccount() != null || !report.getLines()
+                                                                        .isEmpty();
         if (report.getKind() == null || report.getKind()
                                               .isBlank()) {
             if (balanceInputs) {
-                issues.add("report [" + report.getName() + "] declares date/debit/credit but is not kind: balance");
+                issues.add("report [" + report.getName()
+                        + "] declares date/debit/credit/correspondence but is not kind: balance or kind: statement");
+            }
+            if (statementInputs) {
+                issues.add("report [" + report.getName() + "] declares account/lines but is not kind: statement");
             }
             return;
         }
-        if (!report.isBalance()) {
-            issues.add("report [" + report.getName() + "] has unknown kind [" + report.getKind() + "] - expected balance");
+        if (!report.isLedgerKind()) {
+            issues.add("report [" + report.getName() + "] has unknown kind [" + report.getKind() + "] - expected balance or statement");
             return;
         }
-        String prefix = "balance report [" + report.getName() + "]";
+        String prefix = (report.isStatement() ? "statement" : "balance") + " report [" + report.getName() + "]";
         if (!report.getMeasures()
                    .isEmpty()) {
             issues.add(prefix + " must not declare measures - it computes the opening/period/closing debit and credit totals");
         }
-        if (report.getDimensions()
-                  .stream()
-                  .noneMatch(d -> d != null && !d.isBlank())) {
-            issues.add(prefix + " needs at least one dimension to balance by");
+        if (report.isStatement()) {
+            // A statement's output rows are its lines; a dimension would multiply every line by the
+            // dimension's values and the line codes would stop being unique - which is the one thing a
+            // statement guarantees.
+            if (report.getDimensions()
+                      .stream()
+                      .anyMatch(d -> d != null && !d.isBlank())) {
+                issues.add(prefix + " must not declare dimensions - its rows are the declared lines");
+            }
+            if (report.getCorrespondence() != null) {
+                // Correspondence buckets one account's turnover by the accounts it faced; a statement has
+                // no account axis to bucket - its rows are the declared lines.
+                issues.add(prefix + " must not declare correspondence - the general ledger axis belongs to kind: balance");
+            }
+        } else {
+            if (report.getDimensions()
+                      .stream()
+                      .noneMatch(d -> d != null && !d.isBlank())) {
+                issues.add(prefix + " needs at least one dimension to balance by");
+            }
+            if (statementInputs) {
+                issues.add(prefix + " declares account/lines - those belong to kind: statement");
+            }
         }
         EntityIntent source = null;
         for (EntityIntent entity : model.getEntities()) {
@@ -7290,8 +7942,257 @@ public final class IntentParser {
             return; // the missing/unknown source is already reported
         }
         validateBalanceDate(model, source, report, issues, prefix);
+        if (!report.isStatement()) {
+            validateBalanceCorrespondence(model, source, report, issues, prefix);
+        }
         requireNumericBalanceField(source, report.getDebit(), "debit", issues, prefix);
         requireNumericBalanceField(source, report.getCredit(), "credit", issues, prefix);
+        if (report.isStatement()) {
+            validateStatementAccount(model, source, report, issues, prefix);
+            validateStatementLines(report, issues, prefix);
+        }
+    }
+
+    /**
+     * A statement's {@code account} must resolve to a {@code string} field - directly on the source or
+     * through a one-hop to-one {@code relation.field} path, exactly like the balance {@code date}. It
+     * is the code the line selectors match with, so a numeric or date field cannot carry it, and a
+     * cross-model target is checked at generation like every cross-model reference.
+     */
+    /**
+     * {@code correspondence} - the general ledger's "in correspondence with" axis. The bucket is read
+     * off a SIBLING line of the same document, so two things have to hold that a plain dimension never
+     * needs: the source must reach its document (the first hop of {@code date}, which is where the
+     * sibling grouping key comes from) and it must have a primary key (a line does not correspond with
+     * itself, and self-exclusion is by key). The path itself resolves against the source entity - the
+     * sibling is another row of it - so it is checked exactly like a dimension.
+     */
+    private static void validateBalanceCorrespondence(IntentModel model, EntityIntent source, ReportIntent report, List<String> issues,
+            String prefix) {
+        String reference = report.getCorrespondence();
+        if (reference == null) {
+            return;
+        }
+        if (reference.isBlank()) {
+            issues.add(prefix + " correspondence is empty - name the path bucketing the counter-side lines,"
+                    + " e.g. correspondence: Account.number");
+            return;
+        }
+        reference = reference.trim();
+        String date = report.getDate() == null ? ""
+                : report.getDate()
+                        .trim();
+        int dateDot = date.indexOf('.');
+        if (dateDot <= 0 || toOneRelation(source, date.substring(0, dateDot)) == null) {
+            issues.add(prefix + " correspondence needs the document its lines share, which is the first hop of date - so date ["
+                    + report.getDate() + "] must be a <relation>.<field> path over a to-one relation of [" + source.getName()
+                    + "] to its journal entry / voucher");
+        }
+        if (source.getFields()
+                  .stream()
+                  .noneMatch(FieldIntent::isPrimaryKey)) {
+            issues.add(prefix + " correspondence needs a primaryKey on [" + source.getName()
+                    + "] - a line is excluded from its own correspondent bucket by key");
+        }
+        int dot = reference.indexOf('.');
+        if (dot > 0) {
+            String relationName = reference.substring(0, dot);
+            RelationIntent relation = toOneRelation(source, relationName);
+            if (relation == null) {
+                issues.add(
+                        prefix + " correspondence [" + reference + "] does not start with a to-one relation of [" + source.getName() + "]");
+                return;
+            }
+            if (relation.isCrossModel()) {
+                return; // like every cross-model reference, resolved at generation
+            }
+            EntityIntent target = entityByName(model, relation.getTo());
+            if (target != null && fieldByName(target, reference.substring(dot + 1)) == null) {
+                issues.add(prefix + " correspondence [" + reference + "] does not resolve to a field of [" + relation.getTo() + "]");
+            }
+            return;
+        }
+        if (fieldByName(source, reference) == null && toOneRelation(source, reference) == null) {
+            issues.add(
+                    prefix + " correspondence [" + reference + "] is neither a field nor a to-one relation of [" + source.getName() + "]");
+        }
+    }
+
+    private static void validateStatementAccount(IntentModel model, EntityIntent source, ReportIntent report, List<String> issues,
+            String prefix) {
+        String reference = report.getAccount();
+        if (reference == null || reference.isBlank()) {
+            issues.add(prefix + " needs account: the account-code field the lines select on");
+            return;
+        }
+        reference = reference.trim();
+        FieldIntent field;
+        int dot = reference.indexOf('.');
+        if (dot > 0) {
+            RelationIntent relation = toOneRelation(source, reference.substring(0, dot));
+            if (relation == null) {
+                issues.add(prefix + " account [" + reference + "] does not start with a to-one relation of [" + source.getName() + "]");
+                return;
+            }
+            if (relation.isCrossModel()) {
+                return;
+            }
+            EntityIntent target = null;
+            for (EntityIntent entity : model.getEntities()) {
+                if (entity.getName() != null && entity.getName()
+                                                      .equals(relation.getTo())) {
+                    target = entity;
+                }
+            }
+            field = target == null ? null : fieldByName(target, reference.substring(dot + 1));
+        } else {
+            field = fieldByName(source, reference);
+        }
+        if (field == null) {
+            issues.add(prefix + " account [" + reference + "] does not resolve to a field");
+        } else if (!"string".equalsIgnoreCase(field.getType() == null ? "" : field.getType())) {
+            issues.add(prefix + " account [" + reference + "] must be a string field holding the account code (found [" + field.getType()
+                    + "])");
+        }
+    }
+
+    /**
+     * The statement's lines: every line is either a leaf reading the ledger ({@code accounts} +
+     * {@code measure}) or arithmetic over other lines ({@code sum} / {@code less}), never both and
+     * never neither. Line codes are unique, every referenced code exists, and the reference graph is
+     * acyclic - a cycle would flatten forever in the generator, and a code that resolves to nothing
+     * would render a line reading zero with nothing to say why.
+     */
+    private static void validateStatementLines(ReportIntent report, List<String> issues, String prefix) {
+        List<StatementLineIntent> lines = report.getLines();
+        if (lines.isEmpty()) {
+            issues.add(prefix + " needs lines: the statement's fixed line structure");
+            return;
+        }
+        Map<String, StatementLineIntent> byCode = new LinkedHashMap<>();
+        for (StatementLineIntent line : lines) {
+            String code = line.getCode() == null ? null
+                    : line.getCode()
+                          .trim();
+            if (code == null || code.isEmpty()) {
+                issues.add(prefix + " has a line without a code");
+                continue;
+            }
+            String linePrefix = prefix + " line [" + code + "]";
+            if (byCode.put(code, line) != null) {
+                issues.add(prefix + " declares the line code [" + code + "] twice");
+            }
+            if (!statementLiteral(code)) {
+                issues.add(linePrefix + " has a code carrying a quote or a control character - a line code is rendered"
+                        + " into the statement query as a literal");
+            }
+            if (line.getLabel() == null || line.getLabel()
+                                               .isBlank()) {
+                issues.add(linePrefix + " has no label");
+            } else if (!statementLiteral(line.getLabel())) {
+                issues.add(linePrefix + " has a label carrying a control character");
+            }
+            if (line.isLeaf() && line.isComputed()) {
+                issues.add(linePrefix + " both selects accounts and sums other lines - a line does one or the other,"
+                        + " else the same amount is counted twice");
+                continue;
+            }
+            if (line.isLeaf()) {
+                StatementSupport.selector(line.getAccounts(), issues, linePrefix);
+                if (line.getMeasure() == null || line.getMeasure()
+                                                     .isBlank()) {
+                    issues.add(linePrefix + " needs measure: which balance of the selected accounts the line takes - one of "
+                            + StatementSupport.measureNames());
+                } else if (StatementSupport.measure(line.getMeasure()) == null) {
+                    issues.add(linePrefix + " has unknown measure [" + line.getMeasure()
+                                                                           .trim()
+                            + "] - expected one of " + StatementSupport.measureNames());
+                }
+            } else if (line.isComputed()) {
+                if (line.getMeasure() != null && !line.getMeasure()
+                                                      .isBlank()) {
+                    issues.add(linePrefix + " is computed from other lines and cannot declare a measure -"
+                            + " each referenced line carries its own");
+                }
+            } else {
+                issues.add(linePrefix + " neither selects accounts (accounts + measure) nor sums other lines (sum / less)");
+            }
+        }
+        validateStatementReferences(byCode, issues, prefix);
+    }
+
+    /**
+     * Every {@code sum}/{@code less} code names a declared line, and the graph they form is acyclic.
+     */
+    private static void validateStatementReferences(Map<String, StatementLineIntent> byCode, List<String> issues, String prefix) {
+        for (Map.Entry<String, StatementLineIntent> entry : byCode.entrySet()) {
+            String linePrefix = prefix + " line [" + entry.getKey() + "]";
+            for (String reference : statementReferences(entry.getValue())) {
+                if (reference.equals(entry.getKey())) {
+                    issues.add(linePrefix + " references itself");
+                } else if (!byCode.containsKey(reference)) {
+                    issues.add(linePrefix + " references the line [" + reference + "], which the statement does not declare");
+                }
+            }
+        }
+        for (String code : byCode.keySet()) {
+            List<String> path = new ArrayList<>();
+            if (statementCycle(code, byCode, new HashSet<>(), path)) {
+                issues.add(prefix + " has a cycle in its line arithmetic: " + String.join(" -> ", path));
+                return; // one cycle report is enough - every line on it would repeat the same message
+            }
+        }
+    }
+
+    /** The codes a line references, in the authored order, ignoring blanks. */
+    private static List<String> statementReferences(StatementLineIntent line) {
+        List<String> references = new ArrayList<>();
+        for (String reference : line.getSum()) {
+            if (!isBlank(reference)) {
+                references.add(reference.trim());
+            }
+        }
+        for (String reference : line.getLess()) {
+            if (!isBlank(reference)) {
+                references.add(reference.trim());
+            }
+        }
+        return references;
+    }
+
+    /** Depth-first cycle search over the line references, recording the offending path. */
+    private static boolean statementCycle(String code, Map<String, StatementLineIntent> byCode, Set<String> onPath, List<String> path) {
+        if (!onPath.add(code)) {
+            path.add(code);
+            return true;
+        }
+        path.add(code);
+        StatementLineIntent line = byCode.get(code);
+        if (line != null) {
+            for (String reference : statementReferences(line)) {
+                if (byCode.containsKey(reference) && statementCycle(reference, byCode, onPath, path)) {
+                    return true;
+                }
+            }
+        }
+        onPath.remove(code);
+        path.remove(path.size() - 1);
+        return false;
+    }
+
+    /**
+     * Whether a value may be rendered into the statement query as a SQL string literal. Quotes and
+     * control characters are refused rather than escaped: a line code and a label are authored
+     * captions, and refusing them here keeps the generator's literal rendering trivially correct.
+     */
+    private static boolean statementLiteral(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            char character = value.charAt(i);
+            if (character == '\'' || character == '\\' || Character.isISOControl(character)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

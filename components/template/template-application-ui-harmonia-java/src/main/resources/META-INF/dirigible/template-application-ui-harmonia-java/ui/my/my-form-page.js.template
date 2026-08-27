@@ -41,7 +41,7 @@ document.addEventListener('alpine:init', () => {
     options: {},
 
     apiPath: '/${javaPerspectiveName}/${name}MyController',
-#if($immutableStatusProperty || $immutableAlways)
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
 
     // Immutability pre-check (intent `immutable`/`immutableWhen:`), asked from the scoped
     // controller's GET /{id}/mutable so the Edit affordances stay honest - an /edit URL typed
@@ -63,7 +63,7 @@ document.addEventListener('alpine:init', () => {
       if (this.id) {
         try {
           const record = await App.services.api.get(this.apiPath + '/' + this.id);
-#if($immutableStatusProperty || $immutableAlways)
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
           try {
             const m = await App.services.api.get(this.apiPath + '/' + this.id + '/mutable');
             this.mutable = !m || m.mutable !== false;

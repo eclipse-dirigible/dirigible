@@ -39,10 +39,10 @@
     <!-- Status pill is right-aligned: the spacer above pushes it (and the Back button) to the far end. -->
     <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="(isEdit || isPreview) && statusText()" x-text="statusText()"></span>
 #end
-#if($immutableStatusProperty || $immutableAlways)
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
     <!-- Immutability pre-check: the document refuses user edits/deletes in its current status, so the
          page renders read-only and says so (the controller's 409 stays authoritative). -->
-    <span x-h-badge class="shrink-0" data-variant="warning" x-show="!mutable" :title="T('$projectName:${tprefix}.messages.immutable', 'This record is read-only in its current status - corrections go through the workflow.')" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
+    <span x-h-badge class="shrink-0" data-variant="warning" x-show="!mutable" :title="T('$projectName:${tprefix}.messages.immutable', '#if($periodLock && !$immutableStatusProperty && !$immutableAlways)This record is read-only - its accounting period is closed; book the correction in an open period.#{else}This record is read-only in its current status - corrections go through the workflow.#end')" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
 #end
     <button type="button" x-h-button data-variant="transparent" @click="backToList()" x-text="T('$projectName:${tprefix}.defaults.backToList', 'Back to list')"></button>
   </div>
@@ -553,7 +553,7 @@
       </template>
       <!-- Preview footer: Close + Edit instead of Cancel + Save. -->
       <button type="button" x-h-button data-variant="transparent" x-show="isPreview" @click="backToList()" x-text="T('$projectName:${tprefix}.defaults.close', 'Close')"></button>
-      <button type="button" x-h-button data-variant="primary" x-show="isPreview#if($immutableStatusProperty || $immutableAlways) &amp;&amp; mutable#end" @click="goEdit()">
+      <button type="button" x-h-button data-variant="primary" x-show="isPreview#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="goEdit()">
         <i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
       </button>
       <button type="button" x-h-button data-variant="transparent" x-show="!isPreview" @click="backToList()" :disabled="state === 'saving'" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
