@@ -1,0 +1,21 @@
+## Repository layout
+
+The Maven hierarchy (from root `pom.xml`) is: `modules`, `components`, `build`, `dependencies`, `tests`, `cli`. Each is a Maven aggregator.
+
+- **`modules/`** — low-level platform building blocks consumed by everything else: `commons`, `database`, `engines` (script engine abstractions), `odata`, `parsers`, `repository`. These are pure libraries with no Spring wiring.
+- **`components/`** — the Spring application surface, split by concern. The `build/application` module wires all of these together via Spring Boot auto-configuration — there is no manual "list of features"; capability comes from whichever components/* JARs are on the classpath.
+  - `components/core/` — base Spring infrastructure: `core-base`, `core-configurations`, `core-database`, `core-extensions`, `core-initializers`, `core-registry`, `core-repository`, `core-spring`, `core-tenants`, `core-tracing`, `core-version`, `core-healthcheck`, `core-project`.
+  - `components/engine/` — runtime execution engines: `engine-java` (client `.java` runtime — synchronizer + compiler + SPI; see "Client Java code" below), `engine-javascript` (GraalVM polyglot), `engine-typescript`, `engine-bpm-flowable` (workflows), `engine-camel` (integration routes), `engine-jobs` (Quartz), `engine-listeners` (message listeners), `engine-cms-*` (internal / S3 / SharePoint), `engine-odata`, `engine-openapi`, `engine-web`, `engine-websockets`, `engine-template-*`, `engine-open-telemetry`, etc. Each engine registers itself as a Spring component and contributes routes/processors/scheduled jobs to the running app.
+  - `components/api/` — Java implementations of JS/TS APIs that user code in the IDE can `import` (e.g. `api-database`, `api-http`, `api-mail`, `api-git`, `api-bpm`, `api-cms`, `api-s3`, `api-kafka`, `api-rabbitmq`, `api-mongodb`, `api-pdf`, ...). These are bridged into GraalJS by `engine-javascript`.
+  - `components/data/` — data-layer tooling: `data-sources`, `data-structures` (HDB-style table definitions), `data-management`, `data-import`/`-export`, `data-csvim` (CSV import model), `data-store` (TS `@Entity` decorators → Hibernate via HBM XML), `data-store-java` (Java `@Entity` annotations → same Hibernate machinery; consumes `engine-java`'s SPI), `data-transfer`, `data-processes`.
+  - `components/ide/` — the browser IDE: a large set of `ide-ui-*` WebJar modules (Monaco, perspectives for git/bpm/database/jobs/etc.) plus backend services `ide-git`, `ide-terminal`, `ide-workspace`, `ide-console`. Frontend assets are bundled with `esbuild`/`tsc` during the Maven build, hence the Node toolchain prerequisite.
+  - `components/platform/`, `components/platform-ide/`, `components/security/`, `components/template/`, `components/ui/`, `components/resources/` — perspective/branding/security plumbing and shared UI assets.
+  - `components/group/` — _Maven aggregators only_ (`group-api`, `group-engines`, `group-ide`, ...). When you add a new component module, register it in the matching `group-*/pom.xml` so the assembly picks it up.
+- **`build/application/`** — the only thing that turns the above into a runnable jar. `DirigibleApplication.java` is intentionally small (just `@SpringBootApplication` + `@EnableAdminServer` + Camel OpenTelemetry). `Dockerfile` lives here too.
+- **`tests/tests-framework/`** — shared Selenide/Spring test base classes used by ITs.
+- **`tests/tests-integrations/`** — `*IT.java` UI integration tests plus project fixtures under `src/main/resources/<TestName>/`. Each IT fixture directory is a Dirigible project that gets imported and exercised through the running app.
+- **`cli/`** — standalone helper that starts the Dirigible jar against a given user project path; produces `cli/target/dirigible-cli-*-executable.jar`. See `cli/README.md`.
+- **`maven-plugins/flowable-bpmn-docs-maven-plugin/`** — custom Maven plugin generating BPMN docs.
+- **`dependencies/`** — BOM-style module aggregating third-party version pins (the actual `<properties>` for versions still live in the root `pom.xml`).
+- **`open-telemetry/`**, **`samples/`**, **`misc/`**, **`npm/`** — auxiliary content, not part of the Maven reactor in the root build (verify in the relevant `pom.xml` before assuming).
+
