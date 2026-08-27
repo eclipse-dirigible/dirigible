@@ -415,6 +415,16 @@ public class ${name}MyController {
 #end
 #end
     }
+    // The pre-check the generated UI gates its Edit affordances on: every guard this ${name} declares,
+    // in one answer.
+    private boolean isMutable(${name}Entity existing) {
+#if($immutableAlways)
+        return false;
+#else
+        return #if($immutableStatusProperty)isStatusMutable(existing)#{else}true#end#if($periodLock) && isPeriodOpen(existing.${periodLock.dateProperty})#end;
+#end
+    }
+
 #end
 #if($immutableStatusProperty && !$immutableAlways)
 
