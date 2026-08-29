@@ -223,4 +223,5 @@ class CsvimIntentGeneratorTest {
                 34,Bulgaria
                 """, csv, "a seed that never references a relation must not gain FK columns");
     }
+
 }
