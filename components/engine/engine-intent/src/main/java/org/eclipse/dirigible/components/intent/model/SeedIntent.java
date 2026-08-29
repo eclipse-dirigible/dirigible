@@ -52,6 +52,14 @@ public class SeedIntent {
      * scrubbed by the intent regeneration.
      */
     private String file;
+    /**
+     * Optional: whether a re-import may UPDATE rows that already exist ({@code "upsert"} in the emitted
+     * {@code .csvim}). Omitted, the semantics follow the seed's nature: a language seed is
+     * release-maintained nomenclature and keeps updating ({@code true}); every other seed is starter
+     * content - INSERT what is missing, never touch a row the user may have edited since
+     * ({@code false}). Authors of release-maintained reference data declare {@code upsert: true}.
+     */
+    private Boolean upsert;
 
     public String getName() {
         return name;
@@ -129,5 +137,22 @@ public class SeedIntent {
     /** Whether this seed references an authored CSV file instead of inline rows. */
     public boolean isFileSeed() {
         return file != null && !file.isBlank();
+    }
+
+    public Boolean getUpsert() {
+        return upsert;
+    }
+
+    public void setUpsert(Boolean upsert) {
+        this.upsert = upsert;
+    }
+
+    /**
+     * The re-import semantics the emitted {@code .csvim} declares: the authored {@code upsert:} when
+     * present, otherwise {@code true} for a language seed (release-maintained translations) and
+     * {@code false} for everything else (starter content).
+     */
+    public boolean resolvedUpsert() {
+        return upsert != null ? upsert : isLanguageSeed();
     }
 }

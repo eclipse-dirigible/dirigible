@@ -59,6 +59,14 @@ import org.springframework.stereotype.Component;
  * when the seed does not override it.
  *
  * <p>
+ * {@code upsert} is always emitted explicitly rather than left to the platform default, because the
+ * two seed kinds want opposite semantics: a language seed is release-maintained nomenclature whose
+ * re-import must keep updating deployed rows ({@code true}), while an entity or file seed is
+ * starter content whose rows the user owns after first import - a re-import must INSERT what is
+ * missing and never touch an existing row ({@code false}, the lesson of #6980). {@code upsert:} on
+ * the seed overrides either way.
+ *
+ * <p>
  * Idempotent: identical input always produces byte-identical output.
  */
 @Component
@@ -146,6 +154,15 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
      */
     static String renderCsvForTest(EntityIntent entity, SeedIntent seed) {
         return seed.isLanguageSeed() ? renderLanguageCsv(entity, seed) : renderCsv(orderedFieldsOf(entity), entity, seed);
+    }
+
+    /**
+     * Test seam: render a seed's .csvim declaration exactly like {@link #generate}. Public because the
+     * emission tests live beside {@link IntentGenerationContext}'s package-private constructor, one
+     * package up. Never use in production code.
+     */
+    public static String renderCsvimForTest(IntentGenerationContext context, SeedIntent seed, EntityIntent entity, String fileName) {
+        return renderCsvim(context, seed, entity, fileName);
     }
 
     private static String renderCsv(List<FieldIntent> fields, EntityIntent entity, SeedIntent seed) {
@@ -368,6 +385,7 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
         entry.put("delimField", FIELD_DELIM);
         entry.put("delimEnclosing", QUOTE_DELIM);
         entry.put("distinguishEmptyFromNull", true);
+        entry.put("upsert", seed.resolvedUpsert());
         entry.put("version", "1.0");
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("files", List.of(entry));
