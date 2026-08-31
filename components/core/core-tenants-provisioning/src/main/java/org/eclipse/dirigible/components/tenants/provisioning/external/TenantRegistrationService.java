@@ -71,6 +71,9 @@ class TenantRegistrationService {
         }
         String subdomain = parameter.getSubdomain() == null || parameter.getSubdomain()
                                                                         .isBlank() ? tenantId : parameter.getSubdomain();
+        if (!TenantIds.isValid(subdomain)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, TenantIds.invalidSubdomainMessage(subdomain));
+        }
         rejectSubdomainOfAnotherTenant(tenantId, subdomain);
 
         Optional<Tenant> existing = tenantService.findById(tenantId);

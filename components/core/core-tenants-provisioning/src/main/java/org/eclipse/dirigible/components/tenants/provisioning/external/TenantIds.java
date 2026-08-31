@@ -44,6 +44,24 @@ final class TenantIds {
     }
 
     /**
+     * The reason a caller gets when a subdomain is refused.
+     *
+     * <p>
+     * A subdomain is held to the same alphabet as an id, and for a reason of its own: under the
+     * {@code SUBDOMAIN} resolution strategy it is matched out of a request's host name, so anything
+     * that is not a DNS label could never be matched. Refusing it here also keeps arbitrary text - line
+     * breaks included - out of the values this API logs and stores.
+     *
+     * @param subdomain the refused subdomain
+     * @return the message
+     */
+    static String invalidSubdomainMessage(String subdomain) {
+        return "Invalid subdomain [" + subdomain
+                + "]. A subdomain must be a DNS label - letters, digits and inner hyphens, at most 63 characters - since it is matched out of"
+                + " a request's host name.";
+    }
+
+    /**
      * The reason a caller gets when the id is refused.
      *
      * @param tenantId the refused tenant id

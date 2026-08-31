@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
+import org.eclipse.dirigible.components.data.sources.domain.DataSourceProperty;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourceInitializer;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.sources.manager.TenantDataSourceNameManager;
@@ -87,16 +88,31 @@ class TenantDataSourceRegistrationServiceTest {
         assertEquals("org.h2.Driver", saved.getDriver(), "the driver is inherited from the default data source");
     }
 
+    /**
+     * The URL, the driver and the connection properties are never a caller's to choose.
+     *
+     * <p>
+     * They are executable surface - an H2 URL can carry {@code INIT=RUNSCRIPT FROM '<url>'}, a
+     * PostgreSQL connection property can name a {@code socketFactory} class - so a request that could
+     * set them would turn "may register a tenant's credentials" into "may run code on the application
+     * server". They are not fields of the parameter at all; this pins that the definition takes them
+     * from the application's own data source and from nowhere else.
+     */
     @Test
-    void anExplicitUrlAndDriverOverrideTheDefaults() {
-        TenantDataSourceParameter parameter = parameter();
-        parameter.setUrl("jdbc:postgresql://db:5432/apps");
-        parameter.setDriver("org.postgresql.Driver");
+    void theUrlDriverAndPropertiesComeOnlyFromTheApplicationsOwnDataSource() {
+        service.register(tenant, parameter());
 
-        service.register(tenant, parameter);
-
-        assertEquals("jdbc:postgresql://db:5432/apps", savedDataSource().getUrl());
-        assertEquals("org.postgresql.Driver", savedDataSource().getDriver());
+        DataSource saved = savedDataSource();
+        assertEquals("jdbc:h2:mem:default", saved.getUrl());
+        assertEquals("org.h2.Driver", saved.getDriver());
+        assertEquals(1, saved.getProperties()
+                             .size());
+        assertEquals("ssl", saved.getProperties()
+                                 .get(0)
+                                 .getName());
+        assertEquals("false", saved.getProperties()
+                                   .get(0)
+                                   .getValue());
     }
 
     /** Re-registration replaces the definition in place - two rows would be two data sources. */
@@ -123,15 +139,21 @@ class TenantDataSourceRegistrationServiceTest {
         verify(dataSourceInitializer).removeInitializedDataSource(TENANT_DS);
     }
 
+    /**
+     * Saving a definition initializes its pool too, through a data source lifecycle listener, so a
+     * failure there is the same failure as a refused connection and has to reach the caller the same
+     * way. Before this was handled it surfaced as an unhandled 500 with no message.
+     */
     @Test
-    void connectivityIsNotVerifiedWhenTheCallerOptsOut() {
-        TenantDataSourceParameter parameter = parameter();
-        parameter.setVerifyConnectivity(false);
+    void aPoolFailureRaisedBySavingIsAlsoAnsweredAsBadGateway() {
+        when(dataSourceService.save(any())).thenThrow(new IllegalStateException("Failed to initialize pool: Wrong user name or password"));
 
-        service.register(tenant, parameter);
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> service.register(tenant, parameter()));
 
-        verify(dataSourceInitializer, never()).initialize(any());
-        verify(dataSourceService).save(any());
+        assertEquals(HttpStatus.BAD_GATEWAY, ex.getStatusCode());
+        assertTrue(ex.getReason()
+                     .contains("Wrong user name or password"),
+                ex.getReason());
     }
 
     @Test
@@ -213,7 +235,10 @@ class TenantDataSourceRegistrationServiceTest {
 
     private static DataSource defaultDataSource() {
         DataSource dataSource = new DataSource("-", DEFAULT_DS, "", "org.h2.Driver", "jdbc:h2:mem:default", "sa", "");
-        dataSource.setProperties(List.of());
+        DataSourceProperty property = new DataSourceProperty();
+        property.setName("ssl");
+        property.setValue("false");
+        dataSource.setProperties(List.of(property));
         return dataSource;
     }
 

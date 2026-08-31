@@ -124,11 +124,11 @@ class TenantDataSourceRegistrationService {
         // A live pool keeps the credentials it was built with, whatever the definition says.
         dataSourceInitializer.removeInitializedDataSource(name);
 
-        if (parameter.isVerifyConnectivity()) {
-            verifyConnectivity(dataSource);
-        }
+        verifyConnectivity(dataSource);
+        // Saving initializes the pool as well, through a data source lifecycle listener, so a failure
+        // here is the same kind of failure and has to reach the caller the same way - not as a 500.
+        failAsBadGateway(dataSource, () -> dataSourceService.save(dataSource));
 
-        dataSourceService.save(dataSource);
         LOGGER.info("Data source [{}] of tenant [{}] has been {}.", name, tenant.getId(), existing.isPresent() ? "updated" : "registered");
         return existing.isEmpty();
     }
@@ -176,28 +176,27 @@ class TenantDataSourceRegistrationService {
         dataSource.setUsername(parameter.getUsername());
         dataSource.setPassword(parameter.getPassword());
         dataSource.setSchema(parameter.getSchema());
-        dataSource.setUrl(parameter.getUrl() != null ? parameter.getUrl() : defaults.getUrl());
-        dataSource.setDriver(parameter.getDriver() != null ? parameter.getDriver() : defaults.getDriver());
-        dataSource.setProperties(properties(dataSource, parameter, defaults));
+
+        // Never from the caller: a JDBC URL and driver properties are executable surface - an H2 URL
+        // carrying INIT=RUNSCRIPT, a PostgreSQL socketFactory property - so taking them from a request
+        // would let whoever may register a tenant's credentials run code on this server instead.
+        dataSource.setUrl(defaults.getUrl());
+        dataSource.setDriver(defaults.getDriver());
+        dataSource.setProperties(copyProperties(dataSource, defaults));
 
         dataSource.updateKey();
     }
 
     /**
-     * The connection properties: the caller's when it supplied any, otherwise the default data
-     * source's.
+     * The connection properties of the application's own data source, copied onto the tenant's.
      *
      * @param dataSource the owning definition
-     * @param parameter the credentials
      * @param defaults the application's default data source
      * @return the properties
      */
-    private List<DataSourceProperty> properties(DataSource dataSource, TenantDataSourceParameter parameter, DataSource defaults) {
+    private List<DataSourceProperty> copyProperties(DataSource dataSource, DataSource defaults) {
         List<DataSourceProperty> properties = new ArrayList<>();
-        if (parameter.getProperties() != null) {
-            parameter.getProperties()
-                     .forEach(p -> properties.add(property(dataSource, p.getName(), p.getValue())));
-        } else if (defaults.getProperties() != null) {
+        if (defaults.getProperties() != null) {
             defaults.getProperties()
                     .forEach(p -> properties.add(property(dataSource, p.getName(), p.getValue())));
         }
@@ -245,19 +244,46 @@ class TenantDataSourceRegistrationService {
      * @param dataSource the definition to try
      */
     private void verifyConnectivity(DataSource dataSource) {
-        try {
+        failAsBadGateway(dataSource, () -> {
             DirigibleDataSource initialized = dataSourceInitializer.initialize(dataSource);
             try (Connection connection = initialized.getConnection()) {
                 if (!connection.isValid(VALIDATION_TIMEOUT_SECONDS)) {
                     throw new SQLException("The driver does not consider the connection usable");
                 }
             }
+        });
+    }
+
+    /**
+     * Runs work that touches the tenant's database and turns any failure into the answer this API owes
+     * a caller: the status that says "your credentials did not work" and the database's own words.
+     *
+     * @param dataSource the definition being registered
+     * @param work the work to run
+     */
+    private void failAsBadGateway(DataSource dataSource, SqlWork work) {
+        try {
+            work.run();
         } catch (SQLException | RuntimeException ex) {
             dataSourceInitializer.removeInitializedDataSource(dataSource.getName());
             LOGGER.warn("Failed to connect to the database of data source [{}] with the supplied credentials.", dataSource.getName(), ex);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Could not connect to the database of data source ["
                     + dataSource.getName() + "] with the supplied credentials: " + rootMessage(ex));
         }
+    }
+
+    /**
+     * Work that may fail the way a database fails.
+     */
+    @FunctionalInterface
+    private interface SqlWork {
+
+        /**
+         * Run.
+         *
+         * @throws SQLException if the database refuses
+         */
+        void run() throws SQLException;
     }
 
     /**

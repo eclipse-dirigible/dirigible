@@ -128,6 +128,22 @@ class TenantRegistrationServiceTest {
         verify(tenantService, never()).save(any());
     }
 
+    /**
+     * A subdomain is matched out of a request's host name under the {@code SUBDOMAIN} strategy, so
+     * anything that is not a DNS label could never resolve - and, until it was refused here, arbitrary
+     * text including line breaks reached the log and the tenant row.
+     */
+    @Test
+    void aSubdomainThatIsNotADnsLabelIsRefused() {
+        for (String subdomain : new String[] {"acme.eu", "acme corp", "-acme", "acme\r\nINFO fake log line"}) {
+            ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                    () -> service.register(ACME, parameter("Acme Ltd", subdomain)), "expected [" + subdomain + "] to be refused");
+
+            assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        }
+        verify(tenantService, never()).save(any());
+    }
+
     @Test
     void aSubdomainOwnedByAnotherTenantIsRefused() {
         when(tenantService.findBySubdomain(ACME)).thenReturn(Optional.of(tenant("globex", "Globex", ACME, TenantStatus.PROVISIONED)));

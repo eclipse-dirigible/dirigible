@@ -9,18 +9,29 @@
  */
 package org.eclipse.dirigible.components.tenants.provisioning.external;
 
-import java.util.List;
-
 import jakarta.validation.constraints.NotBlank;
 
 /**
  * The credentials of a tenant's database user, as created by the external provisioner.
  *
  * <p>
- * Only the parts that differ from the application's own default data source are required.
- * Everything else - the URL, the driver, the connection properties - is cloned from that data
- * source, because the tenant lives in the same database as the application; a caller that needs a
- * different one may still override them.
+ * Only the credentials. Everything else that makes up a data source - the URL, the driver, the
+ * connection properties - is cloned from the application's own default data source, exactly as the
+ * built-in provisioner clones it, because the tenant lives in the same database as the application.
+ *
+ * <p>
+ * That is a security boundary, not only a convenience. A JDBC URL and driver properties are
+ * executable surface: an H2 URL can carry {@code INIT=RUNSCRIPT FROM '<url>'} and a PostgreSQL
+ * connection property can name a {@code socketFactory} class, so accepting either from a caller
+ * would turn "may register a tenant's credentials" into "may run code on the application server".
+ * They are therefore not part of this API at all, rather than validated - a caller that sends them
+ * is ignored.
+ *
+ * <p>
+ * There is no way to skip the connectivity check either. An earlier draft offered one, which could
+ * not be honoured: saving a data source definition initializes its pool through a lifecycle
+ * listener, so a caller that opted out still had the connection attempted - and got an unhandled
+ * 500 instead of the 502 the check answers with.
  */
 public class TenantDataSourceParameter {
 
@@ -35,22 +46,6 @@ public class TenantDataSourceParameter {
     /** The schema the provisioner created for this tenant. */
     @NotBlank(message = "A database schema is required")
     private String schema;
-
-    /** The JDBC URL. Optional - defaults to the URL of the application's default data source. */
-    private String url;
-
-    /** The JDBC driver. Optional - defaults to the driver of the application's default data source. */
-    private String driver;
-
-    /** Connection properties. Optional - defaults to those of the application's default data source. */
-    private List<PropertyParameter> properties;
-
-    /**
-     * Whether to open a connection with the supplied credentials before accepting them. On by default:
-     * credentials that do not work are otherwise discovered by the activation that follows, where the
-     * failure looks like a broken application rather than a wrong password.
-     */
-    private Boolean verifyConnectivity;
 
     /**
      * Gets the username.
@@ -104,126 +99,5 @@ public class TenantDataSourceParameter {
      */
     public void setSchema(String schema) {
         this.schema = schema;
-    }
-
-    /**
-     * Gets the url.
-     *
-     * @return the url
-     */
-    public String getUrl() {
-        return url;
-    }
-
-    /**
-     * Sets the url.
-     *
-     * @param url the new url
-     */
-    public void setUrl(String url) {
-        this.url = url;
-    }
-
-    /**
-     * Gets the driver.
-     *
-     * @return the driver
-     */
-    public String getDriver() {
-        return driver;
-    }
-
-    /**
-     * Sets the driver.
-     *
-     * @param driver the new driver
-     */
-    public void setDriver(String driver) {
-        this.driver = driver;
-    }
-
-    /**
-     * Gets the properties.
-     *
-     * @return the properties
-     */
-    public List<PropertyParameter> getProperties() {
-        return properties;
-    }
-
-    /**
-     * Sets the properties.
-     *
-     * @param properties the new properties
-     */
-    public void setProperties(List<PropertyParameter> properties) {
-        this.properties = properties;
-    }
-
-    /**
-     * Whether connectivity should be verified. Defaults to true when the caller says nothing.
-     *
-     * @return true, if connectivity should be verified
-     */
-    public boolean isVerifyConnectivity() {
-        return verifyConnectivity == null || verifyConnectivity;
-    }
-
-    /**
-     * Sets whether connectivity should be verified.
-     *
-     * @param verifyConnectivity the new value
-     */
-    public void setVerifyConnectivity(Boolean verifyConnectivity) {
-        this.verifyConnectivity = verifyConnectivity;
-    }
-
-    /**
-     * A connection property.
-     */
-    public static class PropertyParameter {
-
-        /** The property name. */
-        @NotBlank(message = "A property name is required")
-        private String name;
-
-        /** The property value. */
-        private String value;
-
-        /**
-         * Gets the name.
-         *
-         * @return the name
-         */
-        public String getName() {
-            return name;
-        }
-
-        /**
-         * Sets the name.
-         *
-         * @param name the new name
-         */
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        /**
-         * Gets the value.
-         *
-         * @return the value
-         */
-        public String getValue() {
-            return value;
-        }
-
-        /**
-         * Sets the value.
-         *
-         * @param value the new value
-         */
-        public void setValue(String value) {
-            this.value = value;
-        }
     }
 }

