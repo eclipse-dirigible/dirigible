@@ -38,14 +38,18 @@ class TenantRegistrationServiceTest {
     private static final String ACME = "acme";
 
     private final TenantService tenantService = mock(TenantService.class);
-    private final TenantRegistrationService service =
-            new TenantRegistrationService(tenantService, new TenantInitializationStatusCalculator());
+    private final TenantInitializationStatusCalculator statusCalculator = mock(TenantInitializationStatusCalculator.class);
+    private final TenantRegistrationService service = new TenantRegistrationService(tenantService, statusCalculator);
 
     @BeforeEach
     void echoSavedTenant() {
         when(tenantService.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(tenantService.findById(any())).thenReturn(Optional.empty());
         when(tenantService.findBySubdomain(any())).thenReturn(Optional.empty());
+        // the derivation itself has its own test; here it only has to distinguish the two cases
+        when(statusCalculator.calculate(any())).thenAnswer(invocation -> TenantInitializationState.of(
+                TenantStatus.PROVISIONED == ((Tenant) invocation.getArgument(0)).getStatus() ? InitializationStatus.COMPLETED
+                        : InitializationStatus.NOT_STARTED));
     }
 
     @Test

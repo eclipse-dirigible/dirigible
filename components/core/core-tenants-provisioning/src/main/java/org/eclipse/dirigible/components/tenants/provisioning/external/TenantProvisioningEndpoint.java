@@ -9,13 +9,17 @@
  */
 package org.eclipse.dirigible.components.tenants.provisioning.external;
 
+import java.net.URI;
+
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
+import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.provisioning.external.TenantRegistrationService.RegistrationResult;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -40,13 +44,18 @@ class TenantProvisioningEndpoint extends BaseEndpoint {
     /** The registration service. */
     private final TenantRegistrationService registrationService;
 
+    /** The activation service. */
+    private final TenantActivationService activationService;
+
     /**
      * Instantiates a new tenant provisioning endpoint.
      *
      * @param registrationService the registration service
+     * @param activationService the activation service
      */
-    TenantProvisioningEndpoint(TenantRegistrationService registrationService) {
+    TenantProvisioningEndpoint(TenantRegistrationService registrationService, TenantActivationService activationService) {
         this.registrationService = registrationService;
+        this.activationService = activationService;
     }
 
     /**
@@ -73,5 +82,39 @@ class TenantProvisioningEndpoint extends BaseEndpoint {
     @GetMapping("/{tenantId}")
     ResponseEntity<TenantProvisioningState> getTenant(@PathVariable("tenantId") String tenantId) {
         return ResponseEntity.ok(registrationService.read(tenantId));
+    }
+
+    /**
+     * Activates the tenant and starts materializing its artefacts.
+     *
+     * <p>
+     * Answers before the materialization is done: it is a full synchronization pass, tens of seconds to
+     * minutes, far beyond any sane HTTP timeout. The caller polls the location in the response.
+     * Repeating the call is safe and is how a failed initialization is retried.
+     *
+     * @param tenantId the tenant id
+     * @return 202, pointing at the status to poll
+     */
+    @PostMapping("/{tenantId}/activation")
+    ResponseEntity<TenantInitializationState> activateTenant(@PathVariable("tenantId") String tenantId) {
+        Tenant tenant = registrationService.requireTenant(tenantId);
+        activationService.activate(tenant);
+        return ResponseEntity.accepted()
+                             .location(URI.create(
+                                     "/" + BaseEndpoint.PREFIX_ENDPOINT_TENANT_PROVISIONING + "tenants/" + tenantId + "/activation"))
+                             .body(registrationService.read(tenantId)
+                                                      .initialization());
+    }
+
+    /**
+     * How far the tenant's initialization has got.
+     *
+     * @param tenantId the tenant id
+     * @return the initialization state
+     */
+    @GetMapping("/{tenantId}/activation")
+    ResponseEntity<TenantInitializationState> getActivation(@PathVariable("tenantId") String tenantId) {
+        return ResponseEntity.ok(registrationService.read(tenantId)
+                                                    .initialization());
     }
 }

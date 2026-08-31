@@ -122,6 +122,17 @@ public class DefinitionService {
     }
 
     /**
+     * Finds every definition of the given artefact types.
+     *
+     * @param types the artefact types
+     * @return the definitions
+     */
+    @Transactional(readOnly = true)
+    public List<Definition> findByTypes(Set<String> types) {
+        return types.isEmpty() ? List.of() : definitionRepository.findByTypeIn(types);
+    }
+
+    /**
      * Update checksums.
      *
      * @param checksum the checksum
