@@ -10,9 +10,7 @@
 package org.eclipse.dirigible.components.tenants.provisioning.external;
 
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -50,8 +48,9 @@ import org.springframework.web.server.ResponseStatusException;
  * password would otherwise keep serving the old one until the next restart; the pool is therefore
  * always evicted. And the credentials are tried before they are stored, through the platform's own
  * initialization rather than a bare JDBC call, so the check exercises the very pool the application
- * will use, driver resolution and connection properties included. A check that fails leaves nothing
- * behind: the caller gets the database's own complaint and can register again.
+ * will use - driver resolution, connection properties and the database's own validation query
+ * included. A check that fails leaves nothing behind: the caller gets the database's own complaint
+ * and can register again.
  */
 @Service
 @Conditional(TenantProvisioningApiEnabledCondition.class)
@@ -65,6 +64,9 @@ class TenantDataSourceRegistrationService {
 
     /** Marks the data sources this API registered. */
     private static final String CREATED_BY = "TENANT_PROVISIONING_API";
+
+    /** How long the driver may take to answer whether a connection is usable. Hikari's own default. */
+    private static final int VALIDATION_TIMEOUT_SECONDS = 5;
 
     /** The data sources manager. */
     private final DataSourcesManager dataSourcesManager;
@@ -219,21 +221,35 @@ class TenantDataSourceRegistrationService {
     }
 
     /**
-     * Opens a connection with the supplied credentials and runs a trivial query.
+     * Opens a connection with the supplied credentials and asks the driver whether it is usable.
      *
      * <p>
      * Through the platform's own initializer rather than {@code DriverManager}, so what is proven is
-     * that the pool the application will use can be built and can connect. The pool stays initialized
-     * afterwards - it is the correct one either way - and is dropped again when the check fails.
+     * that the pool the application will use can be built and can connect. Building it is already most
+     * of the answer: the pool validates its first connection while it is being constructed, using
+     * whichever mechanism is right for that database - the {@code connectionTestQuery} a
+     * {@code DatabaseConfigurator} registered, or {@link Connection#isValid(int)} where none did.
+     *
+     * <p>
+     * Deliberately <b>no SQL of our own</b>. A hand-written {@code SELECT 1} looks portable and is not:
+     * SAP HANA needs {@code SELECT 1 FROM DUMMY} - which is exactly why
+     * {@code HanaDatabaseConfigurator} sets that as its test query - and Derby needs a {@code FROM}
+     * clause too. Issuing a statement here would walk past the per-database knowledge the platform
+     * already has and refuse working credentials on those systems. {@link Connection#isValid(int)} is
+     * the JDBC-standard question, asked of the driver rather than of the SQL dialect.
+     *
+     * <p>
+     * The pool stays initialized afterwards - it is the correct one either way - and is dropped again
+     * when the check fails.
      *
      * @param dataSource the definition to try
      */
     private void verifyConnectivity(DataSource dataSource) {
         try {
             DirigibleDataSource initialized = dataSourceInitializer.initialize(dataSource);
-            try (Connection connection = initialized.getConnection(); Statement statement = connection.createStatement()) {
-                try (ResultSet resultSet = statement.executeQuery("SELECT 1")) {
-                    resultSet.next();
+            try (Connection connection = initialized.getConnection()) {
+                if (!connection.isValid(VALIDATION_TIMEOUT_SECONDS)) {
+                    throw new SQLException("The driver does not consider the connection usable");
                 }
             }
         } catch (SQLException | RuntimeException ex) {

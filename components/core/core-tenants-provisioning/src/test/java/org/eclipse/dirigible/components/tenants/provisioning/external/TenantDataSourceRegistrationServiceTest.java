@@ -15,14 +15,13 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.List;
 import java.util.Optional;
 
@@ -69,7 +68,7 @@ class TenantDataSourceRegistrationServiceTest {
         when(dataSourceService.findOptionalByName(TENANT_DS)).thenReturn(Optional.empty());
         // built before the stubbing starts: the helper stubs mocks of its own, and Mockito cannot
         // nest that inside an unfinished when(...)
-        DirigibleDataSource working = workingDataSource();
+        DirigibleDataSource working = dataSourceReportingConnection(true);
         when(dataSourceInitializer.initialize(any())).thenReturn(working);
     }
 
@@ -162,6 +161,42 @@ class TenantDataSourceRegistrationServiceTest {
         assertFalse(service.isRegistered(tenant));
     }
 
+    /**
+     * The portability guarantee, stated as an assertion.
+     *
+     * <p>
+     * A hand-written {@code SELECT 1} here would look portable and would refuse working credentials on
+     * SAP HANA, which needs {@code SELECT 1 FROM DUMMY} - the reason {@code HanaDatabaseConfigurator}
+     * registers exactly that as the pool's test query - and on Derby, which needs a {@code FROM} clause
+     * of its own. The check must therefore ask the driver, never the SQL dialect, and this test fails
+     * the moment somebody issues a statement here again.
+     */
+    @Test
+    void connectivityIsCheckedWithoutIssuingAnySqlOfOurOwn() throws SQLException {
+        DirigibleConnection connection = mock(DirigibleConnection.class);
+        DirigibleDataSource dataSource = mock(DirigibleDataSource.class);
+        when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.isValid(anyInt())).thenReturn(true);
+        when(dataSourceInitializer.initialize(any())).thenReturn(dataSource);
+
+        service.register(tenant, parameter());
+
+        verify(connection).isValid(anyInt());
+        verify(connection, never()).createStatement();
+        verify(connection, never()).prepareStatement(any());
+    }
+
+    @Test
+    void aConnectionTheDriverCallsUnusableIsRefusedAndNothingIsStored() throws SQLException {
+        DirigibleDataSource unusable = dataSourceReportingConnection(false);
+        when(dataSourceInitializer.initialize(any())).thenReturn(unusable);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> service.register(tenant, parameter()));
+
+        assertEquals(HttpStatus.BAD_GATEWAY, ex.getStatusCode());
+        verify(dataSourceService, never()).save(any());
+    }
+
     private DataSource savedDataSource() {
         ArgumentCaptor<DataSource> captor = ArgumentCaptor.forClass(DataSource.class);
         verify(dataSourceService).save(captor.capture());
@@ -186,14 +221,18 @@ class TenantDataSourceRegistrationServiceTest {
         return new DataSource("TENANT_DEFAULT", TENANT_DS, "", "org.h2.Driver", "jdbc:h2:mem:default", "u_acme", "old-password");
     }
 
-    private static DirigibleDataSource workingDataSource() throws SQLException {
+    /**
+     * A data source whose connection the driver reports as usable.
+     *
+     * @param usable what {@code isValid} answers
+     * @return the data source
+     * @throws SQLException never - the mocks declare it
+     */
+    private static DirigibleDataSource dataSourceReportingConnection(boolean usable) throws SQLException {
         DirigibleDataSource dataSource = mock(DirigibleDataSource.class);
         DirigibleConnection connection = mock(DirigibleConnection.class);
-        Statement statement = mock(Statement.class);
-        ResultSet resultSet = mock(ResultSet.class);
         when(dataSource.getConnection()).thenReturn(connection);
-        when(connection.createStatement()).thenReturn(statement);
-        when(statement.executeQuery(any())).thenReturn(resultSet);
+        when(connection.isValid(anyInt())).thenReturn(usable);
         return dataSource;
     }
 
