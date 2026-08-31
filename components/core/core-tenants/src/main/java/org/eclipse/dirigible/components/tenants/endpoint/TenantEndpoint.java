@@ -11,7 +11,9 @@ package org.eclipse.dirigible.components.tenants.endpoint;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
@@ -134,18 +136,29 @@ public class TenantEndpoint {
                              .build();
     }
 
+    /** The statuses a tenant may be deleted in - see {@link #deleteTenant(String)}. */
+    private static final Set<TenantStatus> DELETABLE_STATUSES = EnumSet.of(TenantStatus.INITIAL, TenantStatus.PENDING_ACTIVATION);
+
     /**
      * Deletes the tenant.
+     *
+     * <p>
+     * A {@link TenantStatus#PENDING_ACTIVATION} tenant is deletable for the same reason an
+     * {@link TenantStatus#INITIAL} one is: nothing has been materialized for it yet, so removing it
+     * destroys no data. It is the rollback path of the tenant provisioning API - a provisioner that
+     * fails between registering a tenant and activating it can take its registration back instead of
+     * leaving a half-registered tenant behind. Deleting a {@link TenantStatus#PROVISIONED} tenant is
+     * still refused; that is deprovisioning, and it is a different problem.
      *
      * @param id the id of the tenant
      * @return the response entity
      * @throws URISyntaxException the URI syntax exception
      */
     @DeleteMapping("{id}")
-    public ResponseEntity<String> deleteDataSource(@PathVariable("id") String id) throws URISyntaxException {
+    public ResponseEntity<String> deleteTenant(@PathVariable("id") String id) throws URISyntaxException {
         Tenant tenant = tenantService.findById(id)
                                      .get();
-        if (TenantStatus.INITIAL.equals(tenant.getStatus())) {
+        if (DELETABLE_STATUSES.contains(tenant.getStatus())) {
             userService.findUsersByTenantId(tenant.getId())
                        .forEach(user -> userService.deleteUser(user.getId()));
             tenantService.delete(tenant);

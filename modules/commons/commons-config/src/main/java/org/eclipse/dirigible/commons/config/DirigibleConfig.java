@@ -150,6 +150,15 @@ public enum DirigibleConfig {
      */
     TENANT_GROUPS_CLAIM("DIRIGIBLE_TENANT_GROUPS_CLAIM", "cognito:groups"),
 
+    /**
+     * Whether this deployment exposes the tenant provisioning API under
+     * {@code /services/tenant-provisioning/**}, through which an external provisioner registers a
+     * tenant with a caller-supplied id, registers its data source from credentials it created itself,
+     * and activates it. Off by default: the API hands out and accepts real database credentials, so a
+     * deployment has to opt in, and when it does not, none of the beans behind it exist at all.
+     */
+    TENANT_PROVISIONING_API_ENABLED("DIRIGIBLE_TENANT_PROVISIONING_API_ENABLED", Boolean.FALSE.toString()),
+
     SNOWFLAKE_ADMIN_USERNAME("DIRIGIBLE_SNOWFLAKE_ADMIN_USERNAME", null),
 
     /** The basic admin username. */
