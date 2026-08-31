@@ -38,6 +38,16 @@ public abstract class BaseEndpoint {
     /** The Constant PREFIX_ENDPOINT_SECURITY. */
     public static final String PREFIX_ENDPOINT_SECURITY = "services/security/";
 
+    /**
+     * The Constant PREFIX_ENDPOINT_TENANT_PROVISIONING.
+     *
+     * <p>
+     * A prefix of its own, deliberately outside {@code services/data/} and {@code services/security/}:
+     * those carry role gates for the platform's human roles, which would reject a machine-to-machine
+     * token that holds nothing but {@code TENANT_PROVISIONER}.
+     */
+    public static final String PREFIX_ENDPOINT_TENANT_PROVISIONING = "services/tenant-provisioning/";
+
     /** The Constant PREFIX_ENDPOINT_PUBLIC. */
     public static final String PREFIX_ENDPOINT_PUBLIC = "public/";
 
