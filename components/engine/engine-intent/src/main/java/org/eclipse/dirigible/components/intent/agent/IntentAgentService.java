@@ -219,7 +219,12 @@ class IntentAgentService {
     private static String repairTurn(List<String> issues) {
         return "The proposed app.intent fails intent validation with the following issue(s):\n" + ProposalRepairLoop.bulleted(issues)
                 + "\nCall propose_intent again with the corrected COMPLETE YAML. Fix only these issues and keep everything else"
-                + " exactly as proposed.";
+                + " exactly as proposed.\n\nHow to fix them: a key rejected at one level is often valid at another - relocate it"
+                + " before removing it, and re-read the guide section for the feature rather than inferring the platform's limits"
+                + " from the message. Do NOT satisfy an issue by deleting a requirement the user asked for, by weakening a"
+                + " cardinality, or by replacing a declarative construct with a hand-written delegate or service task. If after"
+                + " that you still believe something cannot be expressed, keep the construct closest to the requirement and say"
+                + " what is missing in the explanation - do not silently drop it.";
     }
 
     /**
