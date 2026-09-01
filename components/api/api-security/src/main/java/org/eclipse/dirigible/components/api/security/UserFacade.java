@@ -62,6 +62,15 @@ public class UserFacade {
     /** The Constant ANY_LANGUAGE. */
     private static final String ANY_LANGUAGE = "*";
 
+    /**
+     * A thread-bound language override, preferred over the request's Accept-Language header. It exists
+     * for in-process renders that run outside any HTTP request (a BPM service task minting a document
+     * snapshot, a mail listener attaching a rendered PDF): they know the language the artefact must be
+     * produced in and set it here so the multilingual overlay resolves data in that same language.
+     * Always cleared in a finally by the caller, so pooled worker threads never leak it.
+     */
+    private static final ThreadLocal<String> LANGUAGE_OVERRIDE = new ThreadLocal<>();
+
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(UserFacade.class);
 
@@ -381,12 +390,26 @@ public class UserFacade {
      * @return the language
      */
     public static String getLanguage() {
+        String override = LANGUAGE_OVERRIDE.get();
+        if (override != null && !override.isBlank()) {
+            return override;
+        }
         if (HttpRequestFacade.isValid()) {
             String language = HttpRequestFacade.getHeader(LANGUAGE_HEADER);
             if (language == null || language.isEmpty()) {
                 language = ANY_LANGUAGE;
             }
-            List<Locale.LanguageRange> ranges = Locale.LanguageRange.parse(language);
+            List<Locale.LanguageRange> ranges;
+            try {
+                ranges = Locale.LanguageRange.parse(language);
+            } catch (IllegalArgumentException e) {
+                // The header is client-controlled: a malformed value must degrade to "no language
+                // preference", never turn every localized read on this request into a 500.
+                if (logger.isWarnEnabled()) {
+                    logger.warn("Malformed Accept-Language header [{}] - ignoring it", language);
+                }
+                return "";
+            }
             return ranges == null || ranges.isEmpty() ? ""
                     : ranges.get(0)
                             .getRange();
@@ -396,6 +419,28 @@ public class UserFacade {
             }
         }
         return null;
+    }
+
+    /**
+     * Binds a language to the current thread, preferred by {@link #getLanguage()} over the request's
+     * Accept-Language header. Intended for in-process renders that run outside an HTTP request; the
+     * caller MUST clear it in a finally via {@link #clearLanguage()}.
+     *
+     * @param language the language to bind (a null or blank value leaves the override unset)
+     */
+    public static void setLanguage(String language) {
+        if (language == null || language.isBlank()) {
+            LANGUAGE_OVERRIDE.remove();
+        } else {
+            LANGUAGE_OVERRIDE.set(language);
+        }
+    }
+
+    /**
+     * Clears the thread-bound language override set by {@link #setLanguage(String)}.
+     */
+    public static void clearLanguage() {
+        LANGUAGE_OVERRIDE.remove();
     }
 
     public static Collection<String> getUserRoles() {

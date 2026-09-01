@@ -106,12 +106,16 @@ function basePage() {
         '<th class="' + (c.number ? 'text-right' : '') + '">' + esc(this.columnHeader(c)) + '</th>').join('');
       const body = rows.map((r) => '<tr>' + columns.map((c) =>
         '<td class="' + (c.number ? 'text-right' : '') + '">' + esc(cellText(r, c)) + '</td>').join('') + '</tr>').join('');
+      // Fixed table layout + column-count font scaling so a wide table fits the page instead of
+      // overflowing and being clipped at the right edge (mirrors the server-side XslFoRenderer PDF
+      // path). Long unbreakable tokens (ids, IBANs) wrap inside the fixed cell.
+      const fontSize = Math.max(6, 10 - Math.max(0, columns.length - 3));
       const html = '<!doctype html><html><head><title>' + esc(title) + '</title><style>'
         + 'body{font-family:system-ui,-apple-system,sans-serif;margin:24px;color:#111}'
         + 'h1{font-size:18px;margin:0 0 4px}'
         + '.meta{font-size:11px;color:#555;margin:0 0 16px}'
-        + 'table{border-collapse:collapse;width:100%;font-size:12px}'
-        + 'th,td{border:1px solid #999;padding:4px 8px;text-align:left}'
+        + 'table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:' + fontSize + 'pt}'
+        + 'th,td{border:1px solid #999;padding:2pt;text-align:left;overflow-wrap:anywhere;word-break:break-word}'
         + 'th{background:#eee}.text-right{text-align:right}'
         + '</style></head><body><h1>' + esc(title) + '</h1>'
         + '<p class="meta">' + rows.length + ' rows - ' + esc(new Date().toLocaleString()) + '</p>'

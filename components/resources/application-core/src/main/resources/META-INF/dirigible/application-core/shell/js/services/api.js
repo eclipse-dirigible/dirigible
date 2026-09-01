@@ -96,9 +96,15 @@ App.services.api = {
     // X-Requested-With marks the call as programmatic for browsers without Sec-Fetch-Mode: the
     // server then answers an expired session with a PLAIN 401 (no Basic challenge), so the
     // browser's native login dialog never pops over a background poll.
-    const headers = { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+    // A caller may pin the Accept header for THIS call ({ accept: 'text/plain' }) - e.g. the
+    // monitoring Logs page, whose file endpoint produces text/plain and answers 406 to a JSON-only
+    // Accept before the handler even runs. JSON stays the default.
+    const headers = { 'Accept': opts.accept || 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
     if (!isForm) headers['Content-Type'] = 'application/json';
-    const language = this.language();
+    // A caller may pin the request language for THIS call ({ language: 'bg' }) — e.g. Print, where the
+    // chosen print language must drive the multilingual data overlay, not the UI locale. Absent the
+    // override, the app's single language flag (the Region & Language store) applies as before.
+    const language = opts.language !== undefined ? opts.language : this.language();
     if (language) headers['Accept-Language'] = language;
 
     let r;

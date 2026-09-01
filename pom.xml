@@ -139,7 +139,7 @@
         <!-- com.microsoft.java.debug plugin bundled alongside JDT.LS (EPL-1.0, on Maven Central) -->
         <java.debug.plugin.version>0.53.1</java.debug.plugin.version>
         <java.debug.plugin.download.skip>false</java.debug.plugin.download.skip>
-        <maven-license-plugin.version>5.1.1</maven-license-plugin.version>
+        <maven-license-plugin.version>5.1.2</maven-license-plugin.version>
 
         <!-- Spring -->
         <spring.boot.version>4.1.0</spring.boot.version>
@@ -245,7 +245,7 @@
         <bpmn-visualization.version>0.47.0</bpmn-visualization.version>
         <i18next.version>25.3.0</i18next.version>
         <alpinejs.version>3.15.11</alpinejs.version>
-        <harmonia.version>2.14.0</harmonia.version>
+        <harmonia.version>2.14.2</harmonia.version>
         <opensans.version>5.2.7</opensans.version>
         <lucide.version>1.8.0</lucide.version>
         <pinecone-router.version>7.5.2</pinecone-router.version>
@@ -863,19 +863,6 @@
         </repository>
     </repositories>
 
-    <pluginRepositories>
-        <pluginRepository>
-            <id>sonatype-public-repository</id>
-            <url>https://ossrh-staging-api.central.sonatype.com/content/groups/public</url>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
-            <releases>
-                <enabled>true</enabled>
-            </releases>
-        </pluginRepository>
-    </pluginRepositories>
-
     <distributionManagement>
         <snapshotRepository>
             <id>ossrh</id>
@@ -985,7 +972,7 @@
             <dependency>
                 <groupId>io.opentelemetry.instrumentation</groupId>
                 <artifactId>opentelemetry-instrumentation-bom</artifactId>
-                <version>2.31.0</version>
+                <version>2.31.1</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

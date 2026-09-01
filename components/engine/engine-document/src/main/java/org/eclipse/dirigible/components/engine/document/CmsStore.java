@@ -95,7 +95,15 @@ class CmsStore {
         for (CmisObject child : printFolder.get()
                                            .getChildren()) {
             if (child instanceof CmisFolder) {
-                languages.add(child.getName());
+                // The S3 CMS names a child folder with its trailing separator (en/) while the
+                // internal CMS does not - normalize so the language CODE contract is backend-neutral.
+                String code = child.getName();
+                while (code.endsWith(PATH_SEPARATOR)) {
+                    code = code.substring(0, code.length() - 1);
+                }
+                if (!code.isEmpty()) {
+                    languages.add(code);
+                }
             }
         }
         return languages;

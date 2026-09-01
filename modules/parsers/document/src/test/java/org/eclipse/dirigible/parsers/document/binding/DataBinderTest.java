@@ -373,4 +373,66 @@ public class DataBinderTest {
                                   .get(0)
                                   .text());
     }
+
+    @Test
+    public void formatSpecifierMoneyFormatsIntegralNumbers() {
+        // The reason the specifier exists: a whole-figure money value arrives as an integral JSON
+        // number (the browser strips the trailing .00), lands as a Long and the default rendering
+        // rightly leaves integers alone - only the template author knows the column is money.
+        Node root = parser.parse("<document><text>{{price:#,##0.00}} / {{big:#,##0.00}}</text></document>");
+        Node bound = binder.bind(root, Map.of("price", 5390L, "big", 1234567L));
+        assertEquals("5 390.00 / 1 234 567.00", bound.children()
+                                                     .get(0)
+                                                     .text());
+    }
+
+    @Test
+    public void formatSpecifierOverridesTheDefaultMoneyPattern() {
+        Node root = parser.parse("<document><text>{{total:0.00}}</text></document>");
+        Node bound = binder.bind(root, Map.of("total", 5390.5d));
+        // the explicit pattern wins over the default space-grouped one
+        assertEquals("5390.50", bound.children()
+                                     .get(0)
+                                     .text());
+    }
+
+    @Test
+    public void formatSpecifierFormatsTemporalsAndTheirIsoStrings() {
+        // Feeders emit temporals as their ISO string - both the string and a real temporal reformat.
+        Node root = parser.parse("<document><text>{{document.Date:dd.MM.yyyy}} / {{document.Day:dd.MM.yyyy}}</text></document>");
+        Node bound = binder.bind(root, Map.of("document", Map.of("Date", "2026-08-29", "Day", java.time.LocalDate.of(2026, 8, 29))));
+        assertEquals("29.08.2026 / 29.08.2026", bound.children()
+                                                     .get(0)
+                                                     .text());
+    }
+
+    @Test
+    public void formatSpecifierSplitsAtTheFirstColonSoTimePatternsKeepTheirs() {
+        Node root = parser.parse("<document><text>{{at:HH:mm}}</text></document>");
+        Node bound = binder.bind(root, Map.of("at", "2026-08-29T10:15:30"));
+        assertEquals("10:15", bound.children()
+                                   .get(0)
+                                   .text());
+    }
+
+    @Test
+    public void formatAPatternCannotSatisfyFallsBackToTheDefaultRendering() {
+        // A string is neither a number nor a temporal ('Widget'), and 'bb' is not a valid date
+        // pattern - both render exactly as without the specifier: a printout never shows an exception.
+        Node root = parser.parse("<document><text>{{name:0.00}} / {{document.Date:bb}}</text></document>");
+        Node bound = binder.bind(root, Map.of("name", "Widget", "document", Map.of("Date", "2026-08-29")));
+        assertEquals("Widget / 2026-08-29", bound.children()
+                                                 .get(0)
+                                                 .text());
+    }
+
+    @Test
+    public void formatSpecifierCombinesWithAlternativePaths() {
+        // Each operand carries its own format; blankness is judged on the rendered result.
+        Node root = parser.parse("<document><text>{{document.Missing:0.00|document.Price:#,##0.00}}</text></document>");
+        Node bound = binder.bind(root, Map.of("document", Map.of("Price", 5390L)));
+        assertEquals("5 390.00", bound.children()
+                                      .get(0)
+                                      .text());
+    }
 }

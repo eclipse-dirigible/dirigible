@@ -12,6 +12,12 @@ package org.eclipse.dirigible.parsers.document.binding;
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -57,8 +63,28 @@ import org.eclipse.dirigible.parsers.document.parser.TagRegistry;
  * {@code &#123;&#123;document.Customer.NameLocal|document.Customer.Name&#125;&#125;} prints the
  * local name when the record has one and the canonical name when it does not, instead of leaving a
  * hole in a legal document.
+ *
+ * <p>
+ * An operand may also carry an explicit <b>format</b> after its first {@code :} — a
+ * {@code DecimalFormat} pattern for numbers ({@code &#123;&#123;Price:#,##0.00&#125;&#125;}), a
+ * {@code DateTimeFormatter} pattern for temporals and their ISO string form
+ * ({@code &#123;&#123;document.Date:dd.MM.yyyy&#125;&#125;}). It exists because the default number
+ * rendering cannot know a bare integral JSON value ({@code 5390}) is money that lost its scale on
+ * the way through the browser — only the template author knows, and says so per placeholder.
  */
 public final class DataBinder {
+
+    /**
+     * The generated forms' money symbols: ROOT locale (deterministic output), thousands grouped by a
+     * space. {@code DecimalFormat} clones the symbols it is constructed with, so sharing is safe.
+     */
+    private static final DecimalFormatSymbols MONEY_SYMBOLS = moneySymbols();
+
+    private static DecimalFormatSymbols moneySymbols() {
+        DecimalFormatSymbols symbols = new DecimalFormatSymbols(Locale.ROOT);
+        symbols.setGroupingSeparator(' ');
+        return symbols;
+    }
 
     private final TagRegistry registry;
 
@@ -249,12 +275,31 @@ public final class DataBinder {
      * whitespace-only. The LAST operand is always rendered, whatever it resolves to, so a lone path
      * behaves exactly as it always has (all operands blank renders empty) and only the alternatives
      * before it can be skipped.
+     *
+     * <p>
+     * An operand may carry an explicit <b>format</b> after its first {@code :} - the pattern applied to
+     * that operand's resolved value: a {@link DecimalFormat} pattern for a number
+     * ({@code &#123;&#123;Price:#,##0.00&#125;&#125;} prints a whole-figure {@code 5390} as
+     * {@code 5 390.00}, which the default rendering cannot - it never sees the lost scale of an
+     * integral JSON number), or a {@link DateTimeFormatter} pattern for a temporal or its ISO string
+     * form ({@code &#123;&#123;document.Date:dd.MM.yyyy&#125;&#125;}). The first colon splits, so a
+     * time pattern keeps its own colons ({@code &#123;&#123;At:HH:mm&#125;&#125;}). A pattern the value
+     * cannot satisfy - or a value of any other type - falls back to the default rendering: a printout
+     * never shows an exception, matching the parser's leniency contract.
      */
     private static String resolvePlaceholder(String body, Scope scope) {
         String[] operands = body.split("\\|");
         for (int i = 0; i < operands.length; i++) {
-            Object resolved = scope.resolve(operands[i].trim());
-            String rendered = resolved == null ? "" : stringify(resolved);
+            String operand = operands[i];
+            String pattern = null;
+            int colon = operand.indexOf(':');
+            if (colon >= 0) {
+                pattern = operand.substring(colon + 1)
+                                 .trim();
+                operand = operand.substring(0, colon);
+            }
+            Object resolved = scope.resolve(operand.trim());
+            String rendered = resolved == null ? "" : stringify(resolved, pattern);
             if (i == operands.length - 1 || !rendered.isBlank()) {
                 return rendered;
             }
@@ -268,19 +313,72 @@ public final class DataBinder {
      * {@code Map} (a relation/object node) prints its {@code __label} value so a bare
      * {@code {{document.Customer}}} still renders the display label while
      * {@code {{document.Customer.Address}}} descends into the same node; every other value prints via
-     * {@code toString}.
+     * {@code toString}. An explicit placeholder format takes precedence when the value fits it (see
+     * {@link #resolvePlaceholder(String, Scope)}).
      */
-    private static String stringify(Object resolved) {
-        if (resolved instanceof Double || resolved instanceof Float || resolved instanceof BigDecimal) {
-            DecimalFormatSymbols symbols = new DecimalFormatSymbols(Locale.ROOT);
-            symbols.setGroupingSeparator(' ');
-            return new DecimalFormat("###,###,###,##0.00", symbols).format(resolved);
-        }
+    private static String stringify(Object resolved, String pattern) {
         if (resolved instanceof Map<?, ?> map) {
             Object label = map.get("__label");
-            return label == null ? "" : stringify(label);
+            return label == null ? "" : stringify(label, pattern);
+        }
+        if (pattern != null && !pattern.isBlank()) {
+            String formatted = tryFormat(resolved, pattern);
+            if (formatted != null) {
+                return formatted;
+            }
+        }
+        if (resolved instanceof Double || resolved instanceof Float || resolved instanceof BigDecimal) {
+            return new DecimalFormat("###,###,###,##0.00", MONEY_SYMBOLS).format(resolved);
         }
         return String.valueOf(resolved);
+    }
+
+    /**
+     * The explicit format of one operand: a {@link DecimalFormat} pattern over any {@link Number}
+     * (integral ones included - the reason the specifier exists), a {@link DateTimeFormatter} pattern
+     * over a temporal or the ISO string a feeder emits for one. {@code null} when the value is of any
+     * other shape or cannot satisfy the pattern - the caller then renders the default way.
+     */
+    private static String tryFormat(Object resolved, String pattern) {
+        try {
+            if (resolved instanceof Number number) {
+                return new DecimalFormat(pattern, MONEY_SYMBOLS).format(number);
+            }
+            TemporalAccessor temporal = asTemporal(resolved);
+            if (temporal != null) {
+                return DateTimeFormatter.ofPattern(pattern, Locale.ROOT)
+                                        .format(temporal);
+            }
+        } catch (RuntimeException ex) {
+            // an invalid pattern, or one asking for fields the value does not carry
+        }
+        return null;
+    }
+
+    /** A temporal as-is, or an ISO date / date-time string parsed back into one; else {@code null}. */
+    private static TemporalAccessor asTemporal(Object resolved) {
+        if (resolved instanceof TemporalAccessor temporal) {
+            return temporal;
+        }
+        if (resolved instanceof String string) {
+            String candidate = string.trim();
+            try {
+                return LocalDate.parse(candidate);
+            } catch (DateTimeParseException notADate) {
+                // fall through to the date-time shapes
+            }
+            try {
+                return LocalDateTime.parse(candidate);
+            } catch (DateTimeParseException notALocalDateTime) {
+                // fall through
+            }
+            try {
+                return OffsetDateTime.parse(candidate);
+            } catch (DateTimeParseException notATemporal) {
+                // not a temporal string
+            }
+        }
+        return null;
     }
 
     private static boolean isTruthy(Object value) {

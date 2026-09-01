@@ -40,7 +40,7 @@ window.IntentDiagrams = (() => {
         terminal: '#708090', // slate  - start / end events
         edge: '#7a8896',     // mid-gray - relations and sequence flows, visible on both themes
         output: '#9141ac',   // purple - authoring outputs (forms, reports)
-        glue: '#c64600',     // rust   - declarative glue (notifications, schedules, integrations, inbound, outbound, rollups)
+        glue: '#c64600',     // rust   - declarative glue (notifications, schedules, integrations, inbound, outbound, rollups, register lookups, create-froms)
         label: '#ffffff'     // white  - on-shape text
     };
 
@@ -57,7 +57,9 @@ window.IntentDiagrams = (() => {
         integration: 'sap-icon--chain-link',
         inbound: 'sap-icon--inbox',
         outbound: 'sap-icon--outbox',
-        rollup: 'sap-icon--sum'
+        rollup: 'sap-icon--sum',
+        resolve: 'sap-icon--search',
+        generate: 'sap-icon--create-form'
     };
 
     const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -409,10 +411,46 @@ window.IntentDiagrams = (() => {
         return relation ? relation.to : null;
     };
 
-    // Card label: an icon-badged name over a one-line binding detail (escaped; the detail is optional).
+    // What a register lookup does, in the record's own vocabulary: the moment it runs on and the to-one
+    // it fills. The register it reads is not repeated here - it is the dashed edge coming into the card.
+    const resolveDetail = (resolve) => eventVerb(resolve.event) + ' \u2022 sets ' + (resolve.set || '?');
+
+    // What a create-from turns into what. The source is normally the entity the card is edged to, so it
+    // is named only when it is FOREIGN - then there is no local node to edge to and the detail line is
+    // all the reader has (the same shape a cross-model schedule or roll-up card uses).
+    const generatesFlow = (generates) => (generates.fromUses ? generates.fromUses + '.' + (generates.from || '?') + ' ' : '')
+        + '\u2192 ' + (generates.uses ? generates.uses + '.' : '') + (generates.to || '?');
+
+    // The moment a create-from fires, as it reads on the card. `onTransition` is this construct's own
+    // axis - no other glue binds it - so it is spelled out here rather than in the shared `eventVerb`,
+    // and it carries its `when` guard: two rules bound to the same transition are told apart by their
+    // guards, which is precisely what the picture has to make visible.
+    const generatesTrigger = (event) => {
+        const guard = event.when ? ' ' + event.when : '';
+        if (event.onTransition) return 'on transition' + guard;
+        if (event.onCreate) return 'on create' + guard;
+        if (event.onPhase) return 'on phase ' + (event.phase || '');
+        return eventVerb(event);
+    };
+
+    // A create-from's trigger over its CARDINALITY. `once` is the DSL's default - the target's
+    // back-reference is checked first, so a redelivery is a no-op - while `append` drops that guard and
+    // mints a row per delivery. The badge is the point of drawing these at all: two appending rules on
+    // one transition, side by side, is a defect that is obvious in a picture and invisible in YAML.
+    // With no event at all the create-from is a button, which has no cardinality to state.
+    const generatesDetail = (generates) => {
+        const event = generates.event || {};
+        const trigger = generatesTrigger(event);
+        return [generatesFlow(generates), trigger ? trigger + ' \u2022 ' + (event.mode || 'once') : 'button'];
+    };
+
+    // Card label: an icon-badged name over its binding detail (escaped). The detail is optional and may
+    // be an array, which renders one line per entry - a card whose binding needs two.
     const cardLabel = (icon, name, detail) =>
         `<div style="font-weight:bold"><i class="${icon}" style="margin-right:6px"></i>${escapeHtml(name)}</div>`
-        + (detail ? `<div style="font-size:11px;opacity:.9">${escapeHtml(detail)}</div>` : '');
+        + (Array.isArray(detail) ? detail : [detail]).filter(Boolean)
+            .map((line) => `<div style="font-size:11px;opacity:.9">${escapeHtml(line)}</div>`)
+            .join('');
 
     // One section diagramming the artifacts that hang off the entities - authoring outputs (forms,
     // reports) and the declarative glue (notifications, schedules, integrations, inbound arrivals,
@@ -429,7 +467,14 @@ window.IntentDiagrams = (() => {
             { list: model.outbound, icon: ICON.outbound, color: COLOR.glue, entity: o => eventEntity(model, o.event), detail: outboundDetail },
             // A cross-model child has no node here, so the card anchors to the LOCAL parent it feeds and
             // names the foreign child in its detail line (the same shape a cross-model schedule uses).
-            { list: model.rollups, icon: ICON.rollup, color: COLOR.glue, entity: r => r.model ? r.parent : r.entity, detail: r => (r.model ? r.model + '.' + (r.entity || '') + ' ' : '') + '→ ' + (rollupParent(model, r) || '?') + '.' + (r.field || '') }
+            { list: model.rollups, icon: ICON.rollup, color: COLOR.glue, entity: r => r.model ? r.parent : r.entity, detail: r => (r.model ? r.model + '.' + (r.entity || '') + ' ' : '') + '→ ' + (rollupParent(model, r) || '?') + '.' + (r.field || '') },
+            // A register lookup reads one entity to fill a relation on another, so it is the one card with
+            // two edges: the solid binding edge from the record it runs on, and a dashed `reads` edge from
+            // the register - the read direction on the picture rather than only in the detail line.
+            { list: model.resolves, icon: ICON.resolve, color: COLOR.glue, entity: r => eventEntity(model, r.event), reads: r => r.from, detail: resolveDetail },
+            // A create-from with a FOREIGN source has no local node to hang off, so it anchors to the local
+            // target it mints instead (its detail line names the foreign source).
+            { list: model.generates, icon: ICON.generate, color: COLOR.glue, entity: g => g.fromUses ? (g.uses ? null : g.to) : g.from, detail: generatesDetail }
         ];
 
         const items = [];
@@ -458,6 +503,8 @@ window.IntentDiagrams = (() => {
                 const card = graph.insertVertex(parent, null, cardLabel(category.icon, item.name, category.detail(item)), 0, 0, 190, 48, nodeStyle(category.color));
                 const entity = anchor(category.entity(item));
                 if (entity) graph.insertEdge(parent, null, '', entity, card, edgeStyle(false));
+                const read = category.reads ? anchor(category.reads(item)) : null;
+                if (read) graph.insertEdge(parent, null, 'reads', read, card, edgeStyle(true));
             }
             const layout = new mxHierarchicalLayout(graph, mxConstants.DIRECTION_WEST);
             layout.intraCellSpacing = 30;
@@ -476,7 +523,7 @@ window.IntentDiagrams = (() => {
     const normalize = (model) => {
         model = model || {};
         for (const key of ['entities', 'processes', 'forms', 'reports', 'permissions', 'seeds',
-            'notifications', 'schedules', 'integrations', 'inbound', 'outbound', 'rollups']) {
+            'notifications', 'schedules', 'integrations', 'inbound', 'outbound', 'rollups', 'resolves', 'generates']) {
             model[key] = model[key] || [];
         }
         return model;

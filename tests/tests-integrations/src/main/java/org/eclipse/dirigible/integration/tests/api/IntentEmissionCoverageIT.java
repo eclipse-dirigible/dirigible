@@ -2613,6 +2613,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "attach: print must emit a PDF attachment part");
         assertTrue(sendBill.contains("Print.render(\"Bill\",") && sendBill.contains("new BillPrintFeeder().feed(entity.Id)"),
                 "the attachment must be the generated feeder's payload rendered by the server-side print engine");
+        // #6947: there is no request here to carry Accept-Language, so the render binds the language to
+        // the thread around the feeder call - otherwise the feeder's multilingual overlay resolves
+        // nomenclature values in the default language while the template renders in the chosen one.
+        assertTrue(sendBill.contains("User.setLanguage(language)") && sendBill.contains("User.clearLanguage()"),
+                "the render must bind the render language to the thread so the overlay resolves values in it: " + sendBill);
         // The render language is never hardcoded: languageFrom: Person.locale loads the counterparty
         // and reads it off the record, falling back to the first entry of the tenant-resolved
         // application language set when the chain is null or blank.
@@ -2687,6 +2692,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the report's rows are the print payload's items, got: " + billSend);
         assertTrue(billSend.contains("Print.render(\"ClaimsByUnit\""),
                 "the render must resolve the REPORT's print template by the report's name, got: " + billSend);
+        // #6947: the report query's :language overlay reads the thread language, so the render binds it
+        // around the report findAll + render (no request here to carry Accept-Language).
+        assertTrue(billSend.contains("User.setLanguage(language)") && billSend.contains("User.clearLanguage()"),
+                "the report render must bind the render language to the thread so its :language overlay resolves in it: " + billSend);
         // The bound values double as the rendered header, so the PDF states which slice it is.
         assertTrue(billSend.contains("reportData.put(\"document\", reportFilter)"),
                 "the bound parameters must be the rendered document context, got: " + billSend);
@@ -2713,6 +2722,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the rendered document must be the ANCHOR record's, fed with the anchor's key: " + shareBill);
         assertEquals(1, shareBill.split("Print\\.render\\(", -1).length - 1,
                 "one document for the whole fan-out means exactly one render call");
+        // #6947: the once-before-the-loop render binds the language to the thread so the feeder overlay
+        // resolves nomenclature values in the render language (no request here to carry Accept-Language).
+        assertTrue(shareBill.contains("User.setLanguage(language)") && shareBill.contains("User.clearLanguage()"),
+                "the fan-out's single render must bind the render language to the thread for the overlay: " + shareBill);
         assertTrue(shareBill.contains("private boolean send(BillEntity source, BillRecipientEntity entity, Map document)"),
                 "the per-row send must take the anchor (a placeholder quotes it) and the rendered document");
         assertTrue(shareBill.contains("(Person == null ? null : Person.Email)"),
