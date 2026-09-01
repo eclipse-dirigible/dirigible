@@ -557,6 +557,9 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         Map<String, Map<String, Object>> byName = new LinkedHashMap<>();
         try {
             IRepository repository = context.getRepository();
+            if (repository == null || context.getProjectRoot() == null) {
+                return byName; // no repository/project to read back from (a dry run over an unsaved proposal)
+            }
             IResource resource = repository.getResource(context.getProjectRoot() + "/" + baseName + ".model");
             if (!resource.exists()) {
                 return byName;

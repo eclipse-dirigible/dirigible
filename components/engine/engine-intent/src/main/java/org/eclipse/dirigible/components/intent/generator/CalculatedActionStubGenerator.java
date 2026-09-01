@@ -90,10 +90,12 @@ public class CalculatedActionStubGenerator implements IntentTargetGenerator {
             LOGGER.debug("Calculated action [{}] is not this project's to write - not scaffolding it", action);
             return;
         }
-        String path = context.getProjectRoot() + "/" + fileName;
-        if (context.getRepository()
-                   .getResource(path)
-                   .exists()) {
+        // No repository/project to look into (a dry run over an unsaved proposal): nothing can exist,
+        // so the stub "is produced" - and the dry-run context then discards the write.
+        boolean canLookUp = context.getRepository() != null && context.getProjectRoot() != null;
+        if (canLookUp && context.getRepository()
+                                .getResource(context.getProjectRoot() + "/" + fileName)
+                                .exists()) {
             return; // preserve the developer's implementation
         }
         String packageName = fileName.substring(0, fileName.lastIndexOf('/'))

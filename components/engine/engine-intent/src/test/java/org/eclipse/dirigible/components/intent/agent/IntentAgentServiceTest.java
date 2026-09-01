@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.intent.ai.ModelClient;
+import org.eclipse.dirigible.components.intent.generator.IntentGenerationService;
 import org.junit.jupiter.api.Test;
 
 import com.google.gson.JsonArray;
@@ -95,11 +96,12 @@ class IntentAgentServiceTest {
     @Test
     void repairRoundsAreBoundedAndTheOutstandingIssuesAreSurfaced() {
         ScriptedAgentService service = new ScriptedAgentService(proposal("Try 1.", INVALID_YAML), proposal("Try 2.", INVALID_YAML),
-                proposal("Try 3.", INVALID_YAML));
+                proposal("Try 3.", INVALID_YAML), proposal("Try 4.", INVALID_YAML), proposal("Try 5.", INVALID_YAML));
 
         AgentReply reply = service.chat(request());
 
-        assertEquals(3, service.calls.size(), "one initial call plus exactly two repair rounds");
+        assertEquals(1 + org.eclipse.dirigible.components.intent.ai.ProposalRepairLoop.MAX_REPAIR_ROUNDS, service.calls.size(),
+                "one initial call plus exactly the bounded repair rounds");
         assertEquals(INVALID_YAML, reply.proposedYaml(), "the last proposal is still returned for the editor to flag");
         assertTrue(reply.reply()
                         .contains("still fails intent validation"),
@@ -149,6 +151,40 @@ class IntentAgentServiceTest {
                           .isEmpty());
     }
 
+    @Test
+    void aProposalThatParsesButFailsGenerationIsSentBackForCorrection() {
+        // The band the parser cannot see (dirigible #6956): the proposal is structurally valid, but the
+        // generation pass would refuse or drop a piece of it. The dry run's issues must reach the
+        // repair loop exactly as a parse error does.
+        String generationIssue = "generates [audit-log] map [Vehicle] does not resolve against the source - not generated";
+        ScriptedGenerationService generation = new ScriptedGenerationService(List.of(List.of(generationIssue)));
+        ScriptedAgentService service =
+                new ScriptedAgentService(generation, proposal("First try.", VALID_YAML), proposal("Fixed.", VALID_YAML));
+
+        AgentReply reply = service.chat(request());
+
+        assertEquals(2, service.calls.size(), "the generation-layer issue triggers a repair round");
+        assertEquals(VALID_YAML, reply.proposedYaml());
+        List<Map<String, Object>> secondCall = service.calls.get(1);
+        String repairTurn = (String) secondCall.get(secondCall.size() - 1)
+                                               .get("content");
+        assertTrue(repairTurn.contains(generationIssue), "the dry run's issue text is sent back verbatim");
+    }
+
+    @Test
+    void aDryRunInfrastructureFailureDoesNotFailTheTurn() {
+        // The dry run judging the proposal is a bonus check on top of the parse - its own machinery
+        // breaking must degrade to the parse verdict, never to a failed turn.
+        ScriptedGenerationService generation = ScriptedGenerationService.failing(new IllegalStateException("no repository"));
+        ScriptedAgentService service = new ScriptedAgentService(generation, proposal("Added notes.", VALID_YAML));
+
+        AgentReply reply = service.chat(request());
+
+        assertEquals(1, service.calls.size());
+        assertEquals(VALID_YAML, reply.proposedYaml());
+        assertEquals("Added notes.", reply.reply(), "no validation note is appended");
+    }
+
     private static ModelClient.ModelReply proposal(String text, String yaml) {
         JsonObject input = new JsonObject();
         input.addProperty("explanation", text);
@@ -167,7 +203,11 @@ class IntentAgentServiceTest {
         private final List<List<Map<String, Object>>> calls = new ArrayList<>();
 
         private ScriptedAgentService(ModelClient.ModelReply... scripted) {
-            super(new ModelClient());
+            this(new ScriptedGenerationService(), scripted);
+        }
+
+        private ScriptedAgentService(IntentGenerationService generationService, ModelClient.ModelReply... scripted) {
+            super(new ModelClient(), generationService);
             this.replies = new ArrayDeque<>(List.of(scripted));
         }
 
@@ -175,6 +215,41 @@ class IntentAgentServiceTest {
         ModelClient.ModelReply callModel(List<Map<String, Object>> messages) {
             calls.add(List.copyOf(messages));
             return replies.pop();
+        }
+    }
+
+    /**
+     * Scripts the dry generation pass the same way the upstream model is scripted: each parseable
+     * proposal consumes the next issue list (empty once the script runs out). The real dry run is
+     * exercised by {@code IntentGenerationServiceDryRunTest}; here only the loop's wiring is under
+     * test.
+     */
+    private static final class ScriptedGenerationService extends IntentGenerationService {
+
+        private final Deque<List<String>> scriptedIssues;
+        private RuntimeException failure;
+
+        private ScriptedGenerationService(List<List<String>> scripted) {
+            super(List.of(), null, null);
+            this.scriptedIssues = new ArrayDeque<>(scripted);
+        }
+
+        private ScriptedGenerationService() {
+            this(List.of());
+        }
+
+        private static ScriptedGenerationService failing(RuntimeException failure) {
+            ScriptedGenerationService service = new ScriptedGenerationService();
+            service.failure = failure;
+            return service;
+        }
+
+        @Override
+        public List<String> dryRun(String yaml) {
+            if (failure != null) {
+                throw failure;
+            }
+            return scriptedIssues.isEmpty() ? List.of() : scriptedIssues.pop();
         }
     }
 }

@@ -35,8 +35,15 @@ public final class ProposalRepairLoop {
     /**
      * How many times an invalid proposal is sent back to the model for correction. Bounds the loop at
      * {@code 1 + MAX_REPAIR_ROUNDS} upstream calls per turn.
+     *
+     * <p>
+     * Raised from 2 once two things held (dirigible #6956): the upstream call is streamed with a
+     * generous outer bound instead of one 120-second window (#6955), so more rounds no longer multiply
+     * exposure to a wall-clock cliff; and the intent validator sees the generation layer as well as the
+     * parse, so later rounds have genuinely new defects to fix rather than restating one parse error.
+     * The loop still exits on the first clean round - four is a ceiling, not a target.
      */
-    public static final int MAX_REPAIR_ROUNDS = 2;
+    public static final int MAX_REPAIR_ROUNDS = 4;
 
     /** One upstream round-trip over the accumulated turns. */
     @FunctionalInterface

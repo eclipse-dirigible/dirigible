@@ -58,6 +58,14 @@ public final class IntentGenerationContext {
     private final IntentModel model;
     private final IRepository repository;
 
+    /**
+     * A validation-only pass: generators run and report exactly as they would for a real Generate, but
+     * nothing is written and nothing is scrubbed (dirigible #6956). Reads stay live - what already
+     * exists still decides what a generator would do - so the issues collected are the ones a real pass
+     * would raise.
+     */
+    private final boolean dryRun;
+
     /** The project's {@code .settings} (loaded or scaffolded by the service before generators run). */
     private IntentSettings settings;
 
@@ -71,14 +79,29 @@ public final class IntentGenerationContext {
      */
     private final java.util.List<String> issues = new java.util.ArrayList<>();
 
+    /**
+     * Non-fatal observations that no change to THIS document can address (e.g. a cross-model capacity
+     * guard that belongs to the child's own model). Kept apart from {@link #issues} so the assistant's
+     * repair loop is never asked to "fix" something that is not fixable here - a round spent on an
+     * unfixable advisory is a round not spent on a real defect - while the generate response still
+     * surfaces them to the developer.
+     */
+    private final java.util.List<String> advisories = new java.util.ArrayList<>();
+
     IntentGenerationContext(IntentModel model, String projectRoot, String projectName, String workspaceName, String fallbackName,
             IRepository repository) {
+        this(model, projectRoot, projectName, workspaceName, fallbackName, repository, false);
+    }
+
+    IntentGenerationContext(IntentModel model, String projectRoot, String projectName, String workspaceName, String fallbackName,
+            IRepository repository, boolean dryRun) {
         this.model = model;
         this.projectRoot = projectRoot;
         this.projectName = projectName;
         this.workspaceName = workspaceName;
         this.fallbackName = fallbackName;
         this.repository = repository;
+        this.dryRun = dryRun;
     }
 
     /**
@@ -90,6 +113,12 @@ public final class IntentGenerationContext {
      * @param content the full file content
      */
     public void writeModelFile(String fileName, String content) {
+        if (dryRun) {
+            // The name is still recorded - a dry run must report the same output set a real pass
+            // would produce - but the repository is never touched.
+            writtenFileNames.add(fileName);
+            return;
+        }
         String path = projectRoot + "/" + fileName;
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         IResource existing = repository.getResource(path);
@@ -115,6 +144,10 @@ public final class IntentGenerationContext {
      * @param content the full file content to create when absent
      */
     public void writeModelFileIfAbsent(String fileName, String content) {
+        if (dryRun) {
+            writtenFileNames.add(fileName);
+            return;
+        }
         String path = projectRoot + "/" + fileName;
         IResource existing = repository.getResource(path);
         if (!existing.exists()) {
@@ -134,8 +167,11 @@ public final class IntentGenerationContext {
      *         absent and the generator should produce it
      */
     public boolean keepExistingModelFile(String fileName) {
-        if (!repository.getResource(projectRoot + "/" + fileName)
-                       .exists()) {
+        // No repository or no project to look into (a dry run over a proposal that belongs to no
+        // project yet): nothing can exist, so the generator should produce - which a dry run then
+        // discards, having exercised the build path.
+        if (repository == null || projectRoot == null || !repository.getResource(projectRoot + "/" + fileName)
+                                                                    .exists()) {
             return false;
         }
         writtenFileNames.add(fileName);
@@ -167,6 +203,34 @@ public final class IntentGenerationContext {
      */
     public java.util.List<String> getIssues() {
         return Collections.unmodifiableList(issues);
+    }
+
+    /**
+     * Record an observation no change to this document can address - surfaced to the developer, but
+     * never handed to the assistant's repair loop as something to fix.
+     *
+     * @param advisory a human-readable observation
+     */
+    public void addAdvisory(String advisory) {
+        advisories.add(advisory);
+    }
+
+    /**
+     * The advisories collected during this pass.
+     *
+     * @return an unmodifiable view of the advisories
+     */
+    public java.util.List<String> getAdvisories() {
+        return Collections.unmodifiableList(advisories);
+    }
+
+    /**
+     * Whether this pass is validation-only (nothing is written or scrubbed).
+     *
+     * @return {@code true} for a dry run
+     */
+    public boolean isDryRun() {
+        return dryRun;
     }
 
     public String getProjectName() {

@@ -19,6 +19,7 @@ import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.intent.ai.AssistantGuide;
 import org.eclipse.dirigible.components.intent.ai.ModelClient;
 import org.eclipse.dirigible.components.intent.ai.ProposalRepairLoop;
+import org.eclipse.dirigible.components.intent.generator.IntentGenerationService;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.slf4j.Logger;
@@ -70,9 +71,11 @@ class IntentAgentService {
             "Propose a complete, updated app.intent YAML for the developer to review as a diff.", inputSchema());
 
     private final ModelClient modelClient;
+    private final IntentGenerationService generationService;
 
-    IntentAgentService(ModelClient modelClient) {
+    IntentAgentService(ModelClient modelClient, IntentGenerationService generationService) {
         this.modelClient = modelClient;
+        this.generationService = generationService;
     }
 
     /**
@@ -125,8 +128,7 @@ class IntentAgentService {
      */
     AgentReply chat(AgentRequest request) {
         List<Map<String, Object>> messages = ModelClient.messages(request.history(), buildUserTurn(request));
-        ProposalRepairLoop loop =
-                new ProposalRepairLoop("yaml", "yaml", IntentAgentService::validationIssues, IntentAgentService::repairTurn);
+        ProposalRepairLoop loop = new ProposalRepairLoop("yaml", "yaml", this::validationIssues, IntentAgentService::repairTurn);
         ProposalRepairLoop.Outcome outcome = loop.run(messages, this::callModel);
 
         String reply = replyText(outcome);
@@ -197,21 +199,36 @@ class IntentAgentService {
     }
 
     /**
-     * Validate a proposed intent with the same parser that backs the editor's parse endpoint.
+     * Validate a proposed intent with the same parser that backs the editor's parse endpoint, and -
+     * when it parses - with a dry generation pass (dirigible #6956): the band the parser legitimately
+     * cannot see, a document that parses but whose generation would drop glue or be refused by a
+     * generation-time check, comes back to the repair loop instead of reaching the developer looking
+     * finished.
+     *
+     * <p>
+     * The dry run has no project context here (a proposal is not saved anywhere yet), so cross-model
+     * references resolve by convention and never produce a false "cannot be resolved" issue. A failure
+     * of the dry-run machinery itself must not fail the turn - the parse verdict alone is then the
+     * answer, exactly what this method returned before the dry run existed.
      *
      * @param proposedYaml the proposal
      * @return the validation issues; empty for a valid proposal
      */
-    private static List<String> validationIssues(String proposedYaml) {
+    private List<String> validationIssues(String proposedYaml) {
         try {
             IntentParser.parse(proposedYaml);
-            return List.of();
         } catch (IntentValidationException ex) {
             LOGGER.debug("Intent AI proposal failed structural validation", ex);
             return ex.getIssues();
         } catch (RuntimeException ex) {
             LOGGER.debug("Intent AI proposal is not parseable", ex);
             return List.of("the proposed YAML could not be parsed: " + ex.getMessage());
+        }
+        try {
+            return generationService.dryRun(proposedYaml);
+        } catch (RuntimeException ex) {
+            LOGGER.error("The dry generation pass over an AI proposal failed - accepting the parse verdict alone", ex);
+            return List.of();
         }
     }
 

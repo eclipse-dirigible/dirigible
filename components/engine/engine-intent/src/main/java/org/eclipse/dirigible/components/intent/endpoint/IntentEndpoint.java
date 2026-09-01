@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.endpoint;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 import jakarta.annotation.security.RolesAllowed;
@@ -42,6 +43,8 @@ import org.springframework.web.server.ResponseStatusException;
  * <li>{@code POST /services/ide/intent/parse} - body is the raw intent YAML; returns the parsed
  * {@link IntentModel} (drives the editor's live diagram), or {@code 422} with the full list of
  * structural issues.</li>
+ * <li>{@code POST /services/ide/intent/validate} - parse plus a write-nothing generation pass;
+ * returns the model together with everything generation would object to (dirigible #6956).</li>
  * <li>{@code POST /services/ide/intent/generate} - generates every derived model file into the
  * given workspace project (next to the intent file) and scrubs stale output; returns the written
  * and scrubbed file names.</li>
@@ -81,6 +84,70 @@ public class IntentEndpoint {
     }
 
     /**
+     * Parse AND dry-run-generate an intent document - the full pre-flight the Builder's auto-apply gate
+     * needs (dirigible #6956). The parse-only endpoint above accepts everything the parser accepts,
+     * which includes documents whose generation would drop glue or be refused by a generation-time
+     * check; this one also runs the generation pass without writing anything and returns what it would
+     * object to.
+     *
+     * <p>
+     * The project coordinates are optional. With them, the dry run reads the real project (its
+     * {@code .settings}, developer-owned files, and cross-model dependencies resolving against the
+     * workspace/registry); without them it validates the document on its own, the way the AI
+     * assistant's server-side loop does - cross-model references then resolve by convention and are
+     * never reported as unresolvable.
+     *
+     * @param yaml the raw intent YAML
+     * @param workspace the workspace name, optional
+     * @param project the project name, optional
+     * @param path the intent file path within the project (naming fallback only), optional
+     * @return {@code {"model": ..., "issues": [...]}} - issues empty when generation raises nothing -
+     *         or {@code 422} with {@code {"issues": [...]}} when the document does not parse
+     */
+    @PostMapping(value = "/validate", consumes = MediaType.TEXT_PLAIN_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> validate(@RequestBody(required = false) String yaml,
+            @RequestParam(value = "workspace", required = false) String workspace,
+            @RequestParam(value = "project", required = false) String project,
+            @RequestParam(value = "path", required = false) String path) {
+        IntentModel model;
+        try {
+            model = IntentParser.parse(yaml);
+        } catch (IntentValidationException e) {
+            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                                 .body(Map.of("issues", e.getIssues()));
+        }
+        String projectRoot = null;
+        if (workspace != null && !workspace.isBlank() && project != null && !project.isBlank()) {
+            Workspace workspaceObject = workspaceService.getWorkspace(workspace);
+            if (workspaceObject.exists()) {
+                Project projectObject = workspaceObject.getProject(project);
+                if (projectObject.exists()) {
+                    projectRoot = projectObject.getPath();
+                }
+            }
+        }
+        try {
+            List<String> issues = generationService.dryRun(yaml, projectRoot, project, workspace, path == null ? "app" : baseName(path));
+            return ResponseEntity.ok(Map.of("model", model, "issues", issues));
+        } catch (RuntimeException e) {
+            // The dry-run machinery failing is not the document's fault: answer with the parse verdict
+            // alone rather than blocking the caller on an internal error. The coordinates arrive in
+            // user-controlled URL parameters, so they are scrubbed before they reach the log.
+            LOGGER.error("Intent dry-run validation failed for [{}/{}/{}]", sanitizeForLog(workspace), sanitizeForLog(project),
+                    sanitizeForLog(path), e);
+            return ResponseEntity.ok(Map.of("model", model, "issues", List.of()));
+        }
+    }
+
+    /**
+     * Strip CR/LF and stray control characters from a value that arrives in a user-controlled request
+     * segment before it reaches the log, so a crafted request cannot forge log entries.
+     */
+    private static String sanitizeForLog(String value) {
+        return value == null ? "null" : value.replaceAll("[\\r\\n\\t]", "_");
+    }
+
+    /**
      * Generate the derived model files for the given intent file into its workspace project.
      *
      * @param workspace the workspace name, e.g. {@code workspace}
@@ -117,7 +184,8 @@ public class IntentEndpoint {
             return ResponseEntity.unprocessableEntity()
                                  .body(Map.of("issues", e.getIssues()));
         } catch (RuntimeException e) {
-            LOGGER.error("Intent generation failed for [{}/{}/{}]", workspace, project, path, e);
+            LOGGER.error("Intent generation failed for [{}/{}/{}]", sanitizeForLog(workspace), sanitizeForLog(project),
+                    sanitizeForLog(path), e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Generation failed: " + e.getMessage(), e);
         }
     }

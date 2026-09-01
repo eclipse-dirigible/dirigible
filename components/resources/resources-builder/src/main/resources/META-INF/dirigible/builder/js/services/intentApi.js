@@ -20,12 +20,13 @@
   const SHELLS = '/services/js/platform-core/extension-services/shells.js?extensionPoints=platform-shells';
   const PERSPECTIVES = '/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-perspectives';
 
-  // The agent endpoint makes up to three upstream model calls (the first draft plus two server-side
+  // The agent endpoint makes up to five upstream model calls (the first draft plus four server-side
   // repair rounds), each of them streamed and each reasoning over the COMPLETE app.intent it has to
   // re-emit - so there is no longer a fixed per-call ceiling to multiply, and the server's own outer
   // bound is 10 minutes per call. This is deliberately generous: aborting here reports a turn that is
-  // still being generated as a failure, and the user has no way to tell the two apart.
-  const AGENT_TIMEOUT_MS = 20 * 60 * 1000;
+  // still being generated as a failure, and the user has no way to tell the two apart. In practice
+  // the loop exits on the first clean round, so the worst case is rare by construction.
+  const AGENT_TIMEOUT_MS = 30 * 60 * 1000;
   const DEFAULT_TIMEOUT_MS = 60 * 1000;
 
   /** A failed call, carrying the status and the parsed body so callers can act on 412 / 422 / 502. */
@@ -98,6 +99,21 @@
     async parse(yaml) {
       const result = await call('POST', `${INTENT_BASE}/parse`, { body: yaml || '', contentType: 'text/plain' });
       return result.data;
+    },
+
+    /**
+     * The full pre-flight: parse PLUS a write-nothing generation pass (dirigible #6956). Returns
+     * `{model, issues}` - `issues` lists everything generation would drop or refuse, which the
+     * parse-only check cannot see; throws a BuilderHttpError whose `issues` holds the structural
+     * problems on 422. Passing the project lets the server read the real `.settings` and resolve
+     * cross-model dependencies against the workspace; without it the document is judged on its own.
+     */
+    async validate(yaml, project) {
+      const params = project
+        ? `?workspace=${seg(ws())}&project=${seg(project)}&path=${seg(App.config.intentFile)}`
+        : '';
+      const result = await call('POST', `${INTENT_BASE}/validate${params}`, { body: yaml || '', contentType: 'text/plain' });
+      return result.data || {};
     },
 
     /**

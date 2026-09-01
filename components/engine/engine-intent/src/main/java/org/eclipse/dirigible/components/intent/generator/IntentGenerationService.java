@@ -138,7 +138,70 @@ public class IntentGenerationService {
         List<String> scrubbed = scrubStaleModelFiles(projectRoot, context.getWrittenFileNames());
         List<Map<String, Object>> plan = buildCodeGenerationPlan(context.getSettings(), context.getWrittenFileNames());
         runCodeGenerations(plan, workspaceName, projectName);
-        return new GenerationResult(new ArrayList<>(context.getWrittenFileNames()), scrubbed, plan, context.getIssues());
+        // The developer-facing warnings carry BOTH kinds: the actionable issues and the advisories.
+        // Only the assistant's dry run keeps them apart (see dryRun below).
+        List<String> warnings = new ArrayList<>(context.getIssues());
+        warnings.addAll(context.getAdvisories());
+        return new GenerationResult(new ArrayList<>(context.getWrittenFileNames()), scrubbed, plan, warnings);
+    }
+
+    /**
+     * Run the generation pass for VALIDATION only: every generator executes and reports against the
+     * same context a real Generate would get, but nothing is written and nothing is scrubbed (dirigible
+     * #6956). This is the band the parser legitimately cannot see - a document that parses but whose
+     * generation would drop glue, or would be refused by a generation-time check.
+     *
+     * <p>
+     * A generator throwing {@link IntentValidationException} - fatal on a real Generate (422) - is
+     * collected here instead: the caller wants the complete list of what generation would object to,
+     * not the first objection.
+     *
+     * <p>
+     * The project coordinates may all be {@code null} - a proposal that belongs to no project yet, the
+     * AI assistant's case. Reads then find nothing (developer-owned files are treated as absent), and
+     * cross-model references resolve by naming convention rather than against a real owner model
+     * ({@code CrossModelSupport} skips its strict checks for unresolved targets) - deliberately, so a
+     * dependency that only exists in some workspace never produces a false "cannot be resolved" issue
+     * for the repair loop to burn a round on.
+     *
+     * @param yaml the raw {@code .intent} document; must already parse (the caller handles
+     *        {@link IntentValidationException} from the parse separately)
+     * @param projectRoot repository path of the target project root, or {@code null} when the document
+     *        belongs to no project
+     * @param projectName the target project name, or {@code null}
+     * @param workspaceName the workspace, or {@code null}
+     * @param fallbackName base name for single-file outputs when the YAML omits {@code name:}
+     * @return the actionable issues a real generation pass would report - advisories that no change to
+     *         this document can address are deliberately excluded
+     */
+    public List<String> dryRun(String yaml, String projectRoot, String projectName, String workspaceName, String fallbackName) {
+        IntentModel model = IntentParser.parse(yaml);
+        IntentGenerationContext context =
+                new IntentGenerationContext(model, projectRoot, projectName, workspaceName, fallbackName, repository, true);
+        context.setSettings(loadSettingsReadOnly(context));
+        for (IntentTargetGenerator generator : generators) {
+            try {
+                generator.generate(context);
+            } catch (IntentValidationException e) {
+                e.getIssues()
+                 .forEach(context::addIssue);
+            } catch (RuntimeException e) {
+                // The same isolation the real pass applies to a generator bug: one broken slice must
+                // not silence what the other generators have to say about the document.
+                LOGGER.error("Intent generator [{}] failed during a dry run", generator.name(), e);
+            }
+        }
+        return context.getIssues();
+    }
+
+    /**
+     * Validation-only pass for a document with no project context - the AI assistant's proposals.
+     *
+     * @param yaml the raw {@code .intent} document
+     * @return the actionable issues a real generation pass would report
+     */
+    public List<String> dryRun(String yaml) {
+        return dryRun(yaml, null, null, null, "app");
     }
 
     /**
@@ -214,20 +277,41 @@ public class IntentGenerationService {
      */
     private IntentSettings loadOrScaffoldSettings(IntentGenerationContext context) {
         String fileName = IntentNaming.baseName(context) + ".settings";
-        String path = context.getProjectRoot() + "/" + fileName;
-        var resource = repository.getResource(path);
-        if (resource.exists()) {
-            try {
-                return IntentSettings.parse(new String(resource.getContent(), java.nio.charset.StandardCharsets.UTF_8));
-            } catch (RuntimeException e) {
-                LOGGER.error("Failed to parse [{}] - falling back to defaults (not overwriting your file)", fileName, e);
-                return IntentSettings.scaffold(context.getModel());
-            }
+        IntentSettings existing = readSettings(context, fileName);
+        if (existing != null) {
+            return existing;
         }
         IntentSettings settings = IntentSettings.scaffold(context.getModel());
         context.writeModelFile(fileName, settings.toJson());
         LOGGER.info("Scaffolded initial settings [{}/{}]", context.getProjectRoot(), fileName);
         return settings;
+    }
+
+    /**
+     * The settings a dry run works with: the project's real {@code .settings} when there is a project
+     * to read them from, else an in-memory scaffold. Never writes - the scaffold-and-write of a first
+     * real Generate is exactly the side effect a dry run must not have.
+     */
+    private IntentSettings loadSettingsReadOnly(IntentGenerationContext context) {
+        IntentSettings existing =
+                context.getProjectRoot() == null ? null : readSettings(context, IntentNaming.baseName(context) + ".settings");
+        return existing != null ? existing : IntentSettings.scaffold(context.getModel());
+    }
+
+    /**
+     * The parsed project settings, or {@code null} when absent (or unreadable - defaults then apply).
+     */
+    private IntentSettings readSettings(IntentGenerationContext context, String fileName) {
+        var resource = repository.getResource(context.getProjectRoot() + "/" + fileName);
+        if (!resource.exists()) {
+            return null;
+        }
+        try {
+            return IntentSettings.parse(new String(resource.getContent(), java.nio.charset.StandardCharsets.UTF_8));
+        } catch (RuntimeException e) {
+            LOGGER.error("Failed to parse [{}] - falling back to defaults (not overwriting your file)", fileName, e);
+            return IntentSettings.scaffold(context.getModel());
+        }
     }
 
     /**
