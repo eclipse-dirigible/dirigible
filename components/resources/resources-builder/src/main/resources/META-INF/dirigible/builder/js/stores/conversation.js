@@ -175,6 +175,10 @@ document.addEventListener('alpine:init', () => {
         // nobody noticing. It is stored as its own message, so it is in the record too.
         this.reportBoundaries(reply.boundaries);
 
+        // The proposal's own requirement audit (dirigible #6997): where each sentence of the request
+        // landed - and, prominently, the ones it landed nowhere.
+        this.reportCoverage(reply.coverage);
+
         if (reply.proposedYaml) await this.adopt(reply.proposedYaml);
       } finally {
         await this.flush();
@@ -197,6 +201,26 @@ document.addEventListener('alpine:init', () => {
             + (boundary.suggestedClass ? ' (' + boundary.suggestedClass + ', to be written by hand)' : ''));
         }
         this.say('boundary', lines.join('\n'));
+      }
+    },
+
+    /**
+     * Render the proposal's requirement-coverage audit (dirigible #6997). Requirements the proposal
+     * does NOT carry get the boundary treatment - each its own unmissable message - because a silent
+     * omission is exactly the failure this audit exists to make loud. The rest of the mapping is one
+     * quiet note: a reviewer sees at a glance which sentence of the request landed where.
+     */
+    reportCoverage(coverage) {
+      const entries = (coverage || []).filter(c => c && c.requirement);
+      if (!entries.length) return;
+      const uncovered = entries.filter(c => !c.construct || c.construct.trim().toLowerCase() === 'none');
+      for (const miss of uncovered) {
+        this.say('boundary', 'Not carried by the proposal: ' + miss.requirement);
+      }
+      const mapped = entries.filter(c => !uncovered.includes(c));
+      if (mapped.length) {
+        this.say('note', 'Requirement coverage:\n'
+          + mapped.map(c => '• ' + c.requirement + ' → ' + c.construct).join('\n'));
       }
     },
 

@@ -19,6 +19,9 @@ import java.util.List;
  *        {@code null}
  * @param boundaries the requirements the proposal could <em>not</em> express, each naming the
  *        extension point that carries it; empty when the request fit entirely inside the DSL
+ * @param coverage the proposal's requirement-by-requirement audit of the request (dirigible #6997)
+ *        - which construct carries each requirement; empty when the reply proposed nothing or came
+ *        from a contract without the audit
  */
-record AgentReply(String reply, String proposedYaml, List<AgentBoundary> boundaries) {
+record AgentReply(String reply, String proposedYaml, List<AgentBoundary> boundaries, List<AgentCoverage> coverage) {
 }

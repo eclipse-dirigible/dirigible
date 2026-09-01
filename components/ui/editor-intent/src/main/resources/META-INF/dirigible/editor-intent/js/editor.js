@@ -447,6 +447,28 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         }
     };
 
+    /**
+     * Render the proposal's requirement-coverage audit (dirigible #6997). A requirement the proposal
+     * does NOT carry gets the boundary treatment - its own unmissable bubble - because a silent
+     * omission is exactly the failure the audit exists to make loud. The rest of the mapping is one
+     * quiet bubble: which sentence of the request landed on which construct.
+     */
+    const reportCoverage = (coverage) => {
+        const entries = (coverage || []).filter((c) => c && c.requirement);
+        if (!entries.length) return;
+        const uncovered = entries.filter((c) => !c.construct || c.construct.trim().toLowerCase() === 'none');
+        for (const miss of uncovered) {
+            $scope.chat.messages.push({ role: 'boundary', text: 'Not carried by the proposal: ' + miss.requirement });
+        }
+        const mapped = entries.filter((c) => !uncovered.includes(c));
+        if (mapped.length) {
+            $scope.chat.messages.push({
+                role: 'assistant',
+                text: 'Requirement coverage:\n' + mapped.map((c) => '• ' + c.requirement + ' → ' + c.construct).join('\n'),
+            });
+        }
+    };
+
     /** Where a suggested class lives in this project - the same custom/ mapping the stub generator uses. */
     const customFileFor = (suggestedClass) => {
         if (!suggestedClass) return null;
@@ -491,6 +513,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                      $scope.chat.turns.push({ role: 'assistant', content: reply });
                  }
                  reportBoundaries(response.data && response.data.boundaries);
+                 reportCoverage(response.data && response.data.coverage);
                  if (response.data && response.data.proposedYaml) {
                      proposedYaml = response.data.proposedYaml;
                      $scope.chat.proposalPending = true;
