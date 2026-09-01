@@ -13,7 +13,9 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -187,6 +189,7 @@ final class UnknownKeyValidator {
                     + " - move it out one level";
         }
         String prefix = owner.getSimpleName() + "#";
+        List<String> elsewhere = new ArrayList<>();
         for (Map.Entry<String, Set<String>> registered : MAP_KEYS.entrySet()) {
             if (!registered.getKey()
                            .startsWith(prefix)
@@ -197,10 +200,29 @@ final class UnknownKeyValidator {
             String where = registered.getKey()
                                      .substring(prefix.length());
             if (!where.equals(withinOwner)) {
-                return " - [" + key + "] belongs inside " + shape(where) + " on this " + subject(owner) + " - move it there";
+                elsewhere.add(where);
             }
         }
-        return suggestion(key, here);
+        if (elsewhere.isEmpty()) {
+            return suggestion(key, here);
+        }
+        // Several bindings may accept the same key - a step event's { process, step } is registered
+        // under both onStepReached and onStepCompleted. Point at the one the author actually wrote
+        // (its binding is a sibling of the rejected key), and sort otherwise so the message is stable
+        // rather than dependent on the registration map's iteration order.
+        Collections.sort(elsewhere);
+        for (String where : elsewhere) {
+            String binding = where.substring(where.lastIndexOf('.') + 1);
+            if (here.contains(binding)) {
+                return moveTo(key, where, owner);
+            }
+        }
+        return moveTo(key, elsewhere.get(0), owner);
+    }
+
+    /** The relocation hint itself, shared by the preferred and the fallback candidate. */
+    private static String moveTo(String key, String where, Class<?> owner) {
+        return " - [" + key + "] belongs inside " + shape(where) + " on this " + subject(owner) + " - move it there";
     }
 
     /**

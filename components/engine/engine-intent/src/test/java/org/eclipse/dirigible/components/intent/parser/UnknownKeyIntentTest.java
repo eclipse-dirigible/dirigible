@@ -190,7 +190,7 @@ class UnknownKeyIntentTest {
             name: fines
             entities:
               - name: FineStatus
-                kind: setting
+                function: Setting
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true }
@@ -211,7 +211,10 @@ class UnknownKeyIntentTest {
                 from: Fine
                 to: FineLog
                 event: { onTransition: Fine, when: "Status == IDENTIFIED", mode: append }
-                map: { fine: id }
+                map:
+                  fine: id
+                defaults:
+                  event: "IDENTIFIED"
             seeds:
               - name: fine-statuses
                 entity: FineStatus
@@ -226,45 +229,42 @@ class UnknownKeyIntentTest {
     }
 
     /**
-     * The slip that motivated the hint: `mode` is real, and belongs inside `event:`. Written beside it,
-     * the bare "unknown key [mode]" reads as "this platform has no append mode" - and the fix an author
-     * (or an assistant) then reaches for is to drop the append semantics entirely rather than to move
-     * one line.
+     * The slip that cost a real intent its append cardinality: `mode` written beside `event:` rather
+     * than inside it. A bare "unknown key" reads as "the platform has no such thing" - and the fix an
+     * author (or an assistant) then reaches for is to drop the key and accept the wrong cardinality, so
+     * the message has to name the place the key IS legal.
      */
     @Test
-    void aKeyOfTheEventMapWrittenBesideItIsNamedAsMisplaced() {
-        String issue = assertIssue(GENERATES_YAML.replace("    to: FineLog", "    to: FineLog\n    mode: append"), "unknown key [mode]");
-        assertTrue(issue.contains("belongs inside `event:`"), "should point at the event map: " + issue);
+    void aKeyBelongingOneLevelDownNamesTheMapItBelongsIn() {
+        String issue =
+                assertIssue(GENERATES_YAML.replace("    to: FineLog\n", "    to: FineLog\n    mode: append\n"), "unknown key [mode]");
+        assertTrue(issue.contains("belongs inside `event:`"), "should name the event map: " + issue);
         assertTrue(issue.contains("generates"), "should name the feature: " + issue);
     }
 
-    /** And the mirror image: a key of the create-from itself, written inside its event map. */
+    /** The same slip in the other direction: a key of the create-from written inside its event. */
     @Test
-    void aKeyOfTheFeatureWrittenInsideItsEventMapIsNamedAsMisplaced() {
+    void aKeyBelongingOneLevelUpSaysToMoveItOut() {
         String issue = assertIssue(GENERATES_YAML.replace("event: { onTransition: Fine,", "event: { to: FineLog, onTransition: Fine,"),
                 "unknown key [to]");
-        assertTrue(issue.contains("not inside `event:`"), "should say it belongs one level out: " + issue);
-        assertTrue(issue.contains("move it out one level"), "should say which way to move it: " + issue);
+        assertTrue(issue.contains("declared on the generates itself"), "should name the owning feature: " + issue);
+        assertTrue(issue.contains("not inside `event:`"), "should name the map it was written in: " + issue);
     }
 
-    /**
-     * A key legal only in a map nested one deeper is pointed at with the shape the author must write.
-     */
+    /** Two levels down: the step binding's own keys, written flat on the event. */
     @Test
-    void aKeyOfANestedStepBindingIsNamedWithItsShape() {
-        String issue =
-                assertIssue(GENERATES_YAML.replace("event: { onTransition: Fine,", "event: { process: Approval, onTransition: Fine,"),
-                        "unknown key [process]");
-        assertTrue(issue.contains("`event: { onStepReached: ... }`") || issue.contains("`event: { onStepCompleted: ... }`"),
-                "should render the nesting the author has to write: " + issue);
+    void aKeyBelongingInANestedBindingRendersTheWholeShape() {
+        String issue = assertIssue(GENERATES_YAML.replace("event: { onTransition: Fine, when: \"Status == IDENTIFIED\", mode: append }",
+                "event: { onStepCompleted: { process: P, step: s }, process: P, mode: append }"), "unknown key [process]");
+        assertTrue(issue.contains("`event: { onStepCompleted: ... }`"), "should render the nested shape: " + issue);
     }
 
-    /** A key that is legal nowhere on the feature still gets the fuzzy near-miss it always did. */
+    /** A key legal nowhere on the feature still gets the fuzzy near-miss, not a placement claim. */
     @Test
-    void aKeyLegalNowhereStillFallsBackToDidYouMean() {
-        String issue = assertIssue(GENERATES_YAML.replace("event: { onTransition: Fine,", "event: { onTransitionn: Fine,"),
-                "unknown key [onTransitionn]");
-        assertTrue(issue.contains("did you mean [onTransition]"), "should still guess the near miss: " + issue);
+    void aKeyLegalNowhereKeepsTheDidYouMeanFallback() {
+        String issue = assertIssue(GENERATES_YAML.replace("    to: FineLog\n", "    too: FineLog\n"), "unknown key [too]");
+        assertTrue(issue.contains("did you mean [to]"), "should still guess the near-miss: " + issue);
+        assertTrue(!issue.contains("belongs inside"), "should not claim a placement: " + issue);
     }
 
     private static String assertIssue(String yaml, String expected) {
