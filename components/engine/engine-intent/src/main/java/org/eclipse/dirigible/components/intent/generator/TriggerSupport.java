@@ -40,11 +40,13 @@ public final class TriggerSupport {
         return EventBinding.kind(process.getTrigger());
     }
 
-    /** The optional {@code when} guard expression on the trigger, or null. */
-    public static String triggerWhen(ProcessIntent process) {
-        Object value = process.getTrigger()
-                              .get("when");
-        return value == null ? null : value.toString();
+    /**
+     * The optional {@code when} guard on the trigger, or null - a comparison string, or a list of them
+     * meaning their AND (dirigible #6957); {@code NotificationSupport.guard(Object)} renders either.
+     */
+    public static Object triggerWhen(ProcessIntent process) {
+        return process.getTrigger()
+                      .get("when");
     }
 
     /**

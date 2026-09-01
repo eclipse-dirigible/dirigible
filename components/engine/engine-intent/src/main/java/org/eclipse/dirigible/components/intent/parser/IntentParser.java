@@ -221,6 +221,21 @@ public final class IntentParser {
             java.util.regex.Pattern.compile("\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(==|!=)\\s*(.+?)\\s*");
 
     /**
+     * One entry of a create-from's {@code when} guard list (dirigible #6957) that carries the status:
+     * the same numeric comparison the scalar form always was (a status NAME is already a seed id here -
+     * {@code StatusSymbolResolver} runs before the typed mapping).
+     */
+    private static final java.util.regex.Pattern WHEN_STATUS_TERM = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*==\\s*(\\d+)\\s*");
+
+    /**
+     * One entry of a create-from's {@code when} guard list comparing a STRING field of the source to a
+     * literal - quoted, or a bare word (letters, digits, {@code _}, {@code -}; a lookup's outcome
+     * values such as {@code found} or {@code notFound-notRouted} need no quotes).
+     */
+    private static final java.util.regex.Pattern WHEN_STRING_TERM =
+            java.util.regex.Pattern.compile("\\s*(\\w+)\\s*(==|!=)\\s*(?:'([^']*)'|\"([^\"]*)\"|([A-Za-z_][A-Za-z0-9_\\-]*))\\s*");
+
+    /**
      * Plain Gson for the YAML-Map -> JSON -> POJO round-trip. The platform's {@code JsonHelper} /
      * {@code GsonHelper} cannot be used here: they are configured with
      * {@code excludeFieldsWithoutExposeAnnotation()}, which silently maps every un-annotated model
@@ -1787,7 +1802,10 @@ public final class IntentParser {
         }
         Object when = resolve.getEvent()
                              .get("when");
-        if (when != null) {
+        if (when instanceof List) {
+            issues.add(subject + " when does not take a list here - the ANDed list form (dirigible #6957) is available"
+                    + " on generates events and process triggers");
+        } else if (when != null) {
             java.util.regex.Matcher matcher = RESOLVE_WHEN.matcher(when.toString());
             if (!matcher.matches()) {
                 issues.add(subject + " when [" + when + "] must be `<Field> == <value>` or `<Field> != <value>`");
@@ -5943,7 +5961,10 @@ public final class IntentParser {
                 validatePhaseBinding(posting.getEvent(), subject, alias != null ? null : byName.get(source), issues);
                 Object when = posting.getEvent()
                                      .get("when");
-                if (onTransition != null) {
+                if (when instanceof List) {
+                    issues.add(subject + " event when does not take a list here - the ANDed list form (dirigible #6957) is available"
+                            + " on generates events and process triggers");
+                } else if (onTransition != null) {
                     if (when == null || !String.valueOf(when)
                                                .matches("\\s*\\w+\\s*==\\s*\\d+\\s*")) {
                         issues.add(subject + " event requires `when: \"<Property> == <status seed id>\"`");
@@ -6593,14 +6614,7 @@ public final class IntentParser {
                 issues.add(subject + " event source [" + declared + "] is not the from entity [" + g.getFrom()
                         + "] - a create-from reads the source from:, the event only says when");
             }
-            Object when = event.get("when");
-            if (onTransition != null && (when == null || !String.valueOf(when)
-                                                                .matches("\\s*\\w+\\s*==\\s*\\d+\\s*"))) {
-                issues.add(subject + " event requires `when: \"<Property> == <status seed id or name>\"`");
-            } else if (when != null && !String.valueOf(when)
-                                              .matches("\\s*\\w+\\s*==\\s*\\d+\\s*")) {
-                issues.add(subject + " event when [" + when + "] must be `<Property> == <status seed id or name>`");
-            }
+            validateGeneratesWhen(event.get("when"), onTransition != null, subject, crossModelSource ? null : source, issues);
         }
         // The back-reference: the target's own to-one back to the source, written from the source's
         // primary key. Required in BOTH cardinalities - the at-most-once guard under `once`, the row's
@@ -6664,11 +6678,91 @@ public final class IntentParser {
             issues.add(subject + " event " + kind + " names a process that runs on [" + triggerEntity + "], not on the from entity ["
                     + g.getFrom() + "] - a step event is about the record its process runs on, which is the record the create-from reads");
         }
-        Object when = g.getEvent()
-                       .get("when");
-        if (when != null && !String.valueOf(when)
-                                   .matches("\\s*\\w+\\s*==\\s*\\d+\\s*")) {
-            issues.add(subject + " event when [" + when + "] must be `<Property> == <status seed id or name>`");
+        validateGeneratesWhen(g.getEvent()
+                               .get("when"),
+                false, subject, entityByName(model, g.getFrom()), issues);
+    }
+
+    /**
+     * A create-from's {@code when} guard (dirigible #6957): a single comparison string - the status
+     * guard {@code <Property> == <seed id>} exactly as before - or a LIST of comparison strings,
+     * implicitly ANDed. A list carries at most one status/numeric comparison plus any number of
+     * comparisons against the source's own STRING fields ({@code ==} or {@code !=}, the literal quoted
+     * or a bare word), which is what lets a consumer tell apart two paths that converge on one status:
+     * the {@code resolves:} lookup stamps its {@code outcome:} trace field, and
+     * {@code ["Status == DRIVER_IDENTIFIED", "resolution == found"]} fires only on the automatic one.
+     *
+     * <p>
+     * The list is deliberately AND-only and equality-only - encoding the restriction in the shape
+     * instead of growing an expression grammar - and duplicate properties are refused, since a second
+     * comparison on the same property is either redundant or always-false.
+     */
+    private static void validateGeneratesWhen(Object when, boolean requireStatusGuard, String subject, EntityIntent source,
+            List<String> issues) {
+        if (when == null) {
+            if (requireStatusGuard) {
+                issues.add(subject + " event requires `when: \"<Property> == <status seed id or name>\"`");
+            }
+            return;
+        }
+        if (when instanceof String scalar) {
+            if (!scalar.matches("\\s*\\w+\\s*==\\s*\\d+\\s*")) {
+                issues.add(requireStatusGuard ? subject + " event requires `when: \"<Property> == <status seed id or name>\"`"
+                        : subject + " event when [" + when + "] must be `<Property> == <status seed id or name>`");
+            }
+            return;
+        }
+        if (!(when instanceof List<?> terms)) {
+            issues.add(subject + " event when must be a comparison string or a list of them");
+            return;
+        }
+        if (terms.isEmpty()) {
+            issues.add(subject + " event when list must not be empty");
+            return;
+        }
+        int statusTerms = 0;
+        Set<String> guarded = new HashSet<>();
+        for (Object term : terms) {
+            if (!(term instanceof String comparison)) {
+                issues.add(subject + " event when list entries must be comparison strings, not [" + term + "]");
+                continue;
+            }
+            java.util.regex.Matcher numeric = WHEN_STATUS_TERM.matcher(comparison);
+            java.util.regex.Matcher text = WHEN_STRING_TERM.matcher(comparison);
+            String property;
+            if (numeric.matches()) {
+                statusTerms++;
+                property = numeric.group(1);
+            } else if (text.matches()) {
+                property = text.group(1);
+                FieldIntent field = source == null ? null : fieldByName(source, property);
+                if (source != null && field == null) {
+                    issues.add(subject + " event when [" + comparison + "] references [" + property + "], which is not a field of ["
+                            + source.getName() + "] - a string comparison guards one of the source's own fields (a lookup's `outcome:`"
+                            + " trace field, typically)");
+                    continue;
+                }
+                if (field != null && field.getType() != null && !"string".equals(field.getType()) && !"text".equals(field.getType())) {
+                    issues.add(subject + " event when [" + comparison + "] compares [" + property + "] to a string, but it is a ["
+                            + field.getType() + "] field - only the source's string/text fields can carry a literal guard");
+                    continue;
+                }
+            } else {
+                issues.add(subject + " event when [" + comparison
+                        + "] must be `<Property> == <status seed id or name>` or `<StringField> ==|!= <literal>`");
+                continue;
+            }
+            if (!guarded.add(property.toLowerCase(Locale.ROOT))) {
+                issues.add(subject + " event when guards [" + property + "] twice - a second comparison on the same property is either"
+                        + " redundant or can never hold");
+            }
+        }
+        if (requireStatusGuard && statusTerms == 0) {
+            issues.add(subject + " event when list must include the status guard `<Property> == <status seed id or name>`");
+        }
+        if (statusTerms > 1) {
+            issues.add(subject + " event when declares more than one numeric comparison - one status guard plus string-field"
+                    + " comparisons are supported");
         }
     }
 

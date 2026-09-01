@@ -900,7 +900,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // !$eventOnly, so a .glue written before this key existed keeps rendering the endpoint it
             // always did (a regeneration from an older glue file must not silently drop the button).
             e.put("eventOnly", !g.hasButton());
-            putGeneratesEvent(g, e, fromPk);
+            putGeneratesEvent(g, e, fromPk, source, context);
             putSupersededTarget(g, e, model, crossModel ? null : byName.get(g.getTo()), context);
             // Cross-model source: the gen folder and the project that owns the source's topics/views.
             e.put("crossModelSource", crossModelSource);
@@ -1092,7 +1092,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @param e the glue entry being built
      * @param fromPk the source's primary-key property name
      */
-    private static void putGeneratesEvent(GeneratesIntent g, Map<String, Object> e, String fromPk) {
+    private static void putGeneratesEvent(GeneratesIntent g, Map<String, Object> e, String fromPk, EntityIntent source,
+            IntentGenerationContext context) {
         e.put("hasEvent", g.isEventDriven());
         if (!g.isEventDriven()) {
             e.put("isCreate", false);
@@ -1101,6 +1102,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("appendMode", false);
             e.put("guardProperty", "");
             e.put("guardValue", "");
+            e.put("guardCondition", "");
             e.put("backRefProperty", "");
             return;
         }
@@ -1118,20 +1120,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         // The cardinality (#6800): `append` drops the existing-target lookup in the create-from, so
         // every delivery of the event creates a row. It is the absence of a guard, not another guard.
         e.put("appendMode", g.isAppendMode());
-        String guardProperty = "";
-        String guardValue = "";
-        Object whenValue = g.getEvent()
-                            .get("when");
-        if (whenValue != null) {
-            java.util.regex.Matcher when = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*==\\s*(\\d+)\\s*")
-                                                                  .matcher(String.valueOf(whenValue));
-            if (when.matches()) {
-                guardProperty = IntentNaming.pascalCase(when.group(1));
-                guardValue = when.group(2);
-            }
-        }
-        e.put("guardProperty", guardProperty);
-        e.put("guardValue", guardValue);
+        putGeneratesGuard(g, e, source, context);
         String backReference = "";
         for (Map.Entry<String, String> mapping : g.getMap()
                                                   .entrySet()) {
@@ -1146,6 +1135,79 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     + "] as its value) - it is the at-most-once guard against an event redelivery"));
         }
         e.put("backRefProperty", backReference);
+    }
+
+    /** One entry of a `when` guard: the numeric status comparison, or a string-field comparison. */
+    private static final java.util.regex.Pattern WHEN_STATUS_TERM = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*==\\s*(\\d+)\\s*");
+    private static final java.util.regex.Pattern WHEN_STRING_TERM =
+            java.util.regex.Pattern.compile("\\s*(\\w+)\\s*(==|!=)\\s*(?:'([^']*)'|\"([^\"]*)\"|([A-Za-z_][A-Za-z0-9_\\-]*))\\s*");
+
+    /**
+     * The event guard, rendered for the listener template (dirigible #6957). A scalar {@code when} is
+     * the status comparison it always was; a LIST is an implicit AND of one status comparison plus
+     * comparisons against the source's own string fields - which is how a consumer binds to one of two
+     * paths that converge on a single status (the automatic route stamped by a lookup's {@code
+     * outcome:} trace field versus the manual one).
+     *
+     * <p>
+     * Emits {@code guardCondition} - the complete Java condition over the RE-LOADED {@code source} -
+     * and keeps {@code guardProperty}/{@code guardValue} (the status term) for the javadoc line and
+     * older templates. A string term against a field the developer can edit gets an actionable warning
+     * (never a refusal): a guard on an editable field means a UI edit silently changes which
+     * automations fire, and the fix - {@code readOnly: true} on the trace field - is one line.
+     */
+    private static void putGeneratesGuard(GeneratesIntent g, Map<String, Object> e, EntityIntent source, IntentGenerationContext context) {
+        String guardProperty = "";
+        String guardValue = "";
+        List<String> conditions = new ArrayList<>();
+        Object whenValue = g.getEvent()
+                            .get("when");
+        List<?> terms = whenValue instanceof List<?> list ? list : whenValue == null ? List.of() : List.of(whenValue);
+        for (Object term : terms) {
+            java.util.regex.Matcher status = WHEN_STATUS_TERM.matcher(String.valueOf(term));
+            if (status.matches()) {
+                String property = IntentNaming.pascalCase(status.group(1));
+                if (guardProperty.isEmpty()) {
+                    guardProperty = property;
+                    guardValue = status.group(2);
+                }
+                conditions.add("source." + property + " != null && source." + property + " == " + status.group(2));
+                continue;
+            }
+            java.util.regex.Matcher text = WHEN_STRING_TERM.matcher(String.valueOf(term));
+            if (!text.matches()) {
+                continue; // parser already reported it
+            }
+            String property = IntentNaming.pascalCase(text.group(1));
+            String literal = text.group(3) != null ? text.group(3) : text.group(4) != null ? text.group(4) : text.group(5);
+            String equals = "java.util.Objects.equals(source." + property + ", " + NotificationSupport.quote(literal) + ")";
+            conditions.add("==".equals(text.group(2)) ? equals : "!" + equals);
+            warnIfGuardFieldIsEditable(g, text.group(1), source, context);
+        }
+        e.put("guardProperty", guardProperty);
+        e.put("guardValue", guardValue);
+        e.put("guardCondition", String.join(" && ", conditions));
+    }
+
+    /**
+     * A string guard reads a trace the PLATFORM wrote (a lookup's {@code outcome:}); one the user can
+     * edit turns "how did this record get here" into "what does the field say today". Actionable, not
+     * fatal: {@code readOnly: true} on the field is the one-line fix.
+     */
+    private static void warnIfGuardFieldIsEditable(GeneratesIntent g, String fieldName, EntityIntent source,
+            IntentGenerationContext context) {
+        if (source == null || context == null) {
+            return;
+        }
+        for (FieldIntent field : source.getFields()) {
+            if (fieldName.equalsIgnoreCase(field.getName()) && !field.isReadOnly()) {
+                String warning = "generates [" + g.getName() + "] event when guards [" + field.getName() + "] of [" + source.getName()
+                        + "], which is not readOnly - a user edit of that field silently changes whether this rule fires;"
+                        + " mark it `readOnly: true` so only the platform (a lookup's outcome:) writes it";
+                LOGGER.warn(warning);
+                context.addIssue(warning);
+            }
+        }
     }
 
     /**

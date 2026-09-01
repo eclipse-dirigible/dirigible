@@ -426,7 +426,10 @@ window.IntentDiagrams = (() => {
     // and it carries its `when` guard: two rules bound to the same transition are told apart by their
     // guards, which is precisely what the picture has to make visible.
     const generatesTrigger = (event) => {
-        const guard = event.when ? ' ' + event.when : '';
+        // `when` may be a LIST of ANDed comparisons (issue #6957) - the card joins them, so "which
+        // path fires me" stays readable at a glance.
+        const when = Array.isArray(event.when) ? event.when.join(' && ') : event.when;
+        const guard = when ? ' ' + when : '';
         if (event.onTransition) return 'on transition' + guard;
         if (event.onCreate) return 'on create' + guard;
         if (event.onPhase) return 'on phase ' + (event.phase || '');

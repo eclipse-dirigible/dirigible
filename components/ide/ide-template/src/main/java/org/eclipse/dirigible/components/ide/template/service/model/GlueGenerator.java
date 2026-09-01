@@ -627,8 +627,11 @@ class GlueGenerator {
                 // the at-most-once check reads, plus whether a button is contributed at all. The axis and
                 // the cardinality (issue #6800): the topic suffix the listener binds - a lifecycle one or
                 // a step-scoped one - and whether the create-from keeps its at-most-once lookup at all.
-                "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "backRefProperty", "isStep", "stepProcess",
-                "stepName", "appendMode",
+                // guardCondition (issue #6957) is the COMPLETE pre-rendered guard - the status term AND
+                // any string-field terms of a `when` list; the property/value pair stays beside it for
+                // the javadoc and for a .glue written before the condition existed.
+                "fromPk", "eventOnly", "hasEvent", "isCreate", "guardProperty", "guardValue", "guardCondition", "backRefProperty", "isStep",
+                "stepProcess", "stepName", "appendMode",
                 // The state half of that guard (issue #6814): which of the target's statuses retire it, so
                 // a cancelled or voided document stops blocking its replacement. Gated on the boolean - a
                 // .glue written before this key existed keeps the existence-only guard it always had.
