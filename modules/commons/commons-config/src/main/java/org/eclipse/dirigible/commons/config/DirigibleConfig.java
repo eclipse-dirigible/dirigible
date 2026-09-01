@@ -238,7 +238,7 @@ public enum DirigibleConfig {
     INTENT_AI_API_KEY("DIRIGIBLE_INTENT_AI_API_KEY", null),
 
     /** Claude model the Intent Editor's AI assistant talks to. */
-    INTENT_AI_MODEL("DIRIGIBLE_INTENT_AI_MODEL", "claude-opus-4-8"),
+    INTENT_AI_MODEL("DIRIGIBLE_INTENT_AI_MODEL", "claude-opus-5"),
 
     /** Base URL of the Anthropic-compatible API the Intent assistant calls. */
     INTENT_AI_BASE_URL("DIRIGIBLE_INTENT_AI_BASE_URL", "https://api.anthropic.com"),
