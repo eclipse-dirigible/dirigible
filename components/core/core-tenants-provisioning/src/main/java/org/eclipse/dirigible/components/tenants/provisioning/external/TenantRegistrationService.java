@@ -41,6 +41,22 @@ class TenantRegistrationService {
     /** Marks the tenants this API owns, so an operator can tell them from the ones created by hand. */
     static final String LOCATION = "TENANT_PROVISIONING_API";
 
+    /**
+     * The artefact location of a tenant: the marker above, made unique by the tenant's own id.
+     *
+     * <p>
+     * An artefact's unique key is {@code type:location:name}, so a constant location would make the
+     * <em>display name</em> the unique part - and display names are not unique. Two customers may both
+     * be called "Acme Ltd", and the second registration would fail on the key index. The tenant id is
+     * the identity here (ADR-010, ids are shared across applications), so it belongs in the key.
+     *
+     * @param tenantId the tenant id
+     * @return the location
+     */
+    private static String locationOf(String tenantId) {
+        return LOCATION + "/" + tenantId;
+    }
+
     /** The tenant service. */
     private final TenantService tenantService;
 
@@ -85,11 +101,13 @@ class TenantRegistrationService {
                                                               .isBlank()) {
                 tenant.setSubdomain(parameter.getSubdomain());
             }
+            // also converges a tenant registered before the location carried the id
+            tenant.setLocation(locationOf(tenantId));
             tenant.updateKey();
             return new RegistrationResult(toState(tenantService.save(tenant)), false);
         }
 
-        Tenant tenant = new Tenant(LOCATION, parameter.getName(), "Registered by the tenant provisioning API", subdomain,
+        Tenant tenant = new Tenant(locationOf(tenantId), parameter.getName(), "Registered by the tenant provisioning API", subdomain,
                 TenantStatus.PENDING_ACTIVATION);
         tenant.setId(tenantId);
         tenant.updateKey();

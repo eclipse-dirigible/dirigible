@@ -137,6 +137,45 @@ class TenantProvisioningApiIT extends IntegrationTest {
      * Every refusal has to say why. The caller is a program that must act differently on each one, and
      * the operator reading its logs learns nothing from a bare status either.
      */
+    /**
+     * Two tenants may carry the same display name - two customers really can both be "Acme Ltd".
+     *
+     * <p>
+     * A tenant is an artefact, and an artefact's unique key is {@code type:location:name}. Registering
+     * under a constant location made the display name the unique part, so the second tenant of that
+     * name hit {@code UK_DIRIGIBLE_TENANTS_ARTEFACT_KEY} and the caller got an unhandled 500. Asserted
+     * against the real index rather than against the composed key, since that is where it failed.
+     */
+    @Test
+    void twoTenantsMayShareADisplayName() {
+        restAssuredExecutor.execute(() -> {
+            register("provisioning-api-it-twin-a", "Acme Ltd").then()
+                                                              .statusCode(201);
+            register("provisioning-api-it-twin-b", "Acme Ltd").then()
+                                                              .statusCode(201);
+        });
+
+        assertTrue(tenantService.findById("provisioning-api-it-twin-a")
+                                .isPresent());
+        assertTrue(tenantService.findById("provisioning-api-it-twin-b")
+                                .isPresent());
+    }
+
+    /** Renaming a tenant onto a name another tenant already uses is likewise not a collision. */
+    @Test
+    void aTenantMayBeRenamedOntoAnotherTenantsName() {
+        restAssuredExecutor.execute(() -> {
+            register("provisioning-api-it-rename-a", "Original").then()
+                                                                .statusCode(201);
+            register("provisioning-api-it-rename-b", "Other").then()
+                                                             .statusCode(201);
+
+            register("provisioning-api-it-rename-b", "Original").then()
+                                                                .statusCode(200)
+                                                                .body("name", equalTo("Original"));
+        });
+    }
+
     @Test
     void anIdThatCannotBeAnIdentityProviderGroupSegmentIsRefused() {
         restAssuredExecutor.execute(() -> {

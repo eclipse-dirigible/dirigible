@@ -11,14 +11,17 @@ package org.eclipse.dirigible.components.tenants.provisioning.external;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
@@ -26,6 +29,7 @@ import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -119,6 +123,41 @@ class TenantRegistrationServiceTest {
                                        .subdomain());
     }
 
+    /**
+     * Display names are not unique - two customers may both be "Acme Ltd" - so the tenant's artefact
+     * key must not be derived from one.
+     *
+     * <p>
+     * An artefact key is {@code type:location:name}; with a constant location the display name became
+     * the unique part, and the second tenant of that name hit the key index and left the caller with an
+     * unhandled 500. The tenant id is the identity, so it is what makes the key unique.
+     */
+    @Test
+    void twoTenantsMayShareADisplayName() {
+        service.register(ACME, parameter("Acme Ltd", null));
+        service.register("acme-two", parameter("Acme Ltd", null));
+
+        ArgumentCaptor<Tenant> captor = ArgumentCaptor.forClass(Tenant.class);
+        verify(tenantService, times(2)).save(captor.capture());
+        List<Tenant> saved = captor.getAllValues();
+        assertNotEquals(saved.get(0)
+                             .getKey(),
+                saved.get(1)
+                     .getKey(),
+                "tenants sharing a display name must still have distinct artefact keys");
+    }
+
+    /** Renaming a tenant onto a name another tenant already uses is likewise not a collision. */
+    @Test
+    void aTenantMayBeRenamedOntoAnotherTenantsName() {
+        Tenant existing = tenant(ACME, "Acme Ltd", ACME, TenantStatus.PENDING_ACTIVATION);
+        when(tenantService.findById(ACME)).thenReturn(Optional.of(existing));
+
+        service.register(ACME, parameter("Globex", null));
+
+        assertEquals("tenant:TENANT_PROVISIONING_API/acme:Globex", existing.getKey());
+    }
+
     @Test
     void anIdThatCannotBeAGroupSegmentIsRefused() {
         ResponseStatusException ex =
@@ -182,8 +221,9 @@ class TenantRegistrationServiceTest {
     }
 
     private static Tenant tenant(String id, String name, String subdomain, TenantStatus status) {
-        Tenant tenant = new Tenant(TenantRegistrationService.LOCATION, name, "", subdomain, status);
+        Tenant tenant = new Tenant(TenantRegistrationService.LOCATION + "/" + id, name, "", subdomain, status);
         tenant.setId(id);
+        tenant.updateKey();
         return tenant;
     }
 }
