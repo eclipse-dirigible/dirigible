@@ -113,7 +113,7 @@ public class IntentEndpoint {
         try {
             model = IntentParser.parse(yaml);
         } catch (IntentValidationException e) {
-            return ResponseEntity.unprocessableEntity()
+            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
                                  .body(Map.of("issues", e.getIssues()));
         }
         String projectRoot = null;
@@ -131,10 +131,20 @@ public class IntentEndpoint {
             return ResponseEntity.ok(Map.of("model", model, "issues", issues));
         } catch (RuntimeException e) {
             // The dry-run machinery failing is not the document's fault: answer with the parse verdict
-            // alone rather than blocking the caller on an internal error.
-            LOGGER.error("Intent dry-run validation failed for [{}/{}/{}]", workspace, project, path, e);
+            // alone rather than blocking the caller on an internal error. The coordinates arrive in
+            // user-controlled URL parameters, so they are scrubbed before they reach the log.
+            LOGGER.error("Intent dry-run validation failed for [{}/{}/{}]", sanitizeForLog(workspace), sanitizeForLog(project),
+                    sanitizeForLog(path), e);
             return ResponseEntity.ok(Map.of("model", model, "issues", List.of()));
         }
+    }
+
+    /**
+     * Strip CR/LF and stray control characters from a value that arrives in a user-controlled request
+     * segment before it reaches the log, so a crafted request cannot forge log entries.
+     */
+    private static String sanitizeForLog(String value) {
+        return value == null ? "null" : value.replaceAll("[\\r\\n\\t]", "_");
     }
 
     /**
@@ -174,7 +184,8 @@ public class IntentEndpoint {
             return ResponseEntity.unprocessableEntity()
                                  .body(Map.of("issues", e.getIssues()));
         } catch (RuntimeException e) {
-            LOGGER.error("Intent generation failed for [{}/{}/{}]", workspace, project, path, e);
+            LOGGER.error("Intent generation failed for [{}/{}/{}]", sanitizeForLog(workspace), sanitizeForLog(project),
+                    sanitizeForLog(path), e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Generation failed: " + e.getMessage(), e);
         }
     }
