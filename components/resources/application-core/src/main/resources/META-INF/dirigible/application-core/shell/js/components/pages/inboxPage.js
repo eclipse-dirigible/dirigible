@@ -20,6 +20,9 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('inboxPage', () => ({
     ...basePage(),
     searchTerm: '',
+    // Task ordering is client-side (the house style — see the entity list views' sortedItems). The
+    // backend returns tasks unordered, so default to newest-first and let the user flip the direction.
+    sortDir: 'desc',
     selectedId: null,
     autoRefresh: false,
     lastUpdated: null,
@@ -54,12 +57,30 @@ document.addEventListener('alpine:init', () => {
 
     get filtered() {
       const q = this.searchTerm.trim().toLowerCase();
-      if (!q) return this.tasks;
+      const store = Alpine.store('processTasks');
       // Filter on what the row actually reads — the translated names — as well as the raw ones, so
       // typing what is on screen finds it in any language.
-      const store = Alpine.store('processTasks');
-      return this.tasks.filter(t => [store.taskLabel(t), t.name, t.processDefinitionName, t.processInstanceBusinessKey, t.assignee]
-        .some(v => v && String(v).toLowerCase().includes(q)));
+      const base = q
+        ? this.tasks.filter(t => [store.taskLabel(t), t.name, t.processDefinitionName, t.processInstanceBusinessKey, t.assignee]
+            .some(v => v && String(v).toLowerCase().includes(q)))
+        : this.tasks;
+      return this.sortByTime(base);
+    },
+
+    // Order by task creation time (a copy — the store's list is shared with the notification bell).
+    // A task missing a createTime sinks to the bottom either way, rather than jumping to the top.
+    sortByTime(list) {
+      const dir = this.sortDir === 'asc' ? 1 : -1;
+      return [...list].sort((a, b) => {
+        const ta = a.createTime ? new Date(a.createTime).getTime() : 0;
+        const tb = b.createTime ? new Date(b.createTime).getTime() : 0;
+        return (ta - tb) * dir;
+      });
+    },
+
+    toggleSort() {
+      this.sortDir = this.sortDir === 'desc' ? 'asc' : 'desc';
+      this.refreshIcons();
     },
 
     get selected() { return this.tasks.find(t => t.id === this.selectedId) || null; },

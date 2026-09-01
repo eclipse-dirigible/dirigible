@@ -45,6 +45,8 @@
     "inbox": {
       "refresh": "Обнови",
       "filterTasks": "Филтриране на задачи...",
+      "sortNewestFirst": "Първо най-новите",
+      "sortOldestFirst": "Първо най-старите",
       "noTasks": "Няма задачи",
       "noTasksHint": "Нямате чакащи задачи.",
       "claimOpen": "Поеми и отвори",

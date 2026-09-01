@@ -45,6 +45,8 @@
     "inbox": {
       "refresh": "Refresh",
       "filterTasks": "Filter tasks...",
+      "sortNewestFirst": "Newest first",
+      "sortOldestFirst": "Oldest first",
       "noTasks": "No tasks",
       "noTasksHint": "You have no pending tasks.",
       "claimOpen": "Claim & open",
