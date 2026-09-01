@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.listeners.config;
 
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import jakarta.jms.Connection;
@@ -26,6 +27,7 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.ContextStartedEvent;
 import org.springframework.context.event.ContextStoppedEvent;
@@ -60,6 +62,10 @@ class CloseActiveMQResourcesApplicationListenerTest {
     @Mock
     private ListenersManager listenersManager;
 
+    /** The bean factory. */
+    @Mock
+    private ConfigurableListableBeanFactory beanFactory;
+
     /** The closed event. */
     @Mock
     private ContextClosedEvent closedEvent;
@@ -73,14 +79,17 @@ class CloseActiveMQResourcesApplicationListenerTest {
     private ContextStartedEvent startedEvent;
 
     /**
-     * By default the deployment runs the embedded broker. Lenient because the tests which assert that a
-     * non-applicable event is ignored never reach the broker at all.
+     * By default the deployment runs the embedded broker and the messaging has attached. Lenient
+     * because the tests which assert that a non-applicable event is ignored never reach either.
      */
     @BeforeEach
     void setUp() {
         Mockito.lenient()
                .when(brokerProvider.getIfAvailable())
                .thenReturn(broker);
+        Mockito.lenient()
+               .when(beanFactory.containsSingleton("ActiveMQConnection"))
+               .thenReturn(true);
     }
 
     /**
@@ -225,4 +234,22 @@ class CloseActiveMQResourcesApplicationListenerTest {
         verifyNoInteractions(broker);
     }
 
+
+    /**
+     * An instance that never took the shared message store never opened a connection. Resolving one
+     * here just to close it would either be pointless work or, against a broker that is still not the
+     * master, a shutdown that hangs.
+     *
+     * @throws Exception the exception
+     */
+    @Test
+    void testMessagingThatNeverAttachedIsNotOpenedJustToBeClosed() throws Exception {
+        when(beanFactory.containsSingleton("ActiveMQConnection")).thenReturn(false);
+
+        listener.onApplicationEvent(closedEvent);
+
+        verifyNoInteractions(session, connection);
+        verify(listenersManager).stopListeners();
+        verify(broker).stop();
+    }
 }
