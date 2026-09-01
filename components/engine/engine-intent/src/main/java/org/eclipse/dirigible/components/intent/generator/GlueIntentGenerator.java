@@ -643,7 +643,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                         + " own repository, which the [" + rollup.getModel() + "] model generates.";
                 LOGGER.warn(warning);
                 if (context != null) {
-                    context.addIssue(warning);
+                    // An ADVISORY, not an issue: no change to THIS document installs that guard, so the
+                    // assistant's repair loop must never be asked to fix it (dirigible #6956).
+                    context.addAdvisory(warning);
                 }
             }
             base.put("capacityField", withCapacity ? IntentNaming.pascalCase(rollup.getCapacity()) : "");

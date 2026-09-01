@@ -93,9 +93,12 @@ public class ServiceTaskHandlerGenerator implements IntentTargetGenerator {
                 }
                 String handler = IntentNaming.pascalCase(step.getName());
                 String fileName = "custom/" + handler + ".java";
-                if (context.getRepository()
-                           .getResource(context.getProjectRoot() + "/" + fileName)
-                           .exists()) {
+                // No repository/project to look into (a dry run over an unsaved proposal): nothing can
+                // exist, so the stub "is produced" - and the dry-run context then discards the write.
+                boolean canLookUp = context.getRepository() != null && context.getProjectRoot() != null;
+                if (canLookUp && context.getRepository()
+                                        .getResource(context.getProjectRoot() + "/" + fileName)
+                                        .exists()) {
                     continue; // preserve the developer's implementation
                 }
                 context.writeModelFile(fileName, stub(process.getName(), step.getName(), handler));
