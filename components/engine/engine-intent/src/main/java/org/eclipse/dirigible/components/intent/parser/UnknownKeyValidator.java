@@ -161,6 +161,68 @@ final class UnknownKeyValidator {
                 : " - did you mean [" + nearest + "]?";
     }
 
+    /**
+     * The hint for a key that is not declared where it was written. A misplaced key is the more common
+     * slip on the map-shaped features - {@code mode} written beside {@code event:} rather than inside
+     * it, {@code when} written inside a step binding rather than beside it - and it is the one a bare
+     * "unknown key" reads as "the platform does not support this", which is how a valid capability gets
+     * dropped from an intent instead of being moved one line.
+     *
+     * <p>
+     * The registered vocabularies already say where every map key IS legal, so an exact match elsewhere
+     * on the same feature is reported as a relocation. Only when the key is legal nowhere on the
+     * feature does this fall back to the fuzzy "did you mean" - an exact placement beats a near-miss
+     * guess.
+     *
+     * @param key the authored key
+     * @param owner the model class the key was written on, directly or inside one of its maps
+     * @param withinOwner the map path within that class ({@code event}, {@code event.onStepCompleted}),
+     *        or {@code null} when the key sits on the object itself
+     * @param here the vocabulary that rejected it
+     * @return the suffix to append to the issue message
+     */
+    private static String placement(String key, Class<?> owner, String withinOwner, Collection<String> here) {
+        if (withinOwner != null && keysOf(owner).containsKey(key)) {
+            return " - [" + key + "] is declared on the " + subject(owner) + " itself, not inside " + shape(withinOwner)
+                    + " - move it out one level";
+        }
+        String prefix = owner.getSimpleName() + "#";
+        for (Map.Entry<String, Set<String>> registered : MAP_KEYS.entrySet()) {
+            if (!registered.getKey()
+                           .startsWith(prefix)
+                    || !registered.getValue()
+                                  .contains(key)) {
+                continue;
+            }
+            String where = registered.getKey()
+                                     .substring(prefix.length());
+            if (!where.equals(withinOwner)) {
+                return " - [" + key + "] belongs inside " + shape(where) + " on this " + subject(owner) + " - move it there";
+            }
+        }
+        return suggestion(key, here);
+    }
+
+    /**
+     * A map path rendered as the YAML the author has to write: {@code `event: { onStepCompleted: ...
+     * }`}.
+     */
+    private static String shape(String withinOwner) {
+        int dot = withinOwner.indexOf('.');
+        return dot < 0 ? "`" + withinOwner + ":`"
+                : "`" + withinOwner.substring(0, dot) + ": { " + withinOwner.substring(dot + 1) + ": ... }`";
+    }
+
+    /**
+     * The feature's author-facing name: {@code GeneratesIntent} is what an author calls a `generates`.
+     */
+    private static String subject(Class<?> owner) {
+        String name = owner.getSimpleName();
+        return name.endsWith("Intent") ? name.substring(0, name.length() - "Intent".length())
+                                             .toLowerCase(Locale.ROOT)
+                : name;
+    }
+
     private static void walk(Object node, Class<?> type, String path, List<String> issues) {
         if (!(node instanceof Map<?, ?> map)) {
             return; // a wrong-shaped node is reported by the typed mapping, not here
@@ -170,13 +232,13 @@ final class UnknownKeyValidator {
             String key = String.valueOf(entry.getKey());
             Field field = declared.get(key);
             if (field == null) {
-                issues.add("unknown key [" + key + "] " + at(path) + suggestion(key, declared.keySet()));
+                issues.add("unknown key [" + key + "] " + at(path) + placement(key, type, null, declared.keySet()));
                 continue;
             }
             String childPath = path.isEmpty() ? key : path + "." + key;
             Set<String> vocabulary = MAP_KEYS.get(type.getSimpleName() + "#" + key);
             if (vocabulary != null) {
-                walkMap(entry.getValue(), vocabulary, type.getSimpleName() + "#" + key, childPath, issues);
+                walkMap(entry.getValue(), vocabulary, type, key, childPath, issues);
                 continue;
             }
             descend(entry.getValue(), field.getGenericType(), childPath, issues);
@@ -187,19 +249,20 @@ final class UnknownKeyValidator {
      * Check a closed-vocabulary map, and any registered map nested one level inside it (a step-event
      * binding's {@code { process, step }} under {@code event: { onStepReached: ... }}).
      */
-    private static void walkMap(Object node, Set<String> vocabulary, String registration, String path, List<String> issues) {
+    private static void walkMap(Object node, Set<String> vocabulary, Class<?> owner, String withinOwner, String path, List<String> issues) {
         if (!(node instanceof Map<?, ?> map)) {
             return; // a wrong-shaped node is reported by the feature's own validator
         }
+        String registration = owner.getSimpleName() + "#" + withinOwner;
         for (Map.Entry<?, ?> entry : map.entrySet()) {
             String key = String.valueOf(entry.getKey());
             if (!vocabulary.contains(key)) {
-                issues.add("unknown key [" + key + "] " + at(path) + suggestion(key, vocabulary));
+                issues.add("unknown key [" + key + "] " + at(path) + placement(key, owner, withinOwner, vocabulary));
                 continue;
             }
             Set<String> nested = MAP_KEYS.get(registration + "." + key);
             if (nested != null) {
-                walkMap(entry.getValue(), nested, registration + "." + key, path + "." + key, issues);
+                walkMap(entry.getValue(), nested, owner, withinOwner + "." + key, path + "." + key, issues);
             }
         }
     }

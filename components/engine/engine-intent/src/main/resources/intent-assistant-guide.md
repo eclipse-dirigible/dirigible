@@ -2765,13 +2765,21 @@ so before binding a reaction, check what the thing you care about publishes.
 | A `transitions:` button (void / cancel / reopen) | `-transitioned` | the same three |
 | `generates` `sourceStatus:` flipping the source | `-transitioned` | the same three |
 | `generates` `sourceStatusOnRetire:` returning the source | `-transitioned` | the same three (this is how the reissue re-fires) |
+| A `resolves:` outcome routing by `setStatus:` | `-transitioned` | `postings:`, `generates` `event: { onTransition }`, `abortOn:` |
 | A `userTask` / `serviceTask` being reached or completed | a per-step topic | `onStepReached` / `onStepCompleted` |
 | A hand-written listener announcing a declared `phases:` entry | that phase's own topic | `onPhase` |
 
 **Deliberately silent, and correct** - each of these would re-trigger its own handler if it published:
-the process trigger writing `ProcessId` back, an `expansions:` child-count write, and a `resolves:`
-lookup filling its relation (that one is what `outcome:` is for - stamp the attempt into a string
-field a list filter or a `decision` can read, instead of waiting for an event).
+the process trigger writing `ProcessId` back, an `expansions:` child-count write, and the relation-fill
+half of a `resolves:` lookup (its `outcome:` trace goes out on the same silent write - stamp it into a
+string field a list filter or a `decision` can read).
+
+Note what that does NOT say: a `resolves:` outcome that routes the record with `setStatus:` publishes
+`-transitioned` on the routing write, exactly as a manual transition does. That publish is what makes
+the automatic path observable at all, so **the outcomes of a lookup are bindable** - a `generates:` or
+`postings:` on `event: { onTransition: ..., when: "Status == <the outcome's status>" }` is the normal
+way to log an identification or to create the document it unblocked. Reach for a hand-written
+listener only when no outcome routes by status.
 
 **Silent, and a trap: an enrichment a hand-written listener computes on create.** A costing listener
 that computes a movement's cost and writes it back must not publish (it would re-fire every onUpdate
@@ -3047,8 +3055,8 @@ resolves:
     between: { start: validFrom, end: validTo, value: violationAt }
     outcome: resolution                     # optional string field stamped found/notFound/ambiguous
     found:     { setStatus: IDENTIFIED }
-    notFound:  { setStatus: UNRESOLVED }
-    ambiguous: { setStatus: UNRESOLVED }
+    notFound:  { setStatus: NO_MATCH }
+    ambiguous: { setStatus: MULTIPLE_MATCHES }
 ```
 
 **The three outcomes are the whole point.** Exactly one covering register row fills the relation. NO
@@ -3056,6 +3064,36 @@ covering row and MORE THAN ONE covering row both leave it unset - a lookup never
 candidates, because a silently-wrong driver (or price, or approver) is worse than an unresolved
 record. Route each outcome with `setStatus` and/or record it with `outcome:` so the unresolved ones
 are a filterable worklist a human can finish, and so a process `decision` can branch on them.
+
+**Two outcomes you must tell apart downstream need two statuses.** Note that the example above routes
+`notFound` and `ambiguous` to DIFFERENT statuses, and that is not decoration. A `generates:` /
+`postings:` / process `trigger:` guard compares a **status** and nothing else - `when:` cannot read the
+`outcome:` string - so two outcomes sharing one status become permanently indistinguishable to every
+reaction downstream. If one needs a `NO_MATCH` audit row and the other a `MULTIPLE_MATCHES` one, or if
+they route to different fallback processes, they need separate statuses and separate seed rows. Reuse a
+single status only when nothing downstream cares which of the two happened.
+
+Because each outcome's `setStatus:` publishes `-transitioned` (see *which writes are observable*), the
+whole automatic path is bindable without writing any Java:
+
+```yaml
+generates:
+  - name: log-no-match                          # one audit row per failed lookup
+    from: Fine
+    to: FineLog
+    event: { onTransition: Fine, when: "Status == NO_MATCH", mode: append }
+    map: { fine: id, plateNumberChecked: vehicle.plateNumber, violationAtChecked: violationAt }
+    defaults: { event: "DRIVER_IDENTIFICATION_FAILED", reason: "NO_MATCH" }
+
+processes:
+  - name: ResolveNoMatch                        # a fallback process per failure kind:
+    trigger: { onTransition: Fine, when: "Status == NO_MATCH", businessKey: id }
+    steps:                                      # a process takes at most ONE trigger
+      - name: identify
+        kind: userTask
+        args: { assignee: officer, form: IdentifyDriver, setRelationField: Status, value: IDENTIFIED, next: done }
+      - { name: done, kind: end }
+```
 
 **Semantics worth knowing:**
 - The value copied is **derived**: the register must have exactly ONE to-one relation to the same
