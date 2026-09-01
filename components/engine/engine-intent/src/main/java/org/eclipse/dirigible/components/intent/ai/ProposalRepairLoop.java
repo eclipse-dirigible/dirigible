@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,10 +24,18 @@ import org.slf4j.LoggerFactory;
  * A model's first draft is checked server-side by the same machinery that will judge it later - the
  * intent parser for a proposed {@code app.intent}, the Java compiler for a proposed {@code .java} -
  * <em>before</em> it reaches the developer. An invalid proposal is replayed to the model as its own
- * assistant turn together with the issues, and a corrected complete proposal is requested, at most
+ * assistant turn together with the issues, and a correction is requested, at most
  * {@link #MAX_REPAIR_ROUNDS} times, so a stubbornly invalid proposal cannot spin the request
  * forever. After the last round the proposal is returned as-is with the outstanding issues, which
  * the caller is expected to surface rather than hide.
+ *
+ * <p>
+ * A proposal does not have to arrive as the finished document. The {@link Extractor} turns a reply
+ * into a {@link Proposal}, so a patch-shaped proposal (dirigible #6958) is materialized against the
+ * current document there - and a patch that cannot be applied comes back as a refusal carrying its
+ * own issues, which enters exactly the same repair round a validation failure does. That is the
+ * point: an unusable proposal is corrected by the model, never half-applied and never shown to the
+ * developer as if it were finished.
  */
 public final class ProposalRepairLoop {
 
@@ -58,6 +67,54 @@ public final class ProposalRepairLoop {
         ModelClient.ModelReply call(List<Map<String, Object>> messages);
     }
 
+    /**
+     * A proposal, read off the model's reply.
+     *
+     * @param content the complete proposed content to validate and return, or {@code null} when the
+     *        reply proposed nothing or the proposal could not be read
+     * @param replay what to replay to the model as its own turn when a repair round is needed - the
+     *        content itself for a whole-document proposal, the edits for a patch (the model corrects
+     *        the edits it wrote, and re-anchors them on the unchanged current document)
+     * @param replayFence the markdown fence language {@code replay} is replayed in, or {@code null} for
+     *        the loop's own
+     * @param issues why the proposal could not be read at all; empty when {@code content} stands
+     */
+    public record Proposal(String content, String replay, String replayFence, List<String> issues) {
+
+        /** Nothing was proposed - a clarifying question or a plain answer. */
+        public static Proposal none() {
+            return new Proposal(null, null, null, List.of());
+        }
+
+        /** A whole-document proposal, replayed as itself. */
+        public static Proposal of(String content) {
+            return new Proposal(content, content, null, List.of());
+        }
+
+        /** A patch that applied, replayed as the edits the model wrote. */
+        public static Proposal patched(String content, String edits) {
+            return new Proposal(content, edits, "json", List.of());
+        }
+
+        /** A proposal that could not be read; the model is asked to correct it. */
+        public static Proposal refused(String edits, List<String> issues) {
+            return new Proposal(null, edits, "json", List.copyOf(issues));
+        }
+    }
+
+    /** Reads the proposal out of a model reply. */
+    @FunctionalInterface
+    public interface Extractor {
+
+        /**
+         * Read the proposal.
+         *
+         * @param reply the model's reply
+         * @return the proposal, possibly empty or refused
+         */
+        Proposal read(ModelClient.ModelReply reply);
+    }
+
     /** Judges a proposal; an empty list accepts it. */
     @FunctionalInterface
     public interface Validator {
@@ -81,13 +138,13 @@ public final class ProposalRepairLoop {
     public record Outcome(ModelClient.ModelReply reply, String proposal, List<String> issues) {
     }
 
-    private final String proposalMember;
+    private final Extractor extractor;
     private final String fence;
     private final Validator validator;
     private final Function<List<String>, String> repairPrompt;
 
     /**
-     * Instantiates the loop for one kind of proposal.
+     * Instantiates the loop for a proposal that arrives as one whole-document tool argument.
      *
      * @param proposalMember the tool-input member carrying the proposed content, e.g. {@code yaml}
      * @param fence the markdown fence language the failed proposal is replayed in, e.g. {@code java}
@@ -95,7 +152,19 @@ public final class ProposalRepairLoop {
      * @param repairPrompt renders the corrective user turn from the outstanding issues
      */
     public ProposalRepairLoop(String proposalMember, String fence, Validator validator, Function<List<String>, String> repairPrompt) {
-        this.proposalMember = proposalMember;
+        this(reply -> Proposal.of(reply.toolString(proposalMember)), fence, validator, repairPrompt);
+    }
+
+    /**
+     * Instantiates the loop for one kind of proposal.
+     *
+     * @param extractor reads the proposal out of a reply, materializing it when it arrives as a patch
+     * @param fence the markdown fence language the failed proposal is replayed in, e.g. {@code java}
+     * @param validator judges a proposal server-side
+     * @param repairPrompt renders the corrective user turn from the outstanding issues
+     */
+    public ProposalRepairLoop(Extractor extractor, String fence, Validator validator, Function<List<String>, String> repairPrompt) {
+        this.extractor = extractor;
         this.fence = fence;
         this.validator = validator;
         this.repairPrompt = repairPrompt;
@@ -111,7 +180,7 @@ public final class ProposalRepairLoop {
      */
     public Outcome run(List<Map<String, Object>> messages, Round round) {
         ModelClient.ModelReply reply = round.call(messages);
-        String proposal = reply.toolString(proposalMember);
+        Proposal proposal = extractor.read(reply);
         List<String> issues = validate(proposal);
         for (int repair = 1; !issues.isEmpty() && repair <= MAX_REPAIR_ROUNDS; repair++) {
             LOGGER.info("AI proposal failed validation with [{}] issue(s); requesting a correction (round [{}] of [{}])", issues.size(),
@@ -119,10 +188,10 @@ public final class ProposalRepairLoop {
             messages.add(Map.of("role", "assistant", "content", proposalTurn(reply.text(), proposal)));
             messages.add(Map.of("role", "user", "content", repairPrompt.apply(issues)));
             reply = round.call(messages);
-            proposal = reply.toolString(proposalMember);
+            proposal = extractor.read(reply);
             issues = validate(proposal);
         }
-        return new Outcome(reply, proposal, issues);
+        return new Outcome(reply, proposal.content(), issues);
     }
 
     /**
@@ -143,14 +212,24 @@ public final class ProposalRepairLoop {
     }
 
     /**
-     * A reply that proposed nothing is a clarifying question or an answer - there is nothing to judge.
+     * A proposal that could not be read carries its own reasons; one that proposed nothing is a
+     * clarifying question or an answer - there is nothing to judge.
      */
-    private List<String> validate(String proposal) {
-        return proposal == null ? List.of() : validator.issues(proposal);
+    private List<String> validate(Proposal proposal) {
+        if (!proposal.issues()
+                     .isEmpty()) {
+            return proposal.issues();
+        }
+        return proposal.content() == null ? List.of() : validator.issues(proposal.content());
     }
 
     /** Replay a failed proposal as the assistant's turn, so the model can correct its own output. */
-    private String proposalTurn(String text, String proposal) {
-        return text + "\n\n```" + fence + "\n" + proposal + "\n```";
+    private String proposalTurn(String text, Proposal proposal) {
+        String explanation = StringUtils.defaultIfBlank(text, "(no explanation)");
+        if (proposal.replay() == null) {
+            return explanation;
+        }
+        String language = StringUtils.defaultIfBlank(proposal.replayFence(), fence);
+        return explanation + "\n\n```" + language + "\n" + proposal.replay() + "\n```";
     }
 }

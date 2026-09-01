@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.agent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayDeque;
@@ -22,6 +23,7 @@ import org.eclipse.dirigible.components.intent.ai.ModelClient;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationService;
 import org.junit.jupiter.api.Test;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -42,6 +44,9 @@ class IntentAgentServiceTest {
                   - { name: name,  type: string }
                   - { name: notes, type: text }
             """;
+
+    /** A document big enough for "re-emit the whole file" to be the cost that matters. */
+    private static final String LARGE_YAML = largeIntent();
 
     /** The exact first-proposal failure shape: {@code editable} lists a field not in {@code fields}. */
     private static final String INVALID_YAML = VALID_YAML + """
@@ -90,7 +95,7 @@ class IntentAgentServiceTest {
                                        .get("role"));
         assertTrue(assistantEcho.contains(INVALID_YAML), "the failed proposal is replayed as the assistant turn");
         assertTrue(repairTurn.contains("only a displayed field"), "the parser's issue text is sent back verbatim");
-        assertTrue(repairTurn.contains("corrected COMPLETE YAML"), "the repair instruction asks for a full re-proposal");
+        assertTrue(repairTurn.contains("Call propose_intent again"), "the repair instruction asks for a corrected proposal");
     }
 
     @Test
@@ -258,6 +263,126 @@ class IntentAgentServiceTest {
         assertEquals("Added notes.", reply.reply(), "no validation note is appended");
     }
 
+    @Test
+    void aPatchIsMaterializedAgainstTheCurrentDocumentAndCostsOnlyTheChange() {
+        // The point of the patch contract (dirigible #6958): a one-field edit to a large application
+        // sends the change, not the application - and what comes back is still the complete document.
+        JsonObject input = patch("Added a notes field to Entity7.",
+                edit("insertAfter", "      - { name: name7, type: string }", "\n      - { name: notes, type: text }"));
+
+        AgentReply reply = new ScriptedAgentService(new ModelClient.ModelReply("Added notes.", input)).chat(request(LARGE_YAML));
+
+        assertEquals(LARGE_YAML.replace("      - { name: name7, type: string }",
+                "      - { name: name7, type: string }\n      - { name: notes, type: text }"), reply.proposedYaml());
+        int emitted = new Gson().toJson(input)
+                                .length();
+        assertTrue(LARGE_YAML.length() > 2000, "the fixture is a document worth not re-emitting");
+        assertTrue(emitted * 10 < LARGE_YAML.length(),
+                () -> "the proposal cost [" + emitted + "] characters against a [" + LARGE_YAML.length() + "]-character document");
+    }
+
+    @Test
+    void aPatchThatCannotBeAppliedIsRefusedIntoTheRepairLoopRatherThanHalfApplied() {
+        JsonObject stale = patch("Try 1.", edit("replace", "  - name: Reservation", "  - name: Reservation\n    audit: true"),
+                edit("insertAfter", "      - { name: name7, type: string }", "\n      - { name: notes, type: text }"));
+        JsonObject corrected =
+                patch("Fixed.", edit("insertAfter", "      - { name: name7, type: string }", "\n      - { name: notes, type: text }"));
+        ScriptedAgentService service =
+                new ScriptedAgentService(new ModelClient.ModelReply("Try 1.", stale), new ModelClient.ModelReply("Fixed.", corrected));
+
+        AgentReply reply = service.chat(request(LARGE_YAML));
+
+        assertEquals(2, service.calls.size(), "the unapplicable patch is corrected by the model");
+        assertTrue(reply.proposedYaml()
+                        .contains("      - { name: notes, type: text }"));
+        assertTrue(reply.proposedYaml()
+                        .contains("      - { name: name7, type: string }"),
+                "the good edit of the refused patch was not applied on its own");
+        List<Map<String, Object>> secondCall = service.calls.get(1);
+        String assistantEcho = (String) secondCall.get(secondCall.size() - 2)
+                                                  .get("content");
+        String repairTurn = (String) secondCall.get(secondCall.size() - 1)
+                                               .get("content");
+        assertTrue(assistantEcho.contains("insertAfter"), "the model's own edits are replayed, not the document");
+        assertTrue(repairTurn.contains("not found"), "the anchor failure is sent back verbatim");
+        assertTrue(repairTurn.contains("- name: Reservation"), "and it names the anchor that missed");
+        assertTrue(repairTurn.contains("has not changed"), "the correction is re-anchored on the same document");
+    }
+
+    @Test
+    void aPatchThatNeverAppliesLeavesNoProposalAndSaysSo() {
+        JsonObject stale = patch("Try.", edit("replace", "  - name: Reservation", "x"));
+        ScriptedAgentService service = new ScriptedAgentService(new ModelClient.ModelReply("Try.", stale),
+                new ModelClient.ModelReply("Try.", stale), new ModelClient.ModelReply("Try.", stale),
+                new ModelClient.ModelReply("Try.", stale), new ModelClient.ModelReply("Try.", stale));
+
+        AgentReply reply = service.chat(request(LARGE_YAML));
+
+        assertEquals(1 + org.eclipse.dirigible.components.intent.ai.ProposalRepairLoop.MAX_REPAIR_ROUNDS, service.calls.size());
+        assertNull(reply.proposedYaml(), "a patch that will not apply produces no half-applied document");
+        assertTrue(reply.reply()
+                        .contains("could not be applied"),
+                "and the developer is told why, rather than shown an unchanged buffer");
+    }
+
+    @Test
+    void aToolCallCarryingNeitherEditsNorYamlIsSentBackForCorrection() {
+        JsonObject empty = new JsonObject();
+        empty.addProperty("explanation", "Done!");
+        ScriptedAgentService service = new ScriptedAgentService(new ModelClient.ModelReply("Done!", empty), proposal("Fixed.", VALID_YAML));
+
+        AgentReply reply = service.chat(request(LARGE_YAML));
+
+        assertEquals(2, service.calls.size());
+        assertEquals(VALID_YAML, reply.proposedYaml());
+    }
+
+    @Test
+    void aReplyCarryingBothEditsAndAWholeDocumentTakesTheDocument() {
+        // Only one can be authoritative; the whole document is the one that cannot half-apply.
+        JsonObject input = patch("Both.", edit("delete", "  - name: Entity1\n", null));
+        input.addProperty("yaml", VALID_YAML);
+
+        AgentReply reply = new ScriptedAgentService(new ModelClient.ModelReply("Both.", input)).chat(request(LARGE_YAML));
+
+        assertEquals(VALID_YAML, reply.proposedYaml());
+    }
+
+    private static String largeIntent() {
+        StringBuilder yaml = new StringBuilder("name: lib\nentities:\n");
+        for (int entity = 1; entity <= 40; entity++) {
+            yaml.append("  - name: Entity")
+                .append(entity)
+                .append("\n    fields:\n")
+                .append("      - { name: id,   type: integer, primaryKey: true, generated: true }\n")
+                .append("      - { name: name")
+                .append(entity)
+                .append(", type: string }\n");
+        }
+        return yaml.toString();
+    }
+
+    private static JsonObject patch(String explanation, JsonObject... edits) {
+        JsonObject input = new JsonObject();
+        input.addProperty("explanation", explanation);
+        JsonArray array = new JsonArray();
+        for (JsonObject edit : edits) {
+            array.add(edit);
+        }
+        input.add("edits", array);
+        return input;
+    }
+
+    private static JsonObject edit(String op, String anchor, String content) {
+        JsonObject edit = new JsonObject();
+        edit.addProperty("op", op);
+        edit.addProperty("anchor", anchor);
+        if (content != null) {
+            edit.addProperty("content", content);
+        }
+        return edit;
+    }
+
     private static ModelClient.ModelReply proposal(String text, String yaml) {
         JsonObject input = new JsonObject();
         input.addProperty("explanation", text);
@@ -266,7 +391,11 @@ class IntentAgentServiceTest {
     }
 
     private static AgentRequest request() {
-        return new AgentRequest("name: lib\n", "Add a notes field", List.of());
+        return request("name: lib\n");
+    }
+
+    private static AgentRequest request(String yaml) {
+        return new AgentRequest(yaml, "Add a notes field", List.of());
     }
 
     /** Overrides the upstream call with a scripted sequence of replies, recording each call's turns. */
