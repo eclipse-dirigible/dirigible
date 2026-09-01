@@ -152,6 +152,79 @@ class IntentAgentServiceTest {
     }
 
     @Test
+    void theCoverageAuditReachesTheEditorAsStructure() {
+        // The completeness contract (dirigible #6997): the requirement-by-requirement mapping arrives
+        // as data, a malformed entry is dropped, and an uncovered requirement is impossible to miss -
+        // it is appended to the reply the way outstanding validation issues are.
+        JsonObject input = new JsonObject();
+        input.addProperty("explanation", "Added the notes field.");
+        input.addProperty("yaml", VALID_YAML);
+        JsonArray coverage = new JsonArray();
+        JsonObject covered = new JsonObject();
+        covered.addProperty("requirement", "members carry free-text notes");
+        covered.addProperty("construct", "entities: Member (fields: notes)");
+        coverage.add(covered);
+        JsonObject uncovered = new JsonObject();
+        uncovered.addProperty("requirement", "every note edit is recorded in an audit log");
+        uncovered.addProperty("construct", "none");
+        coverage.add(uncovered);
+        JsonObject malformed = new JsonObject();
+        malformed.addProperty("construct", "no requirement named");
+        coverage.add(malformed);
+        input.add("coverage", coverage);
+
+        ScriptedAgentService service = new ScriptedAgentService(new ModelClient.ModelReply("Here you go.", input));
+
+        AgentReply reply = service.chat(request());
+
+        assertEquals(2, reply.coverage()
+                             .size(),
+                "a malformed entry is dropped rather than failing the turn");
+        assertEquals("entities: Member (fields: notes)", reply.coverage()
+                                                              .get(0)
+                                                              .construct());
+        assertTrue(reply.reply()
+                        .contains("NOT carried by it"),
+                "the uncovered requirement is announced in the reply");
+        assertTrue(reply.reply()
+                        .contains("every note edit is recorded in an audit log"));
+    }
+
+    @Test
+    void aFullyCoveredProposalAppendsNoWarning() {
+        JsonObject input = new JsonObject();
+        input.addProperty("explanation", "Added notes.");
+        input.addProperty("yaml", VALID_YAML);
+        JsonArray coverage = new JsonArray();
+        JsonObject covered = new JsonObject();
+        covered.addProperty("requirement", "members carry free-text notes");
+        covered.addProperty("construct", "entities: Member (fields: notes)");
+        coverage.add(covered);
+        input.add("coverage", coverage);
+
+        ScriptedAgentService service = new ScriptedAgentService(new ModelClient.ModelReply("Added notes.", input));
+
+        AgentReply reply = service.chat(request());
+
+        assertEquals(1, reply.coverage()
+                             .size());
+        assertEquals("Added notes.", reply.reply(), "a clean audit adds nothing to the reply");
+    }
+
+    @Test
+    void aReplyWithoutACoverageAuditStillAnswers() {
+        // An older transcript replayed against the new contract, or a plain-text answer: absence is
+        // an empty list, never a failure.
+        ScriptedAgentService service = new ScriptedAgentService(proposal("Added notes.", VALID_YAML));
+
+        AgentReply reply = service.chat(request());
+
+        assertTrue(reply.coverage()
+                        .isEmpty());
+        assertEquals("Added notes.", reply.reply());
+    }
+
+    @Test
     void aProposalThatParsesButFailsGenerationIsSentBackForCorrection() {
         // The band the parser cannot see (dirigible #6956): the proposal is structurally valid, but the
         // generation pass would refuse or drop a piece of it. The dry run's issues must reach the

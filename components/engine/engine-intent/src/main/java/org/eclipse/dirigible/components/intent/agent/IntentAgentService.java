@@ -82,17 +82,40 @@ class IntentAgentService {
      * The proposal's shape. {@code boundaries} is the structured half of the honesty contract: a
      * requirement the DSL cannot express must arrive as data the editor can render distinctly and the
      * developer can forward verbatim, not buried in prose that reads like the rest of the answer.
+     *
+     * <p>
+     * {@code coverage} is the completeness half (dirigible #6997): a REQUIRED requirement-by-
+     * requirement mapping of the request onto the proposal. The server cannot verify the mapping - both
+     * sides are prose - but demanding the enumeration makes the model walk the request while it still
+     * holds the pen, so an omission stops being a thing nobody looked at and becomes a hole in a list
+     * the model itself is writing. The mapping then reaches the developer as structure.
      */
     private static Map<String, Object> inputSchema() {
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("explanation", Map.of("type", "string", "description", "A short, plain explanation of what changed and why."));
         properties.put("yaml", Map.of("type", "string", "description", "The COMPLETE updated app.intent YAML document."));
+        properties.put("coverage",
+                Map.of("type", "array", "description",
+                        "EVERY discrete requirement in the developer's request, one entry each, mapped to what carries it. "
+                                + "Enumerate the request first, then map: a requirement you cannot map to a construct is a defect to fix "
+                                + "before proposing, not a footnote. For a small edit the list is small - it is never empty.",
+                        "items", coverageItemSchema()));
         properties.put("boundaries",
                 Map.of("type", "array", "description",
                         "Every requirement this proposal could NOT express in the intent - one entry each, "
                                 + "including ones the proposal omits entirely. Empty when the request fit inside the DSL.",
                         "items", boundaryItemSchema()));
-        return Map.of("type", "object", "properties", properties, "required", List.of("explanation", "yaml"));
+        return Map.of("type", "object", "properties", properties, "required", List.of("explanation", "yaml", "coverage"));
+    }
+
+    private static Map<String, Object> coverageItemSchema() {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("requirement", Map.of("type", "string", "description", "One discrete requirement, in the developer's own words."));
+        properties.put("construct", Map.of("type", "string", "description",
+                "The construct(s) of the proposed YAML that carry it, named precisely (e.g. \"generates: log-no-match (defaults: reason)\"). "
+                        + "Use \"boundary\" when a boundaries entry carries it instead, and \"none\" when the proposal does not carry it "
+                        + "- never leave a requirement out of this list to avoid saying \"none\"."));
+        return Map.of("type", "object", "properties", properties, "required", List.of("requirement", "construct"));
     }
 
     private static Map<String, Object> boundaryItemSchema() {
@@ -136,7 +159,44 @@ class IntentAgentService {
                     .isEmpty()) {
             reply += "\n\nNote: this proposal still fails intent validation:\n" + ProposalRepairLoop.bulleted(outcome.issues());
         }
-        return new AgentReply(reply, outcome.proposal(), boundaries(outcome.reply()));
+        List<AgentCoverage> coverage = coverage(outcome.reply());
+        List<String> uncovered = coverage.stream()
+                                         .filter(AgentCoverage::uncovered)
+                                         .map(AgentCoverage::requirement)
+                                         .toList();
+        if (!uncovered.isEmpty()) {
+            // The model's own audit found holes and proposed anyway - make them impossible to miss,
+            // exactly the way outstanding validation issues are surfaced (dirigible #6997).
+            reply += "\n\nNote: by the proposal's own coverage audit, these requirements are NOT carried by it:\n"
+                    + ProposalRepairLoop.bulleted(uncovered);
+        }
+        return new AgentReply(reply, outcome.proposal(), boundaries(outcome.reply()), coverage);
+    }
+
+    /**
+     * The requirement-coverage audit, in the order the model listed it (dirigible #6997). A malformed
+     * entry is dropped rather than failing the turn, and an absent audit is an empty list - an older
+     * transcript replayed against this contract must still answer.
+     */
+    private static List<AgentCoverage> coverage(ModelClient.ModelReply reply) {
+        JsonObject input = reply.toolInput();
+        if (input == null || !input.has("coverage") || !input.get("coverage")
+                                                             .isJsonArray()) {
+            return List.of();
+        }
+        List<AgentCoverage> coverage = new ArrayList<>();
+        for (JsonElement element : input.getAsJsonArray("coverage")) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject entry = element.getAsJsonObject();
+            String requirement = member(entry, "requirement");
+            if (StringUtils.isBlank(requirement)) {
+                continue;
+            }
+            coverage.add(new AgentCoverage(requirement, member(entry, "construct")));
+        }
+        return coverage;
     }
 
     /**
