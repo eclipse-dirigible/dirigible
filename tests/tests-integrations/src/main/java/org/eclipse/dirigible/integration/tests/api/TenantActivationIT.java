@@ -38,6 +38,7 @@ import org.eclipse.dirigible.components.initializers.synchronizer.Synchronizatio
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
 import org.eclipse.dirigible.database.sql.SqlFactory;
+import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
@@ -391,14 +392,23 @@ class TenantActivationIT extends IntegrationTest {
      * The assertion the whole test exists for: the per-tenant artefact is physically there, in the
      * schema the external provisioner created, reached through the data source the API registered.
      *
+     * <p>
+     * Both identifiers are quoted with the dialect's own escape symbol, because both were created
+     * quoted - the schema by {@link #createDatabaseUserAndSchema(String)} and the table by the
+     * platform's table processor. An unquoted name is folded by the database (down on PostgreSQL, up on
+     * H2), so it only happens to match on a database that folds the way the identifier was written.
+     *
      * @throws SQLException if the table cannot be read
      */
     private void assertPerTenantTableExists() throws SQLException {
         DirigibleDataSource tenantDataSource = dataSourcesManager.getDataSource(TENANT_ID + "_DefaultDB");
+        char escape = SqlDialectFactory.getDialect(tenantDataSource)
+                                       .getEscapeSymbol();
+        String qualifiedTable = escape + SCHEMA + escape + "." + escape + TABLE + escape;
         try (Connection connection = tenantDataSource.getConnection();
                 Statement statement = connection.createStatement();
-                ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM " + SCHEMA + "." + TABLE)) {
-            assertTrue(resultSet.next(), "table " + SCHEMA + "." + TABLE + " must exist in the tenant's schema");
+                ResultSet resultSet = statement.executeQuery("SELECT COUNT(*) FROM " + qualifiedTable)) {
+            assertTrue(resultSet.next(), "table " + qualifiedTable + " must exist in the tenant's schema");
         }
     }
 }
