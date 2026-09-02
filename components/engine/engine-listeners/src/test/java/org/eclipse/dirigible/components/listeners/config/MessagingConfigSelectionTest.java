@@ -10,15 +10,21 @@
 package org.eclipse.dirigible.components.listeners.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.util.Arrays;
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.activemq.broker.BrokerService;
+import org.eclipse.dirigible.components.listeners.service.MessageConsumer;
+import org.eclipse.dirigible.components.listeners.service.MessageProducer;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.DependsOn;
+import org.springframework.context.annotation.Lazy;
+import jakarta.jms.Session;
 
 /**
  * Pins the shape of the two messaging configurations. The wiring is asserted by reflection rather
@@ -68,6 +74,61 @@ class MessagingConfigSelectionTest {
         assertThat(beanTypes(ExternalBrokerMessagingConfig.class)).doesNotContain(BrokerService.class);
         assertThat(Arrays.stream(ExternalBrokerMessagingConfig.class.getDeclaredMethods())
                          .anyMatch(method -> null != method.getAnnotation(DependsOn.class))).isFalse();
+    }
+
+    /**
+     * Against a message store shared with the other instances of the deployment, the embedded broker
+     * may still be waiting for its lease when the context finishes refreshing - so nothing that needs a
+     * running broker may be instantiated while the context refreshes. The external mode keeps
+     * connecting eagerly: an unreachable external broker is a misconfiguration, and failing the startup
+     * on it is deliberate.
+     */
+    @Test
+    void testOnlyTheEmbeddedModeAttachesOnFirstUse() {
+        assertThat(isLazy(EmbeddedBrokerMessagingConfig.class, "createConnection")).isTrue();
+        assertThat(isLazy(EmbeddedBrokerMessagingConfig.class, "createSession")).isTrue();
+
+        assertThat(isLazy(ExternalBrokerMessagingConfig.class, "createConnection")).isFalse();
+        assertThat(isLazy(ExternalBrokerMessagingConfig.class, "createSession")).isFalse();
+    }
+
+    /**
+     * A lazy bean definition only defers what nothing else pulls in eagerly, so every singleton that
+     * takes the session has to accept it lazily too.
+     */
+    @Test
+    void testTheSessionConsumersTakeItLazily() {
+        assertThat(sessionParameterOf(MessageProducer.class).getAnnotation(Lazy.class)).isNotNull();
+        assertThat(sessionParameterOf(MessageConsumer.class).getAnnotation(Lazy.class)).isNotNull();
+    }
+
+    /**
+     * Whether a bean method is annotated lazy.
+     *
+     * @param configClass the configuration class
+     * @param methodName the bean method name
+     * @return true, if the bean attaches on first use
+     */
+    private static boolean isLazy(Class<?> configClass, String methodName) {
+        return Arrays.stream(configClass.getDeclaredMethods())
+                     .filter(method -> methodName.equals(method.getName()) && null != method.getAnnotation(Bean.class))
+                     .findFirst()
+                     .map(method -> null != method.getAnnotation(Lazy.class))
+                     .orElseThrow(() -> new AssertionError("No bean method [" + methodName + "] in " + configClass));
+    }
+
+    /**
+     * The session parameter of a class' single constructor.
+     *
+     * @param consumerClass the class taking a session
+     * @return the parameter
+     */
+    private static Parameter sessionParameterOf(Class<?> consumerClass) {
+        Constructor<?> constructor = consumerClass.getDeclaredConstructors()[0];
+        return Arrays.stream(constructor.getParameters())
+                     .filter(parameter -> Session.class.equals(parameter.getType()))
+                     .findFirst()
+                     .orElseThrow(() -> new AssertionError("No session parameter in " + consumerClass));
     }
 
     /**

@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.lang.IllegalStateException;
@@ -39,11 +40,12 @@ public class MessageConsumer {
     /**
      * Instantiates a new message consumer.
      *
-     * @param session the session
+     * @param session the session, resolved on first use - the embedded broker may still be waiting for
+     *        the shared message store when the context finishes refreshing
      * @param destinationNameManager the destination name manager
      */
     @Autowired
-    MessageConsumer(@Qualifier("ActiveMQSession") Session session, DestinationNameManager destinationNameManager) {
+    MessageConsumer(@Lazy @Qualifier("ActiveMQSession") Session session, DestinationNameManager destinationNameManager) {
         this.session = session;
         this.destinationNameManager = destinationNameManager;
     }
