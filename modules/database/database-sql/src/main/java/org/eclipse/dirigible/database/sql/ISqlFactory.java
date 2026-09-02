@@ -11,6 +11,8 @@ package org.eclipse.dirigible.database.sql;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
 
 import org.eclipse.dirigible.database.sql.builders.AlterBranchingBuilder;
 import org.eclipse.dirigible.database.sql.builders.CreateBranchingBuilder;
@@ -136,6 +138,18 @@ public interface ISqlFactory<SELECT extends SelectBuilder, INSERT extends Insert
      * @throws SQLException the SQL exception
      */
     public boolean existsSchema(Connection connection, String schema) throws SQLException;
+
+    /**
+     * The UNIQUE constraints of a table as the database catalog reports them - never the primary key,
+     * never a foreign key: constraint name to its columns in ordinal order.
+     *
+     * @param connection the current connection
+     * @param table the (unquoted) table name
+     * @return constraint name to ordered column names, empty when the table has none; {@code null} when
+     *         this database exposes no catalog of unique constraints at all
+     * @throws SQLException when the catalog read fails
+     */
+    Map<String, List<String>> uniqueConstraints(Connection connection, String table) throws SQLException;
 
     /**
      * Nextval.

@@ -17,6 +17,8 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import javax.sql.DataSource;
@@ -135,6 +137,22 @@ public interface ISqlDialect<SELECT extends SelectBuilder, INSERT extends Insert
      */
     @Override
     boolean existsSchema(Connection connection, String schema) throws SQLException;
+
+    /**
+     * The UNIQUE constraints of a table as the database catalog reports them - never the primary key,
+     * never a foreign key: constraint name to its columns in ordinal order. The table alter path
+     * reconciles these with the model, so the catalog read has to be the dialect's: INFORMATION_SCHEMA
+     * where the database has it, {@code SYS.CONSTRAINTS} on HANA, and so on.
+     *
+     * @param connection the current connection
+     * @param table the (unquoted) table name
+     * @return constraint name to ordered column names, empty when the table has none; {@code null} when
+     *         this database exposes no catalog of unique constraints at all - the caller then leaves
+     *         the table's constraints as they are
+     * @throws SQLException when the catalog read fails
+     */
+    @Override
+    Map<String, List<String>> uniqueConstraints(Connection connection, String table) throws SQLException;
 
     /**
      * Checks if the database is capable of schema-level filtering statements (e.g. to reduce the

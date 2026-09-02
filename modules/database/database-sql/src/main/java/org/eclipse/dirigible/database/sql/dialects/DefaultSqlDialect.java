@@ -33,6 +33,10 @@ import java.sql.*;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.ArrayList;
 import java.util.Set;
 
 /**
@@ -333,6 +337,56 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
         statement.setString(1, schema);
         ResultSet resultSet = statement.executeQuery();
         return resultSet.next();
+    }
+
+    /**
+     * The standard INFORMATION_SCHEMA form - TABLE_CONSTRAINTS joined to KEY_COLUMN_USAGE - which H2,
+     * PostgreSQL, MySQL, MariaDB and SQL Server all expose. Scoped to the connection's schema (or,
+     * where the driver reports none - MySQL and MariaDB call it the catalog - to the catalog), so a
+     * same-named table in another schema does not leak in.
+     *
+     * @param connection the connection
+     * @param table the table
+     * @return constraint name to ordered columns
+     * @throws SQLException when the catalog read fails
+     */
+    @Override
+    public Map<String, List<String>> uniqueConstraints(Connection connection, String table) throws SQLException {
+        String schema = connection.getSchema();
+        if (schema == null) {
+            schema = connection.getCatalog();
+        }
+        String sql = "SELECT tc.CONSTRAINT_NAME, kcu.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc"
+                + " JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu ON kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME"
+                + " AND kcu.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA AND kcu.TABLE_NAME = tc.TABLE_NAME"
+                + " WHERE tc.CONSTRAINT_TYPE = 'UNIQUE' AND tc.TABLE_NAME = ?" + (schema != null ? " AND tc.TABLE_SCHEMA = ?" : "")
+                + " ORDER BY tc.CONSTRAINT_NAME, kcu.ORDINAL_POSITION";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, table);
+            if (schema != null) {
+                statement.setString(2, schema);
+            }
+            return readUniqueConstraints(statement);
+        }
+    }
+
+    /**
+     * Collects a (constraint name, column name) result ordered by constraint and position into the
+     * {@link #uniqueConstraints} shape. Shared by the dialects' catalog queries.
+     *
+     * @param statement the prepared, bound statement
+     * @return constraint name to ordered columns
+     * @throws SQLException when the query fails
+     */
+    protected static Map<String, List<String>> readUniqueConstraints(PreparedStatement statement) throws SQLException {
+        Map<String, List<String>> constraints = new LinkedHashMap<>();
+        try (ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                constraints.computeIfAbsent(resultSet.getString(1), name -> new ArrayList<>())
+                           .add(resultSet.getString(2));
+            }
+        }
+        return constraints;
     }
 
     /**

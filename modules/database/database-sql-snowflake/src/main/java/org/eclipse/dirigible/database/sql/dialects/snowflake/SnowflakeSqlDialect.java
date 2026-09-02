@@ -24,6 +24,8 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -213,4 +215,18 @@ public class SnowflakeSqlDialect extends
         return resultSet.next();
     }
 
+
+    /**
+     * Snowflake has TABLE_CONSTRAINTS but no KEY_COLUMN_USAGE - the columns of a key are only reachable
+     * through {@code SHOW UNIQUE KEYS}, which is not a query. Until that is wired, the table alter path
+     * leaves unique constraints alone here.
+     *
+     * @param connection the connection
+     * @param table the table
+     * @return {@code null} - no catalog
+     */
+    @Override
+    public Map<String, List<String>> uniqueConstraints(Connection connection, String table) {
+        return null;
+    }
 }
