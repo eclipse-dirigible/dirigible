@@ -17,6 +17,10 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import org.eclipse.dirigible.components.data.structures.domain.TableConstraintUnique;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.data.structures.domain.Table;
@@ -165,7 +169,154 @@ public class TableAlterProcessor {
                 executeAlterBuilder(connection, alterTableBuilder);
             }
         }
+        reconcileUniqueConstraints(connection, tableName, tableModel);
+    }
 
+    /**
+     * Brings the table's UNIQUE constraints in line with the model - the half of schema evolution the
+     * column pass above never covered (#7019). A key the model declares (a {@code unique} column or a
+     * composite {@code uniqueIndexes} entry) that the database lacks is ADDED; a UNIQUE the database
+     * enforces that the model no longer declares is DROPPED - the same policy the column pass applies
+     * to undeclared columns. Keys are compared as column SETS, so a differently named but equal key is
+     * left alone and a second run issues nothing. PRIMARY KEY and FOREIGN KEY constraints are never
+     * touched.
+     *
+     * <p>
+     * Fails soft: a database without an INFORMATION_SCHEMA view of its constraints skips the step (no
+     * change from before), and a statement the database refuses - duplicate rows already present, a
+     * foreign key that depends on the unique - is logged with the table and key, without failing the
+     * column reconciliation or the publish.
+     *
+     * @param connection the connection
+     * @param quotedTableName the table name as the alter builder wants it (quoted)
+     * @param tableModel the model
+     */
+    static void reconcileUniqueConstraints(Connection connection, String quotedTableName, Table tableModel) {
+        String tableName = DatabaseNameNormalizer.normalizeTableName(quotedTableName);
+        Map<String, List<String>> existing;
+        try {
+            existing = readUniqueConstraints(connection, tableName);
+        } catch (SQLException e) {
+            logger.warn("Unique constraints of table [{}] are not reconciled - the database exposes no INFORMATION_SCHEMA constraint"
+                    + " view: {}", tableName, e.getMessage());
+            return;
+        }
+        Map<Set<String>, DesiredUnique> desired = new LinkedHashMap<>();
+        for (TableColumn column : tableModel.getColumns()) {
+            if (column.isUnique() && !column.isPrimaryKey()) {
+                String columnName = DatabaseNameNormalizer.normalizeColumnName(column.getName())
+                                                          .toUpperCase();
+                desired.putIfAbsent(Set.of(columnName), new DesiredUnique(tableName + "_" + columnName + "_UNIQUE", List.of(columnName)));
+            }
+        }
+        if (tableModel.getConstraints() != null && tableModel.getConstraints()
+                                                             .getUniqueIndexes() != null) {
+            for (TableConstraintUnique unique : tableModel.getConstraints()
+                                                          .getUniqueIndexes()) {
+                if (unique.getColumns() == null || unique.getColumns().length == 0) {
+                    continue;
+                }
+                List<String> columns = new ArrayList<>(unique.getColumns().length);
+                for (String column : unique.getColumns()) {
+                    columns.add(DatabaseNameNormalizer.normalizeColumnName(column)
+                                                      .toUpperCase());
+                }
+                String name = unique.getName() != null && !unique.getName()
+                                                                 .isBlank() ? unique.getName()
+                                                                         : tableName + "_" + String.join("_", columns) + "_UNIQUE";
+                desired.putIfAbsent(new HashSet<>(columns), new DesiredUnique(name, columns));
+            }
+        }
+        Set<Set<String>> present = new HashSet<>();
+        for (Map.Entry<String, List<String>> constraint : existing.entrySet()) {
+            Set<String> columns = new HashSet<>(constraint.getValue());
+            if (desired.containsKey(columns)) {
+                present.add(columns);
+                continue;
+            }
+            logger.warn("Dropping unique constraint [{}] on table [{}] over {} - the model no longer declares it", constraint.getKey(),
+                    tableName, constraint.getValue());
+            AlterTableBuilder drop = SqlFactory.getNative(connection)
+                                               .alter()
+                                               .table(quotedTableName);
+            drop.drop()
+                .unique(constraint.getKey(), constraint.getValue()
+                                                       .toArray(new String[0]));
+            executeConstraintChange(connection, drop, tableName, constraint.getKey());
+        }
+        for (Map.Entry<Set<String>, DesiredUnique> key : desired.entrySet()) {
+            if (present.contains(key.getKey())) {
+                continue;
+            }
+            DesiredUnique unique = key.getValue();
+            logger.info("Adding unique constraint [{}] on table [{}] over {}", unique.name(), tableName, unique.columns());
+            AlterTableBuilder add = SqlFactory.getNative(connection)
+                                              .alter()
+                                              .table(quotedTableName);
+            add.add()
+               .unique(unique.name(), unique.columns()
+                                            .toArray(new String[0]));
+            executeConstraintChange(connection, add, tableName, unique.name());
+        }
+    }
+
+    /** A key the model wants: its constraint name and its columns in the declared order. */
+    private record DesiredUnique(String name, List<String> columns) {
+    }
+
+    /**
+     * The table's UNIQUE constraints as the database reports them through the standard
+     * INFORMATION_SCHEMA views (H2 and PostgreSQL both expose them): constraint name to its columns in
+     * ordinal order. Column names are upper-cased for the comparison with the model.
+     *
+     * @param connection the connection
+     * @param tableName the normalized (unquoted) table name
+     * @return constraint name to ordered columns
+     * @throws SQLException when the database has no such view
+     */
+    private static Map<String, List<String>> readUniqueConstraints(Connection connection, String tableName) throws SQLException {
+        String schema = connection.getSchema();
+        String sql = "SELECT tc.CONSTRAINT_NAME, kcu.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc"
+                + " JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu ON kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME"
+                + " AND kcu.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA AND kcu.TABLE_NAME = tc.TABLE_NAME"
+                + " WHERE tc.CONSTRAINT_TYPE = 'UNIQUE' AND tc.TABLE_NAME = ?" + (schema != null ? " AND tc.TABLE_SCHEMA = ?" : "")
+                + " ORDER BY tc.CONSTRAINT_NAME, kcu.ORDINAL_POSITION";
+        Map<String, List<String>> constraints = new LinkedHashMap<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, tableName);
+            if (schema != null) {
+                statement.setString(2, schema);
+            }
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    constraints.computeIfAbsent(resultSet.getString(1), name -> new ArrayList<>())
+                               .add(resultSet.getString(2)
+                                             .toUpperCase());
+                }
+            }
+        }
+        return constraints;
+    }
+
+    /**
+     * One ADD/DROP CONSTRAINT statement, fail-soft (see {@link #reconcileUniqueConstraints}).
+     *
+     * @param connection the connection
+     * @param builder the built statement
+     * @param tableName the table, for the log
+     * @param constraint the constraint, for the log
+     */
+    private static void executeConstraintChange(Connection connection, AlterTableBuilder builder, String tableName, String constraint) {
+        String sql = builder.build();
+        if (logger.isInfoEnabled()) {
+            logger.info(sql);
+        }
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            logger.error("Unique constraint [{}] on table [{}] could not be reconciled - the table's other changes stand. Statement: [{}]",
+                    constraint, tableName, sql, e);
+        }
     }
 
     /**
