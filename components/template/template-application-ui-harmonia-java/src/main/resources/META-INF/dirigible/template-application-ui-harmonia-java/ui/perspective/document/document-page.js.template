@@ -148,7 +148,7 @@ document.addEventListener('alpine:init', () => {
 ## ProcessIds stays OUT of the form model: it is the per-process at-most-once bookkeeping the
 ## trigger listener writes, and a form that carried it would post a stale copy back over a stamp
 ## written while the document was open.
-#if(!$property.dataAutoIncrement && $property.aggregate != "true" && $property.name != "ProcessIds")
+#if(!$property.dataAutoIncrement && $property.aggregate != "true" && !$property.isHiddenProperty)
 #if($property.widgetType == "CHECKBOX")
       ${property.name}: false,
 #elseif($property.widgetType == "NUMBER")

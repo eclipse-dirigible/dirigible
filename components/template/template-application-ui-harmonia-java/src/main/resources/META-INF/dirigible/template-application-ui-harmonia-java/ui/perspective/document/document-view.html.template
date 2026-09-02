@@ -568,7 +568,7 @@
          top-to-bottom (edit/preview only). -->
 #set($hasReadOnly = false)
 #foreach($property in $properties)
-#if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && $property.name != "ProcessIds")#set($hasReadOnly = true)#end
+#if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)#set($hasReadOnly = true)#end
 #end
 #if($hasReadOnly || $docStatusProp != "" || $history == "true")
     <div class="vbox gap-4 shrink-0" style="width: 18rem;" x-show="isEdit || isPreview">
@@ -578,7 +578,7 @@
         <div x-h-card-content>
           <div class="grid grid-cols-1 gap-y-3">
 #foreach($property in $properties)
-#if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && $property.name != "ProcessIds")
+#if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)
 #if($property.widgetLabel)#set($rolabel = $property.widgetLabel)#else#set($rolabel = $property.name)#end
             <div class="vbox gap-0" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
               <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${rolabel}')"></span>

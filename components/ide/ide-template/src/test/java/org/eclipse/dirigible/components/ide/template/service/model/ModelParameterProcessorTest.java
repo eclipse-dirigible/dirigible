@@ -54,6 +54,24 @@ class ModelParameterProcessorTest {
         assertEquals(Boolean.FALSE, property.get("widgetIsMajor"));
     }
 
+    /**
+     * The one flag the generated forms, lists and details blocks consult to leave bookkeeping out: the
+     * model may set it (a roll-up's displaced status), and the per-process stamps carry it by name, so
+     * a model written before the flag existed still hides them.
+     */
+    @Test
+    void hidesFlaggedBookkeepingAndTheProcessStamps() {
+        Map<String, Object> flagged = property("DisplacedStatus", "INTEGER");
+        flagged.put("isHiddenProperty", "true");
+        Map<String, Object> stamps = property("ProcessIds", "VARCHAR");
+        Map<String, Object> plain = property("Name", "VARCHAR");
+        ModelParameterProcessor.process(model(entity("Invoice", "Invoices", flagged, stamps, plain)), parameters());
+
+        assertEquals(Boolean.TRUE, flagged.get("isHiddenProperty"));
+        assertEquals(Boolean.TRUE, stamps.get("isHiddenProperty"));
+        assertEquals(Boolean.FALSE, plain.get("isHiddenProperty"));
+    }
+
     @Test
     void defaultsTheWidgetLabelFromThePropertyName() {
         Map<String, Object> property = property("TaxEventDate", "DATE");

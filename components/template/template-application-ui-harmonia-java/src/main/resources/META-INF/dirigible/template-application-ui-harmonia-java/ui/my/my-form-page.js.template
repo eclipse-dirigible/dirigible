@@ -33,7 +33,7 @@ document.addEventListener('alpine:init', () => {
     deleteBusy: false,
     form: {
 #foreach($property in $properties)
-#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && $property.name != "ProcessIds" && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name")
+#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name")
       ${property.name}: #if($property.widgetType == "CHECKBOX")false#elseif($property.widgetType == "MULTISELECT")[]#{else}''#end,
 #end
 #end

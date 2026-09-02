@@ -79,8 +79,11 @@ public class RollupIntent {
     /**
      * Optional (sum roll-ups only, requires {@link #capacity}): a parent to-one relation set to
      * {@link #statusWhenFull} when {@code sum >= capacity}, or {@link #statusWhenPartial} when
-     * {@code 0 < sum < capacity} (left unchanged at zero). E.g. an invoice's {@code Status} → PAID /
-     * PARTIAL as payments accumulate.
+     * {@code 0 < sum < capacity}. E.g. an invoice's {@code Status} → PAID / PARTIAL as payments
+     * accumulate. The status the first such move displaces is remembered in a hidden parent column
+     * ({@code Displaced<Status>}) and put back when the sum returns to zero, so an invoice whose only
+     * allocation is deleted is CONFIRMED (or ISSUED) again rather than PAID with nothing paid; a status
+     * the roll-up did not set itself (a manual void) is never touched.
      */
     private String status;
     /** Seed id set on {@link #status} when the sum reaches the capacity (fully consumed). */

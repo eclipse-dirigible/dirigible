@@ -2070,4 +2070,61 @@ class EdmIntentGeneratorTest {
         assertFalse(driverProperties.contains("ProcessIds"), "an entity no process triggers on must not carry the stamps");
         assertFalse(driverProperties.contains("ProcessId"));
     }
+
+    /**
+     * A capacity roll-up that drives a status (#7016) needs somewhere to keep the status it displaced,
+     * so a sum back at zero can restore it: a hidden, read-only integer column on the PARENT, named
+     * after the status relation. The child and the nomenclature carry nothing.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void aStatusRollupParentCarriesTheDisplacedStatusColumn() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Bill
+                    fields:
+                      - { name: id,      type: integer, primaryKey: true, generated: true }
+                      - { name: total,   type: decimal, precision: 18, scale: 2 }
+                      - { name: paid,    type: decimal, precision: 18, scale: 2 }
+                      - { name: balance, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: BillStatus }
+                  - name: BillStatus
+                    kind: setting
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string,  required: true, length: 50 }
+                  - name: BillPayment
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
+                    relations:
+                      - { name: Bill, kind: manyToOne, to: Bill, composition: true, required: true }
+                rollups:
+                  - { name: billPaid, entity: BillPayment, via: Bill, field: paid, op: sum, of: amount,
+                      capacity: total, balance: balance, status: Status, statusWhenFull: 2, statusWhenPartial: 1 }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing");
+        List<Map<String, Object>> entities = entities(model);
+
+        Map<String, Object> displaced = propertyByName(entityByName(entities, "Bill"), "DisplacedStatus");
+        assertNotNull(displaced, "the parent of a status roll-up must remember the status the roll-up displaced");
+        assertEquals("INTEGER", displaced.get("dataType"));
+        assertEquals("BILL_DISPLACED_STATUS", displaced.get("dataName"));
+        assertEquals("true", displaced.get("dataNullable"));
+        // Read-only so a full-row form save preserves it, never a major column, and hidden outright: it is
+        // bookkeeping only the roll-up handler reads.
+        assertEquals("true", displaced.get("isReadOnlyProperty"));
+        assertEquals("true", displaced.get("isHiddenProperty"));
+        assertEquals("false", displaced.get("widgetIsMajor"));
+
+        for (String other : List.of("BillPayment", "BillStatus")) {
+            List<String> names = ((List<Map<String, Object>>) entityByName(entities, other).get("properties")).stream()
+                                                                                                              .map(p -> String.valueOf(
+                                                                                                                      p.get("name")))
+                                                                                                              .toList();
+            assertFalse(names.contains("DisplacedStatus"), other + " is not the parent of the roll-up");
+        }
+    }
 }

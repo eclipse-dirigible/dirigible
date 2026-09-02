@@ -337,7 +337,7 @@
 #foreach($property in $properties)
 ## ProcessIds is per-process at-most-once bookkeeping (Process=instanceId pairs) - plumbing with
 ## nothing to say to a reader, unlike ProcessId, which names the flow the record is in.
-#if(!$property.dataAutoIncrement && $property.name != "ProcessIds")
+#if(!$property.dataAutoIncrement && !$property.isHiddenProperty)
 #if($property.widgetLabel)#set($plabel = $property.widgetLabel)#else#set($plabel = $property.name)#end
 #if($property.isDateType)#set($isDate = "true")#else#set($isDate = "false")#end
           <div class="vbox gap-0"#visibleGate($property)>

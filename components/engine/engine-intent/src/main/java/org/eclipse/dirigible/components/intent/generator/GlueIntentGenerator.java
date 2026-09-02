@@ -667,6 +667,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             base.put("statusWhenPartial", withStatus && rollup.getStatusWhenPartial() != null ? rollup.getStatusWhenPartial()
                                                                                                       .toString()
                     : "");
+            // The parent column remembering the status the roll-up DISPLACED when it first moved the parent
+            // into whenFull / whenPartial, so a sum that returns to zero can put it back (#7016). Emitted
+            // on the parent by the EDM generator (EdmIntentGenerator.displacedStatusProperty) under the
+            // same name.
+            base.put("statusDisplacedField", withStatus ? IntentNaming.displacedStatusProperty(rollup.getStatus()) : "");
             // Recompute the value for the affected parent from the store on each child event.
             base.put("criteriaExpression", "Criteria.create().eq(\"" + fkProperty + "\", entity." + fkProperty + ")");
             // Handler name derives from the coalescing key (childEntity + parent-fk), NOT the roll-up name:

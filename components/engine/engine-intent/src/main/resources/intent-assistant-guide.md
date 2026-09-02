@@ -3034,7 +3034,13 @@ left. Nothing to declare.
 **Sum + balance + status (payment settlement).** With `op: sum` the roll-up keeps `field` equal to the
 sum of the children's `of` field. Add `capacity` (a numeric parent field the sum is measured against)
 to also maintain a `balance` field (= `capacity − sum`) and set a `status` relation to `statusWhenFull`
-(when `sum >= capacity`) or `statusWhenPartial` (when `0 < sum < capacity`; unchanged at zero):
+(when `sum >= capacity`) or `statusWhenPartial` (when `0 < sum < capacity`). At zero the roll-up gives
+the status back: the first move into one of its two statuses remembers the status it displaced (a
+hidden `Displaced<Status>` column the generator adds to the parent), and a sum that returns to zero -
+the only allocation deleted, amended to 0, re-parented away - restores it, so the invoice is CONFIRMED
+(or ISSUED, if it was paid from there) again instead of PAID with nothing paid. Only a status the
+roll-up itself set is ever relinquished; a manual void or cancel stays. Declare no `statusWhenEmpty`
+- there is none, the remembered status is always the right one:
 ```yaml
 rollups:
   # Invoice.paid = sum of its payment allocations; balance = total − paid; Status -> PAID / PARTIAL.
@@ -3111,7 +3117,9 @@ status seeds, which this model does not own.
 **Rules:** `via` must be a to-one (`manyToOne` / `oneToOne`) relation of the child entity; `field`
 must be an existing field on the parent (**integer** for `count`, **numeric** for `sum`). For the sum
 extras: `capacity`/`balance` are numeric parent fields, `status` a to-one relation of the parent, and
-`statusWhenFull`/`statusWhenPartial` its target seed ids.
+`statusWhenFull`/`statusWhenPartial` its target seed ids. With a `lifecycle:` on the parent, the
+moves the roll-up makes - into its two statuses AND back to whatever they displaced - must be declared
+edges, or the generated repository refuses the recompute.
 
 **When it recomputes.** Every roll-up - `count`, `sum` and `latest` alike - recomputes on the child's
 create, update **and** delete. The update pass is what keeps a count right when an ordinary edit moves
