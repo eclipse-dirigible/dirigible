@@ -238,7 +238,7 @@ Import from here rather than from a platform-internal package.
 | Package | What is in it |
 |---|---|
 | `component` | `Component`, `Inject`, `Repository`, `Beans` |
-| `db` | `Entity`, `Table`, `Id`, `GeneratedValue`, `Column`, `Lob`, `Transient`, audit annotations, `CalculatedField`, `Store`, `Database`, `Translator`, `ValidationException` |
+| `db` | `Entity`, `Table`, `Id`, `GeneratedValue`, `Column`, `Lob`, `Transient`, audit annotations, `CalculatedField`, `Store`, `Database` (SQL, sequences, and the user / schema DDL: `createUser`, `setUserPassword`, `dropUser`, `existsUser`, `createSchema`, `dropSchema`, `existsSchema`), `Translator`, `ValidationException` |
 | `http` | `Controller`, `Get`/`Post`/`Put`/`Patch`/`Delete`, `Body`, `PathParam`, `QueryParam`, `Context`, `Request`, `Response`, `Upload`, `HttpClient` |
 | `job` | `Scheduled`, `JobHandler`, `Scheduler` |
 | `messaging` | `Listener`, `ListenerKind`, `MessageHandler`, `Producer`, `Consumer` |

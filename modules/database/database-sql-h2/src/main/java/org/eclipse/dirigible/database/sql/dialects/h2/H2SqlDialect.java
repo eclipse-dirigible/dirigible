@@ -30,7 +30,7 @@ import org.eclipse.dirigible.database.sql.dialects.DefaultSqlDialect;
  * The H2 SQL Dialect.
  */
 public class H2SqlDialect extends
-        DefaultSqlDialect<SelectBuilder, InsertBuilder, UpdateBuilder, DeleteBuilder, CreateBranchingBuilder, AlterBranchingBuilder, DropBranchingBuilder, H2NextValueSequenceBuilder, H2LastValueIdentityBuilder> {
+        DefaultSqlDialect<SelectBuilder, InsertBuilder, UpdateBuilder, DeleteBuilder, CreateBranchingBuilder, H2AlterBranchingBuilder, DropBranchingBuilder, H2NextValueSequenceBuilder, H2LastValueIdentityBuilder> {
 
     /** The Constant FUNCTIONS. */
     public static final Set<String> FUNCTIONS = Collections.synchronizedSet(new HashSet<String>(Arrays.asList("abs", "acos", "asin", "atan",
@@ -107,6 +107,16 @@ public class H2SqlDialect extends
     }
 
     /**
+     * Alter.
+     *
+     * @return the H2 alter branching builder
+     */
+    @Override
+    public H2AlterBranchingBuilder alter() {
+        return new H2AlterBranchingBuilder(this);
+    }
+
+    /**
      * Exists schema.
      *
      * @param connection the connection
@@ -128,6 +138,29 @@ public class H2SqlDialect extends
             return true;
         }
         return false;
+    }
+
+    /**
+     * Exists user.
+     *
+     * @param connection the connection
+     * @param userId the user id
+     * @return true, if successful
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    public boolean existsUser(Connection connection, String userId) throws SQLException {
+        String sql = new SelectBuilder(this).column("*")
+                                            .schema("INFORMATION_SCHEMA")
+                                            .from("USERS")
+                                            .where("USER_NAME = ?")
+                                            .build();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, userId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
+            }
+        }
     }
 
 }

@@ -91,6 +91,14 @@
             <artifactId>dirigible-components-api-database</artifactId>
             <version>${project.version}</version>
         </dependency>
+
+        <!-- Database.getNativeSqlFactory and the user/schema DDL expose the SQL builders, so this is a
+            direct dependency rather than one inherited through api-database. -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-database-sql</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-api-etcd</artifactId>

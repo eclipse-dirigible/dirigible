@@ -10,17 +10,17 @@
 package org.eclipse.dirigible.database.sql.builders.user;
 
 import org.eclipse.dirigible.database.sql.ISqlDialect;
-import org.eclipse.dirigible.database.sql.builders.AbstractCreateSqlBuilder;
+import org.eclipse.dirigible.database.sql.builders.AbstractSqlBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The Class CreateUserBuilder.
+ * The Class AlterUserBuilder - changes the password of an existing user.
  */
-public class CreateUserBuilder extends AbstractCreateSqlBuilder {
+public class AlterUserBuilder extends AbstractSqlBuilder {
 
     /** The Constant logger. */
-    private static final Logger logger = LoggerFactory.getLogger(CreateUserBuilder.class);
+    private static final Logger logger = LoggerFactory.getLogger(AlterUserBuilder.class);
 
     /** The user id. */
     private final String userId;
@@ -29,13 +29,13 @@ public class CreateUserBuilder extends AbstractCreateSqlBuilder {
     private final String password;
 
     /**
-     * Instantiates a new creates the user builder.
+     * Instantiates a new alter user builder.
      *
      * @param dialect the dialect
      * @param userId the user id
-     * @param password the password
+     * @param password the new password
      */
-    public CreateUserBuilder(ISqlDialect dialect, String userId, String password) {
+    public AlterUserBuilder(ISqlDialect dialect, String userId, String password) {
         super(dialect);
         this.userId = userId;
         this.password = password;
@@ -48,23 +48,27 @@ public class CreateUserBuilder extends AbstractCreateSqlBuilder {
      */
     @Override
     public String generate() {
-        // The user, never the statement: the statement carries the password in clear text, and a trace
-        // log is exactly the wrong place for it to end up.
-        logger.trace("generating a create user statement for [{}]", userId);
+        // The user, never the statement: the statement carries the new password in clear text, and a
+        // trace log is exactly the wrong place for it to end up.
+        logger.trace("generating an alter user statement for [{}]", userId);
 
-        return generateCreateUserStatement(userId, password);
+        return generateAlterUserStatement(userId, password);
     }
 
     /**
-     * Generate create user statement.
+     * Generate alter user statement.
+     *
+     * <p>
+     * A dialect whose credentials live on a different object than the user overrides this - see the
+     * MSSQL dialect, where the password belongs to the server login rather than to the database user.
      *
      * @param user the user
-     * @param pass the pass
+     * @param pass the new password
      * @return the string
      */
-    protected String generateCreateUserStatement(String user, String pass) {
+    protected String generateAlterUserStatement(String user, String pass) {
         StringBuilder sql = new StringBuilder();
-        sql.append("CREATE USER ")
+        sql.append("ALTER USER ")
            .append(encapsulateIdentifier(user))
            .append(SPACE)
            .append("PASSWORD ")
@@ -79,6 +83,15 @@ public class CreateUserBuilder extends AbstractCreateSqlBuilder {
      */
     protected char getPasswordEscapeSymbol() {
         return '\'';
+    }
+
+    /**
+     * Gets the user id.
+     *
+     * @return the user id
+     */
+    public String getUserId() {
+        return userId;
     }
 
 }

@@ -20,12 +20,12 @@ public class MSSQLCreateUserBuilder extends CreateUserBuilder {
 
     @Override
     protected String generateCreateUserStatement(String user, String pass) {
-        // create server login
-        return "CREATE LOGIN " + getEscapeSymbol() + user + getEscapeSymbol() + SPACE + "WITH PASSWORD =" + getPasswordEscapeSymbol() + pass
-                + getPasswordEscapeSymbol() + "; "
+        String name = encapsulateIdentifier(user);
 
-                // create user mapped to the login
-                + "CREATE USER " + getEscapeSymbol() + user + getEscapeSymbol() + SPACE + "FOR LOGIN " + getEscapeSymbol() + user
-                + getEscapeSymbol();
+        // create server login
+        return "CREATE LOGIN " + name + SPACE + "WITH PASSWORD =" + encapsulateLiteral(pass, getPasswordEscapeSymbol()) + "; "
+
+        // create user mapped to the login
+                + "CREATE USER " + name + SPACE + "FOR LOGIN " + name;
     }
 }

@@ -152,6 +152,16 @@ public interface ISqlFactory<SELECT extends SelectBuilder, INSERT extends Insert
     Map<String, List<String>> uniqueConstraints(Connection connection, String table) throws SQLException;
 
     /**
+     * Check existence of a user (or role - the two are the same object on most databases).
+     *
+     * @param connection the current connection
+     * @param userId the user id
+     * @return true if the user exists and false otherwise
+     * @throws SQLException the SQL exception
+     */
+    public boolean existsUser(Connection connection, String userId) throws SQLException;
+
+    /**
      * Nextval.
      *
      * @param sequence the sequence
