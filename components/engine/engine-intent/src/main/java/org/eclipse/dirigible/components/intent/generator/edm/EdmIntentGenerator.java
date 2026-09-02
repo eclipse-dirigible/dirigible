@@ -1213,7 +1213,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                                .toString()
                     : "2");
         }
-        if (field.isUnique()) {
+        // A partitioned document number (`number: { per: Company }`) is unique WITHIN its partition, by
+        // contract - identical numbers across partitions are correct. A single-column UNIQUE on the number
+        // would contradict that: the second company's first document renders the same string as the
+        // first company's and dies on the index (#7015). So `unique: true` on such a field is folded into
+        // the composite key over (partition, number) that buildUniqueConstraints synthesizes instead.
+        if (field.isUnique() && !isPartitionedNumber(field)) {
             p.put("dataUnique", "true");
         }
         if (field.getDefaultValue() != null && !field.getDefaultValue()
@@ -1831,39 +1836,84 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      */
     private static List<Map<String, Object>> buildUniqueConstraints(EntityIntent entity) {
         List<Map<String, Object>> constraints = new ArrayList<>();
+        Set<Set<String>> declared = new HashSet<>();
         for (UniqueIntent unique : entity.getUnique()) {
             List<String> names = unique.getFields();
             if (names.size() < 2) {
                 continue; // reported by the parser
             }
-            List<Map<String, Object>> columns = new ArrayList<>(names.size());
-            StringBuilder constraintName = new StringBuilder(entity.getName());
-            for (String name : names) {
-                Map<String, Object> column = new LinkedHashMap<>();
-                column.put("name", IntentNaming.upperSnake(entity.getName()) + "_" + IntentNaming.upperSnake(name));
-                columns.add(column);
-                constraintName.append('_')
-                              .append(IntentNaming.pascalCase(name));
+            declared.add(keyOf(names));
+            constraints.add(uniqueConstraint(entity, names, unique.getMessage()));
+        }
+        // A partitioned document number is unique per partition (see propertyMap): the key the author
+        // means is (partition, number), synthesized here unless the author already spelled it out - in
+        // either column order, so a hand-written key is never doubled.
+        for (FieldIntent field : entity.getFields()) {
+            if (!isPartitionedNumber(field)) {
+                continue;
             }
-            Map<String, Object> constraint = new LinkedHashMap<>();
-            constraint.put("name", constraintName.toString());
-            constraint.put("columns", columns);
-            // The PROPERTY names, for the .edm twin: the modeler declares a key over properties (so a
-            // later dataName change follows it), and resolves them to columns when it rebuilds the
-            // .model. The columns above are what the schema template emits.
-            constraint.put("properties", names.stream()
-                                              .map(IntentNaming::pascalCase)
-                                              .collect(Collectors.joining(",")));
-            constraint.put("columnsCsv", columns.stream()
-                                                .map(column -> String.valueOf(column.get("name")))
-                                                .collect(Collectors.joining(",")));
-            constraint.put("message", notBlank(unique.getMessage()) ? unique.getMessage()
-                    : "A " + IntentNaming.humanize(entity.getName())
-                                         .toLowerCase(Locale.ROOT)
-                            + " with the same " + humanizeJoin(names) + " already exists");
-            constraints.add(constraint);
+            List<String> names = List.of(field.getNumber()
+                                              .getPer(),
+                    field.getName());
+            if (declared.add(keyOf(names))) {
+                constraints.add(uniqueConstraint(entity, names, null));
+            }
         }
         return constraints;
+    }
+
+    /** A {@code number:} field whose series is partitioned by a to-one ({@code per:}). */
+    private static boolean isPartitionedNumber(FieldIntent field) {
+        return field.getNumber() != null && notBlank(field.getNumber()
+                                                          .getPer());
+    }
+
+    /**
+     * The identity of a key - its member names, order-insensitive and in the property's canonical case.
+     */
+    private static Set<String> keyOf(List<String> names) {
+        Set<String> key = new HashSet<>();
+        for (String name : names) {
+            key.add(IntentNaming.pascalCase(name));
+        }
+        return key;
+    }
+
+    /**
+     * One composite key over the given fields / to-one relations, in the authored order.
+     *
+     * @param entity the entity
+     * @param names the member names (a field or a to-one relation each)
+     * @param message the authored violation message, or {@code null} for the default
+     * @return the constraint map the schema and REST templates consume
+     */
+    private static Map<String, Object> uniqueConstraint(EntityIntent entity, List<String> names, String message) {
+        List<Map<String, Object>> columns = new ArrayList<>(names.size());
+        StringBuilder constraintName = new StringBuilder(entity.getName());
+        for (String name : names) {
+            Map<String, Object> column = new LinkedHashMap<>();
+            column.put("name", IntentNaming.upperSnake(entity.getName()) + "_" + IntentNaming.upperSnake(name));
+            columns.add(column);
+            constraintName.append('_')
+                          .append(IntentNaming.pascalCase(name));
+        }
+        Map<String, Object> constraint = new LinkedHashMap<>();
+        constraint.put("name", constraintName.toString());
+        constraint.put("columns", columns);
+        // The PROPERTY names, for the .edm twin: the modeler declares a key over properties (so a
+        // later dataName change follows it), and resolves them to columns when it rebuilds the
+        // .model. The columns above are what the schema template emits.
+        constraint.put("properties", names.stream()
+                                          .map(IntentNaming::pascalCase)
+                                          .collect(Collectors.joining(",")));
+        constraint.put("columnsCsv", columns.stream()
+                                            .map(column -> String.valueOf(column.get("name")))
+                                            .collect(Collectors.joining(",")));
+        constraint.put("message", notBlank(message) ? message
+                : "A " + IntentNaming.humanize(entity.getName())
+                                     .toLowerCase(Locale.ROOT)
+                        + " with the same " + humanizeJoin(names) + " already exists");
+        return constraint;
     }
 
     /** {@code [tenant, application]} → {@code "tenant and application"}, for a default message. */

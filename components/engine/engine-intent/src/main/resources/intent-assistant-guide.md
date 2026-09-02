@@ -609,8 +609,12 @@ gives the field a platform-allocated, gap-free document number. The intent decla
   identically, else that artefact fails at publish.
 - `per` (optional) - a to-one relation of the entity whose value PARTITIONS the series (canonically
   `per: Company`): each partition value gets its own sequence, so two legal entities in one tenant
-  never share a counter. Identical numbers across partitions are correct. Never an `EntityStatus`
-  relation.
+  never share a counter. Identical numbers across partitions are correct - so the number's
+  uniqueness is COMPOSITE: the generator emits a `(per, number)` unique key for every partitioned
+  number, and a `unique: true` on the field is folded into it rather than emitted as a single-column
+  UNIQUE (which would make the second company's first document collide with the first company's).
+  A hand-declared entity-level `unique: [{ fields: [Company, number] }]` is honoured as-is, never
+  doubled. Never an `EntityStatus` relation.
 - `stampOn` - `create` (the generated repository allocates at insert) or `issue` (the document is
   created with a UUID placeholder and a generated delegate replaces it at the modeled issue step,
   idempotently - a re-issue after an amend keeps the number). Use `issue` for legal documents whose
