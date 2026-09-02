@@ -49,11 +49,11 @@ import com.google.gson.JsonParseException;
  *
  * <p>
  * The call is <b>streamed</b> ({@code "stream": true}, consumed as server-sent events) and asks for
- * <b>adaptive thinking</b>. Both are capacity decisions, not cosmetics: the tool contract re-emits
- * the COMPLETE {@code app.intent} on every turn and every repair round, so a real application is
- * thousands of output tokens - which a single blocking response with one fixed deadline could not
- * hold, and which the model should reason about rather than emit cold. On the configured default
- * model omitting {@code thinking} means running with no thinking at all, so it is sent explicitly.
+ * <b>adaptive thinking</b>. Both are capacity decisions, not cosmetics: a proposal that rewrites or
+ * creates a document is thousands of output tokens - which a single blocking response with one
+ * fixed deadline could not hold, and which the model should reason about rather than emit cold. On
+ * the configured default model omitting {@code thinking} means running with no thinking at all, so
+ * it is sent explicitly.
  */
 @Component
 public class ModelClient {
