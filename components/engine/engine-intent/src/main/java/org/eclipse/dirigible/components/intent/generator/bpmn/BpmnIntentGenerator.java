@@ -22,6 +22,7 @@ import java.util.Set;
 
 import java.util.regex.Pattern;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -187,20 +188,20 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         for (ProcessIntent process : model.getProcesses()) {
             if (process.getName() == null || process.getName()
                                                     .isBlank()) {
-                LOGGER.warn("Skipping unnamed process in intent [{}]", IntentNaming.baseName(context));
+                LOGGER.warn("Skipping unnamed process in intent [{}]", LoggedValue.of(IntentNaming.baseName(context)));
                 continue;
             }
             String fileName = process.getName() + ".bpmn";
             if (!seenFiles.add(fileName)) {
-                LOGGER.warn("Duplicate process [{}] in intent [{}] - keeping the first occurrence", process.getName(),
-                        IntentNaming.baseName(context));
+                LOGGER.warn("Duplicate process [{}] in intent [{}] - keeping the first occurrence", LoggedValue.of(process.getName()),
+                        LoggedValue.of(IntentNaming.baseName(context)));
                 continue;
             }
             if (!process.getTrigger()
                         .isEmpty()) {
                 LOGGER.info(
                         "Process [{}] declares a trigger; the BPMN keeps a none-start event - auto-start (listener/handler under gen/events) is generated separately, so for now start it explicitly",
-                        process.getName());
+                        LoggedValue.of(process.getName()));
             }
             List<Resolver> processResolvers = new ArrayList<>();
             for (Resolver resolver : allResolvers) {
@@ -907,7 +908,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             case "end":
                 break;
             default:
-                LOGGER.warn("Unknown step kind [{}] for step [{}] - rendering as userTask", kind, step.getName());
+                LOGGER.warn("Unknown step kind [{}] for step [{}] - rendering as userTask", LoggedValue.of(kind),
+                        LoggedValue.of(step.getName()));
                 appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra, clears);
                 break;
         }
@@ -1251,7 +1253,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             String condition = stringArg(step, "if");
             String thenTarget = stringArg(step, "then");
             if (condition == null || condition.isBlank() || thenTarget == null || thenTarget.isBlank()) {
-                LOGGER.warn("Decision [{}] is missing `if` or `then` - skipping conditioned outgoing flow", step.getName());
+                LOGGER.warn("Decision [{}] is missing `if` or `then` - skipping conditioned outgoing flow", LoggedValue.of(step.getName()));
                 continue;
             }
             flows.add(new SequenceFlow("flow_" + step.getName() + "_then", step.getName(), targets.resolve(thenTarget, targets.regions()

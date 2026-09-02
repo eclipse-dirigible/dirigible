@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.ide.template.service.model.ModelGenerationService;
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
@@ -110,8 +111,8 @@ public class IntentGenerationService {
         IntentGenerationContext context =
                 new IntentGenerationContext(model, projectRoot, projectName, workspaceName, fallbackName, repository);
         context.setSettings(loadOrScaffoldSettings(context));
-        LOGGER.info("Generating model files for intent [{}] under [{}] via {} generator(s)", IntentNaming.baseName(context), projectRoot,
-                generators.size());
+        LOGGER.info("Generating model files for intent [{}] under [{}] via {} generator(s)", LoggedValue.of(IntentNaming.baseName(context)),
+                LoggedValue.of(projectRoot), generators.size());
         // The shape this project declared BEFORE the pass. Compared against what the pass writes, it is
         // what makes a removal visible - see the impact report below.
         String modelFileName = IntentNaming.baseName(context) + ".model";
@@ -124,7 +125,7 @@ public class IntentGenerationService {
                 // dependency) - surface it to the caller (-> 422), do NOT isolate it like a generator bug.
                 throw e;
             } catch (RuntimeException e) {
-                LOGGER.error("Intent generator [{}] failed for project [{}]", generator.name(), projectName, e);
+                LOGGER.error("Intent generator [{}] failed for project [{}]", generator.name(), LoggedValue.of(projectName), e);
             }
         }
         // A member this pass dropped invalidates the committed generated code of every project that
@@ -133,7 +134,7 @@ public class IntentGenerationService {
         try {
             CrossModelImpactSupport.reportRemovals(context, shapeBefore, modelFileName);
         } catch (RuntimeException e) {
-            LOGGER.error("Cross-model impact report failed for project [{}]", projectName, e);
+            LOGGER.error("Cross-model impact report failed for project [{}]", LoggedValue.of(projectName), e);
         }
         List<String> scrubbed = scrubStaleModelFiles(projectRoot, context.getWrittenFileNames());
         List<Map<String, Object>> plan = buildCodeGenerationPlan(context.getSettings(), context.getWrittenFileNames());
@@ -231,8 +232,8 @@ public class IntentGenerationService {
                 modelGenerationService.generate(workspaceName, projectName, path, templateId, parameters);
                 entry.put("generated", Boolean.TRUE);
             } catch (IOException | RuntimeException e) {
-                LOGGER.error("Failed to generate code from [{}/{}] with template [{}]", sanitizeForLog(projectName), sanitizeForLog(path),
-                        sanitizeForLog(templateId), e);
+                LOGGER.error("Failed to generate code from [{}/{}] with template [{}]", LoggedValue.of(projectName), LoggedValue.of(path),
+                        LoggedValue.of(templateId), e);
                 entry.put("generated", Boolean.FALSE);
                 entry.put("error", e.getMessage());
             }
@@ -283,7 +284,7 @@ public class IntentGenerationService {
         }
         IntentSettings settings = IntentSettings.scaffold(context.getModel());
         context.writeModelFile(fileName, settings.toJson());
-        LOGGER.info("Scaffolded initial settings [{}/{}]", context.getProjectRoot(), fileName);
+        LOGGER.info("Scaffolded initial settings [{}/{}]", LoggedValue.of(context.getProjectRoot()), LoggedValue.of(fileName));
         return settings;
     }
 
@@ -309,7 +310,7 @@ public class IntentGenerationService {
         try {
             return IntentSettings.parse(new String(resource.getContent(), java.nio.charset.StandardCharsets.UTF_8));
         } catch (RuntimeException e) {
-            LOGGER.error("Failed to parse [{}] - falling back to defaults (not overwriting your file)", fileName, e);
+            LOGGER.error("Failed to parse [{}] - falling back to defaults (not overwriting your file)", LoggedValue.of(fileName), e);
             return IntentSettings.scaffold(context.getModel());
         }
     }
@@ -330,9 +331,9 @@ public class IntentGenerationService {
             try {
                 repository.removeResource(projectRoot + "/" + fileName);
                 scrubbed.add(fileName);
-                LOGGER.info("Scrubbed stale intent output [{}/{}]", projectRoot, fileName);
+                LOGGER.info("Scrubbed stale intent output [{}/{}]", LoggedValue.of(projectRoot), LoggedValue.of(fileName));
             } catch (RuntimeException e) {
-                LOGGER.error("Failed to scrub stale intent output [{}/{}]", projectRoot, fileName, e);
+                LOGGER.error("Failed to scrub stale intent output [{}/{}]", LoggedValue.of(projectRoot), LoggedValue.of(fileName), e);
             }
         }
         return scrubbed;
@@ -341,20 +342,6 @@ public class IntentGenerationService {
     private static boolean isIntentOwned(String fileName) {
         int dot = fileName.lastIndexOf('.');
         return dot >= 0 && INTENT_OWNED_EXTENSIONS.contains(fileName.substring(dot));
-    }
-
-    /**
-     * Strip CR/LF (and stray control characters) from a value that arrives in a user-controlled URL
-     * segment before it reaches the log, so a crafted request cannot forge log entries.
-     *
-     * @param value the value
-     * @return the value, with anything that could break a log line replaced
-     */
-    private static String sanitizeForLog(String value) {
-        if (value == null) {
-            return "null";
-        }
-        return value.replaceAll("[\\r\\n\\t]", "_");
     }
 
 }

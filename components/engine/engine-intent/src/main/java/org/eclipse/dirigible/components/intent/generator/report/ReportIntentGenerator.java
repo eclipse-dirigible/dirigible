@@ -17,12 +17,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BinaryOperator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.StatementSupport;
 import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
@@ -124,22 +126,21 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                                                              .create();
 
     /** {@code aggregate(field)} pattern - aggregate in group 1, field in group 2. */
-    private static final Pattern AGGREGATE_EXPRESSION = Pattern.compile("\\s*(\\w+)\\s*\\(\\s*([^)]*)\\s*\\)\\s*");
+    private static final Pattern AGGREGATE_EXPRESSION = Pattern.compile("\\s*(\\w+)\\s*\\(([^)]*)\\)\\s*");
     private static final Set<String> KNOWN_AGGREGATES = Set.of("COUNT", "SUM", "AVG", "MIN", "MAX");
-    private static final Pattern DOTTED_REF = Pattern.compile("\\b([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\b");
-    private static final Pattern SIMPLE_CONDITION = Pattern.compile("^\\s*(\\S+)\\s*(<=|>=|<>|!=|=|<|>)\\s*(.+?)\\s*$");
+    private static final Pattern SIMPLE_CONDITION = Pattern.compile("^\\s*([^\\s<>=!]+)\\s*(<=|>=|<>|!=|=|<|>)(.+)$");
     /**
      * {@code month(field)} / {@code year(field)} dimension - the bucket function in group 1, field in
      * group 2.
      */
-    private static final Pattern DATE_BUCKET = Pattern.compile("\\s*(month|year)\\s*\\(\\s*([^)]+?)\\s*\\)\\s*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern DATE_BUCKET = Pattern.compile("\\s*(month|year)\\s*\\(([^)]+)\\)\\s*", Pattern.CASE_INSENSITIVE);
 
     /**
      * {@code ageing(field, [30, 60, 90])} dimension - the date field in group 1, the comma-separated
      * day thresholds in group 2.
      */
     private static final Pattern AGEING_BUCKET =
-            Pattern.compile("\\s*ageing\\s*\\(\\s*([^,\\[]+?)\\s*,\\s*\\[\\s*([^\\]]+?)\\s*\\]\\s*\\)\\s*", Pattern.CASE_INSENSITIVE);
+            Pattern.compile("\\s*ageing\\s*\\(([^,\\[]+),\\s*\\[([^\\]]+)\\]\\s*\\)\\s*", Pattern.CASE_INSENSITIVE);
 
     /** The sibling translation table of a multilingual entity, and its bookkeeping columns. */
     private static final String LANGUAGE_TABLE_SUFFIX = "_LANG";
@@ -222,13 +223,13 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         for (ReportIntent report : model.getReports()) {
             if (report.getName() == null || report.getName()
                                                   .isBlank()) {
-                LOGGER.warn("Skipping unnamed report in intent [{}]", IntentNaming.baseName(context));
+                LOGGER.warn("Skipping unnamed report in intent [{}]", LoggedValue.of(IntentNaming.baseName(context)));
                 continue;
             }
             String fileName = report.getName() + ".report";
             if (!seenFiles.add(fileName)) {
-                LOGGER.warn("Duplicate report [{}] in intent [{}] - keeping the first occurrence", report.getName(),
-                        IntentNaming.baseName(context));
+                LOGGER.warn("Duplicate report [{}] in intent [{}] - keeping the first occurrence", LoggedValue.of(report.getName()),
+                        LoggedValue.of(IntentNaming.baseName(context)));
                 continue;
             }
             Emission emission = build(context, report);
@@ -250,7 +251,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 // formatted artifact, and a later Generate must not overwrite a designed one.
                 String templateFile = ReportPrintTemplate.fileName(report.getName());
                 context.writeModelFileIfAbsent(templateFile, ReportPrintTemplate.build(report, columnsOf(document)));
-                LOGGER.debug("Generated standard report print template [{}]", templateFile);
+                LOGGER.debug("Generated standard report print template [{}]", LoggedValue.of(templateFile));
             }
         }
     }
@@ -353,7 +354,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         } else {
             for (ResolvedDimension dimension : resolveDimensions(context, model, source, baseAlias, report, joins, aggregated)) {
                 columns.add(dimension.column());
-                dimensionColumns.put(expressionKey(dimension.authored()), new WidgetDimension(dimension.column(), dimension.bucket()));
+                dimensionColumns.put(expressionKey(dimension.declared()), new WidgetDimension(dimension.column(), dimension.bucket()));
             }
             if (balance) {
                 addBalanceMeasures(context, model, source, baseAlias, baseTable, report, joins, columns);
@@ -462,7 +463,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * reference it reads, and the bucket function ({@code month}/{@code year}/{@code ageing}) when it
      * is a computed bucket rather than a plain column.
      */
-    private record ResolvedDimension(String authored, Map<String, Object> column, ColumnRef ref, String bucket) {
+    private record ResolvedDimension(String declared, Map<String, Object> column, ColumnRef ref, String bucket) {
     }
 
     /**
@@ -555,7 +556,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 return;
             }
         }
-        LOGGER.warn("Measure [{}] did not match the aggregate(field) convention - skipping", measure);
+        LOGGER.warn("Measure [{}] did not match the aggregate(field) convention - skipping", LoggedValue.of(measure));
     }
 
     /**
@@ -576,11 +577,11 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      */
     private static List<Integer> ageingThresholds(String raw) {
         List<Integer> thresholds = new ArrayList<>();
-        for (String token : raw.split(",")) {
+        for (String threshold : raw.split(",")) {
             try {
-                thresholds.add(Integer.valueOf(token.trim()));
+                thresholds.add(Integer.valueOf(threshold.trim()));
             } catch (NumberFormatException ex) {
-                LOGGER.warn("Skipping non-numeric ageing threshold [{}]", token.trim(), ex);
+                LOGGER.warn("Skipping non-numeric ageing threshold [{}]", LoggedValue.of(threshold.trim()), ex);
             }
         }
         return thresholds;
@@ -690,8 +691,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
         String documentColumn = documentColumn(source, report);
         if (documentColumn == null) {
-            LOGGER.warn("Balance report [{}] declares correspondence but its date [{}] does not go through a to-one relation of [{}]"
-                    + " - the correspondence axis is skipped", report.getName(), report.getDate(), source.getName());
+            LOGGER.warn(
+                    "Balance report [{}] declares correspondence but its date [{}] does not go through a to-one relation of [{}]"
+                            + " - the correspondence axis is skipped",
+                    LoggedValue.of(report.getName()), LoggedValue.of(report.getDate()), LoggedValue.of(source.getName()));
             return null;
         }
         String correspondent = source.getName() + CORRESPONDENT_SUFFIX;
@@ -837,8 +840,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             }
             Map<String, Object> column = column(baseAlias, alias, viewColumn, (String) emitted.get("type"), "NONE", true, repoExpression);
             columns.add(column);
-            if (dimension.authored() != null) {
-                dimensionColumns.put(expressionKey(dimension.authored()), new WidgetDimension(column, dimension.bucket()));
+            if (dimension.declared() != null) {
+                dimensionColumns.put(expressionKey(dimension.declared()), new WidgetDimension(column, dimension.bucket()));
             }
         }
 
@@ -866,7 +869,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             String target = parameter.getNormalizedTarget();
             String operation = SQL_OPERATIONS.get(parameter.getNormalizedOp());
             if (name == null || name.isBlank() || target == null || operation == null) {
-                LOGGER.warn("Skipping incomplete parameter [{}] of report [{}]", name, report.getName());
+                LOGGER.warn("Skipping incomplete parameter [{}] of report [{}]", LoggedValue.of(name), LoggedValue.of(report.getName()));
                 continue;
             }
             ColumnRef ref = resolve(context, model, source, baseAlias, target);
@@ -1070,7 +1073,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             String target = parameter.getNormalizedTarget();
             String operation = SQL_OPERATIONS.get(parameter.getNormalizedOp());
             if (name == null || name.isBlank() || target == null || operation == null) {
-                LOGGER.warn("Skipping incomplete parameter [{}] of report [{}]", name, report.getName());
+                LOGGER.warn("Skipping incomplete parameter [{}] of report [{}]", LoggedValue.of(name), LoggedValue.of(report.getName()));
                 continue;
             }
             ColumnRef ref = resolve(context, model, source, baseAlias, target);
@@ -1270,7 +1273,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 : line.getCode()
                       .trim();
         if (code != null && !path.add(code)) {
-            LOGGER.warn("Statement line [{}] takes part in a cycle - dropping the reference that closes it", code);
+            LOGGER.warn("Statement line [{}] takes part in a cycle - dropping the reference that closes it", LoggedValue.of(code));
             return;
         }
         if (line.isLeaf()) {
@@ -1549,7 +1552,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             Map<String, Object> measureColumn = measureColumns.get(expressionKey(intent.getValue()));
             if (measureColumn == null) {
                 LOGGER.warn("Widget of report [{}] references measure [{}] which produced no column - the KPI will not resolve",
-                        report.getName(), intent.getValue());
+                        LoggedValue.of(report.getName()), LoggedValue.of(intent.getValue()));
             } else {
                 widget.put("valueColumn", measureColumn.get("alias"));
                 widget.put("valueType", measureColumn.get("type"));
@@ -1566,7 +1569,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                                                   .entrySet()) {
             WidgetDimension dimension = dimensionColumns.get(expressionKey(at.getKey()));
             if (dimension == null) {
-                LOGGER.warn("Widget of report [{}] pins unknown dimension [{}] - skipping the pin", report.getName(), at.getKey());
+                LOGGER.warn("Widget of report [{}] pins unknown dimension [{}] - skipping the pin", LoggedValue.of(report.getName()),
+                        LoggedValue.of(at.getKey()));
                 continue;
             }
             Map<String, Object> pin = new LinkedHashMap<>();
@@ -2083,23 +2087,16 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         if (filter == null || filter.isBlank() || source == null) {
             return filter == null ? null : filter.trim();
         }
-        Matcher matcher = DOTTED_REF.matcher(filter);
-        StringBuilder dotted = new StringBuilder();
-        while (matcher.find()) {
-            RelationIntent relation = relationByName(source, matcher.group(1));
-            if (relation != null && relation.getTo() != null) {
-                EntityIntent target = entityByName(model, relation.getTo());
-                String targetAlias = relation.getTo();
-                joins.putIfAbsent(targetAlias,
-                        join(context, model, source, relation, target, targetAlias, targetAlias, baseAlias, JOIN_TYPE));
-                matcher.appendReplacement(dotted,
-                        Matcher.quoteReplacement(targetAlias + "." + quote(column(targetAlias, matcher.group(2)))));
-            } else {
-                matcher.appendReplacement(dotted, Matcher.quoteReplacement(matcher.group()));
+        String where = rewriteDottedReferences(filter, (relationName, fieldName) -> {
+            RelationIntent relation = relationByName(source, relationName);
+            if (relation == null || relation.getTo() == null) {
+                return null;
             }
-        }
-        matcher.appendTail(dotted);
-        String where = dotted.toString();
+            EntityIntent target = entityByName(model, relation.getTo());
+            String targetAlias = relation.getTo();
+            joins.putIfAbsent(targetAlias, join(context, model, source, relation, target, targetAlias, targetAlias, baseAlias, JOIN_TYPE));
+            return targetAlias + "." + quote(column(targetAlias, fieldName));
+        });
         for (FieldIntent field : source.getFields()) {
             if (field.getName() != null && !field.getName()
                                                  .isBlank()) {
@@ -2126,6 +2123,66 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         // `==` (e.g. Code == 'A==B') is left intact.
         where = normalizeEqualityOperator(where);
         return where.trim();
+    }
+
+    /**
+     * Rewrite every {@code Relation.Field} reference in the filter - an identifier, a dot and an
+     * identifier, bounded by non-word characters - through the mapping, left to right in one pass; a
+     * {@code null} mapping keeps the reference as written. A hand-rolled scan rather than an unanchored
+     * regex {@code find()}: the filter is request-tainted since the dry-run validation endpoint, and
+     * this walk provably touches every character once.
+     *
+     * @param filter the authored WHERE fragment
+     * @param mapping relation name and field name to the SQL that replaces the reference, or
+     *        {@code null}
+     * @return the fragment with the references rewritten
+     */
+    private static String rewriteDottedReferences(String filter, BinaryOperator<String> mapping) {
+        StringBuilder out = new StringBuilder(filter.length());
+        int length = filter.length();
+        int i = 0;
+        while (i < length) {
+            if (!isIdentifierStart(filter.charAt(i)) || (i > 0 && isWordCharacter(filter.charAt(i - 1)))) {
+                out.append(filter.charAt(i++));
+                continue;
+            }
+            int relationEnd = identifierEnd(filter, i);
+            boolean dotted =
+                    relationEnd + 1 < length && filter.charAt(relationEnd) == '.' && isIdentifierStart(filter.charAt(relationEnd + 1));
+            int fieldEnd = dotted ? identifierEnd(filter, relationEnd + 1) : relationEnd;
+            if (dotted && (fieldEnd == length || !isWordCharacter(filter.charAt(fieldEnd)))) {
+                String rewritten = mapping.apply(filter.substring(i, relationEnd), filter.substring(relationEnd + 1, fieldEnd));
+                out.append(rewritten != null ? rewritten : filter.substring(i, fieldEnd));
+            } else {
+                out.append(filter, i, fieldEnd);
+            }
+            i = fieldEnd;
+        }
+        return out.toString();
+    }
+
+    /** The index just past the identifier that starts at {@code start}. */
+    private static int identifierEnd(String text, int start) {
+        int end = start + 1;
+        while (end < text.length() && isIdentifierPart(text.charAt(end))) {
+            end++;
+        }
+        return end;
+    }
+
+    private static boolean isIdentifierStart(char c) {
+        return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+    }
+
+    private static boolean isIdentifierPart(char c) {
+        return isIdentifierStart(c) || (c >= '0' && c <= '9');
+    }
+
+    /**
+     * What a regex word boundary counts as a word character - the reference must not sit inside one.
+     */
+    private static boolean isWordCharacter(char c) {
+        return c == '_' || Character.isLetterOrDigit(c);
     }
 
     /**
@@ -2179,7 +2236,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                                                                                      .find()) {
                     return null;
                 }
-                conditions.add(condition(matcher.group(1), matcher.group(2), matcher.group(3)));
+                conditions.add(condition(matcher.group(1), matcher.group(2), matcher.group(3)
+                                                                                    .trim()));
             }
         }
         if (scope != null) {

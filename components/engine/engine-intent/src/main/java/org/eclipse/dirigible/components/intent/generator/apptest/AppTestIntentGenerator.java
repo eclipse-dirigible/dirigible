@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
@@ -90,19 +91,20 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         // neither rewrites it nor lets the scrub take it. Checked before anything is built - there is
         // no output to produce for a module that already has its manifest.
         if (context.keepExistingModelFile(fileName)) {
-            LOGGER.debug("Keeping the existing app-test manifest [{}] — it is developer-owned after the first Generate", fileName);
+            LOGGER.debug("Keeping the existing app-test manifest [{}] — it is developer-owned after the first Generate",
+                    LoggedValue.of(fileName));
             return;
         }
 
         Map<String, Map<String, Object>> edmEntities = readModelEntities(context, baseName);
         if (edmEntities.isEmpty()) {
-            LOGGER.debug("Skipping app-test manifest for [{}] — no .model entities to describe", baseName);
+            LOGGER.debug("Skipping app-test manifest for [{}] — no .model entities to describe", LoggedValue.of(baseName));
             return;
         }
 
         Map<String, Object> manifest = buildManifest(baseName, context.getProjectName(), model, edmEntities, context);
         context.writeModelFile(fileName, GSON.toJson(manifest) + "\n");
-        LOGGER.debug("Generated app-test manifest [{}]", fileName);
+        LOGGER.debug("Generated app-test manifest [{}]", LoggedValue.of(fileName));
     }
 
     /**
@@ -361,7 +363,7 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                     // reaching here means a degraded context - omit the relation rather than emit a
                     // guessed URL
                     LOGGER.warn("Omitting cross-model relation [{}] of [{}] from the app-test manifest - target unresolved",
-                            relation.getName(), entity.getName(), ex);
+                            LoggedValue.of(relation.getName()), LoggedValue.of(entity.getName()), ex);
                     continue;
                 }
                 out.put("crossModel", true);
@@ -580,7 +582,7 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                 }
             }
         } catch (RuntimeException e) {
-            LOGGER.warn("Failed to read the .model for the app-test manifest of [{}]; skipping", baseName, e);
+            LOGGER.warn("Failed to read the .model for the app-test manifest of [{}]; skipping", LoggedValue.of(baseName), e);
         }
         return byName;
     }

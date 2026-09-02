@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.intent.generator.edm;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -26,6 +27,7 @@ import java.util.stream.Collectors;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -543,8 +545,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 if (relation.isCrossModel()) {
                     UsesIntent uses = usesByAlias.get(relation.getModel());
                     if (uses == null) {
-                        LOGGER.warn("Skipping cross-model relation [{}] of [{}] - model [{}] is not in uses:", relation.getName(), name,
-                                relation.getModel());
+                        LOGGER.warn("Skipping cross-model relation [{}] of [{}] - model [{}] is not in uses:",
+                                LoggedValue.of(relation.getName()), LoggedValue.of(name), LoggedValue.of(relation.getModel()));
                         continue;
                     }
                     CrossModelSupport.TargetInfo info = CrossModelSupport.resolve(context, uses, relation.getTo());
@@ -1012,7 +1014,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (widget.getName() == null || widget.getName()
                                                   .isBlank()
                     || !seen.add(widget.getName())) {
-                LOGGER.warn("Skipping unnamed or duplicate custom widget in intent [{}]", model.getName());
+                LOGGER.warn("Skipping unnamed or duplicate custom widget in intent [{}]", LoggedValue.of(model.getName()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -1798,10 +1800,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 (targetIdentityLabel == null || targetIdentityLabel.isBlank()) ? targetIdentityProperty : targetIdentityLabel);
     }
 
-    /** YAML integers arrive as Long/Double - render {@code 1} not {@code 1.0} for whole numbers. */
+    /**
+     * YAML integers arrive as Long/Double - render {@code 1} not {@code 1.0} for whole numbers. The
+     * whole number is rendered through {@link BigDecimal} rather than a {@code long} cast, so an
+     * authored magnitude beyond the long range renders as its own digits instead of silently
+     * saturating.
+     */
     private static String stripTrailingZero(Number value) {
         double d = value.doubleValue();
-        return d == Math.rint(d) && !Double.isInfinite(d) ? String.valueOf((long) d) : String.valueOf(d);
+        return d == Math.rint(d) && !Double.isInfinite(d) ? BigDecimal.valueOf(d)
+                                                                      .toBigInteger()
+                                                                      .toString()
+                : String.valueOf(d);
     }
 
     /**
@@ -2147,8 +2157,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      */
     private static Map<String, Object> localRelatedRegister(EntityIntent entity, RelatedIntent related, Map<String, Object> source) {
         if (source == null) {
-            LOGGER.warn("Skipping related register [{}] of [{}] - the source entity was not generated", related.getEntity(),
-                    entity.getName());
+            LOGGER.warn("Skipping related register [{}] of [{}] - the source entity was not generated", LoggedValue.of(related.getEntity()),
+                    LoggedValue.of(entity.getName()));
             return null;
         }
         List<Map<String, Object>> properties = propertiesOf(source);
@@ -2171,8 +2181,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static Map<String, Object> crossModelRelatedRegister(IntentGenerationContext context, EntityIntent entity,
             RelatedIntent related, UsesIntent uses) {
         if (uses == null) {
-            LOGGER.warn("Skipping related register [{}] of [{}] - model [{}] is not in uses:", related.getEntity(), entity.getName(),
-                    related.getModel());
+            LOGGER.warn("Skipping related register [{}] of [{}] - model [{}] is not in uses:", LoggedValue.of(related.getEntity()),
+                    LoggedValue.of(entity.getName()), LoggedValue.of(related.getModel()));
             return null;
         }
         CrossModelSupport.RelatedSourceInfo info =
@@ -2912,7 +2922,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             Object value = attr.getValue();
             if ((value instanceof Iterable || value instanceof Map) && !STRUCTURED_ATTRIBUTES.contains(key)) {
                 LOGGER.warn("Document-level model value [{}] has no .edm representation and is lost when a diagram is saved -"
-                        + " add it to STRUCTURED_ATTRIBUTES (and to transform-edm.js's MODEL_STRUCTURED)", key);
+                        + " add it to STRUCTURED_ATTRIBUTES (and to transform-edm.js's MODEL_STRUCTURED)", LoggedValue.of(key));
                 continue;
             }
             appendModelAttribute(sb, key, value);

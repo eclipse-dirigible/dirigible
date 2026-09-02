@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -76,7 +77,7 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
                                                        .getName()
                     + "/Print/en/standard.print";
             context.writeModelFileIfAbsent(fileName, buildTemplate(master.getKey(), master.getValue(), IntentEntities.byName(model)));
-            LOGGER.debug("Generated standard print template [{}]", fileName);
+            LOGGER.debug("Generated standard print template [{}]", LoggedValue.of(fileName));
         }
     }
 

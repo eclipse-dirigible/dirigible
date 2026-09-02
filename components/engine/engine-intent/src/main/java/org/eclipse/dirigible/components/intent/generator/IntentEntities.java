@@ -16,6 +16,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -136,7 +137,7 @@ public final class IntentEntities {
         Set<String> visited = new LinkedHashSet<>();
         while (compositionParents.containsKey(current)) {
             if (!visited.add(current)) {
-                LOGGER.warn("Composition cycle detected at entity [{}] - keeping its own perspective", entityName);
+                LOGGER.warn("Composition cycle detected at entity [{}] - keeping its own perspective", LoggedValue.of(entityName));
                 return entityName;
             }
             current = compositionParents.get(current);

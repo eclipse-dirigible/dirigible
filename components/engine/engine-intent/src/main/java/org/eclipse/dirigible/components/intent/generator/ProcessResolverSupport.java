@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
@@ -156,8 +157,9 @@ public final class ProcessResolverSupport {
         }
         EntityIntent target = byName.get(relation.getTo());
         if (target == null || fieldOf(target, fieldName) == null) {
-            LOGGER.warn("{} [{}] in process [{}] references [{}.{}] but [{}] has no field [{}] - skipping resolver", origin, step.getName(),
-                    process.getName(), relationName, fieldName, relation.getTo(), fieldName);
+            LOGGER.warn("{} [{}] in process [{}] references [{}.{}] but [{}] has no field [{}] - skipping resolver", LoggedValue.of(origin),
+                    LoggedValue.of(step.getName()), LoggedValue.of(process.getName()), LoggedValue.of(relationName),
+                    LoggedValue.of(fieldName), LoggedValue.of(relation.getTo()), LoggedValue.of(fieldName));
             return;
         }
         String handler = "Resolve" + IntentNaming.pascalCase(relationName) + IntentNaming.pascalCase(fieldName);

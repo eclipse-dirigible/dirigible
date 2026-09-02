@@ -21,6 +21,7 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
@@ -96,18 +97,19 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
         for (SeedIntent seed : model.getSeeds()) {
             if (seed.getName() == null || seed.getName()
                                               .isBlank()) {
-                LOGGER.warn("Skipping unnamed seed in intent [{}]", IntentNaming.baseName(context));
+                LOGGER.warn("Skipping unnamed seed in intent [{}]", LoggedValue.of(IntentNaming.baseName(context)));
                 continue;
             }
             EntityIntent entity = entitiesByName.get(seed.getEntity());
             if (entity == null) {
-                LOGGER.warn("Seed [{}] references unknown entity [{}] - skipping", seed.getName(), seed.getEntity());
+                LOGGER.warn("Seed [{}] references unknown entity [{}] - skipping", LoggedValue.of(seed.getName()),
+                        LoggedValue.of(seed.getEntity()));
                 continue;
             }
             String fileName = fileNameOnly(seed.getName());
             if (!seenFiles.add(fileName)) {
-                LOGGER.warn("Duplicate seed [{}] in intent [{}] - keeping the first occurrence", seed.getName(),
-                        IntentNaming.baseName(context));
+                LOGGER.warn("Duplicate seed [{}] in intent [{}] - keeping the first occurrence", LoggedValue.of(seed.getName()),
+                        LoggedValue.of(IntentNaming.baseName(context)));
                 continue;
             }
             // A file seed references an AUTHORED CSV (large data sets - countries, currencies, ...):

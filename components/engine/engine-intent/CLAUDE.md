@@ -186,6 +186,22 @@ anti-pattern downstream. The same applies to the `custom/` stubs `ServiceTaskHan
 scaffolds. This leaked once (the #6356 send templates shipped `System.err.println` in review); the
 platform-wide rule and the single documented exception live in the root `CLAUDE.md`.
 
+**Platform-side log lines scrub every authored value through `LoggedValue.of(...)`.** Almost every
+string a generator or the parser logs is developer-authored - an entity, report or process name, a
+file path, the workspace/project/path segments of the request - and since `POST /validate` all of it
+can also arrive straight in a request body, so CodeQL rightly treats each such log argument as a
+remote-taint sink (`java/log-injection`, issue #7003). The one shared helper
+(`org.eclipse.dirigible.components.intent.LoggedValue`) collapses line breaks (`\R`) and nothing
+else; route every model- or request-derived log argument through it, including a pre-built warning
+string that is logged whole, and never reintroduce a per-class `sanitizeForLog` copy - the previous
+private copies used a character class CodeQL does not recognise as a sanitizer, so they silenced
+nothing. Counters, constants and the trailing throwable stay unwrapped. Two more scanner findings
+worth knowing before you name things here: a method whose name contains `auth` (`authoredId`,
+`authored()`) is read as an authentication step and every tainted condition around it becomes a
+`java/user-controlled-bypass` alert, and a variable called `token` is read as a credential
+(`java/sensitive-log`) - the renames to `parseSeedId`, `ResolvedDimension.declared` and
+`threshold` are why those alerts are gone, not suppressions.
+
 **Documentation sync (normative).** A DSL change is not done until its human documentation lands,
 in the same effort — never offered as an optional follow-up. **Three** repositories, because the
 specification and its website split in mid-2026:

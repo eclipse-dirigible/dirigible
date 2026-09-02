@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.intent.generator;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
@@ -102,7 +103,8 @@ public class ServiceTaskHandlerGenerator implements IntentTargetGenerator {
                     continue; // preserve the developer's implementation
                 }
                 context.writeModelFile(fileName, stub(process.getName(), step.getName(), handler));
-                LOGGER.info("Scaffolded service-task handler stub [{}] (implement it - it will not be regenerated)", fileName);
+                LOGGER.info("Scaffolded service-task handler stub [{}] (implement it - it will not be regenerated)",
+                        LoggedValue.of(fileName));
             }
         }
     }
