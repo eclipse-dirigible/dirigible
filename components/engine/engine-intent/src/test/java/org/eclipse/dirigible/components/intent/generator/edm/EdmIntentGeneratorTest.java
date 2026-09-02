@@ -1143,6 +1143,98 @@ class EdmIntentGeneratorTest {
                                                            .get("fields"));
     }
 
+    /**
+     * A document check counts the document's LINES, even when the document owns several composition
+     * children - a printed {@code function: Snapshot} copy, a payment allocation, a promotion. The
+     * items child used to be whichever one a {@code HashMap} iteration yielded first, so an invoice's
+     * "needs at least one line" guard counted printed snapshots and could never be satisfied (#7027).
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void documentCheckBindsToTheLinesChildNotAnySibling() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Invoice
+                    checks:
+                      - { kind: itemsMin, count: 1, status: 2, message: "Invoice needs at least one line" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                  - name: InvoiceCopy
+                    function: Snapshot
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                  - name: InvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing");
+        List<Map<String, Object>> entities = entities(model);
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities, "Invoice").get("checks");
+        Map<String, Object> minCheck = checks.get(0);
+        // The lines, not the snapshot copy declared before them - and the same child the document
+        // layout renders as the items table.
+        assertEquals("InvoiceItem", minCheck.get("itemsEntity"));
+        assertEquals("Invoice", minCheck.get("itemsFk"));
+        assertEquals("InvoiceItem", entityByName(entities, "Invoice").get("documentItemsEntity"));
+    }
+
+    /**
+     * The explicit answer wins over the naming convention: a lines child flagged
+     * {@code function: DocumentItem} is the items child even when a sibling is {@code *Item}-named.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void documentCheckPrefersTheFlaggedItemsChild() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Invoice
+                    checks:
+                      - { kind: itemsMin, count: 1, status: 2, message: "Invoice needs at least one line" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                  - name: InvoiceAdjustmentItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                  - name: InvoiceLine
+                    function: DocumentItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal }
+                    relations:
+                      - { name: Document, kind: manyToOne, to: Invoice, composition: true, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "Invoice").get("checks");
+        assertEquals("InvoiceLine", checks.get(0)
+                                          .get("itemsEntity"));
+        // The back-reference is the flagged child's own composition relation name, not the master's.
+        assertEquals("Document", checks.get(0)
+                                       .get("itemsFk"));
+    }
+
     @Test
     void whereEmitsStaticOptionFilterAttributes() {
         String yaml = """

@@ -117,7 +117,10 @@ Values: `Document`, `DocumentItem`, `Master`, `Detail`, `List`, `Setting` (entit
 
 Row-level `exactlyOne` on every user write; document-level `itemsMin` / `itemsSumEqual` gated on a
 status transition (drafting stays unconstrained; the failing transition aborts with the authored
-message).
+message). A document-level check counts the document's LINES: a child flagged
+`function: DocumentItem`, else the `*Item`-named child, else the sole composition child, else the
+first declared. Flag the lines child explicitly on a document that owns several composition children
+(payment allocations, promotions, printed snapshots).
 
 ```yaml
 - name: JournalEntry

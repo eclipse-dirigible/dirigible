@@ -72,24 +72,25 @@ import ch.qos.logback.classic.Level;
  * 409 keyed on a period register's status instead - a record booked into an open period stops being
  * writable when the period around it closes, a create into or a move into a closed one is refused,
  * and a date no period covers stays writable), {@code checks} (exactlyOne / itemsMin /
- * itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual} (the read-time overlay
- * on an entity read, and its SQL counterpart on a report grouping by that nomenclature - the two
- * must agree on the same value in the same language), seed rows carrying a RELATION column,
- * aggregate totals, first-class {@code number:} stamping from an authored {@code .numbers} series
- * declaration, {@code transitions} (the guarded on-demand status flip: allowed-status 200,
- * wrong-status/guard 409), {@code lifecycle} (the declarative state machine: the graph walked
- * through its transitions, an unmodeled flip and a create filed mid-lifecycle both refused through
- * the plain REST surface no transition guard covers), {@code postings} with {@code reverses} (post
- * on a transition; red-storno reversal on void - negated amounts, storno link, fail-soft), the
- * {@code notify} block with {@code attach: print} (send the document itself by e-mail - on a
- * transition and on a process step; the fail-soft contract), {@code calculatedActionOnCreate} on a
- * to-one RELATION (the FK resolved server-side by a hand-written {@code custom/} action: assigned
- * in the repository, and at runtime both defaulted when omitted and left alone when the caller
- * supplied one), the event-driven {@code generates} (posting the source mints the whole document
- * with nobody clicking, and a click afterwards returns that same document - the at-most-once
- * back-reference guard), and the personal (my) surface
- * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
- * fields).
+ * itemsSumEqual - including that a document gate counts the document's LINES and not a sibling
+ * composition child such as its printed copy), {@code hierarchy}/{@code leafOnly},
+ * {@code multilingual} (the read-time overlay on an entity read, and its SQL counterpart on a
+ * report grouping by that nomenclature - the two must agree on the same value in the same
+ * language), seed rows carrying a RELATION column, aggregate totals, first-class {@code number:}
+ * stamping from an authored {@code .numbers} series declaration, {@code transitions} (the guarded
+ * on-demand status flip: allowed-status 200, wrong-status/guard 409), {@code lifecycle} (the
+ * declarative state machine: the graph walked through its transitions, an unmodeled flip and a
+ * create filed mid-lifecycle both refused through the plain REST surface no transition guard
+ * covers), {@code postings} with {@code reverses} (post on a transition; red-storno reversal on
+ * void - negated amounts, storno link, fail-soft), the {@code notify} block with
+ * {@code attach: print} (send the document itself by e-mail - on a transition and on a process
+ * step; the fail-soft contract), {@code calculatedActionOnCreate} on a to-one RELATION (the FK
+ * resolved server-side by a hand-written {@code custom/} action: assigned in the repository, and at
+ * runtime both defaulted when omitted and left alone when the caller supplied one), the
+ * event-driven {@code generates} (posting the source mints the whole document with nobody clicking,
+ * and a click afterwards returns that same document - the at-most-once back-reference guard), and
+ * the personal (my) surface ({@code identity}/{@code personal}/{@code sensitive}: scoped reads,
+ * forced owner, stripped fields).
  */
 @Tag("slow")
 class IntentEmissionCoverageIT extends IntegrationTest {
@@ -313,6 +314,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Unit,  kind: manyToOne, to: Unit }
                   # copied from Doc.Party by docPosting, and carried UNCHANGED onto the storno line (#6533).
                   - { name: Party, kind: manyToOne, to: Party }
+
+              # A SECOND composition child of the same document (#7027): the entry's printed copy is
+              # not its lines. The document gate must count EntryLine - the child declared first -
+              # however this entity's name happens to hash, which is what used to decide it.
+              - name: EntryCopy
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 200 }
+                relations:
+                  - { name: Entry, kind: manyToOne, to: Entry, composition: true, required: true }
 
               # A master-detail (MANAGE_MASTER) entity carrying an EntityStatus: the master
               # layout must resolve the status FK to a label lookup and render it as a badge in
@@ -1791,6 +1802,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "checks: itemsMin must emit its authored message into the repository gate");
         assertTrue(entryRepository.contains("Debits must equal credits"),
                 "checks: itemsSumEqual must emit its authored message into the repository gate");
+        // ...and both gates must query the document's LINES. The items child used to be whichever
+        // composition child a HashMap iteration yielded first, so a document that also owns a printed
+        // copy, a payment allocation or a promotion counted THOSE rows (#7027) - an invoice guard that
+        // could never be satisfied, with every pipeline step green and the authored message present.
+        assertTrue(entryRepository.contains("new EntryLineRepository().findAll("),
+                "a document check must count the document's line items, got: " + entryRepository);
+        assertFalse(entryRepository.contains("new EntryCopyRepository().findAll("),
+                "a document check must not count a sibling composition child (the printed copy), got: " + entryRepository);
         // A workflow setter/writer persists via the TARGETED updateProperty/updateProperties write - the
         // checks-bearing repository must OVERRIDE it to still run the posting gate, so converting the
         // setter from a full-row merge to a targeted write did not silently drop the check (the
@@ -3511,6 +3530,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("$", hasSize(0)));
+
+        // A printed copy of the entry - a row in a SIBLING composition child, not a line (#7027). The
+        // guard below must still refuse: what satisfies "at least one line" is a line.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Entry\":" + entryId + ",\"Note\":\"printed copy\"}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryCopyController")
+                                                 .then()
+                                                 .statusCode(200));
 
         // checks: itemsMin - carrying the gate status with no lines must be rejected.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
