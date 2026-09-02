@@ -59,7 +59,16 @@ public class ${className}GenerateOnEvent implements MessageHandler {
         if (payload == null || payload.${fromPk} == null) {
             return;
         }
-#if($guardProperty != "")
+#if($guardCondition && $guardCondition != "")
+        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
+                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(payload.${fromPk});
+        ## The complete pre-rendered guard - the status comparison AND any string-field terms of the
+        ## intent's `when` list (issue #6957), all evaluated against the re-loaded source.
+        if (source == null || !(${guardCondition})) {
+            return;
+        }
+#elseif($guardProperty != "")
+        ## A .glue written before guardCondition existed: render the single status guard it always had.
         gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
                 new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(payload.${fromPk});
         if (source == null || source.${guardProperty} == null || source.${guardProperty} != ${guardValue}) {

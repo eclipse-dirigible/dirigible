@@ -1790,6 +1790,33 @@ generates:
     process and its steps belong to the model that declares them). `when:` stays optional here: the step
     IS the moment. Use it when the follow-up document belongs to a point in a flow rather than to a
     status - and as the route around a source whose write does not publish a transition.
+- **`when:` may be a LIST of comparisons - their AND - to guard by HOW the status was reached.** When a
+  status converges from more than one path (a `resolves:` lookup routes to it automatically, an
+  officer's task sets it manually), a bare status guard fires on both. The lookup's `outcome:` trace
+  field stamps the provenance (`found` / `notFound` / `ambiguous`), and a list `when` reads it:
+
+  ```yaml
+  # SUCCESS log only for the AUTOMATIC identification - the manual path (same status,
+  # outcome stamped notFound/ambiguous by the earlier failed lookup) does not fire it.
+  - name: log-driver-identified
+    from: Fine
+    to: FineLog
+    event:
+      onTransition: Fine
+      mode: append
+      when:
+        - "Status == DRIVER_IDENTIFIED"
+        - "resolution == found"
+  ```
+
+  One status comparison (mandatory for `onTransition`, by seeded name or id) plus any number of
+  `<StringField> ==|!= <literal>` terms against the source's OWN string fields (the literal quoted or a
+  bare word). AND only, equality only, one comparison per property - and guard only fields the platform
+  writes (`readOnly: true`, like a lookup's `outcome:` target): a user-editable guard field means a UI
+  edit silently changes which automations fire, and Generate warns about it. The document that must
+  exist once regardless of path (the Declaration) keeps the bare converged-status guard; only the rules
+  that record HOW it happened need the extra term. The manual path's own log binds `onStepCompleted` on
+  the officer's task, which needs no guard at all.
 - **`map:` must copy the source's `id` onto the target's to-one back to the source** - in BOTH
   cardinalities. Under the default `mode: once` it is the at-most-once guard: before creating anything the
   create-from looks for a target that already back-references this source and returns it instead, so an

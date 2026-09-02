@@ -3093,10 +3093,72 @@ class IntentEngineIT extends IntegrationTest {
         // its guard still steps over the retired document - which is what mints the replacement once the
         // reopen has re-published the source's transition.
         String onEvent = codeOf("gen/events/reissue/InvoiceFromProformaGenerateOnEvent.java");
-        assertTrue(onEvent.contains("source.Status != 2"), "the trigger still qualifies on the status the source is returned to");
+        assertTrue(onEvent.contains("!(source.Status != null && source.Status == 2)"),
+                "the trigger still qualifies on the status the source is returned to");
         String generate = codeOf("gen/events/reissue/InvoiceFromProformaGenerate.java");
         assertTrue(generate.contains("if (candidate.Status == null || !(candidate.Status == 3 || candidate.Status == 4)) {"),
                 "the at-most-once guard must step over the retired target the reopen reacts to");
+    }
+
+    @Test
+    void generates_when_list_guards_the_listener_by_status_and_trace_field() {
+        // Issue #6957: a status two paths converge on (a resolves: lookup routes to it, an officer's
+        // task sets it manually) is indistinguishable to a bare status guard - the SUCCESS log fires on
+        // both. A `when` LIST is the AND of the status comparison and the lookup's own readOnly
+        // `outcome:` trace field, so the rule fires only on the path that stamped it.
+        String yaml = """
+                name: fineflow
+                entities:
+                  - name: FineStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: Fine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string }
+                      - { name: resolution, type: string, readOnly: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+                  - name: FineLog
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string }
+                    relations:
+                      - { name: Fine, kind: manyToOne, to: Fine }
+                generates:
+                  - name: log-identified
+                    from: Fine
+                    to: FineLog
+                    forEntity: Fine
+                    event:
+                      onTransition: Fine
+                      mode: append
+                      when:
+                        - "Status == IDENTIFIED"
+                        - "resolution == found"
+                    map: { Fine: id }
+                seeds:
+                  - name: fine-statuses
+                    entity: FineStatus
+                    rows:
+                      - { id: 1, name: NEW }
+                      - { id: 2, name: IDENTIFIED }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        generateFromModel("template-application-events-java/template/template.js", "fineflow.glue");
+        String onEvent = codeOf("gen/events/fineflow/LogIdentifiedGenerateOnEvent.java");
+        assertTrue(
+                onEvent.contains(
+                        "!(source.Status != null && source.Status == 2 && java.util.Objects.equals(source.Resolution, \"found\"))"),
+                "every term of the when list must guard the re-loaded source, got: " + onEvent);
+        assertTrue(onEvent.contains("-Fine-transitioned"), "the list form must not change the topic the listener binds");
     }
 
     @Test

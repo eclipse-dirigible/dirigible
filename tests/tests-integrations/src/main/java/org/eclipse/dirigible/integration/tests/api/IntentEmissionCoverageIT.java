@@ -2878,7 +2878,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(generateOnEvent.contains("implements MessageHandler"), "the event-driven create-from must be a message handler");
         assertTrue(generateOnEvent.contains("-Slip-transitioned"),
                 "an onTransition create-from must bind the source's -transitioned topic");
-        assertTrue(generateOnEvent.contains("source.Status != 2"), "the listener must guard on the status the seeded name resolved to");
+        assertTrue(generateOnEvent.contains("!(source.Status != null && source.Status == 2)"),
+                "the listener must guard on the status the seeded name resolved to");
         assertTrue(generateOnEvent.contains("new VoucherFromSlipGenerate().create("),
                 "the listener must delegate to the create-from rather than re-implement the mapping");
         assertFalse(generateOnEvent.contains("VoucherLineEntity"), "the listener must carry no mapping of its own");

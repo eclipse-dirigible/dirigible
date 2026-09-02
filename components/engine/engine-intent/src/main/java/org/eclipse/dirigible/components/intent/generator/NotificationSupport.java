@@ -308,6 +308,29 @@ public final class NotificationSupport {
         return "==".equals(matcher.group(2)) ? equals : "!" + equals;
     }
 
+    /**
+     * A {@code when} guard that may be the scalar comparison or a LIST of them - an implicit AND
+     * (dirigible #6957). Each element renders through {@link #guard(String)}; an element that does not
+     * parse contributes nothing ({@code true}), exactly as the scalar always degraded, so a list is
+     * never stricter than what its author could say with scalars.
+     *
+     * @param when the guard - a comparison string, a list of them, or {@code null}
+     * @return a Java boolean expression
+     */
+    public static String guard(Object when) {
+        if (!(when instanceof List<?> terms)) {
+            return guard(when == null ? null : String.valueOf(when));
+        }
+        List<String> conditions = new java.util.ArrayList<>();
+        for (Object term : terms) {
+            String condition = guard(term == null ? null : String.valueOf(term));
+            if (!"true".equals(condition)) {
+                conditions.add(condition);
+            }
+        }
+        return conditions.isEmpty() ? "true" : String.join(" && ", conditions);
+    }
+
     private static String literalToJava(String rhs) {
         if (rhs.length() >= 2 && (rhs.startsWith("'") && rhs.endsWith("'") || rhs.startsWith("\"") && rhs.endsWith("\""))) {
             return quote(rhs.substring(1, rhs.length() - 1));

@@ -221,8 +221,7 @@ final class StatusSymbolResolver {
             // the guard could never hold and the process silently never started (#6862).
             Map<?, ?> trigger = asMap(process.get("trigger"));
             if (trigger != null && trigger.get("when") != null) {
-                put(trigger, "when", rewriteExpression(text(trigger, "when"), statusRelationName(triggerEntity), statusOf(triggerEntity),
-                        subject + " trigger when"));
+                rewriteWhen(trigger, statusRelationName(triggerEntity), statusOf(triggerEntity), subject + " trigger when");
             }
             // `setRelationField: <Relation>` + `value:` writes an id of THAT relation's target - the
             // status in the canonical case, but the same shape serves any nomenclature FK.
@@ -255,7 +254,9 @@ final class StatusSymbolResolver {
             // A cross-model source's nomenclature is seeded in its own model; name it as such rather
             // than reporting the entity as unknown.
             Target status = text(event, "model") != null ? new Target(source, text(event, "model")) : statusOf(source);
-            put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(source), status, subject));
+            if (event.get("when") instanceof String) { // a list `when` is refused by the parser; do not mangle it into a string here
+                put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(source), status, subject));
+            }
         }
     }
 
@@ -277,7 +278,7 @@ final class StatusSymbolResolver {
             Target status = text(generate, "fromUses") != null ? new Target(source, text(generate, "fromUses")) : statusOf(source);
             Map<?, ?> event = asMap(generate.get("event"));
             if (event != null && event.get("when") != null) {
-                put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(source), status, subject + " event when"));
+                rewriteWhen(event, statusRelationName(source), status, subject + " event when");
             }
             putResolved(generate, "sourceStatus", status, subject + " sourceStatus");
             putResolved(generate, "sourceStatusOnRetire", status, subject + " sourceStatusOnRetire");
@@ -298,7 +299,7 @@ final class StatusSymbolResolver {
             String record = event.get("onCreate") != null ? text(event, "onCreate") : text(event, "onUpdate");
             Target status = statusOf(record);
             String subject = "resolve [" + text(resolve, "name") + "]";
-            if (event.get("when") != null) {
+            if (event.get("when") instanceof String) { // a list `when` is refused by the parser; do not mangle it into a string here
                 put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(record), status, subject + " event when"));
             }
             for (String outcome : List.of("found", "notFound", "ambiguous")) {
@@ -451,6 +452,27 @@ final class StatusSymbolResolver {
             return null;
         }
         return resolveSymbol(token, target, subject);
+    }
+
+    /**
+     * Rewrite a {@code when} guard in place - a scalar comparison string, or a LIST of them (implicit
+     * AND, dirigible #6957): each element is rewritten independently, so a status name resolves to its
+     * seed id while the elements guarding other properties (a string trace field such as a lookup's
+     * {@code outcome:}) pass through untouched.
+     */
+    @SuppressWarnings("unchecked")
+    private void rewriteWhen(Map<?, ?> owner, String statusRelation, Target target, String subject) {
+        Object value = owner.get("when");
+        if (value instanceof List<?> list) {
+            List<Object> mutable = (List<Object>) list;
+            for (int i = 0; i < mutable.size(); i++) {
+                if (mutable.get(i) instanceof String term) {
+                    mutable.set(i, rewriteExpression(term, statusRelation, target, subject));
+                }
+            }
+        } else if (value instanceof String expression) {
+            put(owner, "when", rewriteExpression(expression, statusRelation, target, subject));
+        }
     }
 
     /**
