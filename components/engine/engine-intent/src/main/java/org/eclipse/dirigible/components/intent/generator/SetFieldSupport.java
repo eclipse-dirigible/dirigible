@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -95,8 +96,9 @@ public final class SetFieldSupport {
                 String relField = stringArg(step, "setRelationField");
                 if (relField != null && !relField.isBlank()) {
                     if (relationOf(owner, relField) == null) {
-                        LOGGER.warn("Step [{}] in process [{}] sets unknown to-one relation [{}] of [{}] - skipping", step.getName(),
-                                process.getName(), relField, triggerEntity);
+                        LOGGER.warn("Step [{}] in process [{}] sets unknown to-one relation [{}] of [{}] - skipping",
+                                LoggedValue.of(step.getName()), LoggedValue.of(process.getName()), LoggedValue.of(relField),
+                                LoggedValue.of(triggerEntity));
                         continue;
                     }
                     String value = stringArg(step, "value");
@@ -114,8 +116,8 @@ public final class SetFieldSupport {
                     continue;
                 }
                 if (fieldOf(owner, field) == null) {
-                    LOGGER.warn("Step [{}] in process [{}] sets unknown field [{}] of [{}] - skipping", step.getName(), process.getName(),
-                            field, triggerEntity);
+                    LOGGER.warn("Step [{}] in process [{}] sets unknown field [{}] of [{}] - skipping", LoggedValue.of(step.getName()),
+                            LoggedValue.of(process.getName()), LoggedValue.of(field), LoggedValue.of(triggerEntity));
                     continue;
                 }
                 setters.add(new Setter(process.getName(), step.getName(), className(process.getName(), step.getName()), triggerEntity,

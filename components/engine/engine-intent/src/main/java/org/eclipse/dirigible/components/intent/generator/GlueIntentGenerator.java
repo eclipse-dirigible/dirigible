@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport.FieldLoad;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport.Setter;
@@ -208,7 +209,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             if (!settings.shouldGenerate("triggers", process.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing listener for trigger [{}] (not generated)", process.getName());
+                LOGGER.info("Settings opt-out: keeping existing listener for trigger [{}] (not generated)",
+                        LoggedValue.of(process.getName()));
                 continue;
             }
             Map<String, Object> trigger = new LinkedHashMap<>();
@@ -443,7 +445,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             if (!settings.shouldGenerate("notifications", notification.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing listener for notification [{}] (not generated)", notification.getName());
+                LOGGER.info("Settings opt-out: keeping existing listener for notification [{}] (not generated)",
+                        LoggedValue.of(notification.getName()));
                 continue;
             }
             NotificationSupport.Plan plan = NotificationSupport.plan(notification, byName.get(entity), byName, compositionParents, lookup);
@@ -577,7 +580,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue; // parser already reported the bad reference
             }
             if (!settings.shouldGenerate("rollups", rollup.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing listeners for rollup [{}] (not generated)", rollup.getName());
+                LOGGER.info("Settings opt-out: keeping existing listeners for rollup [{}] (not generated)",
+                        LoggedValue.of(rollup.getName()));
                 continue;
             }
             String op = rollup.getOp() == null || rollup.getOp()
@@ -586,14 +590,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             boolean latest = "latest".equals(op);
             if (sum && (rollup.getOf() == null || rollup.getOf()
                                                         .isBlank())) {
-                LOGGER.warn("Sum roll-up [{}] has no 'of' field - skipping", rollup.getName());
+                LOGGER.warn("Sum roll-up [{}] has no 'of' field - skipping", LoggedValue.of(rollup.getName()));
                 continue;
             }
             if (latest && (rollup.getOf() == null || rollup.getOf()
                                                            .isBlank()
                     || rollup.getBy() == null || rollup.getBy()
                                                        .isBlank())) {
-                LOGGER.warn("Latest roll-up [{}] needs both 'of' and 'by' - skipping", rollup.getName());
+                LOGGER.warn("Latest roll-up [{}] needs both 'of' and 'by' - skipping", LoggedValue.of(rollup.getName()));
                 continue;
             }
             String fkProperty = IntentNaming.pascalCase(rollup.getVia());
@@ -641,7 +645,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                         + rollup.getEntity() + "] against capacity [" + rollup.getCapacity()
                         + "]: the balance and status are maintained, but the overdraw GUARD is not installed - it belongs to the child's"
                         + " own repository, which the [" + rollup.getModel() + "] model generates.";
-                LOGGER.warn(warning);
+                LOGGER.warn(LoggedValue.of(warning));
                 if (context != null) {
                     // An ADVISORY, not an issue: no change to THIS document installs that guard, so the
                     // assistant's repair loop must never be asked to fix it (dirigible #6956).
@@ -748,7 +752,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue; // parser already reported the bad reference
             }
             if (!settings.shouldGenerate("settlements", s.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing settlement [{}] (not generated)", s.getName());
+                LOGGER.info("Settings opt-out: keeping existing settlement [{}] (not generated)", LoggedValue.of(s.getName()));
                 continue;
             }
             RelationIntent fkInvoice = relationTo(junction, s.getInvoice());
@@ -875,7 +879,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             if (!settings.shouldGenerate("generates", g.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing controller for generates [{}] (not generated)", g.getName());
+                LOGGER.info("Settings opt-out: keeping existing controller for generates [{}] (not generated)",
+                        LoggedValue.of(g.getName()));
                 continue;
             }
             boolean crossModel = g.getUses() != null && !g.getUses()
@@ -1204,7 +1209,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 String warning = "generates [" + g.getName() + "] event when guards [" + field.getName() + "] of [" + source.getName()
                         + "], which is not readOnly - a user edit of that field silently changes whether this rule fires;"
                         + " mark it `readOnly: true` so only the platform (a lookup's outcome:) writes it";
-                LOGGER.warn(warning);
+                LOGGER.warn(LoggedValue.of(warning));
                 context.addIssue(warning);
             }
         }
@@ -1278,7 +1283,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     + "] is classified with `stage:` - the at-most-once guard can only ask whether a [" + g.getTo()
                     + "] exists, so a cancelled or voided one blocks its replacement forever. Classify the seed rows of [" + status.getTo()
                     + "] with `stage:` (draft/live/cancelled/void) so a retired target can be superseded.";
-            LOGGER.warn(warning);
+            LOGGER.warn(LoggedValue.of(warning));
             if (context != null) {
                 context.addIssue(warning);
             }
@@ -1393,7 +1398,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue; // parser already reported the bad reference
             }
             if (!settings.shouldGenerate("transitions", t.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing controller for transition [{}] (not generated)", t.getName());
+                LOGGER.info("Settings opt-out: keeping existing controller for transition [{}] (not generated)",
+                        LoggedValue.of(t.getName()));
                 continue;
             }
             String statusProperty = "";
@@ -1522,7 +1528,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> aborts = new ArrayList<>();
         for (ProcessAbortSupport.Abort abort : ProcessAbortSupport.aborts(model)) {
             if (!settings.shouldGenerate("aborts", abort.process())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for abort [{}] (not generated)", abort.process());
+                LOGGER.info("Settings opt-out: keeping existing handler for abort [{}] (not generated)", LoggedValue.of(abort.process()));
                 continue;
             }
             List<String> terms = new ArrayList<>();
@@ -1623,7 +1629,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> out = new ArrayList<>();
         for (NotifySupport.Sender sender : NotifySupport.senders(model)) {
             if (!settings.shouldGenerate("sends", sender.className())) {
-                LOGGER.info("Settings opt-out: keeping existing delegate for send [{}] (not generated)", sender.className());
+                LOGGER.info("Settings opt-out: keeping existing delegate for send [{}] (not generated)",
+                        LoggedValue.of(sender.className()));
                 continue;
             }
             EntityIntent entity = byName.get(sender.entity());
@@ -1725,8 +1732,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     statusValue = Integer.valueOf(p.getEvent()
                                                    .trim());
                 } catch (NumberFormatException nfe) {
-                    LOGGER.warn("posts [{}]: event must be `create` or a numeric status seed id, was [{}] - skipped", p.getName(),
-                            p.getEvent());
+                    LOGGER.warn("posts [{}]: event must be `create` or a numeric status seed id, was [{}] - skipped",
+                            LoggedValue.of(p.getName()), LoggedValue.of(p.getEvent()));
                     continue;
                 }
                 for (RelationIntent relation : source.getRelations()) {
@@ -1736,7 +1743,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
                 if (statusProperty.isEmpty()) {
                     LOGGER.warn("posts [{}]: source [{}] has no function: EntityStatus relation for a status-triggered post - skipped",
-                            p.getName(), p.getForEntity());
+                            LoggedValue.of(p.getName()), LoggedValue.of(p.getForEntity()));
                     continue;
                 }
             }
@@ -1763,7 +1770,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     }
                 }
                 if (child == null) {
-                    LOGGER.warn("posts [{}]: forEach set but [{}] has no composition child - skipped", p.getName(), p.getForEntity());
+                    LOGGER.warn("posts [{}]: forEach set but [{}] has no composition child - skipped", LoggedValue.of(p.getName()),
+                            LoggedValue.of(p.getForEntity()));
                     continue;
                 }
                 itemsEntity = child.getName();
@@ -1888,7 +1896,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                          .anyMatch(r -> fk.equals(IntentNaming.pascalCase(r.getName())));
                 if (!onSource || !onTarget) {
                     LOGGER.warn("aggregate [{}]: key [{}] must be a to-one relation of both source [{}] and target [{}] - skipped",
-                            a.getName(), key, a.getOf(), a.getInto());
+                            LoggedValue.of(a.getName()), LoggedValue.of(key), LoggedValue.of(a.getOf()), LoggedValue.of(a.getInto()));
                     keysOk = false;
                     break;
                 }
@@ -1939,7 +1947,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue; // malformed: the parser already reported it
             }
             if (!settings.shouldGenerate("resolves", resolve.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for resolve [{}] (not generated)", resolve.getName());
+                LOGGER.info("Settings opt-out: keeping existing handler for resolve [{}] (not generated)",
+                        LoggedValue.of(resolve.getName()));
                 continue;
             }
             String kind = EventBinding.kind(resolve.getEvent());
@@ -2149,7 +2158,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue; // parser already reported it
             }
             if (!settings.shouldGenerate("postings", posting.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for posting [{}] (not generated)", posting.getName());
+                LOGGER.info("Settings opt-out: keeping existing handler for posting [{}] (not generated)",
+                        LoggedValue.of(posting.getName()));
                 continue;
             }
             EntityIntent creates = byName.get(effective.getCreates());
@@ -3089,7 +3099,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue; // parser already reported the bad reference
             }
             if (!settings.shouldGenerate("expansions", expansion.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing handlers for expansion [{}] (not generated)", expansion.getName());
+                LOGGER.info("Settings opt-out: keeping existing handlers for expansion [{}] (not generated)",
+                        LoggedValue.of(expansion.getName()));
                 continue;
             }
             RelationIntent back = null;
@@ -3355,7 +3366,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             return null;
         }
         if (!settings.shouldGenerate("inbound", ingest.getName())) {
-            LOGGER.info("Settings opt-out: keeping existing {} for inbound [{}] (not generated)", handlerNoun, ingest.getName());
+            LOGGER.info("Settings opt-out: keeping existing {} for inbound [{}] (not generated)", handlerNoun,
+                    LoggedValue.of(ingest.getName()));
             return null;
         }
         ArrivalSupport.Plan arrival;
@@ -3385,7 +3397,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> stepEvents = new ArrayList<>();
         for (StepEventSupport.Emitter emitter : StepEventSupport.emitters(model)) {
             if (!settings.shouldGenerate("stepEvents", emitter.className())) {
-                LOGGER.info("Settings opt-out: keeping existing delegate for step event [{}] (not generated)", emitter.className());
+                LOGGER.info("Settings opt-out: keeping existing delegate for step event [{}] (not generated)",
+                        LoggedValue.of(emitter.className()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -3417,7 +3430,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             if (!settings.shouldGenerate("integrations", integration.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing listener for integration [{}] (not generated)", integration.getName());
+                LOGGER.info("Settings opt-out: keeping existing listener for integration [{}] (not generated)",
+                        LoggedValue.of(integration.getName()));
                 continue;
             }
             // The declared envelope, when there is one. A value that cannot be resolved (a cross-model
@@ -3479,7 +3493,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue; // parser already reported "exactly one of queue/topic"
             }
             if (!settings.shouldGenerate("outbound", outbound.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing publisher for outbound [{}] (not generated)", outbound.getName());
+                LOGGER.info("Settings opt-out: keeping existing publisher for outbound [{}] (not generated)",
+                        LoggedValue.of(outbound.getName()));
                 continue;
             }
             // The declared envelope, when there is one. A value that cannot be resolved (a cross-model
@@ -3549,7 +3564,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue; // parser already reported "no notify/generate action"
             }
             if (!settings.shouldGenerate("schedules", schedule.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing job for schedule [{}] (not generated)", schedule.getName());
+                LOGGER.info("Settings opt-out: keeping existing job for schedule [{}] (not generated)", LoggedValue.of(schedule.getName()));
                 continue;
             }
             // Never emit a job that cannot compile: for a cross-model source, validate every reference
@@ -3831,7 +3846,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> assignees = new ArrayList<>();
         for (ProcessAssigneeSupport.Assignee assignee : ProcessAssigneeSupport.assignees(model, assigneeCrossModelLookup(model, context))) {
             if (!settings.shouldGenerate("assignees", assignee.handler())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for assignee resolver [{}] (not generated)", assignee.handler());
+                LOGGER.info("Settings opt-out: keeping existing handler for assignee resolver [{}] (not generated)",
+                        LoggedValue.of(assignee.handler()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -3886,7 +3902,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * #6360). The generation itself still succeeds - the issue is a warning, not a 422.
      */
     private static void reportDroppedGlue(IntentGenerationContext context, String message) {
-        LOGGER.warn(message);
+        LOGGER.warn(LoggedValue.of(message));
         if (context != null) {
             context.addIssue(message);
         }
@@ -4002,7 +4018,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> loaders = new ArrayList<>();
         for (FieldLoad load : ProcessFieldLoadSupport.fieldLoads(model)) {
             if (!settings.shouldGenerate("fieldLoaders", load.handler())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for field loader [{}] (not generated)", load.handler());
+                LOGGER.info("Settings opt-out: keeping existing handler for field loader [{}] (not generated)",
+                        LoggedValue.of(load.handler()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -4028,7 +4045,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> loaders = new ArrayList<>();
         for (ProcessTimerSupport.TimerLoad load : ProcessTimerSupport.timerLoads(model)) {
             if (!settings.shouldGenerate("timerLoaders", load.handler())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for timer loader [{}] (not generated)", load.handler());
+                LOGGER.info("Settings opt-out: keeping existing handler for timer loader [{}] (not generated)",
+                        LoggedValue.of(load.handler()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -4055,7 +4073,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> waits = new ArrayList<>();
         for (ProcessWaitSupport.Wait wait : ProcessWaitSupport.waits(model)) {
             if (!settings.shouldGenerate("waits", wait.className())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for wait [{}] (not generated)", wait.className());
+                LOGGER.info("Settings opt-out: keeping existing handler for wait [{}] (not generated)", LoggedValue.of(wait.className()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -4081,7 +4099,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> resolvers = new ArrayList<>();
         for (Resolver resolver : ProcessResolverSupport.resolvers(model)) {
             if (!settings.shouldGenerate("resolvers", resolver.handler())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for resolver [{}] (not generated)", resolver.handler());
+                LOGGER.info("Settings opt-out: keeping existing handler for resolver [{}] (not generated)",
+                        LoggedValue.of(resolver.handler()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -4108,7 +4127,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> writers = new ArrayList<>();
         for (Writer writer : WriterSupport.writers(model)) {
             if (!settings.shouldGenerate("writers", writer.className())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for writer [{}] (not generated)", writer.className());
+                LOGGER.info("Settings opt-out: keeping existing handler for writer [{}] (not generated)",
+                        LoggedValue.of(writer.className()));
                 continue;
             }
             List<Map<String, Object>> fields = new ArrayList<>();
@@ -4136,7 +4156,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> setters = new ArrayList<>();
         for (Setter setter : SetFieldSupport.setters(model)) {
             if (!settings.shouldGenerate("setters", setter.className())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for setter [{}] (not generated)", setter.className());
+                LOGGER.info("Settings opt-out: keeping existing handler for setter [{}] (not generated)",
+                        LoggedValue.of(setter.className()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();

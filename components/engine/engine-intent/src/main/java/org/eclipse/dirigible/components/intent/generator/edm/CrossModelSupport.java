@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
@@ -263,7 +264,8 @@ public final class CrossModelSupport {
             Map<String, Object> body = (Map<String, Object>) root.get("model");
             entities = body == null ? null : (List<Map<String, Object>>) body.get("entities");
         } catch (RuntimeException e) {
-            LOGGER.warn("Failed to read owner model [{}] for related register source [{}]", modelPath, sourceEntity, e);
+            LOGGER.warn("Failed to read owner model [{}] for related register source [{}]", LoggedValue.of(modelPath),
+                    LoggedValue.of(sourceEntity), e);
             return null;
         }
         if (entities == null) {
@@ -431,7 +433,8 @@ public final class CrossModelSupport {
             return new ItemsChildInfo(false, null, masterEntity, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(),
                     java.util.Map.of());
         } catch (RuntimeException e) {
-            LOGGER.warn("Failed to read owner model [{}] for cross-model items child of [{}]", modelPath, masterEntity, e);
+            LOGGER.warn("Failed to read owner model [{}] for cross-model items child of [{}]", LoggedValue.of(modelPath),
+                    LoggedValue.of(masterEntity), e);
         }
         return null;
     }
@@ -511,7 +514,8 @@ public final class CrossModelSupport {
                         translatedProperties("true".equals(String.valueOf(entity.get("multilingual"))), properties));
             }
         } catch (RuntimeException e) {
-            LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", modelPath, targetEntity, e);
+            LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", LoggedValue.of(modelPath),
+                    LoggedValue.of(targetEntity), e);
         }
         return null;
     }

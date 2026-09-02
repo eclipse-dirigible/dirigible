@@ -20,6 +20,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -135,18 +136,18 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         for (FormIntent form : model.getForms()) {
             if (form.getName() == null || form.getName()
                                               .isBlank()) {
-                LOGGER.warn("Skipping unnamed form in intent [{}]", IntentNaming.baseName(context));
+                LOGGER.warn("Skipping unnamed form in intent [{}]", LoggedValue.of(IntentNaming.baseName(context)));
                 continue;
             }
             String fileName = form.getName() + ".form";
             if (!seenFiles.add(fileName)) {
-                LOGGER.warn("Duplicate form [{}] in intent [{}] - keeping the first occurrence", form.getName(),
-                        IntentNaming.baseName(context));
+                LOGGER.warn("Duplicate form [{}] in intent [{}] - keeping the first occurrence", LoggedValue.of(form.getName()),
+                        LoggedValue.of(IntentNaming.baseName(context)));
                 continue;
             }
             if (!context.getSettings()
                         .shouldGenerate("forms", form.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing form [{}] (not generated)", form.getName());
+                LOGGER.info("Settings opt-out: keeping existing form [{}] (not generated)", LoggedValue.of(form.getName()));
                 continue;
             }
             EntityIntent boundEntity = form.getForEntity() == null ? null : entitiesByName.get(form.getForEntity());

@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.commons.lang3.StringUtils;
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.ai.AssistantGuide;
 import org.eclipse.dirigible.components.intent.ai.ChatTurn;
 import org.eclipse.dirigible.components.intent.ai.ModelClient;
@@ -146,13 +147,14 @@ class JavaAssistService {
         try {
             result = compiler.compileBatch(units);
         } catch (RuntimeException ex) {
-            LOGGER.error("Could not compile the proposed Java for [{}]", LoggedPath.of(context.path()), ex);
+            LOGGER.error("Could not compile the proposed Java for [{}]", LoggedValue.of(context.path()), ex);
             return List.of(new AssistDiagnostic(-1, -1, "the proposal could not be compiled: " + ex.getMessage()));
         }
         if (!result.failures()
                    .isEmpty()) {
-            LOGGER.debug("Assist compile of [{}] reported failures for [{}]", LoggedPath.of(context.path()), result.failures()
-                                                                                                                   .keySet());
+            LOGGER.debug("Assist compile of [{}] reported failures for [{}]", LoggedValue.of(context.path()),
+                    LoggedValue.of(result.failures()
+                                         .keySet()));
         }
         List<CompileDiagnostic> diagnostics = result.diagnostics()
                                                     .get(fqn);

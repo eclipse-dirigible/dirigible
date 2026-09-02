@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
@@ -140,7 +141,8 @@ public final class WriterSupport {
             if (relation == null) {
                 LOGGER.warn(
                         "Editable [{}] on form [{}] (task [{}] of process [{}]) is not a field or to-one relation of [{}] - skipping write-back",
-                        fieldName, form.getName(), step.getName(), process.getName(), owner.getName());
+                        LoggedValue.of(fieldName), LoggedValue.of(form.getName()), LoggedValue.of(step.getName()),
+                        LoggedValue.of(process.getName()), LoggedValue.of(owner.getName()));
                 continue;
             }
             FieldIntent targetKey = IntentEntities.primaryKeyOf(byName.get(relation.getTo()));

@@ -15,6 +15,7 @@ import java.util.List;
 
 import org.eclipse.dirigible.components.ide.workspace.domain.File;
 import org.eclipse.dirigible.components.ide.workspace.domain.Project;
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.engine.java.runtime.JavaSourceParser;
 import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -95,7 +96,7 @@ class WorkspaceJavaSources {
             } catch (RuntimeException ex) {
                 // A .java file with no parseable type declaration cannot be a compilation unit; leaving it
                 // out keeps the batch compilable instead of failing the whole assist on somebody's scratch file.
-                LOGGER.debug("Skipping unparseable Java source [{}]", LoggedPath.of(path), ex);
+                LOGGER.debug("Skipping unparseable Java source [{}]", LoggedValue.of(path), ex);
             }
         }
         for (ICollection child : collection.getCollections()) {

@@ -5254,7 +5254,7 @@ public final class IntentParser {
                     if (value == null || value.isBlank()) {
                         issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setRelationField [" + setRelationField
                                 + "] must declare a value (the related record id)");
-                    } else if (authoredId(value) == null) {
+                    } else if (parseSeedId(value) == null) {
                         // Digits alone are not enough: a run too long to be an int is no record id
                         // either, and accepting it here would hand every consumer a number nothing can
                         // hold.
@@ -6907,7 +6907,7 @@ public final class IntentParser {
             }
             Map<Integer, Set<Integer>> edges = validateLifecycleEdges(lifecycle, statuses, subject, issues);
             String init = status.getInit();
-            Integer initStatus = authoredId(init);
+            Integer initStatus = parseSeedId(init);
             if (init != null && !statuses.containsKey(initStatus)) {
                 issues.add(subject + " starts at init [" + init + "], which is not a seeded status of [" + status.getTo() + "] - known: "
                         + statusNames(statuses));
@@ -7023,7 +7023,7 @@ public final class IntentParser {
             }
             for (StepIntent step : process.getSteps()) {
                 String relation = stepArg(step, "setRelationField");
-                Integer target = authoredId(stepArg(step, "value"));
+                Integer target = parseSeedId(stepArg(step, "value"));
                 if (relation == null || !relation.equalsIgnoreCase(status.getName()) || target == null) {
                     continue; // a non-numeric or unresolvable value is reported by the step's own validation
                 }
@@ -7122,7 +7122,7 @@ public final class IntentParser {
      * @param value the authored token
      * @return the id, or {@code null}
      */
-    private static Integer authoredId(String value) {
+    private static Integer parseSeedId(String value) {
         if (value == null || !value.matches("-?\\d+")) {
             return null;
         }
@@ -7765,7 +7765,7 @@ public final class IntentParser {
 
     /** {@code ageing(field, [30, 60, 90])} - the date field in group 1, the thresholds in group 2. */
     private static final java.util.regex.Pattern REPORT_AGEING = java.util.regex.Pattern.compile(
-            "\\s*ageing\\s*\\(\\s*([^,\\[]+?)\\s*,\\s*\\[\\s*([^\\]]+?)\\s*\\]\\s*\\)\\s*", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "\\s*ageing\\s*\\(([^,\\[]+),\\s*\\[([^\\]]+)\\]\\s*\\)\\s*", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     /**
      * An {@code ageing(field, [30, 60, 90])} dimension: the thresholds must be ascending positive day

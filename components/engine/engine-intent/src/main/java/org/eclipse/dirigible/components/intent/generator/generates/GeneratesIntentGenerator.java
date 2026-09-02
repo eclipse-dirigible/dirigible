@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
@@ -76,7 +77,7 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
                 // Event-driven only (issue #6711): the create-from runs by itself, so there is no button
                 // to contribute - and contributing one anyway would offer the user a click that only
                 // re-reads the document the event already created.
-                LOGGER.debug("Generates action [{}] is event-driven with no button - contributing no client action", name);
+                LOGGER.debug("Generates action [{}] is event-driven with no button - contributing no client action", LoggedValue.of(name));
                 continue;
             }
             String fileBase = name + "-generate-action";

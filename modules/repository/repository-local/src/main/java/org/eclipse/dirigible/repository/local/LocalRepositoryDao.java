@@ -92,7 +92,9 @@ public class LocalRepositoryDao {
                 FileSystemUtils.saveFile(versionsPath + IRepository.SEPARATOR + formatter.format(new Date()), contentInputStream);
             }
         } catch (Exception ev) {
-            logger.warn("Error while storing version for file: {} with: {}", path, ev.getMessage());
+            logger.warn("Error while storing version for file: {} with: {}", path.replace('\r', '_')
+                                                                                 .replace('\n', '_'),
+                    ev.getMessage());
         }
         return workspacePath;
     }
