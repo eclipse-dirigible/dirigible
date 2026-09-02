@@ -26,6 +26,8 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
      * The Regex find the content between single quotes.
      */
     private static final Pattern contentBetweenSingleQuotes = Pattern.compile("'([^']*?)'");
+    /** The ANSI escape symbol, the one every caller that pre-quotes a name uses. */
+    private static final char ANSI_ESCAPE_SYMBOL = '"';
     /** The dialect. */
     private final ISqlDialect dialect;
     /** The column pattern. */
@@ -82,18 +84,36 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
     protected String encapsulate(String name, boolean isDataStructureName) {
         if (name == null)
             return null;
-        String escapeSymbol = String.valueOf(getEscapeSymbol());
+        char escapeChar = getEscapeSymbol();
+        String escapeSymbol = String.valueOf(escapeChar);
         if ("*".equals(name.trim())) {
             return name;
         }
-        if (!name.startsWith(escapeSymbol)) {
-            if (isDataStructureName || isColumn(name.trim())) {
-                name = escapeSymbol + name + escapeSymbol;
-            } else {
-                name = encapsulateMany(name);
-            }
+        if (name.startsWith(escapeSymbol)) {
+            return name;
+        }
+        if (isAnsiQuoted(name)) {
+            // Already quoted, but with the ANSI symbol rather than this dialect's - re-quote it instead of
+            // wrapping it again, which on the backtick dialects addressed a table literally named "T" (#7021).
+            return name.replace(ANSI_ESCAPE_SYMBOL, escapeChar);
+        }
+        if (isDataStructureName || isColumn(name.trim())) {
+            name = escapeSymbol + name + escapeSymbol;
+        } else {
+            name = encapsulateMany(name);
         }
         return name;
+    }
+
+    /**
+     * Checks whether the name is wrapped in the ANSI escape symbol - {@code "T"} or {@code "S"."T"}.
+     * The data-structure processors quote every name they pass down that way, whatever the dialect is.
+     *
+     * @param name the name
+     * @return true if the name is ANSI-quoted
+     */
+    private boolean isAnsiQuoted(String name) {
+        return name.length() > 1 && name.charAt(0) == ANSI_ESCAPE_SYMBOL && name.charAt(name.length() - 1) == ANSI_ESCAPE_SYMBOL;
     }
 
     /**
