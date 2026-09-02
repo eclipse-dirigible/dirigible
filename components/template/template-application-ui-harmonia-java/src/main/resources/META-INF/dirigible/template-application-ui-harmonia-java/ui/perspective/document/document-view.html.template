@@ -93,7 +93,7 @@
 #if($property.widgetSize)#set($span = $property.widgetSize)#else#set($span = "6")#end
 #if($property.widgetType == "TEXTAREA" || $property.widgetType == "CHECKBOX" || $property.widgetType == "MULTISELECT")#set($span = "12")#end
 #if($lookup)#set($span = "12")#end
-      <div x-h-field#if($span == "12") class="col-span-full"#else style="grid-column: span ${span};"#end#visibleGate($property) :data-invalid="!!errors.${property.name}">
+      <div x-h-field#if($span == "12") class="col-span-full"#else class="sm:col-span-${span}"#end#visibleGate($property) :data-invalid="!!errors.${property.name}">
 #if($property.widgetType == "CHECKBOX")
         <div class="hbox items-center gap-3">
           <span x-h-checkbox><input type="checkbox" id="f_${property.name}" x-model="form.${property.name}"#if($readonly) disabled#end /></span>
