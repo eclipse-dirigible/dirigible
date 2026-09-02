@@ -44,6 +44,8 @@ class RollupAggregatesTest {
         rollup.put("statusField", statusField);
         rollup.put("statusWhenFull", "");
         rollup.put("statusWhenPartial", "");
+        rollup.put("statusDisplacedField", statusField.isEmpty() ? "" : "Displaced" + statusField);
+        rollup.put("fkProperty", "SalesOrder");
         return rollup;
     }
 
@@ -72,6 +74,36 @@ class RollupAggregatesTest {
         assertThat(rendered).contains("parent.Capacity")
                             .contains("parent.Available = capacity.subtract(sum);")
                             .contains("parent.Status = sum.compareTo(capacity) >= 0 ? 3 : 2;");
+    }
+
+    /**
+     * The status moves in BOTH directions (#7016): a sum that returns to zero must give back the status
+     * the roll-up set, and give it back to what it displaced - not to a declared constant, which is
+     * wrong for a parent that entered the roll-up's region from another status.
+     */
+    @Test
+    void aZeroSumRestoresTheStatusTheRollupDisplaced() {
+        Map<String, Object> rollup = sumRollup("Capacity", "Available", "Status");
+        rollup.put("statusWhenFull", "3");
+        rollup.put("statusWhenPartial", "2");
+
+        String rendered = RollupAggregates.render(rollup);
+
+        String owned = "java.util.Objects.equals(parent.Status, 3) || java.util.Objects.equals(parent.Status, 2)";
+        assertThat(rendered).as("the first move INTO a roll-up-owned status snapshots the status it displaces")
+                            .contains("if (!(" + owned + ")) {")
+                            .contains("parent.DisplacedStatus = parent.Status;")
+                            .contains("derived.put(\"DisplacedStatus\", parent.DisplacedStatus);");
+        assertThat(rendered).as("a zero sum relinquishes only a status the roll-up itself set")
+                            .contains("} else if (" + owned + ") {")
+                            .contains("parent.Status = parent.DisplacedStatus;")
+                            .contains("parent.DisplacedStatus = null;")
+                            .contains("derived.put(\"Status\", parent.Status);")
+                            .contains("derived.put(\"DisplacedStatus\", null);");
+        assertThat(rendered).as("a roll-up-owned status with no recorded predecessor is reported, not guessed")
+                            .contains("if (parent.DisplacedStatus == null) {")
+                            .contains("LOG.warn(")
+                            .contains("entity.SalesOrder, parent.Status);");
     }
 
     @Test

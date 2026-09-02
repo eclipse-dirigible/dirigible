@@ -2041,6 +2041,20 @@ class IntentEngineIT extends IntegrationTest {
                 "with a capacity + balance, it should keep balance = capacity - sum");
         assertTrue(onCreate.contains("parent.Status = sum.compareTo(capacity) >= 0 ? 2 : 1"),
                 "with a capacity + status, it should set the status relation to whenFull/whenPartial at the thresholds");
+        // ...and lets go of it again (#7016): the status the roll-up displaces is remembered in a hidden
+        // parent column and restored when the sum returns to zero - in every variant, since an
+        // allocation amended to 0 or re-parented away is the same situation as a deleted one.
+        assertTrue(contentOf("billing.model").contains("\"name\": \"DisplacedStatus\""),
+                "the parent must carry the column remembering the status the roll-up displaced");
+        for (String variant : java.util.List.of("OnCreate", "OnUpdate", "OnDelete", "OnRekey")) {
+            String handler = codeOf("gen/events/billing/BillPaymentBillRollup" + variant + ".java");
+            assertTrue(
+                    handler.contains("parent.DisplacedStatus = parent.Status;") && handler.contains(
+                            "} else if (java.util.Objects.equals(parent.Status, 2) || java.util.Objects.equals(parent.Status, 1)) {")
+                            && handler.contains("parent.Status = parent.DisplacedStatus;")
+                            && handler.contains("derived.put(\"DisplacedStatus\", null);"),
+                    variant + " must snapshot the displaced status on the way in and restore it when the sum is back at zero");
+        }
     }
 
     @Test

@@ -596,6 +596,13 @@ rollups:
       status: Status, statusWhenFull: 7, statusWhenPartial: 6 }
 ```
 
+A status the roll-up sets, it also lets go of: the first move into `statusWhenFull` /
+`statusWhenPartial` remembers the status it displaced in a hidden parent column (`Displaced<Status>`),
+and a sum back at zero - the only allocation deleted, amended to 0 or re-parented away - restores
+it, so a paid invoice returns to CONFIRMED (or to ISSUED, if it was paid straight from there) rather
+than staying PAID with nothing paid. A status the roll-up did not set (a manual void of a partially
+paid document) is never touched.
+
 Roll-ups compose transitively across a multi-level composition (leaf edit -> mid total -> top
 total); recomputation stops when values stop changing.
 

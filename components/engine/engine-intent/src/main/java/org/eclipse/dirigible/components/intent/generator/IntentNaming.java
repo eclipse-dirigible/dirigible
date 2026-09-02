@@ -277,4 +277,17 @@ public final class IntentNaming {
     public static String pluralize(String label) {
         return NamingHelper.pluralizeLabel(label);
     }
+
+    /**
+     * The parent property a capacity roll-up keeps the DISPLACED status in: the status the parent held
+     * before the roll-up first moved it into {@code statusWhenFull} / {@code statusWhenPartial}, put
+     * back when the summed children go away again (#7016). Named after the status relation so two
+     * roll-ups driving different status relations of one parent keep separate memories.
+     *
+     * @param statusRelation the roll-up's {@code status:} relation name
+     * @return the PascalCase property name, e.g. {@code DisplacedStatus}
+     */
+    public static String displacedStatusProperty(String statusRelation) {
+        return "Displaced" + pascalCase(statusRelation);
+    }
 }

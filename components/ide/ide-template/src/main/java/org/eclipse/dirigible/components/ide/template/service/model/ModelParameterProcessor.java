@@ -282,6 +282,11 @@ final class ModelParameterProcessor {
         if ("ProcessId".equals(name)) {
             entity.put("hasProcess", Boolean.TRUE);
         }
+        // Bookkeeping with nothing to say to a reader stays out of every generated form, list and
+        // details block: the per-process stamps (ProcessIds, kept by name so a model written before the
+        // flag existed still hides them) and whatever the model flags itself, such as the displaced
+        // status a capacity roll-up remembers.
+        property.put("isHiddenProperty", isTrue(property, "isHiddenProperty") || "ProcessIds".equals(name));
         property.put("widgetDropdownUrl", "");
         property.put("widgetDropdownControllerUrl", "");
 

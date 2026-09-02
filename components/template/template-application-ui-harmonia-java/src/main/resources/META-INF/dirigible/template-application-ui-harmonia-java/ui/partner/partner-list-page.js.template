@@ -87,7 +87,7 @@ document.addEventListener('alpine:init', () => {
 
     columns: [
 #foreach($property in $properties)
-#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "$!{partnerProperty}" && $property.name != "ProcessId" && $property.name != "ProcessIds" && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
+#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "$!{partnerProperty}" && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
       { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DOCUMENT_STATUS"), status: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
 #end
 #end

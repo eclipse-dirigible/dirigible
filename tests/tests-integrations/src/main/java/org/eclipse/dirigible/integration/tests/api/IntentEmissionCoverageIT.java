@@ -883,6 +883,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Stay, kind: manyToOne, to: Stay, composition: true, required: true }
 
+              # A capacity roll-up with a status (#7016): Pledge.paid = sum of its payments against
+              # Pledge.total, Status -> SETTLED / PARTIAL as they arrive - and BACK to what the payment
+              # found when they go away again, through the hidden DisplacedStatus column.
+              - name: PledgeStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string,  required: true, length: 50 }
+              - name: Pledge
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: total,   type: decimal, precision: 18, scale: 2 }
+                  - { name: paid,    type: decimal, precision: 18, scale: 2 }
+                  - { name: balance, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Status, kind: manyToOne, to: PledgeStatus }
+              - name: PledgePayment
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
+                relations:
+                  - { name: Pledge, kind: manyToOne, to: Pledge, composition: true, required: true }
+
             aggregates:
               - name: ledgerTotal
                 of: Ledger
@@ -905,6 +928,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             # totalCost is NOT authored sensitive on purpose.
             rollups:
               - { name: claimCost, entity: ClaimLine, via: Claim, field: totalCost, op: sum, of: cost }
+              - { name: pledgePaid, entity: PledgePayment, via: Pledge, field: paid, op: sum, of: amount,
+                  capacity: total, balance: balance, status: Status, statusWhenFull: 3, statusWhenPartial: 2 }
 
             expansions:
               - name: retainer-periods
@@ -1399,6 +1424,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { id: 1, name: DRAFT,     stage: draft }
                   - { id: 2, name: POSTED,    stage: live }
                   - { id: 3, name: CANCELLED, stage: cancelled }
+              - name: pledge-statuses
+                entity: PledgeStatus
+                rows:
+                  - { id: 1, name: OPEN }
+                  - { id: 2, name: PARTIAL }
+                  - { id: 3, name: SETTLED }
               - name: channels
                 entity: Channel
                 rows:
@@ -1987,6 +2018,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a roll-up must record each recomputed column into the derived map it persists");
         assertTrue(claimRollup.contains("parents.updateDerived("), "a roll-up must persist through the targeted derived write");
         assertFalse(claimRollup.contains("parents.update(parent)"), "a roll-up must not merge the whole parent row back (lost update)");
+
+        // A status roll-up lets go of the status it set (#7016): the parent carries a hidden column for
+        // the status the roll-up displaced, every handler variant snapshots into it on the way in and
+        // restores from it at zero, and no generated surface renders the column.
+        assertTrue(contentOf("emission.model").contains("\"name\": \"DisplacedStatus\""),
+                "the parent of a status roll-up must carry the displaced-status column");
+        for (String variant : List.of("OnCreate", "OnUpdate", "OnDelete", "OnRekey")) {
+            String pledgeRollup = contentOf("gen/events/emission/PledgePaymentPledgeRollup" + variant + ".java");
+            assertTrue(
+                    pledgeRollup.contains("parent.DisplacedStatus = parent.Status;")
+                            && pledgeRollup.contains("parent.Status = parent.DisplacedStatus;")
+                            && pledgeRollup.contains("derived.put(\"DisplacedStatus\", null);"),
+                    variant + " must snapshot the displaced status on the way in and restore it when the sum is back at zero");
+        }
+        assertFalse(contentOf("gen/emission/js/components/pages/Pledge/PledgeFormPage.js").contains("DisplacedStatus"),
+                "the displaced status is bookkeeping - it must not reach the form model");
+        assertFalse(contentOf("gen/emission/views/Pledge/Pledge-form.html").contains("DisplacedStatus"), "...nor be rendered on the form");
+        assertFalse(contentOf("gen/emission/views/Pledge/Pledge-master.html").contains("DisplacedStatus"), "...nor on the master list");
 
         // The keyed aggregate handler writes the aggregate column of an EXISTING target row targeted. The
         // resolved primary key in the call also proves the descriptor's targetPk reached the template: an
@@ -4117,6 +4166,50 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("$", hasSize(1)));
+
+        // ---- A status roll-up lets go (#7016): a pledge paid in full is SETTLED, and when its only
+        // payment is deleted it is OPEN again - the status the payment found, not a declared one - with
+        // the displaced-status memory cleared. Before the fix the pledge stayed SETTLED owing everything.
+        AtomicReference<Integer> pledgeId = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> pledgeId.set(given().contentType("application/json")
+                                                              .body("{\"Total\":1000,\"Status\":1}")
+                                                              .when()
+                                                              .post(API + "/pledge/PledgeController")
+                                                              .then()
+                                                              .statusCode(200)
+                                                              .extract()
+                                                              .path("Id")));
+        AtomicReference<Integer> pledgePaymentId = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> pledgePaymentId.set(given().contentType("application/json")
+                                                                     .body("{\"Pledge\":" + pledgeId.get() + ",\"Amount\":1000}")
+                                                                     .when()
+                                                                     .post(API + "/pledge/PledgePaymentController")
+                                                                     .then()
+                                                                     .statusCode(200)
+                                                                     .extract()
+                                                                     .path("Id")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/pledge/PledgeController/" + pledgeId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Paid", equalTo(1000.0F))
+                                                 .body("Balance", equalTo(0.0F))
+                                                 .body("Status", equalTo(3))
+                                                 .body("DisplacedStatus", equalTo(1)),
+                30);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(API + "/pledge/PledgePaymentController/" + pledgePaymentId.get())
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/pledge/PledgeController/" + pledgeId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Paid", equalTo(0.0F))
+                                                 .body("Balance", equalTo(1000.0F))
+                                                 .body("Status", equalTo(1))
+                                                 .body("DisplacedStatus", nullValue()),
+                30);
 
         // ---- Act as (delegated entry): an entitled user arms an acting identity for the SESSION
         // and the personal surfaces serve THAT person's world - the manager-does-the-entry mode.

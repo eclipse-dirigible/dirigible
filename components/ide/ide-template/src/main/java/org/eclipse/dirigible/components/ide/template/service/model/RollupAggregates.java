@@ -157,26 +157,97 @@ final class RollupAggregates {
                    .append(");\n");
             }
             if (!statusField.isEmpty()) {
-                out.append("                if (sum.signum() > 0) {\n");
-                out.append("                    parent.")
-                   .append(statusField)
-                   .append(" = sum.compareTo(capacity) >= 0 ? ")
-                   .append(str(rollup, "statusWhenFull"))
-                   .append(" : ")
-                   .append(str(rollup, "statusWhenPartial"))
-                   .append(";\n");
-                out.append("                    derived.put(\"")
-                   .append(statusField)
-                   .append("\", parent.")
-                   .append(statusField)
-                   .append(");\n");
-                out.append("                }\n");
+                appendStatus(out, rollup, statusField);
             }
         }
         out.append("                changed = true;\n");
         out.append("            }\n");
         out.append("        }\n");
         return out.toString();
+    }
+
+    /**
+     * Moves the parent's status with the sum, in BOTH directions. A positive sum sets
+     * {@code statusWhenFull} / {@code statusWhenPartial}; the status that move displaces is remembered
+     * in the parent's displaced-status column the first time the roll-up takes the status over, and a
+     * sum back at zero restores it - so deleting the only allocation of a PAID invoice puts the invoice
+     * back where the payment found it (CONFIRMED, or ISSUED if it was paid straight from there), not
+     * left PAID with nothing paid (#7016). Only the two roll-up-owned statuses are ever relinquished: a
+     * document somebody voided or cancelled while partially paid stays voided when its allocation goes.
+     *
+     * <p>
+     * The status is compared with {@code Objects.equals} because the seed ids are emitted as int
+     * literals and the property is the boxed FK type.
+     *
+     * @param out the Java source being built
+     * @param rollup the roll-up descriptor
+     * @param statusField the parent status property
+     */
+    private static void appendStatus(StringBuilder out, Map<String, Object> rollup, String statusField) {
+        String displacedField = str(rollup, "statusDisplacedField");
+        String whenFull = str(rollup, "statusWhenFull");
+        String whenPartial = str(rollup, "statusWhenPartial");
+        String owned = "java.util.Objects.equals(parent." + statusField + ", " + whenFull + ") || java.util.Objects.equals(parent."
+                + statusField + ", " + whenPartial + ")";
+        out.append("                if (sum.signum() > 0) {\n");
+        out.append("                    if (!(")
+           .append(owned)
+           .append(")) {\n");
+        out.append("                        parent.")
+           .append(displacedField)
+           .append(" = parent.")
+           .append(statusField)
+           .append(";\n");
+        out.append("                        derived.put(\"")
+           .append(displacedField)
+           .append("\", parent.")
+           .append(displacedField)
+           .append(");\n");
+        out.append("                    }\n");
+        out.append("                    parent.")
+           .append(statusField)
+           .append(" = sum.compareTo(capacity) >= 0 ? ")
+           .append(whenFull)
+           .append(" : ")
+           .append(whenPartial)
+           .append(";\n");
+        out.append("                    derived.put(\"")
+           .append(statusField)
+           .append("\", parent.")
+           .append(statusField)
+           .append(");\n");
+        out.append("                } else if (")
+           .append(owned)
+           .append(") {\n");
+        out.append("                    if (parent.")
+           .append(displacedField)
+           .append(" == null) {\n");
+        out.append(
+                "                        LOG.warn(\"Roll-up: [{}] holds the roll-up-owned status [{}] with nothing summed, but records no"
+                        + " displaced status to restore - left as it is\", entity.")
+           .append(str(rollup, "fkProperty"))
+           .append(", parent.")
+           .append(statusField)
+           .append(");\n");
+        out.append("                    } else {\n");
+        out.append("                        parent.")
+           .append(statusField)
+           .append(" = parent.")
+           .append(displacedField)
+           .append(";\n");
+        out.append("                        parent.")
+           .append(displacedField)
+           .append(" = null;\n");
+        out.append("                        derived.put(\"")
+           .append(statusField)
+           .append("\", parent.")
+           .append(statusField)
+           .append(");\n");
+        out.append("                        derived.put(\"")
+           .append(displacedField)
+           .append("\", null);\n");
+        out.append("                    }\n");
+        out.append("                }\n");
     }
 
     /**

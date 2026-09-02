@@ -177,6 +177,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         Map<String, String> compositionParents = computeCompositionParents(entities);
         Set<String> settingEntities = settingEntities(entities);
         Set<String> triggerTargets = TriggerSupport.triggerTargetEntities(model);
+        Map<String, List<String>> displacedStatuses = displacedStatusProperties(model, byName);
         Map<String, UsesIntent> usesByAlias = new LinkedHashMap<>();
         for (UsesIntent uses : model.getUses()) {
             if (uses.getModel() != null) {
@@ -495,6 +496,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (triggerTargets.contains(name)) {
                 properties.add(processIdProperty(name));
                 properties.add(processIdsProperty(name));
+            }
+            // The parent of a capacity roll-up with a status remembers the status that roll-up displaced,
+            // so a sum back at zero can restore it (#7016). See displacedStatusProperty.
+            for (String statusProperty : displacedStatuses.getOrDefault(name, List.of())) {
+                properties.add(displacedStatusProperty(name, statusProperty));
             }
             // A file-child (function: Attachment or Snapshot) gets the standard file-metadata columns
             // injected (like audit:) - the author never hand-writes plumbing; the upload (attachment) or
@@ -1302,6 +1308,73 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetType", "TEXTBOX");
         p.put("widgetSize", "");
         p.put("widgetLength", "1000");
+        p.put("widgetIsMajor", "false");
+        return p;
+    }
+
+    /**
+     * The status properties of each LOCAL parent that a capacity roll-up drives ({@code status:} with
+     * {@code capacity:}, {@code op: sum}), by parent entity name - the parents that need a
+     * {@link #displacedStatusProperty(String, String) displaced-status column}. A cross-model parent is
+     * refused a status by the parser; a cross-model CHILD names its local parent with {@code parent:}.
+     * One column per status relation, however many roll-ups drive it.
+     */
+    private static Map<String, List<String>> displacedStatusProperties(IntentModel model, Map<String, EntityIntent> byName) {
+        Map<String, List<String>> byParent = new LinkedHashMap<>();
+        for (RollupIntent rollup : model.getRollups()) {
+            if (!"sum".equals(rollup.getOp()) || !notBlank(rollup.getCapacity()) || !notBlank(rollup.getStatus())) {
+                continue;
+            }
+            String parentName;
+            if (rollup.isCrossModelChild()) {
+                parentName = rollup.getParent();
+            } else {
+                EntityIntent child = byName.get(rollup.getEntity());
+                RelationIntent via = child == null ? null : toOneRelationByName(child, rollup.getVia());
+                parentName = via == null || notBlank(via.getModel()) ? null : via.getTo();
+            }
+            if (parentName == null || !byName.containsKey(parentName)) {
+                continue; // the parser already reported the bad reference
+            }
+            List<String> statuses = byParent.computeIfAbsent(parentName, ignored -> new ArrayList<>());
+            String statusProperty = IntentNaming.pascalCase(rollup.getStatus());
+            if (!statuses.contains(statusProperty)) {
+                statuses.add(statusProperty);
+            }
+        }
+        return byParent;
+    }
+
+    /**
+     * The column a capacity roll-up keeps the status it DISPLACED in. The roll-up moves the parent's
+     * status to {@code statusWhenFull} / {@code statusWhenPartial} as the summed children arrive; the
+     * first such move records the status the parent held until then, and a sum that returns to zero
+     * puts that status back - so an invoice whose only allocation is deleted is CONFIRMED (or ISSUED,
+     * if it was paid straight from there) again rather than PAID with nothing paid (#7016). Remembering
+     * beats a declared "empty" status, which is wrong for every parent that entered the roll-up's
+     * region from a different status than the declared one.
+     *
+     * <p>
+     * System-managed like {@code ProcessIds}: read-only (so a full-row form save preserves it), never a
+     * major column, and hidden from every generated form, list and details block - it is bookkeeping
+     * the roll-up handler alone reads and writes.
+     */
+    private static Map<String, Object> displacedStatusProperty(String entityName, String statusProperty) {
+        String name = IntentNaming.displacedStatusProperty(statusProperty);
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("name", name);
+        p.put("description", "The " + statusProperty + " a roll-up displaced, restored when its sum returns to zero");
+        p.put("tooltip", "");
+        p.put("dataName", IntentNaming.upperSnake(entityName) + "_" + IntentNaming.upperSnake(name));
+        p.put("dataType", "INTEGER");
+        p.put("dataNullable", "true");
+        p.put("dataLength", "");
+        p.put("auditType", "NONE");
+        p.put("isReadOnlyProperty", "true");
+        p.put("isHiddenProperty", "true");
+        p.put("widgetType", "NUMBER");
+        p.put("widgetSize", "");
+        p.put("widgetLength", "");
         p.put("widgetIsMajor", "false");
         return p;
     }
@@ -2328,7 +2401,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             String auditType = str(property.get("auditType"));
             boolean excluded =
                     "true".equals(String.valueOf(property.get("dataAutoIncrement"))) || name.equals(fkProperty) || "ProcessId".equals(name)
-                            || "ProcessIds".equals(name) || "false".equals(String.valueOf(property.get("widgetIsMajor")))
+                            || "ProcessIds".equals(name) || "true".equals(String.valueOf(property.get("isHiddenProperty")))
+                            || "false".equals(String.valueOf(property.get("widgetIsMajor")))
                             || (auditType != null && !auditType.isEmpty() && !"NONE".equals(auditType));
             if (!excluded) {
                 columns.add(relatedColumn(property));
