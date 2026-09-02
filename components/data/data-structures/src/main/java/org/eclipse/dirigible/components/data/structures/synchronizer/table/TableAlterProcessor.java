@@ -182,10 +182,10 @@ public class TableAlterProcessor {
      * touched.
      *
      * <p>
-     * Fails soft: a database without an INFORMATION_SCHEMA view of its constraints skips the step (no
-     * change from before), and a statement the database refuses - duplicate rows already present, a
-     * foreign key that depends on the unique - is logged with the table and key, without failing the
-     * column reconciliation or the publish.
+     * Fails soft: a dialect without a catalog of unique constraints skips the step (no change from
+     * before), and a statement the database refuses - duplicate rows already present, a foreign key
+     * that depends on the unique - is logged with the table and key, without failing the column
+     * reconciliation or the publish.
      *
      * @param connection the connection
      * @param quotedTableName the table name as the alter builder wants it (quoted)
@@ -195,12 +195,19 @@ public class TableAlterProcessor {
         String tableName = DatabaseNameNormalizer.normalizeTableName(quotedTableName);
         Map<String, List<String>> existing;
         try {
-            existing = readUniqueConstraints(connection, tableName);
+            existing = SqlFactory.getNative(connection)
+                                 .uniqueConstraints(connection, tableName);
         } catch (SQLException e) {
-            logger.warn("Unique constraints of table [{}] are not reconciled - the database exposes no INFORMATION_SCHEMA constraint"
-                    + " view: {}", tableName, e.getMessage());
+            logger.warn("Unique constraints of table [{}] are not reconciled - the catalog read failed: {}", tableName, e.getMessage());
             return;
         }
+        if (existing == null) {
+            logger.info("Unique constraints of table [{}] are not reconciled - this database exposes no catalog of them", tableName);
+            return;
+        }
+        existing.replaceAll((name, columns) -> columns.stream()
+                                                      .map(String::toUpperCase)
+                                                      .toList());
         Map<Set<String>, DesiredUnique> desired = new LinkedHashMap<>();
         for (TableColumn column : tableModel.getColumns()) {
             if (column.isUnique() && !column.isPrimaryKey()) {
@@ -262,40 +269,6 @@ public class TableAlterProcessor {
 
     /** A key the model wants: its constraint name and its columns in the declared order. */
     private record DesiredUnique(String name, List<String> columns) {
-    }
-
-    /**
-     * The table's UNIQUE constraints as the database reports them through the standard
-     * INFORMATION_SCHEMA views (H2 and PostgreSQL both expose them): constraint name to its columns in
-     * ordinal order. Column names are upper-cased for the comparison with the model.
-     *
-     * @param connection the connection
-     * @param tableName the normalized (unquoted) table name
-     * @return constraint name to ordered columns
-     * @throws SQLException when the database has no such view
-     */
-    private static Map<String, List<String>> readUniqueConstraints(Connection connection, String tableName) throws SQLException {
-        String schema = connection.getSchema();
-        String sql = "SELECT tc.CONSTRAINT_NAME, kcu.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc"
-                + " JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu ON kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME"
-                + " AND kcu.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA AND kcu.TABLE_NAME = tc.TABLE_NAME"
-                + " WHERE tc.CONSTRAINT_TYPE = 'UNIQUE' AND tc.TABLE_NAME = ?" + (schema != null ? " AND tc.TABLE_SCHEMA = ?" : "")
-                + " ORDER BY tc.CONSTRAINT_NAME, kcu.ORDINAL_POSITION";
-        Map<String, List<String>> constraints = new LinkedHashMap<>();
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, tableName);
-            if (schema != null) {
-                statement.setString(2, schema);
-            }
-            try (ResultSet resultSet = statement.executeQuery()) {
-                while (resultSet.next()) {
-                    constraints.computeIfAbsent(resultSet.getString(1), name -> new ArrayList<>())
-                               .add(resultSet.getString(2)
-                                             .toUpperCase());
-                }
-            }
-        }
-        return constraints;
     }
 
     /**

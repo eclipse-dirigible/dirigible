@@ -11,6 +11,8 @@ package org.eclipse.dirigible.database.sql;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
 
 import org.eclipse.dirigible.database.sql.builders.AlterBranchingBuilder;
 import org.eclipse.dirigible.database.sql.builders.CreateBranchingBuilder;
@@ -258,6 +260,20 @@ public class SqlFactory<SELECT extends SelectBuilder, INSERT extends InsertBuild
     @Override
     public boolean existsSchema(Connection connection, String schema) throws SQLException {
         return this.dialect.existsSchema(connection, schema);
+    }
+
+    /**
+     * Unique constraints of a table, from the dialect's catalog.
+     *
+     * @param connection the connection
+     * @param table the table
+     * @return constraint name to ordered columns, or {@code null} when the dialect has no catalog of
+     *         them
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    public Map<String, List<String>> uniqueConstraints(Connection connection, String table) throws SQLException {
+        return this.dialect.uniqueConstraints(connection, table);
     }
 
     /**
