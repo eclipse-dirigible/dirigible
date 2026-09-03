@@ -81,6 +81,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlueIntentGenerator.class);
 
+    /** A {@code {path}} placeholder of a notify subject / body - a field or a one-hop path. */
+    private static final java.util.regex.Pattern NOTIFY_PLACEHOLDER =
+            java.util.regex.Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?)\\}");
+
+    /** The reserved link tokens a notify path may be instead of a property of the record. */
+    private static final java.util.Set<String> RESERVED_NOTIFY_TOKENS =
+            java.util.Set.of(NotificationSupport.APP_URL_TOKEN, NotificationSupport.RECORD_URL_TOKEN, NotificationSupport.INBOX_URL_TOKEN);
+
     @Override
     public String name() {
         return "glue";
@@ -3757,20 +3765,48 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
             } else {
                 // The per-row action reuses the notification machinery against the queried row entity.
-                NotificationSupport.Plan plan = NotificationSupport.plan(schedule.getNotify(), byName.get(entity), byName,
-                        compositionParents, crossModelLookup(model, context));
+                // For a cross-model source that entity is the OWNER's, so the row is projected from the
+                // owner's .model facts (#7030) - which is what lets a statement mail live in the model
+                // that owns the report rather than the one that owns the customer.
+                EntityIntent rowEntity = sourceCrossModel ? crossModelRow(entity, sourceTarget) : byName.get(entity);
+                NotificationSupport.Plan plan = NotificationSupport.plan(schedule.getNotify(), rowEntity, byName, compositionParents,
+                        crossModelLookup(model, context));
                 if (plan == null) {
                     reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] notify recipient [" + schedule.getNotify()
                                                                                                                     .getTo()
                             + "] is not a resolvable field or relation.field of [" + entity + "] - the schedule was NOT generated");
                     continue;
                 }
-                NotifySupport.PrintAttachment attachment = printAttachment(schedule.getNotify(), byName.get(entity), model, byName,
+                if (sourceCrossModel && plan.usesRecordUrl()) {
+                    // The record link is composed from THIS application's routes; the source row is a
+                    // record of the owner's application, so the link would point at a page that is not
+                    // there. The parser reports this too - a generation reached by another route drops it.
+                    reportDroppedGlue(context,
+                            "Schedule [" + schedule.getName() + "] notify uses {" + NotificationSupport.RECORD_URL_TOKEN
+                                    + "} for the cross-model source [" + entity + "], whose record belongs to the [" + schedule.getModel()
+                                    + "] application - the schedule was NOT generated");
+                    continue;
+                }
+                if (sourceCrossModel && schedule.getNotify()
+                                                .getOutcome() != null
+                        && !schedule.getNotify()
+                                    .getOutcome()
+                                    .isBlank()) {
+                    // The stamp writes through the row's own repository and publishes on its own
+                    // failure topic - both generated in the model that owns the row. The parser reports
+                    // this too; a generation reached by another route drops rather than stamps nothing.
+                    reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] notify declares outcome [" + schedule.getNotify()
+                                                                                                                           .getOutcome()
+                            + "] on the cross-model source [" + entity + "], whose repository and failure topic belong to the ["
+                            + schedule.getModel() + "] model - the schedule was NOT generated");
+                    continue;
+                }
+                NotifySupport.PrintAttachment attachment = printAttachment(schedule.getNotify(), rowEntity, model, byName,
                         compositionParents, context, "Schedule [" + schedule.getName() + "] notify");
                 if (attachment == null && NotifySupport.attachesPrint(schedule.getNotify())) {
                     continue; // asked for the document but it cannot be rendered - reported above
                 }
-                NotifySupport.ReportAttachment reportAttachment = reportAttachment(schedule.getNotify(), byName.get(entity), model, byName,
+                NotifySupport.ReportAttachment reportAttachment = reportAttachment(schedule.getNotify(), rowEntity, model, byName,
                         compositionParents, context, "Schedule [" + schedule.getName() + "] notify");
                 if (reportAttachment == null && NotifySupport.attachesReport(schedule.getNotify())) {
                     continue; // asked for the report but it cannot be scoped - reported above
@@ -3781,16 +3817,64 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.put("subjectExpression", plan.subjectExpression());
                 entry.put("bodyExpression", plan.bodyExpression());
                 entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment));
-                entry.putAll(NotifySupport.deepLinkFields(plan, byName.get(entity)));
+                entry.putAll(NotifySupport.deepLinkFields(plan, rowEntity));
                 // A schedule already runs once per matched row, so the row IS the record the message is
                 // about and the stamp lands on it - which is what makes a dunning run auditable per
-                // invoice instead of one aggregate line per tick.
+                // invoice instead of one aggregate line per tick. A cross-model row is stamped through
+                // the OWNER's repository on the OWNER's failure topic, neither of which this model can
+                // name, so the parser refuses that combination and this stays the local row.
                 entry.putAll(NotifySupport.outcomeFields(schedule.getNotify(), byName.get(entity), compositionParents,
                         IntentEntities.settingEntities(byName.values())));
             }
             schedules.add(entry);
         }
         return schedules;
+    }
+
+    /**
+     * The cross-model source row of a schedule's {@code notify}, projected from the owner's
+     * {@code .model} facts into the {@link EntityIntent} shape the notify machinery resolves paths
+     * against (dirigible #7030). It carries the owner's property names and its primary key - enough for
+     * a recipient, a placeholder, a bound report parameter and the default attachment name.
+     *
+     * <p>
+     * Relations are deliberately absent: a foreign entity's relations are known only to its owner
+     * model, which is the same reason a cross-model {@code generate map} refuses a
+     * {@code relation.field} source. So such a path resolves to nothing here and the block is dropped
+     * with that reason rather than emitting a load of a record this model cannot name. Each property is
+     * registered under the owner's PascalCase name AND its lower-camel form, because the author names
+     * it as the owner's intent authored it while the {@code .model} carries the PascalCase property -
+     * both render the same access ({@code entity.<PascalName>}), so the alias is a lookup affordance
+     * only, matching the tolerance {@code where} fields already have.
+     *
+     * @param entity the source entity name
+     * @param target the owner's resolved facts ({@code propertyNames} null on a convention fallback,
+     *        where only the key is known and every authored field is trusted)
+     * @return the projected row entity
+     */
+    private static EntityIntent crossModelRow(String entity, CrossModelSupport.TargetInfo target) {
+        EntityIntent row = new EntityIntent();
+        row.setName(entity);
+        String keyProperty = target == null ? "Id" : target.keyField();
+        java.util.Set<String> properties = new java.util.LinkedHashSet<>();
+        properties.add(keyProperty);
+        if (target != null && target.propertyNames() != null) {
+            properties.addAll(target.propertyNames());
+        }
+        List<FieldIntent> fields = new ArrayList<>();
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        for (String property : properties) {
+            names.add(property);
+            names.add(IntentNaming.camelCase(property));
+        }
+        for (String name : names) {
+            FieldIntent field = new FieldIntent();
+            field.setName(name);
+            field.setPrimaryKey(keyProperty.equals(IntentNaming.pascalCase(name)));
+            fields.add(field);
+        }
+        row.setFields(fields);
+        return row;
     }
 
     /**
@@ -3816,23 +3900,89 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     private static String firstUnresolvableScheduleRef(IntentModel model, ScheduleIntent schedule,
             CrossModelSupport.TargetInfo sourceTarget, IntentGenerationContext context) {
         java.util.Set<String> sourceProps = sourceTarget == null ? null : sourceTarget.propertyNames();
+        GeneratesIntent generate = schedule.getGenerate();
         if (sourceProps != null) {
             for (ScheduleConditionIntent condition : schedule.getWhere()) {
                 if (isMissing(sourceProps, condition.getField())) {
                     return "where field [" + condition.getField() + "]";
                 }
             }
-            for (Map.Entry<String, String> mapping : schedule.getGenerate()
-                                                             .getMap()
-                                                             .entrySet()) {
-                if (isMissing(sourceProps, mapping.getValue())) {
-                    return "generate map source [" + mapping.getValue() + "]";
+            if (generate != null) {
+                for (Map.Entry<String, String> mapping : generate.getMap()
+                                                                 .entrySet()) {
+                    if (isMissing(sourceProps, mapping.getValue())) {
+                        return "generate map source [" + mapping.getValue() + "]";
+                    }
+                }
+            } else {
+                String notifyRef = firstUnresolvableNotifyRef(schedule.getNotify(), sourceProps);
+                if (notifyRef != null) {
+                    return notifyRef;
                 }
             }
         }
-        return firstUnresolvableChildRef(model, schedule.getGenerate()
-                                                        .getChildren(),
-                sourceProps, context);
+        return generate == null ? null : firstUnresolvableChildRef(model, generate.getChildren(), sourceProps, context);
+    }
+
+    /**
+     * The first reference of a cross-model source's {@code notify} that names no property of the owner
+     * entity, or {@code null} when they all resolve (dirigible #7030). A direct path is emitted as a
+     * plain field read without a local check, so a mistyped name would otherwise reach {@code javac};
+     * and a placeholder that does not resolve degrades to its own literal text, which is a statement
+     * mail quietly saying {@code {name}}. Both are checked here, against the owner's property names,
+     * with the same PascalCase tolerance the {@code where} fields have.
+     *
+     * <p>
+     * A path that hops through a relation is refused for what it is - the source's relations belong to
+     * its owner - and the reserved link tokens are not paths at all.
+     *
+     * @param notify the notify block
+     * @param sourceProps the owner entity's property names (never {@code null} here)
+     * @return the offending reference, described for the drop message, or {@code null}
+     */
+    private static String firstUnresolvableNotifyRef(NotificationIntent notify, java.util.Set<String> sourceProps) {
+        Map<String, String> paths = new LinkedHashMap<>();
+        String to = notify.getTo();
+        if (to != null && !to.isBlank() && !to.contains("@")) {
+            paths.put("notify recipient", to.trim());
+        }
+        collectNotifyPlaceholders(notify.getSubject(), paths);
+        collectNotifyPlaceholders(notify.getBody(), paths);
+        NotificationIntent.ReportAttachment report = notify.getReportAttachment();
+        if (report != null) {
+            for (Map.Entry<String, String> bound : report.bind()
+                                                         .entrySet()) {
+                if (bound.getValue() != null && !bound.getValue()
+                                                      .isBlank()) {
+                    paths.put("notify attach bind [" + bound.getKey() + "]", bound.getValue()
+                                                                                  .trim());
+                }
+            }
+        }
+        for (Map.Entry<String, String> path : paths.entrySet()) {
+            String value = path.getValue();
+            if (RESERVED_NOTIFY_TOKENS.contains(value)) {
+                continue;
+            }
+            if (value.indexOf('.') >= 0) {
+                return path.getKey() + " [" + value + "] (a relation of the source, known only to its owner model)";
+            }
+            if (isMissing(sourceProps, value)) {
+                return path.getKey() + " [" + value + "]";
+            }
+        }
+        return null;
+    }
+
+    /** The {@code {path}} placeholders of one text, keyed by the message they are reported under. */
+    private static void collectNotifyPlaceholders(String text, Map<String, String> paths) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        java.util.regex.Matcher matcher = NOTIFY_PLACEHOLDER.matcher(text);
+        while (matcher.find()) {
+            paths.put("notify placeholder [{" + matcher.group(1) + "}]", matcher.group(1));
+        }
     }
 
     /**

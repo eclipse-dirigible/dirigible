@@ -203,6 +203,65 @@ class NotifyAttachReportTest {
         assertEquals(java.util.Set.of("CustomerStatement"), NotifySupport.attachedReports(IntentParser.parse(MODEL + STATEMENT_SCHEDULE)));
     }
 
+    @Test
+    void aCrossModelSourceMailsTheStatementFromTheModelThatOwnsTheReport() {
+        // The suite layout the mechanism was filed for (dirigible #7030): the report lives with the
+        // invoices, the customer lives in another module, and the schedule can only be declared where
+        // the report is - so its source is cross-model. With no repository the owner's facts fall back
+        // to the naming convention, which is enough to assert the emitted mail plan.
+        String yaml = """
+                name: sales-invoices
+                uses:
+                  - { model: customers }
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: issuedOn, type: date }
+                      - { name: total,    type: decimal }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer, model: customers }
+                reports:
+                  - name: CustomerStatement
+                    source: SalesInvoice
+                    dimensions: [issuedOn]
+                    measures: ["sum(total)"]
+                    parameters:
+                      - { name: customer, target: Customer.name, op: like }
+                schedules:
+                  - name: monthly-customer-statements
+                    cron: "0 0 7 1 * ?"
+                    entity: Customer
+                    model: customers
+                    where:
+                      - { field: openBalance, op: gt, value: 0 }
+                    notify:
+                      to: email
+                      subject: "Your account statement"
+                      body: "Dear {name}, your statement is attached."
+                      attach: { report: CustomerStatement, bind: { customer: name } }
+                """;
+        Map<String, Object> entry = schedule(yaml);
+        assertEquals("notify", entry.get("action"));
+        // The row is the OWNER's, so the job imports its gen package and queries its repository.
+        assertEquals(true, entry.get("sourceCrossModel"));
+        assertEquals("customers", entry.get("sourceModel"));
+        assertEquals("Customer", entry.get("perspective"));
+        // Every path resolves off the loop row exactly as a same-model source's does - the recipient,
+        // the placeholder and the report binding.
+        assertEquals("entity.Email", entry.get("toExpression"));
+        assertTrue(String.valueOf(entry.get("bodyExpression"))
+                         .contains("entity.Name"),
+                "body: " + entry.get("bodyExpression"));
+        assertEquals("report", entry.get("attach"));
+        assertEquals("CustomerStatement", entry.get("attachReport"));
+        assertEquals(List.of(Map.of("parameter", "customer", "expression", "entity.Name")), bindings(entry));
+        // The report is this model's, so nothing about the mail crosses back: no relation load, and no
+        // claim of a document print the owner alone could render.
+        assertEquals(List.of(), entry.get("relationLoads"));
+        assertEquals("", entry.get("attachEntity"));
+    }
+
     private static String parseError(String yaml) {
         IntentValidationException failure = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
         return String.join("\n", failure.getIssues());
