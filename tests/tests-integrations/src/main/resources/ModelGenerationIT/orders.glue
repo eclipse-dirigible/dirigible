@@ -376,6 +376,74 @@
             "notFoundStatus": "3",
             "ambiguousStatus": "4",
             "writesStatus": "true"
+        },
+        {
+            "name": "priceFromList",
+            "className": "PriceFromList",
+            "entity": "SalesOrderItem",
+            "perspective": "Sales Orders",
+            "keyProperty": "Id",
+            "topicSuffix": "",
+            "guardExpression": "true",
+            "setProperty": "PriceListItem",
+            "registerEntity": "PriceListItem",
+            "registerPerspective": "Settings",
+            "registerValueProperty": "Id",
+            "matches": [
+                {
+                    "registerProperty": "Product",
+                    "recordProperty": "Product",
+                    "recordExpression": "entity.Product",
+                    "local": "key0"
+                },
+                {
+                    "registerProperty": "PriceList",
+                    "recordProperty": "SalesOrder.Customer.PriceList",
+                    "recordExpression": "(hop1 == null ? null : hop1.PriceList)",
+                    "local": "key1"
+                }
+            ],
+            "matchSummary": "Product = Product, PriceList = SalesOrder.Customer.PriceList",
+            "filters": [],
+            "filterSummary": "",
+            "startProperty": "ValidFrom",
+            "endProperty": "ValidTo",
+            "valueProperty": "SalesOrder.OrderedOn",
+            "valueExpression": "(hop0 == null ? null : hop0.OrderedOn)",
+            "pathLoads": [
+                {
+                    "local": "hop0",
+                    "sourceExpression": "entity.SalesOrder",
+                    "entity": "SalesOrder",
+                    "perspective": "Sales Orders",
+                    "crossModel": false,
+                    "targetModel": "",
+                    "targetProject": ""
+                },
+                {
+                    "local": "hop1",
+                    "sourceExpression": "(hop0 == null ? null : hop0.Customer)",
+                    "entity": "Customer",
+                    "perspective": "Customer",
+                    "crossModel": false,
+                    "targetModel": "",
+                    "targetProject": ""
+                }
+            ],
+            "copies": [
+                {
+                    "registerProperty": "Price",
+                    "recordProperty": "Price"
+                }
+            ],
+            "hasCopies": "true",
+            "copySummary": "Price -> Price",
+            "outcomeProperty": "",
+            "statusProperty": "",
+            "foundStatus": "",
+            "notFoundStatus": "",
+            "ambiguousStatus": "",
+            "writesStatus": "false"
         }
     ],
     "writers": [
