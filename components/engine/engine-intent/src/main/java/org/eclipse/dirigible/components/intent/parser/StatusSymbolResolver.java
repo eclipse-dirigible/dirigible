@@ -18,6 +18,8 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
+
 /**
  * Resolves a status referenced by its <b>seeded name</b> to the seed id, everywhere the intent
  * names a status, on the raw YAML tree - before the typed Gson mapping, so every downstream
@@ -223,18 +225,33 @@ final class StatusSymbolResolver {
             if (trigger != null && trigger.get("when") != null) {
                 rewriteWhen(trigger, statusRelationName(triggerEntity), statusOf(triggerEntity), subject + " trigger when");
             }
-            // `setRelationField: <Relation>` + `value:` writes an id of THAT relation's target - the
-            // status in the canonical case, but the same shape serves any nomenclature FK.
             for (Object stepNode : asList(process.get("steps"))) {
-                Map<?, ?> args = asMap(asMap(stepNode) == null ? null : asMap(stepNode).get("args"));
+                Map<?, ?> step = asMap(stepNode);
+                Map<?, ?> args = asMap(step == null ? null : step.get("args"));
+                if (args == null) {
+                    continue;
+                }
+                String stepSubject = subject + " step [" + text(step, "name") + "]";
+                // A `wait` step's guard qualifies the event that RESUMES the parked instance, and it is
+                // read against the event entity's own record - not necessarily the trigger entity's
+                // (`via:` is exactly the case where the two differ), so the nomenclature is the event
+                // entity's. Left unresolved, the name reached the generated listener as a string
+                // compared against the integer status FK: never true, and because a wait that matches
+                // nothing is a deliberate no-op, the instance simply stayed parked with nothing logged
+                // (#6907).
+                if ("wait".equals(lower(text(step, "kind"))) && args.get("when") != null) {
+                    String eventEntity = waitEventEntityOf(args);
+                    rewriteWhen(args, statusRelationName(eventEntity), statusOf(eventEntity), stepSubject + " when");
+                }
+                // `setRelationField: <Relation>` + `value:` writes an id of THAT relation's target - the
+                // status in the canonical case, but the same shape serves any nomenclature FK.
                 String relationName = text(args, "setRelationField");
                 if (relationName == null || args.get("value") == null) {
                     continue;
                 }
                 Map<?, ?> relation = toOneRelation(triggerEntity, relationName);
                 Target target = relation == null ? new Target(null, null) : new Target(text(relation, "to"), text(relation, "model"));
-                putResolved(args, "value", target,
-                        subject + " step [" + text(asMap(stepNode), "name") + "] setRelationField [" + relationName + "] value");
+                putResolved(args, "value", target, stepSubject + " setRelationField [" + relationName + "] value");
             }
         }
     }
@@ -369,6 +386,22 @@ final class StatusSymbolResolver {
         // nomenclature rather than about the trigger.
         for (String event : List.of("onCreate", "onUpdate", "onDelete", "onTransition", "onNotifyFailed")) {
             String entity = text(trigger, event);
+            if (entity != null) {
+                return entity;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The entity whose lifecycle event resumes a {@code wait} step - the target of the one
+     * {@code onCreate}/{@code onUpdate}/{@code onTransition} arg it declares. Read through the
+     * generator's own list, so the vocabulary a wait accepts and the guard resolved against it cannot
+     * drift apart (the parser validates the same list).
+     */
+    private static String waitEventEntityOf(Map<?, ?> args) {
+        for (String event : ProcessWaitSupport.EVENT_KINDS) {
+            String entity = text(args, event);
             if (entity != null) {
                 return entity;
             }

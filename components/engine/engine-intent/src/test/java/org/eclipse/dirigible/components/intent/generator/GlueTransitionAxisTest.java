@@ -80,6 +80,53 @@ class GlueTransitionAxisTest {
                 to: { topic: "codbex.fines" }
             """;
 
+    /**
+     * A flow that PARKS until the record reaches a status - the shape the status axis invites, and the
+     * one whose guard was never resolved.
+     */
+    private static final String WAITING = """
+              - name: Dunning
+                trigger: { onCreate: Fine }
+                steps:
+                  - { name: hold, kind: wait, args: { onTransition: Fine, when: "Status == IDENTIFIED", next: remind } }
+                  - { name: remind, kind: end }
+            """;
+
+    /** A wait resumed by ANOTHER entity's transition, walked back through {@code via:}. */
+    private static final String WAITING_VIA = """
+              - name: Collection
+                trigger: { onCreate: Fine }
+                steps:
+                  - { name: settle, kind: wait, args: { onTransition: Payment, via: fine, when: "Status == SETTLED", next: closed } }
+                  - { name: closed, kind: end }
+            """;
+
+    /** The payment whose own nomenclature the {@code via:} wait's guard is read against. */
+    private static final String PAYMENT = """
+              - name: PaymentStatus
+                kind: setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Payment
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: fine, kind: manyToOne, to: Fine }
+                  - { name: Status, kind: manyToOne, to: PaymentStatus, function: EntityStatus, init: 1 }
+            """;
+
+    /** The payment nomenclature's own seeds - deliberately numbered apart from the fine's. */
+    private static final String PAYMENT_SEEDS = """
+              - name: paymentStatuses
+                entity: PaymentStatus
+                rows:
+                  - { id: 1, name: NEW }
+                  - { id: 2, name: PENDING }
+                  - { id: 3, name: SETTLED }
+            """;
+
     /** The follow-up flow, started by the transition the first flow produces. */
     private static final String DUNNING = """
               - name: Dunning
@@ -164,5 +211,43 @@ class GlueTransitionAxisTest {
         // - which is exactly the one that needs a status guard - could not start at all.
         assertEquals("java.util.Objects.equals(entity.Status, 2)", dunning.get("guardExpression"),
                 "the trigger's status guard must compare against the seed id, not against the name as a string");
+    }
+
+    /**
+     * A {@code wait} step's guard was the last {@code when} in the DSL whose status NAME survived
+     * unresolved: the wait template emits it verbatim, so the generated listener compared the integer
+     * status FK against the string {@code "IDENTIFIED"}. Always false - and since a wait that matches
+     * nothing is a deliberate no-op, the parked instance simply never resumed, with nothing logged
+     * anywhere (#6907).
+     */
+    @Test
+    void aWaitStatusGuardResolvesToTheSeedId() {
+        IntentModel model = IntentParser.parse(YAML.replace("notifications:", WAITING + "notifications:"));
+
+        Map<String, Object> wait = only(GlueIntentGenerator.buildWaitsForTest(model));
+
+        assertEquals("Fine", wait.get("eventEntity"));
+        assertEquals("-transitioned", wait.get("topicSuffix"));
+        assertEquals("java.util.Objects.equals(entity.Status, 2)", wait.get("guardExpression"),
+                "the wait's status guard must compare against the seed id, not against the name as a string");
+    }
+
+    /**
+     * And it resolves against the EVENT entity's nomenclature, not the trigger entity's - the two
+     * differ exactly when the wait walks back through {@code via:}, and taking the id from the wrong
+     * lifecycle would be the #6645 failure again one level down.
+     */
+    @Test
+    void aViaWaitResolvesAgainstTheEventEntitysNomenclature() {
+        IntentModel model = IntentParser.parse(YAML.replace("seeds:", PAYMENT + "seeds:")
+                                                   .replace("processes:", PAYMENT_SEEDS + "processes:")
+                                                   .replace("notifications:", WAITING_VIA + "notifications:"));
+
+        Map<String, Object> wait = only(GlueIntentGenerator.buildWaitsForTest(model));
+
+        assertEquals("Payment", wait.get("eventEntity"));
+        assertEquals("Fine", wait.get("parentEntity"));
+        assertEquals("java.util.Objects.equals(entity.Status, 3)", wait.get("guardExpression"),
+                "the guard is over the payment's own status nomenclature, which numbers SETTLED apart from any fine status");
     }
 }
