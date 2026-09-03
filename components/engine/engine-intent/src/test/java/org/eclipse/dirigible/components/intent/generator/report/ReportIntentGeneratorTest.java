@@ -887,6 +887,26 @@ class ReportIntentGeneratorTest {
         assertTrue(query.contains("WHERE Unit.\"UNIT_CODE\" != 'X'"), query);
     }
 
+    /**
+     * A key is not a label: {@code code} on the unit nomenclature is what a determination rule and a
+     * report filter match on, so it declares {@code translatable: false} and has no language column at
+     * all. The report must then read it from the base table like any other untranslated property -
+     * COALESCE-ing over a column the schema never emitted would fail the query outright (#6545).
+     */
+    @Test
+    void aKeyMarkedNonTranslatableIsReadFromTheBaseTable() {
+        IntentModel model = IntentParser.parse(
+                MULTILINGUAL_INTENT.replace("{ name: code, type: string }", "{ name: code, type: string, translatable: false }"));
+        String query = (String) ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                     .get(0))
+                                                     .get("query");
+
+        assertTrue(query.contains("Unit.\"UNIT_CODE\" as \"Unit Code\""), query);
+        assertFalse(query.contains("Unit_LANG.\"Code\""), query);
+        // The label next to it is untouched - the marker is per field, not per entity.
+        assertTrue(query.contains("COALESCE(Unit_LANG.\"Name\", Unit.\"UNIT_NAME\") as \"Unit\""), query);
+    }
+
     @Test
     void aPlainFieldOfAMultilingualSourceIsOverlaidToo() {
         IntentModel model = IntentParser.parse(MULTILINGUAL_INTENT);

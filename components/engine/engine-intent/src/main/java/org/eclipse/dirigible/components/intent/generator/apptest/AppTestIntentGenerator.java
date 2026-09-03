@@ -475,9 +475,15 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         return sample;
     }
 
+    /**
+     * The seeded property the translation sample is taken from: the first string field the base row
+     * carries that actually HAS a language column - a field marked {@code translatable: false} is a key
+     * rather than a label and no translation seed may set it, so choosing it would silently drop the
+     * whole translation assertion from the generated runner.
+     */
     private static String firstTranslatableKey(EntityIntent entity, Map<String, Object> row) {
         for (FieldIntent field : entity.getFields()) {
-            if (!field.isPrimaryKey() && isStringType(field.getType()) && row.containsKey(field.getName())) {
+            if (field.hasLanguageColumn() && isStringType(field.getType()) && row.containsKey(field.getName())) {
                 return field.getName();
             }
         }

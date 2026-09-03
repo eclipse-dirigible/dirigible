@@ -524,8 +524,8 @@ public final class CrossModelSupport {
      * The properties a multilingual entity's sibling <code>&lt;TABLE&gt;_LANG</code> table carries a
      * column for - mirroring exactly what the schema template emits there: the character-typed
      * properties that are neither the primary key, nor a foreign key, nor calculated, nor an audit
-     * column. A consumer that reads the base table directly can only overlay a property that actually
-     * has a language column.
+     * column, nor marked {@code translatable: false} (a key, not a label). A consumer that reads the
+     * base table directly can only overlay a property that actually has a language column.
      *
      * @param multilingual whether the entity keeps per-language values at all
      * @param properties the entity's model properties
@@ -543,7 +543,7 @@ public final class CrossModelSupport {
             boolean audit = !"NONE".equals(str(property.get("auditType"), "NONE"));
             if (name == null || !character || audit || "true".equals(String.valueOf(property.get("dataPrimaryKey")))
                     || "true".equals(String.valueOf(property.get("isCalculatedProperty")))
-                    || property.get("relationshipEntityName") != null) {
+                    || "false".equals(String.valueOf(property.get("translatable"))) || property.get("relationshipEntityName") != null) {
                 continue;
             }
             translated.add(name);

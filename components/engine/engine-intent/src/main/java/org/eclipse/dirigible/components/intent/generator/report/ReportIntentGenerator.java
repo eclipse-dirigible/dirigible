@@ -1738,21 +1738,16 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Whether a field has a column in its entity's language table - mirroring what the schema template
-     * emits there: a character-typed field that is neither the primary key nor calculated. (A relation
-     * is not a field, and the audit columns are not authored ones, so neither can reach this.)
+     * Whether a field has a column in its entity's language table - the shared
+     * {@link FieldIntent#hasLanguageColumn()} predicate, which the schema template's own emission
+     * mirrors. (A relation is not a field, and the audit columns are not authored ones, so neither can
+     * reach this.)
      *
      * @param field the field, or null when the reference names no declared field
      * @return true when the language table carries a column for it
      */
     private static boolean isTranslatable(FieldIntent field) {
-        if (field == null || field.isPrimaryKey() || field.isCalculated()) {
-            return false;
-        }
-        String type = field.getType() == null ? "string"
-                : field.getType()
-                       .toLowerCase(Locale.ROOT);
-        return "string".equals(type) || "text".equals(type);
+        return field != null && field.hasLanguageColumn();
     }
 
     /**

@@ -1335,6 +1335,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 p.put("calculatedActionOnUpdate", field.getCalculatedActionOnUpdate());
             }
         }
+        // A key, not a label: kept out of the multilingual language table, so nothing overlays it on a
+        // read and the value a match compares stays the authored one. Emitted only when authored, so a
+        // model that does not use the marker generates byte-identically.
+        if (!field.isTranslatable()) {
+            p.put("translatable", "false");
+        }
         // Render hint for the document (header-items) layout: show this property in the totals footer
         // under the items table rather than in the header form. Presentational only.
         if (field.isAggregate()) {
