@@ -82,11 +82,11 @@ log.info("file size: {}", Files.size("/users/admin/workspace/proj/foo.txt"));
 | `security/user`                      | `sdk.security.User`                                            |       |
 | `template/engines`                   | `sdk.template.TemplateEngines`                                 |       |
 | `utils/alphanumeric`                 | `sdk.utils.Alphanumeric`                                       | `SecureRandom`-backed. |
-| `utils/base64`                       | `sdk.utils.Base64`                                             |       |
+| `utils/base64`                       | `sdk.utils.Base64`                                             | A `String` argument is text, encoded as UTF-8 bytes (as in the TS module). |
 | `utils/converter`                    | `sdk.utils.Converter`                                          | Jackson-backed JSON helpers. |
-| `utils/digest`                       | `sdk.utils.Digest`                                             |       |
+| `utils/digest`                       | `sdk.utils.Digest`                                             | A `String` argument is text, encoded as UTF-8 bytes (as in the TS module). |
 | `utils/escape`                       | `sdk.utils.Escape`                                             |       |
-| `utils/hex`                          | `sdk.utils.Hex`                                                |       |
+| `utils/hex`                          | `sdk.utils.Hex`                                                | A `String` argument is text, encoded as UTF-8 bytes (as in the TS module). |
 | `utils/qrcode`                       | `sdk.utils.QrCode`                                             |       |
 | `utils/url`                          | `sdk.utils.Url`                                                | Named `Url` to avoid clashing with `java.net.URL`. |
 | `utils/utf8`                         | `sdk.utils.Utf8`                                               |       |
