@@ -3340,6 +3340,10 @@ public final class IntentParser {
                 if (!isBlank(field.getFormat())) {
                     validateFormat("entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
+                if (field.getLabel() != null || !field.getCountryLabels()
+                                                      .isEmpty()) {
+                    validateLabels("entity [" + name + "] field [" + field.getName() + "]", field, issues);
+                }
                 if (field.isSensitive()) {
                     if (field.isPrimaryKey()) {
                         issues.add("entity [" + name + "] field [" + field.getName()
@@ -4737,6 +4741,9 @@ public final class IntentParser {
     /** The named field formats (#6463). A preset over `pattern`, so each maps to a canonical regex. */
     private static final Set<String> FIELD_FORMATS = Set.of("email");
 
+    /** The ISO 3166-1 alpha-2 codes a field's {@code countryLabels} may be keyed by. */
+    private static final Set<String> ISO_COUNTRIES = Set.of(Locale.getISOCountries());
+
     /**
      * A field's named {@code format} (#6463): a preset over {@link FieldIntent#getPattern()}. String
      * fields only, for the same reason a raw pattern is - on a numeric property the emitted
@@ -4760,6 +4767,35 @@ public final class IntentParser {
         }
         if (!isBlank(field.getPattern())) {
             issues.add(subject + " declares both `format` and `pattern` - they set the same validation, so declare one");
+        }
+    }
+
+    /**
+     * A field's display {@code label} and its country-scoped variants (#6424).
+     *
+     * <p>
+     * A variant is keyed by an ISO 3166-1 alpha-2 country code, because what resolves it is the
+     * tenant's country, not the reader's language - an unknown or misspelled code would simply never
+     * match any tenant, so it is refused here rather than silently rendering the base label forever.
+     */
+    private static void validateLabels(String subject, FieldIntent field, List<String> issues) {
+        if (field.getLabel() != null && field.getLabel()
+                                             .isBlank()) {
+            issues.add(subject + " declares a blank `label` - remove it to keep the humanized field name");
+        }
+        for (java.util.Map.Entry<String, String> variant : field.getCountryLabels()
+                                                                .entrySet()) {
+            String country = variant.getKey() == null ? ""
+                    : variant.getKey()
+                             .trim()
+                             .toUpperCase(Locale.ROOT);
+            if (!ISO_COUNTRIES.contains(country)) {
+                issues.add(subject + " countryLabels declares [" + variant.getKey()
+                        + "] which is not an ISO 3166-1 alpha-2 country code (e.g. BG, DE)");
+            }
+            if (isBlank(variant.getValue())) {
+                issues.add(subject + " countryLabels [" + variant.getKey() + "] has no label");
+            }
         }
     }
 

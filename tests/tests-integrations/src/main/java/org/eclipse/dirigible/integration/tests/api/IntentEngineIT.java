@@ -3286,6 +3286,42 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void field_label_and_its_country_variant_reach_the_catalog_and_the_application_configuration() {
+        // Issue #6424: humanizing a name cannot produce an acronym, and a term that follows the
+        // COMPANY's country cannot ride the language catalogs - they are per language and are not even
+        // loaded in the default one. So the label seeds the catalog like any other, while the country
+        // variants are generated into the app's configuration as their own overlay.
+        String yaml = """
+                name: payroll
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - name: nationalId
+                        type: string
+                        label: National ID
+                        countryLabels:
+                          BG: ЕГН
+                      - { name: name, type: string }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "payroll.model");
+
+        String catalog = contentOf("i18n/en-US/payroll.model.json");
+        assertTrue(catalog.contains("\"EMPLOYEE_NATIONAL_ID\": \"National ID\""),
+                "the authored label must seed the property's catalog entry, so it is translated like any other: " + catalog);
+        assertFalse(catalog.contains("National Id"), "and the humanized name must not be what the catalog carries");
+
+        String config = contentOf("gen/payroll/js/config.js");
+        assertTrue(config.contains("countryLabels: {\"BG\":{\"" + PROJECT + ":payroll-model.t.EMPLOYEE_NATIONAL_ID\":\"ЕГН\"}}"),
+                "the overlay must be keyed by the very translation key the views bind, so the runtime needs one exact lookup: " + config);
+    }
+
+    @Test
     void multilingual_entity_generates_the_translation_stack() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()

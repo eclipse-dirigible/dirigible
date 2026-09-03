@@ -10,7 +10,9 @@
 package org.eclipse.dirigible.components.intent.model;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Single attribute on an {@link EntityIntent}. {@link #type} carries a logical type string
@@ -23,6 +25,28 @@ public class FieldIntent {
 
     private String name;
     private String type;
+    /**
+     * Optional display label, replacing the humanized field name in every generated surface: the form
+     * input's caption, the list column header, the read-only details block. It seeds the generated
+     * en-US catalog entry for the property, so a translation of it is authored the same way as any
+     * other label. Use it for what humanizing a name cannot produce - an acronym ({@code nationalId} as
+     * "National ID", not "National Id"), a unit, a term of art.
+     */
+    private String label;
+    /**
+     * Optional label variants keyed by ISO 3166-1 alpha-2 <b>country</b> code, resolved from the
+     * tenant's country ({@code DIRIGIBLE_APPLICATION_COUNTRY}) rather than from the language the user
+     * reads the UI in.
+     *
+     * <p>
+     * A national identification number is called ЕГН in Bulgaria and Steuer-ID in Germany: which term
+     * applies is a property of the company, not of the reader. Keying such a label off the language
+     * catalogs gets it wrong in both directions - an English-speaking accountant at a Bulgarian company
+     * sees the generic term, their Bulgarian colleague the local one, on the same record (dirigible
+     * #6424). The variant therefore overrides the label for EVERY language, and {@link #label} (or the
+     * humanized name) remains the fallback for a country that declares none.
+     */
+    private Map<String, String> countryLabels = new LinkedHashMap<>();
     private boolean required;
     private boolean primaryKey;
     private boolean generated;
@@ -188,6 +212,22 @@ public class FieldIntent {
 
     public void setType(String type) {
         this.type = type;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    public Map<String, String> getCountryLabels() {
+        return countryLabels;
+    }
+
+    public void setCountryLabels(Map<String, String> countryLabels) {
+        this.countryLabels = countryLabels == null ? new LinkedHashMap<>() : countryLabels;
     }
 
     public boolean isRequired() {
