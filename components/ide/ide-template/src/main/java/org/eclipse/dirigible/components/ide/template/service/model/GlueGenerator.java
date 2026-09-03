@@ -362,6 +362,7 @@ class GlueGenerator {
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
         bindDeepLinks(item, context);
+        bindNotifyOutcome(item, context, parameters);
         bindAttachLanguage(item, context, parameters);
         bindAttachReport(item, context);
     }
@@ -387,6 +388,7 @@ class GlueGenerator {
         context.put("action", strOr(item, "action", "notify"));
         context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
         bindDeepLinks(item, context);
+        bindNotifyOutcome(item, context, parameters);
         bindAttachLanguage(item, context, parameters);
         bindAttachReport(item, context);
         context.put("genToGenFolder",
@@ -690,6 +692,7 @@ class GlueGenerator {
         context.put("notifyRelationLoads", relationLoads(item.get("notifyRelationLoads"), parameters));
         context.put("javaForEachPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "forEachPerspective", "")));
         bindDeepLinks(item, context);
+        bindNotifyOutcome(item, context, parameters);
         bindAttachLanguage(item, context, parameters);
         bindAttachReport(item, context);
     }
@@ -710,6 +713,7 @@ class GlueGenerator {
         context.put("notifyRelationLoads", relationLoads(item.get("notifyRelationLoads"), parameters));
         context.put("javaForEachPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "forEachPerspective", "")));
         bindDeepLinks(item, context);
+        bindNotifyOutcome(item, context, parameters);
         bindAttachLanguage(item, context, parameters);
         bindAttachReport(item, context);
     }
@@ -1088,6 +1092,42 @@ class GlueGenerator {
      */
     private static void bindDeepLinks(Map<String, Object> item, Map<String, Object> context) {
         copy(context, item, "usesRecordUrl", "usesInboxUrl", "recordUrlEntity", "recordUrlKeyProperty");
+    }
+
+    /**
+     * Resolves a notify block's optional delivery-outcome stamp (dirigible #7023) - the record the
+     * attempt is recorded on, and the Java class of its repository.
+     *
+     * <p>
+     * Defaulted to the no-stamp shape rather than copied, because a {@code .glue} written before these
+     * keys existed carries none of them: an absent key renders as its own literal in Velocity, which
+     * here would be a repository named {@code ${notifyOutcomeEntity}Repository} and a sender that does
+     * not compile. The same migration the {@code filters} keys of a lookup take.
+     *
+     * <p>
+     * The repository arrives fully qualified rather than as an import, so the sender needs no
+     * conditional import block for a class only one of its branches names - the assignee walk's hops
+     * take the same shape. The RAW perspective travels alongside it because the failure TOPIC is built
+     * from that, while the Java package is its sanitized form.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindNotifyOutcome(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        String property = strOr(item, "notifyOutcomeProperty", "");
+        context.put("notifyOutcomeProperty", property);
+        context.put("notifyOutcomeEntity", strOr(item, "notifyOutcomeEntity", ""));
+        // The RAW perspective stays too: the failure topic is built from it, while the sanitized form
+        // is the Java package the repository lives in.
+        context.put("notifyOutcomePerspective", strOr(item, "notifyOutcomePerspective", ""));
+        context.put("notifyOutcomeKeyProperty", strOr(item, "notifyOutcomeKeyProperty", ""));
+        context.put("notifyOutcomeLength", strOr(item, "notifyOutcomeLength", "64"));
+        context.put("notifyOutcomeRepositoryClass",
+                property.isEmpty() ? ""
+                        : "gen." + str(parameters, "javaGenFolderName") + ".data."
+                                + NamingHelper.sanitizeJavaIdentifier(strOr(item, "notifyOutcomePerspective", "")) + "."
+                                + strOr(item, "notifyOutcomeEntity", "") + "Repository");
     }
 
     /**

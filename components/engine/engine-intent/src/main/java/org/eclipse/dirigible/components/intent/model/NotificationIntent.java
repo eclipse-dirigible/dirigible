@@ -88,6 +88,21 @@ public class NotificationIntent {
      * the default.
      */
     private String fileName;
+    /**
+     * Optional <b>delivery outcome</b>: a string field of the record the message is about (the ROW
+     * inside a {@link #forEach} fan-out) that the send attempt stamps with {@code sent} or
+     * {@code failed: <reason>} (dirigible #7023).
+     *
+     * <p>
+     * A notify block is fail-soft - the transition, the schedule tick or the process step must not
+     * break because a mailbox is unreachable - and until this key the only trace of a failed delivery
+     * was a server log line: the document sat in SENT, nobody was told, and nothing downstream could
+     * react. Naming a field here makes the attempt part of the record: a list or a report can show
+     * "sent / failed (reason)" per document, the transition's own response reports it to the person who
+     * pressed the button, and a FAILED stamp publishes {@code -notifyFailed} so glue bound to
+     * {@code event: { onNotifyFailed: <Entity> }} can route the record or open a task.
+     */
+    private String outcome;
 
     /**
      * The keys {@link #fromMap} reads - the whole vocabulary of an embedded notify block. Published so
@@ -96,7 +111,7 @@ public class NotificationIntent {
      * not to this set would go straight back to being unauthorable.
      */
     public static final Set<String> BLOCK_KEYS =
-            Set.of("to", "subject", "body", "attach", "language", "languageFrom", "fileName", "forEach", "channel");
+            Set.of("to", "subject", "body", "attach", "language", "languageFrom", "fileName", "forEach", "channel", "outcome");
 
     /**
      * The kind {@link #getAttach()} reports for the map shape {@code attach: { report, bind }}. It is
@@ -129,6 +144,7 @@ public class NotificationIntent {
         notify.setLanguageFrom(string(map.get("languageFrom")));
         notify.setFileName(string(map.get("fileName")));
         notify.setForEach(string(map.get("forEach")));
+        notify.setOutcome(string(map.get("outcome")));
         String channel = string(map.get("channel"));
         if (channel != null) {
             notify.setChannel(channel);
@@ -138,6 +154,14 @@ public class NotificationIntent {
 
     private static String string(Object value) {
         return value == null ? null : value.toString();
+    }
+
+    public String getOutcome() {
+        return outcome;
+    }
+
+    public void setOutcome(String outcome) {
+        this.outcome = outcome;
     }
 
     public String getName() {

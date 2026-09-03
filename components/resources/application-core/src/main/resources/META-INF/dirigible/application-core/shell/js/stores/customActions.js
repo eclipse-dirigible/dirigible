@@ -22,7 +22,9 @@
  *
  * A descriptor's action decides what the button does: an `endpoint` descriptor POSTs the selected id to
  * a server controller (a create-from / generate action) and toasts the result; a `path` descriptor opens
- * the page in the app-wide dialog.
+ * the page in the app-wide dialog. An `endpoint` descriptor may also declare `notifies`, meaning the
+ * controller mails as part of its work and answers { record, notify }: the delivery outcome then decides
+ * the toast, so a fail-soft send that did not leave is a warning rather than a success (issue #7023).
  *
  * It is a global Alpine store so every generated view reads it the same way:
  *   $store.customActions.getActions(perspective, view, 'page')    -> the view's toolbar actions
@@ -367,8 +369,22 @@ document.addEventListener('alpine:init', () => {
       if (values && Object.keys(values).length) body.values = values;
       try {
         const created = await App.services.api.post(action.endpoint, body, { baseUrl: '' });
-        const ref = created && (created.Number || created.Name || created.Id || created.id);
-        this.notify(label, ref ? 'Created ' + ref : 'Completed', 'positive');
+        // A transition that mails answers { record, notify } - the descriptor's `notifies` says so, set
+        // when the endpoint was generated (issue #7023). Its notify block is fail-soft, so the flip
+        // succeeds even when nothing left the mail server: reporting that as a green toast is exactly
+        // the silence this branch removes - the user learns the customer never got the invoice weeks
+        // later, from the customer.
+        const notified = action.notifies && created ? created.notify : null;
+        const record = (action.notifies && created && created.record !== undefined) ? created.record : created;
+        const ref = record && (record.Number || record.Name || record.Id || record.id);
+        if (notified && notified.status === 'failed') {
+          this.notify(label, (ref ? ref + ': ' : '') + 'e-mail not sent - '
+            + (notified.message || 'unknown error'), 'warning');
+        } else if (notified && notified.status === 'skipped') {
+          this.notify(label, (ref ? ref + ': ' : '') + 'no e-mail address on the record - nothing was sent', 'warning');
+        } else {
+          this.notify(label, ref ? 'Created ' + ref : 'Completed', 'positive');
+        }
         window.dispatchEvent(new CustomEvent('harmonia:action-done'));
       } catch (e) {
         const msg = (App.services.apiErrors && App.services.apiErrors.messageFor)

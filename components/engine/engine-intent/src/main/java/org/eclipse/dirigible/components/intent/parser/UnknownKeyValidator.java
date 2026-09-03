@@ -66,10 +66,11 @@ final class UnknownKeyValidator {
      * a {@code generates} completion hook publish {@code -transitioned} and never {@code -updated}.
      * {@code onPhase} (with its sibling {@code phase}) is the enrichment channel - a write a listener
      * makes event-silently announces its declared phase, which is the only moment a consumer of that
-     * value may observe.
+     * value may observe. {@code onNotifyFailed} is the delivery channel - a notify block that stamps an
+     * {@code outcome:} announces the send it could not complete, which is otherwise only a log line.
      */
-    private static final Set<String> GLUE_EVENT_KEYS =
-            Set.of("onCreate", "onUpdate", "onDelete", "onTransition", "onPhase", "phase", "onStepReached", "onStepCompleted", "when");
+    private static final Set<String> GLUE_EVENT_KEYS = Set.of("onCreate", "onUpdate", "onDelete", "onTransition", "onNotifyFailed",
+            "onPhase", "phase", "onStepReached", "onStepCompleted", "when");
 
     /**
      * Author-facing maps whose keys are a closed vocabulary, keyed by {@code <SimpleClassName>#<field>}
@@ -84,7 +85,8 @@ final class UnknownKeyValidator {
      */
     private static final Map<String, Set<String>> MAP_KEYS = Map.ofEntries(
             Map.entry("ProcessIntent#trigger",
-                    Set.of("onCreate", "onUpdate", "onDelete", "onTransition", "when", "businessKey", "businessKeyStrategy")),
+                    Set.of("onCreate", "onUpdate", "onDelete", "onTransition", "onNotifyFailed", "when", "businessKey",
+                            "businessKeyStrategy")),
             Map.entry("ProcessIntent#abortOn", Set.of("status", "then")), Map.entry("NotificationIntent#event", GLUE_EVENT_KEYS),
             // A notify block's `attach` is a scalar (print / recordPrint) OR the report shape
             // { report, bind } - a non-map node falls straight through this check. `bind`'s own keys are

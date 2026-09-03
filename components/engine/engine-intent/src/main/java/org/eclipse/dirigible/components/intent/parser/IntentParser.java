@@ -170,9 +170,11 @@ public final class IntentParser {
      * bind to. {@code onTransition} is the STATUS axis - a workflow setter, a {@code transitions:}
      * button and a {@code generates} completion hook publish {@code -transitioned} and never
      * {@code -updated}, so without it the whole update half of the DSL was deaf to every status the
-     * system itself writes.
+     * system itself writes. {@code onNotifyFailed} is the DELIVERY axis (#7023) - a notify block is
+     * fail-soft, so a mail that never left was a server log line and nothing a construct could observe.
      */
-    private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete", "onTransition");
+    private static final Set<String> EVENT_KINDS =
+            Set.of("onCreate", "onUpdate", "onDelete", "onTransition", EventBinding.ON_NOTIFY_FAILED);
 
     /** Topic suffixes the platform itself publishes - an entity phase may not shadow one (#6929). */
     private static final Set<String> RESERVED_PHASES = Set.of("updated", "deleted", "transitioned", "rekeyed");
@@ -214,6 +216,13 @@ public final class IntentParser {
     private static final Set<String> HTTP_METHODS = Set.of("GET", "POST", "PUT", "PATCH", "DELETE");
     /** Field types an effective-dated lookup may use as a period bound or as the covered date. */
     private static final Set<String> RESOLVE_DATE_TYPES = Set.of("date", "timestamp");
+
+    /**
+     * The shortest {@code notify: { outcome: }} field that can carry a reason worth reading -
+     * {@code "failed: "} plus something of the mail server's message. Shorter and the column would
+     * truncate the diagnosis at the database, where nothing reports it (dirigible #7023).
+     */
+    private static final int NOTIFY_OUTCOME_MIN_LENGTH = 64;
     /**
      * The shape a lookup's {@code event.when} guard must have - the one the generator can render
      * ({@code <Field> ==|!= <literal>}). Anything else would silently degrade to an always-open guard.
@@ -2435,6 +2444,10 @@ public final class IntentParser {
             aboutEntity = rows;
         }
         validateRecordScope(notify, subject, fansOut, anchorEntity, model, issues);
+        // The delivery outcome is stamped on the record the message is ABOUT - the ROW inside a
+        // fan-out, which is the record that carries the recipient and therefore the one whose delivery
+        // succeeded or failed. Validated here, after the fan-out has moved `aboutEntity`.
+        validateNotifyOutcome(notify, subject, aboutEntity, model, issues);
         String attach = notify.getAttach();
         boolean hasLanguage = notify.getLanguage() != null && !notify.getLanguage()
                                                                      .isBlank();
@@ -2494,6 +2507,61 @@ public final class IntentParser {
             // so only fields of the anchor itself are readable there, exactly as the `record.` scope is
             // limited to one field of it.
             validateFileNamePattern(notify.getFileName(), documentEntity, subject + " fileName", model, issues, !recordPrint, false);
+        }
+    }
+
+    /**
+     * The optional {@code outcome:} field of a notify block: a string field of the record the message
+     * is about, stamped with {@code sent} or {@code failed: <reason>} by the generated sender.
+     *
+     * <p>
+     * It must be a plain string field, and long enough to hold a reason worth reading. The length rule
+     * is the one {@code resolves:} learned the hard way: the trace is the one column whose whole job is
+     * to be readable afterwards, and a length that truncates it away truncates at the DATABASE, where
+     * nothing reports it - so a delivery that failed for a nameable reason would read as a bare
+     * {@code failed}. A relation is refused rather than coerced: a status the failure should route to
+     * is what {@code event: { onNotifyFailed: ... }} is for, and two writers of one status column is
+     * the collision this layer exists to prevent.
+     *
+     * @param notify the block
+     * @param subject the message prefix identifying the call site
+     * @param aboutEntity the entity the message is about (a fan-out's row), or {@code null} when
+     *        unknown
+     * @param model the parsed model
+     * @param issues the collected issues
+     */
+    private static void validateNotifyOutcome(NotificationIntent notify, String subject, String aboutEntity, IntentModel model,
+            List<String> issues) {
+        String field = notify.getOutcome();
+        if (field == null || field.isBlank()) {
+            return;
+        }
+        EntityIntent about = aboutEntity == null ? null : entityByName(model, aboutEntity);
+        if (about == null) {
+            return;
+        }
+        FieldIntent declared = fieldByName(about, field.trim());
+        if (declared == null) {
+            if (toOneRelationByName(about, field.trim()) != null) {
+                issues.add(subject + " outcome [" + field + "] is a relation of [" + about.getName()
+                        + "] - the delivery trace is a string field; route a status with event: { onNotifyFailed: " + about.getName()
+                        + " } instead");
+                return;
+            }
+            issues.add(subject + " outcome [" + field + "] is not a field of [" + about.getName() + "]");
+            return;
+        }
+        if (!"string".equals(declared.getType())) {
+            issues.add(subject + " outcome [" + field + "] must be a string field, was [" + declared.getType() + "]");
+            return;
+        }
+        if (declared.isPrimaryKey()) {
+            issues.add(subject + " outcome [" + field + "] is the primary key of [" + about.getName() + "]");
+            return;
+        }
+        if (declared.getLength() != null && declared.getLength() < NOTIFY_OUTCOME_MIN_LENGTH) {
+            issues.add(subject + " outcome [" + field + "] is length [" + declared.getLength()
+                    + "], too short for a delivery reason - at least [" + NOTIFY_OUTCOME_MIN_LENGTH + "]");
         }
     }
 
@@ -4859,8 +4927,8 @@ public final class IntentParser {
                 }
             }
             if (triggerEvents > 1) {
-                issues.add(
-                        "process [" + process.getName() + "] trigger must declare at most one of onCreate/onUpdate/onDelete/onTransition");
+                issues.add("process [" + process.getName()
+                        + "] trigger must declare at most one of onCreate/onUpdate/onDelete/onTransition/onNotifyFailed");
             }
             // An optional businessKey flags which trigger-entity field becomes the started process
             // instance's BPM business key; it must be a field of the triggered entity.

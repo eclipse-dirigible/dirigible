@@ -714,6 +714,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # refresh it on every line change, or it stays stale/null until a header save
                   # (the unpaid-invoice Balance printed empty).
                   - { name: balanceDue, type: decimal, calculatedOnCreate: "Amount", calculatedOnUpdate: "Amount" }
+                  # #7023: where the SendBill notify block records what its delivery did. A notify block
+                  # is fail-soft, so without this the mail that never left was a log line and nothing
+                  # else - and this instance has no SMTP, which is exactly the case being asserted.
+                  - { name: sendOutcome, type: string, length: 128, readOnly: true }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person }
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
@@ -1224,6 +1228,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   subject: "Bill {note}"
                   body: "Please find the bill attached. Open it here: {recordUrl}"
                   attach: print
+                  # #7023: stamp what the delivery did on the record, and publish -notifyFailed when it
+                  # did not leave - the trace the notification below binds.
+                  outcome: sendOutcome
                   # languageFrom: the counterparty decides the language the attached print renders in.
                   languageFrom: Person.locale
                   # fileName (#6899): a self-describing name instead of the bare document number. The
@@ -2711,6 +2718,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the pattern's relation must be declared as a load of its own, got: " + sendBill);
         assertFalse(sendBill.contains("document.put(\"fileName\", \"Bill \" + entity.Id"),
                 "the pattern must replace the entity-name-plus-id default, got: " + sendBill);
+        // #7023: the delivery is recorded. Both branches stamp, the FAILURE rides -notifyFailed into the
+        // outbox with its own write (so the trace and its announcement commit together), and the
+        // outcome travels back in the response - a fail-soft send that did not leave must not answer a
+        // bare 200.
+        assertTrue(sendBill.contains("stampNotifyOutcome(entity.Id, null)") && sendBill.contains("stampNotifyOutcome(entity.Id, ex)"),
+                "both delivery branches must stamp the outcome, got: " + sendBill);
+        assertTrue(sendBill.contains("updateProperties(id, java.util.Map.of(\"SendOutcome\", value)"),
+                "the stamp must be a TARGETED write of the trace column only, got: " + sendBill);
+        assertTrue(sendBill.contains("failure == null ? null : \"" + PROJECT + "-Bill-Bill-notifyFailed\""),
+                "only the FAILURE may announce itself, and it must ride the write into the outbox, got: " + sendBill);
+        assertTrue(sendBill.contains("\"{\\\"record\\\": \" + Json.stringify(source) + \", \\\"notify\\\": \""),
+                "a transition that mails must report the delivery outcome in its response, got: " + sendBill);
 
         // The feeder resolves the LINE-ITEM to-one relations per row - an items-table column renders
         // {{Unit}} (the target's label, through the repository so the translation overlay applies) or
@@ -3927,13 +3946,31 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             assertTrue(balanceDue instanceof Number && Math.abs(((Number) balanceDue).doubleValue() - 250.0) < 0.001,
                     "the calculated header field must follow the totals recompute, got: " + balanceDue);
         });
+        // ...and the response says so: the flip is still a 200 with the status written, but the mail is
+        // reported rather than swallowed (#7023) - a green answer on a delivery that never left is how
+        // a document sits in SENT that nobody received.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"id\":" + bill.get() + "}")
                                                  .when()
                                                  .post("/services/java/" + PROJECT + "/gen/events/emission/SendBillTransition/run")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("Status", equalTo(2)));
+                                                 .body("record.Status", equalTo(2))
+                                                 .body("notify.status", equalTo("failed")));
+        // ...and the record itself carries the trace, so "which bills did not go out" is a filter
+        // rather than a log search. The stamp lands on a document the send just FROZE
+        // (immutableWhen: Status == 2), which is exactly why it goes through the repository's targeted
+        // write and not the REST layer's guarded one.
+        restAssuredExecutor.execute(() -> {
+            Object outcome = given().when()
+                                    .get(API + "/bill/BillController/" + bill.get())
+                                    .then()
+                                    .statusCode(200)
+                                    .extract()
+                                    .path("SendOutcome");
+            assertTrue(outcome instanceof String && ((String) outcome).startsWith("failed:"),
+                    "the failed delivery must be stamped on the record with its reason, got: " + outcome);
+        });
         // ...and the send froze the document, LINES INCLUDED (#6695). This is the whole point of the
         // inherited lock: a line write recomputes the header's totals, so accepting one here would
         // move the amount the mailed PDF was rendered from, on a document nobody may edit any more.
