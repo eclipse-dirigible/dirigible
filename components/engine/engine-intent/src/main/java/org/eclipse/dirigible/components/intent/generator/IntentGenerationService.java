@@ -139,6 +139,7 @@ public class IntentGenerationService {
         List<String> scrubbed = scrubStaleModelFiles(projectRoot, context.getWrittenFileNames());
         List<Map<String, Object>> plan = buildCodeGenerationPlan(context.getSettings(), context.getWrittenFileNames());
         runCodeGenerations(plan, workspaceName, projectName);
+        auditConsumedAttributes(context, plan, workspaceName, projectName);
         // The developer-facing warnings carry BOTH kinds: the actionable issues and the advisories.
         // Only the assistant's dry run keeps them apart (see dryRun below).
         List<String> warnings = new ArrayList<>(context.getIssues());
@@ -236,6 +237,48 @@ public class IntentGenerationService {
                         LoggedValue.of(templateId), e);
                 entry.put("generated", Boolean.FALSE);
                 entry.put("error", e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Report the attributes this pass wrote into a {@code .model} that the template it just ran reads
+     * nowhere (dirigible #6543).
+     *
+     * <p>
+     * This is the band nothing else covers. The parser sees an attribute it knows; the generation
+     * writes it; the code generation succeeds - and if no template source reads it, the behaviour the
+     * author asked for is simply absent from the generated code, with every step green. A stale
+     * registry template and producer/consumer drift both land here.
+     *
+     * <p>
+     * Reported as an advisory, not an issue: the fix is almost always in the template or the generator,
+     * so the assistant's repair loop must not spend a round rewriting the document over it, while the
+     * developer still sees it in the generate response. Only {@code .model} entries are audited - the
+     * glue / form / report recipes consume model files of an entirely different shape.
+     *
+     * @param context the pass context, collecting the advisories
+     * @param plan the code-generation plan that has just run
+     * @param workspaceName the workspace the project lives in
+     * @param projectName the project the models were written into
+     */
+    private void auditConsumedAttributes(IntentGenerationContext context, List<Map<String, Object>> plan, String workspaceName,
+            String projectName) {
+        for (Map<String, Object> entry : plan) {
+            String path = String.valueOf(entry.get("path"));
+            if (!path.endsWith(".model") || !Boolean.TRUE.equals(entry.get("generated"))) {
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parameters = (Map<String, Object>) entry.get("parameters");
+            try {
+                modelGenerationService.auditConsumedAttributes(workspaceName, projectName, path, String.valueOf(entry.get("templateId")),
+                        parameters)
+                                      .forEach(context::addAdvisory);
+            } catch (IOException | RuntimeException e) {
+                // The audit is a report about a generation that already happened - it never costs the
+                // pass its result.
+                LOGGER.error("Consumed-attributes audit failed for [{}/{}]", LoggedValue.of(projectName), LoggedValue.of(path), e);
             }
         }
     }

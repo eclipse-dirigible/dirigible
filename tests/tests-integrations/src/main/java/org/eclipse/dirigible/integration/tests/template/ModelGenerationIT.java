@@ -81,6 +81,12 @@ class ModelGenerationIT extends IntegrationTest {
     /** The project every case generates in. */
     private static final String PROJECT = "generation";
 
+    /** An attribute name no template reads - injected into a copy of a fixture to probe the audit. */
+    private static final String UNREAD_ATTRIBUTE = "widgetNobodyReadsThis";
+
+    /** A property's own name key, where the probe attribute is injected next to it. */
+    private static final Pattern PROPERTY_NAME = Pattern.compile("\"dataName\"\\s*:");
+
     /** The extension of the descriptor recording what a model was generated with. */
     private static final String DESCRIPTOR_EXTENSION = ".gen";
 
@@ -258,6 +264,8 @@ class ModelGenerationIT extends IntegrationTest {
             }
         }
 
+        problems.addAll(consumedAttributeProblems(label, workspace, fixture, templateId));
+
         // Agreeing on nothing is not coverage: assert the contributed column actually reached the
         // output, or a pipeline that dropped the extension entirely would still look sound.
         if (testCase.withContributor() && rendered.values()
@@ -267,6 +275,66 @@ class ModelGenerationIT extends IntegrationTest {
                     + " cross-project entity extension was not merged at all");
         }
         return problems;
+    }
+
+    /**
+     * Runs the consumed-attributes manifest over one case and collects what is wrong with it (dirigible
+     * #6543).
+     *
+     * <p>
+     * Two oracles, because either alone is worthless. <b>Nothing is reported</b> for a fixture whose
+     * every attribute the full-stack template reads - a manifest that cried wolf on a sound model would
+     * be turned off within a week. And <b>the injected attribute IS reported</b> - the same model with
+     * one attribute no template has ever heard of - because an audit that reports nothing on everything
+     * would pass the first oracle perfectly. This is the only place the real path is exercised end to
+     * end: the descriptor executed, its source list read out of the registry, and the tokens scanned.
+     *
+     * <p>
+     * Only the full-stack template is audited. A narrower one (the schema alone) legitimately reads
+     * none of the UI attributes, so on it the report is a long true statement about nothing actionable
+     * - and the recipe an intent project scaffolds is the full-stack template.
+     *
+     * @param label the case label, for the message
+     * @param workspace the workspace name
+     * @param fixture the model file name
+     * @param templateId the template's module path
+     * @return the problems found, empty when the manifest behaves on this case
+     * @throws IOException when the model or a template is missing
+     */
+    private List<String> consumedAttributeProblems(String label, String workspace, String fixture, String templateId) throws IOException {
+        if (!fixture.endsWith(".model") || !TEMPLATE_APPLICATION.equals(templateId)) {
+            return List.of();
+        }
+        List<String> problems = new ArrayList<>();
+        List<String> reported =
+                modelGenerationService.auditConsumedAttributes(workspace, PROJECT, fixture, templateId, new LinkedHashMap<>());
+        if (!reported.isEmpty()) {
+            problems.add("[" + label + "] the consumed-attributes audit reports " + reported.size() + " attribute(s) of a fixture the"
+                    + " full-stack template is supposed to read in full:\n" + String.join("\n", reported));
+        }
+
+        String probeFixture = baseName(fixture) + "-probe.model";
+        seed(workspace, probeFixture, withUnreadAttribute(readFixture(fixture)));
+        List<String> probed =
+                modelGenerationService.auditConsumedAttributes(workspace, PROJECT, probeFixture, templateId, new LinkedHashMap<>());
+        if (probed.stream()
+                  .noneMatch(warning -> warning.contains(UNREAD_ATTRIBUTE))) {
+            problems.add("[" + label + "] the consumed-attributes audit did not report [" + UNREAD_ATTRIBUTE + "], an attribute no"
+                    + " template reads, so it would not catch a stale template or a drifted attribute name either: " + probed);
+        }
+        return problems;
+    }
+
+    /**
+     * Adds an attribute no template has ever read to every property of a model - the injected defect
+     * the audit has to find.
+     *
+     * @param model the model file's content
+     * @return the same model, with the attribute added to each property
+     */
+    private static String withUnreadAttribute(String model) {
+        return PROPERTY_NAME.matcher(model)
+                            .replaceAll(Matcher.quoteReplacement("\"" + UNREAD_ATTRIBUTE + "\": \"asked-for\", ") + "$0");
     }
 
     /**

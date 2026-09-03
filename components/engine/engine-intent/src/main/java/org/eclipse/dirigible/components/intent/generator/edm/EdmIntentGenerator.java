@@ -1168,11 +1168,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // property off the entity. Empty = one sequence for the whole tenant.
             p.put("numberPer", notBlank(number.getPer()) ? IntentNaming.pascalCase(number.getPer()) : "");
             p.put("isReadOnlyProperty", "true");
+            // Only the marker a generated artefact READS is emitted: `generatedUuid` for the
+            // placeholder path, `numberStampOnCreate` for the stamp-on-insert path. The documentary
+            // `numberStampOn` twin that used to accompany them was read by no template and no
+            // generation stage - exactly the unconsumed attribute the audit now reports (#6543).
             if ("issue".equalsIgnoreCase(number.getStampOn())) {
-                p.put("numberStampOn", "issue");
                 p.put("generatedUuid", "true"); // UUID placeholder on create; stamped at the issue step
             } else {
-                p.put("numberStampOn", "create");
                 p.put("numberStampOnCreate", "true"); // real number allocated + formatted on insert
             }
         }
