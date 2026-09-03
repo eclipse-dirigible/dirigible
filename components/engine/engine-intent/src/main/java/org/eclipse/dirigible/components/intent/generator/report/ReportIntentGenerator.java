@@ -29,6 +29,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext
 import org.eclipse.dirigible.components.intent.generator.StatementSupport;
 import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
+import org.eclipse.dirigible.components.intent.generator.PermissionSupport;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.print.ReportPrintTemplate;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
@@ -454,7 +455,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         if (!statement && conditions != null && !conditions.isEmpty()) {
             document.put("conditions", conditions);
         }
-        document.put("security", security(context, report.getName()));
+        document.put("security", security(context, report.getName(), PermissionSupport.gates(context.getModel())));
         return new Emission(document, views);
     }
 
@@ -2309,12 +2310,24 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         return count;
     }
 
-    private static Map<String, Object> security(IntentGenerationContext context, String reportName) {
+    /**
+     * The report's read gate. A {@code permissions[].can: [<Report>:read]} token names the roles that
+     * may open it, in which case the convention role is neither the gate nor declared; a report no
+     * token names keeps the convention {@code <project>.Report.<Report>ReadOnly}. A report has no write
+     * gate - it is a query.
+     *
+     * @param context the generation context
+     * @param reportName the report's declared name
+     * @param gates the authored read / write role sets
+     * @return the report's {@code security} attributes
+     */
+    private static Map<String, Object> security(IntentGenerationContext context, String reportName, PermissionSupport.Gates gates) {
         Map<String, Object> security = new LinkedHashMap<>();
-        security.put("generateDefaultRoles", "true");
+        String authoredRead = gates.readRoles(reportName);
+        security.put("generateDefaultRoles", authoredRead != null ? "false" : "true");
         String project = context.getProjectName();
         String prefix = project == null || project.isEmpty() ? IntentNaming.baseName(context) : project;
-        security.put("roleRead", prefix + ".Report." + reportName + "ReadOnly");
+        security.put("roleRead", authoredRead != null ? authoredRead : prefix + ".Report." + reportName + "ReadOnly");
         return security;
     }
 

@@ -82,6 +82,25 @@ public final class IntentSettings {
         }
     }
 
+    /**
+     * Whether Generate emits the project's {@code <intent>.access} - the URL-shaped constraints over
+     * the paths the generated templates publish, derived from the intent's {@code permissions[].can:}
+     * tokens. OPT-IN, and deliberately so: the constraints name the controller and page paths of the
+     * stack the recipes above materialise, so turning them on is a decision about this project's
+     * deployment rather than a property of its domain - which is why it lives here and not in the DSL.
+     */
+    public static final class AccessGeneration {
+        private Boolean generate;
+
+        AccessGeneration(Boolean generate) {
+            this.generate = generate;
+        }
+
+        public boolean isGenerate() {
+            return generate != null && generate;
+        }
+    }
+
     /** User-task generation options. */
     public static final class UserTasks {
         private List<String> candidateGroupsExtra = new ArrayList<>();
@@ -116,6 +135,7 @@ public final class IntentSettings {
     private Map<String, Map<String, ArtefactOverride>> overrides = new LinkedHashMap<>();
     private UserTasks userTasks = new UserTasks();
     private Branding branding = new Branding();
+    private AccessGeneration access = new AccessGeneration(false);
 
     /** Parse a settings document; tolerant of missing sections. */
     public static IntentSettings parse(String json) {
@@ -211,12 +231,25 @@ public final class IntentSettings {
             settings.overrides.put("forms", forms);
         }
         settings.userTasks.candidateGroupsExtra.add("ADMINISTRATOR");
+        // Written explicitly, and false: the access artefact is opt-in, and a scaffolded key the
+        // developer can see and flip beats one that is only documented elsewhere.
+        settings.access = new AccessGeneration(false);
         // Seed branding from the model so it is visible/editable in .settings; a developer rebrands
         // per deployment by editing these (they win over the intent's own name/description/icon).
         settings.branding.title = IntentNaming.humanize(model.getName());
         settings.branding.description = model.getDescription();
         settings.branding.icon = model.getIcon();
         return settings;
+    }
+
+    /**
+     * Whether to emit {@code <intent>.access} from the {@code permissions[].can:} tokens. Off unless
+     * the project's settings turn it on.
+     *
+     * @return true when the access artefact should be generated
+     */
+    public boolean isGenerateAccess() {
+        return access != null && access.isGenerate();
     }
 
     /** Per-deployment branding (title / description / icon) for the shell header. Never null. */

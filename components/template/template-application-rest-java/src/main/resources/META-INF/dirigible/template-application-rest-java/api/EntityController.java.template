@@ -512,17 +512,17 @@ public class ${name}Controller {
 
     private void checkPermissions(String op) {
 #if($perspectiveRole)
-        if (!UserFacade.isInRole("${perspectiveRole}")) {
+        if (!isInAnyRole("${perspectiveRole}")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
 #end
 #if($roleRead)
-        if ("read".equals(op) && !(UserFacade.isInRole("${roleRead}")#if($roleWrite) || UserFacade.isInRole("${roleWrite}")#end)) {
+        if ("read".equals(op) && !(isInAnyRole("${roleRead}")#if($roleWrite) || isInAnyRole("${roleWrite}")#end)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
 #end
 #if($roleWrite)
-        if ("write".equals(op) && !UserFacade.isInRole("${roleWrite}")) {
+        if ("write".equals(op) && !isInAnyRole("${roleWrite}")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
 #end
@@ -562,21 +562,6 @@ public class ${name}Controller {
         }
 #end
 #end
-    }
-
-    /**
-     * Whether the caller holds ANY of a comma-separated role list. One role name is what the entity
-     * modeler's per-property read/write role carries; the intent's `visibleTo: [A, B]` allow-list
-     * arrives here as "A,B" and holding either of them is enough.
-     */
-    private static boolean isInAnyRole(String roles) {
-        for (String role : roles.split(",")) {
-            String name = role.trim();
-            if (!name.isEmpty() && UserFacade.isInRole(name)) {
-                return true;
-            }
-        }
-        return false;
     }
 #end
 
@@ -833,6 +818,24 @@ public class ${name}Controller {
             }
         }
 #end
+    }
+#end
+#if($needsRoles || $isEntityPropertySecurityEnabled)
+
+    /**
+     * Whether the caller holds ANY of a comma-separated role list. One role name is what the entity
+     * modeler's per-property read/write role and the convention-derived entity gates carry; a gate the
+     * intent's `permissions[].can:` tokens authorized, and the intent's `visibleTo: [A, B]`
+     * allow-list, arrive here as "A,B" and holding either of them is enough.
+     */
+    private static boolean isInAnyRole(String roles) {
+        for (String role : roles.split(",")) {
+            String name = role.trim();
+            if (!name.isEmpty() && UserFacade.isInRole(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 #end
 }

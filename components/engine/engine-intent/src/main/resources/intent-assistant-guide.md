@@ -2334,7 +2334,16 @@ permissions:
   - { role: Member,    can: [Book:read] }
 ```
 
-**Rules:** `can` tokens are `Entity:action` hints; deduped by role name.
+**Rules:** each token is exactly `Resource:action` (anything else is refused at parse); roles are
+deduped by name. The tokens are ENFORCED, not hints: a resource a token names is gated by the roles
+declared here rather than by the platform's convention role names. `read`/`view`/`list` grant the
+read gate, `write`/`create`/`update`/`edit`/`delete`/`manage` grant the write gate and the read gate
+with it, `*`/`all` grant both; a composition child inherits its master's grants. A grant is an
+allow-list, so if no role may write a covered entity, nothing may. `Resource` is an entity or a
+report for a gate-bearing token, and may be a process or a form for a business action like
+`Loan:approve` - such an action maps to no generated gate and is reported as an advisory, so enforce
+it in a process guard or a hand-written `custom/*.access`. An entity no token names keeps the
+convention gates unchanged, so partial coverage is fine.
 
 ### seeds - initial data
 

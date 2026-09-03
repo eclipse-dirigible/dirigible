@@ -124,15 +124,30 @@ public class ${name}Controller {
 
     private void checkPermissions(String operationType) {
 #if($perspectiveRole)
-        if (!UserFacade.isInRole("${perspectiveRole}")) {
+        if (!isInAnyRole("${perspectiveRole}")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
 #end
 #if($security.roleRead)
-        if ("read".equals(operationType) && !UserFacade.isInRole("${security.roleRead}")) {
+        if ("read".equals(operationType) && !isInAnyRole("${security.roleRead}")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
 #end
+    }
+
+    /**
+     * Whether the caller holds ANY of a comma-separated role list. A convention-derived report gate
+     * carries one name; a gate the intent's `permissions[].can: [<Report>:read]` tokens authorized
+     * arrives here as "A,B" and holding either of them is enough.
+     */
+    private static boolean isInAnyRole(String roles) {
+        for (String role : roles.split(",")) {
+            String name = role.trim();
+            if (!name.isEmpty() && UserFacade.isInRole(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 #end
 }
