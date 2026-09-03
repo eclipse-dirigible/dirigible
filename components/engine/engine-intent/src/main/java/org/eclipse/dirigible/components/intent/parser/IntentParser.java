@@ -32,6 +32,7 @@ import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
+import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
 import org.eclipse.dirigible.components.intent.generator.ScheduleSupport;
 import org.eclipse.dirigible.components.intent.generator.StatementSupport;
@@ -1753,9 +1754,15 @@ public final class IntentParser {
                 register = byName.get(resolve.getFrom());
             }
             RelationIntent filled = validateResolveSet(resolve, subject, record, register, issues);
-            validateResolveMatch(resolve, subject, record, register, issues);
+            // One walker per lookup: the paths of a lookup share their prefixes (a line's header is
+            // read once), and the parser only needs the failures - it walks with no cross-model lookup,
+            // so a hop that leaves this model stops the check rather than guessing at the owner.
+            ResolvePathSupport.Walker walker =
+                    record == null ? null : ResolvePathSupport.walker(record, byName, IntentEntities.compositionParents(model), null);
+            validateResolveMatch(resolve, subject, record, register, walker, issues);
             validateResolveWhere(resolve, subject, register, issues);
-            validateResolveBetween(resolve, subject, record, register, issues);
+            validateResolveBetween(resolve, subject, record, register, walker, issues);
+            validateResolveCopy(resolve, subject, record, register, filled, issues);
             validateResolveOutcomes(resolve, subject, record, issues);
             if (record != null && filled != null && filled.getName()
                                                           .equals(resolve.getOutcome())) {
@@ -1818,9 +1825,11 @@ public final class IntentParser {
     }
 
     /**
-     * {@code set} must name a to-one of the record, and the register must carry exactly one to-one to
-     * the same target - the value the lookup copies. Zero means the register holds nothing to resolve;
-     * two would make the copied value a coin toss, which this construct exists to refuse.
+     * {@code set} must name a to-one of the record. When it points at the REGISTER itself the resolved
+     * value is the covering row's own key - a value-bearing register, where the row IS what the record
+     * needs a link to. Otherwise the register must carry exactly one to-one to the same target: zero
+     * means the register holds nothing to resolve, and two would make the copied value a coin toss,
+     * which this construct exists to refuse.
      *
      * @param resolve the lookup
      * @param subject the message prefix
@@ -1845,6 +1854,14 @@ public final class IntentParser {
             return null;
         }
         if (register == null) {
+            return filled;
+        }
+        if (register.getName()
+                    .equals(filled.getTo())) {
+            // The record points at the REGISTER ROW itself - the invoice line references the price-list
+            // item it was priced from - so the resolved value is that row's own key and there is no
+            // column to disambiguate. This is the shape a value-bearing register takes: the row carries
+            // the price, so what the line needs a link to is the row, not something it points at.
             return filled;
         }
         List<RelationIntent> candidates = new ArrayList<>();
@@ -1876,7 +1893,7 @@ public final class IntentParser {
      * @param issues the collected issues
      */
     private static void validateResolveMatch(ResolveIntent resolve, String subject, EntityIntent record, EntityIntent register,
-            List<String> issues) {
+            ResolvePathSupport.Walker walker, List<String> issues) {
         if (resolve.getMatch()
                    .isEmpty()) {
             issues.add(subject + " has no match keys - a lookup without one would scan the whole register");
@@ -1888,10 +1905,46 @@ public final class IntentParser {
                 issues.add(subject + " match key [" + pair.getKey() + "] is not a field or to-one relation of register ["
                         + register.getName() + "]");
             }
-            if (record != null && !hasPropertyIgnoreCase(record, pair.getValue())) {
-                issues.add(
-                        subject + " match value [" + pair.getValue() + "] is not a field or to-one relation of [" + record.getName() + "]");
+            validateResolveOperand(pair.getValue(), record, walker, subject + " match value", null, issues);
+        }
+    }
+
+    /**
+     * One operand read off the record: a property of it, or a to-one PATH off it whose terminal segment
+     * carries the value. A bare property keeps the case-insensitive check it always had, so an existing
+     * model neither becomes invalid nor changes what it generates; a path is walked.
+     *
+     * @param authored the authored operand
+     * @param record the record entity, or {@code null} when unknown (already reported)
+     * @param walker the path walker of this lookup, or {@code null} when the record is unknown
+     * @param subject the message prefix
+     * @param requiredTypes the declared types the terminal must have, or {@code null} for any
+     * @param issues the collected issues
+     */
+    private static void validateResolveOperand(String authored, EntityIntent record, ResolvePathSupport.Walker walker, String subject,
+            Set<String> requiredTypes, List<String> issues) {
+        if (record == null) {
+            return;
+        }
+        if (!ResolvePathSupport.isPath(authored)) {
+            if (requiredTypes == null) {
+                if (!hasPropertyIgnoreCase(record, authored)) {
+                    issues.add(subject + " [" + authored + "] is not a field or to-one relation of [" + record.getName() + "]");
+                }
+            } else {
+                validateResolveDateField(record, authored, subject, issues);
             }
+            return;
+        }
+        ResolvePathSupport.Path path = walker.resolve(authored);
+        if (!path.resolved()) {
+            issues.add(subject + " " + path.failure());
+            return;
+        }
+        // A cross-model terminal carries no declared type here - its owner model is not read at parse
+        // time - so the type check is the generator's, exactly as for a cross-model status nomenclature.
+        if (requiredTypes != null && path.terminalType() != null && !requiredTypes.contains(path.terminalType())) {
+            issues.add(subject + " [" + authored + "] must end at a date or timestamp field, was [" + path.terminalType() + "]");
         }
     }
 
@@ -1944,7 +1997,7 @@ public final class IntentParser {
      * @param issues the collected issues
      */
     private static void validateResolveBetween(ResolveIntent resolve, String subject, EntityIntent record, EntityIntent register,
-            List<String> issues) {
+            ResolvePathSupport.Walker walker, List<String> issues) {
         Map<String, String> between = resolve.getBetween();
         if (between.get("start") == null && between.get("end") == null) {
             issues.add(subject + " has no between.start or between.end - an effective-dated lookup needs at least one period bound");
@@ -1953,10 +2006,66 @@ public final class IntentParser {
         if (value == null || value.isBlank()) {
             issues.add(subject + " has no between.value - the record's date the period must cover");
         } else {
-            validateResolveDateField(record, value, subject + " between.value", issues);
+            validateResolveOperand(value, record, walker, subject + " between.value", RESOLVE_DATE_TYPES, issues);
         }
         validateResolveDateField(register, between.get("start"), subject + " between.start", issues);
         validateResolveDateField(register, between.get("end"), subject + " between.end", issues);
+    }
+
+    /**
+     * The scalar copies from the covering row: each {@code <register field>: <record field>} pair names
+     * a plain field on both sides, and the two must have the same declared type.
+     *
+     * <p>
+     * A copy is a SCALAR of the found row - the price the price-list row names, the rate the contract
+     * names - so a relation on either side is refused: the relation the row points at is what
+     * {@code set:} fills, and a second mechanism writing it would fight the first. The types must match
+     * because the mismatch is otherwise invisible until the write reaches the database, where a string
+     * landing in a decimal column fails inside a listener nobody is watching. Two register columns
+     * copied onto one field is refused for the same reason a {@code where:} pair repeating a
+     * {@code match} key is: which of the two wins depends on nothing an author can see.
+     *
+     * @param resolve the lookup
+     * @param subject the message prefix
+     * @param record the record entity, or {@code null} when unknown
+     * @param register the register entity, or {@code null} when unknown
+     * @param filled the relation the lookup fills, or {@code null} when unknown
+     * @param issues the collected issues
+     */
+    private static void validateResolveCopy(ResolveIntent resolve, String subject, EntityIntent record, EntityIntent register,
+            RelationIntent filled, List<String> issues) {
+        Set<String> targets = new HashSet<>();
+        for (Map.Entry<String, String> pair : resolve.getCopy()
+                                                     .entrySet()) {
+            String source = pair.getKey();
+            String target = pair.getValue();
+            FieldIntent from = register == null ? null : fieldByName(register, source);
+            if (register != null && from == null) {
+                issues.add(subject + " copy source [" + source + "] is not a field of register [" + register.getName()
+                        + "] - a copy takes a SCALAR of the covering row; the relation it points at is what set: fills");
+            }
+            FieldIntent into = record == null ? null : fieldByName(record, target);
+            if (record != null && into == null) {
+                issues.add(subject + " copy target [" + target + "] is not a field of [" + record.getName() + "]");
+            }
+            if (filled != null && filled.getName()
+                                        .equals(target)) {
+                issues.add(subject + " copy target [" + target + "] is the relation it fills - set: already writes it");
+            }
+            if (target != null && target.equals(resolve.getOutcome())) {
+                issues.add(subject + " copy target [" + target + "] is the outcome trace field - it records the attempt, not a value");
+            }
+            if (into != null && into.isPrimaryKey()) {
+                issues.add(subject + " copy target [" + target + "] is the primary key of [" + record.getName() + "]");
+            }
+            if (target != null && !targets.add(target)) {
+                issues.add(subject + " copies two register columns onto [" + target + "] - only one of them could ever win");
+            }
+            if (from != null && into != null && !java.util.Objects.equals(from.getType(), into.getType())) {
+                issues.add(subject + " copy [" + source + "] is type [" + from.getType() + "] but [" + target + "] is type ["
+                        + into.getType() + "] - a copy writes the value through unchanged");
+            }
+        }
     }
 
     /**

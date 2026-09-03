@@ -18,6 +18,19 @@ import gen.${javaGenFolderName}.data.${javaRegisterPerspective}.${registerEntity
  * row whose validity period covers ${entity}.${valueProperty}, matched on [${matchSummary}]#if($filterSummary != "")
  * and filtered to [${filterSummary}]#end.
  *
+#if($pathLoads.size() > 0)
+ * A match key or the period date may be a to-one PATH off the record rather than a column of it - the
+ * list a line is priced by belongs to its document header, and the date in force is the header's. Each
+ * hop is loaded here, once per distinct path prefix, so two paths through the same header read it once.
+ *
+#end
+#if($hasCopies == "true")
+ * On the single covering row this also copies [${copySummary}] onto the record - the scalars the row
+ * NAMES (a price, a rate), as opposed to the relation it points at, which is what ${setProperty} is.
+ * A copy skips a field the record already carries a value in, the same never-overwrite rule the
+ * relation has, so a manual correction stands.
+ *
+#end
  * Generated from the intent resolves block - do not edit; it is re-generated with the application.
  *
  * All three outcomes are first-class. Exactly one covering row fills the relation; NO covering row and
@@ -28,10 +41,10 @@ import gen.${javaGenFolderName}.data.${javaRegisterPerspective}.${registerEntity
  *
  * A record that already carries ${setProperty} is skipped, so a manual correction is never overwritten
  * and a re-delivered event is a no-op. The writes are TARGETED (updateProperties / updateProperty) -
- * only the resolved column, the outcome and the status are in the UPDATE statements, so a concurrent
- * user write to any other column cannot be reverted, and no "-updated" event re-fires. The result and
- * the routing status go out SEPARATELY, so a rejected status move cannot discard the identification -
- * see stamp().
+ * only the resolved column#if($hasCopies == "true"), the copied scalars#end, the outcome and the status are in the UPDATE
+ * statements, so a concurrent user write to any other column cannot be reverted, and no "-updated"
+ * event re-fires. The result and the routing status go out SEPARATELY, so a rejected status move
+ * cannot discard the identification - see stamp().
  *
  * When an outcome routes the record by status, the "-transitioned" topic IS published afterwards, so
  * that an automatic resolution reaches the same constructs a manual transition does - `generates:` and
@@ -63,33 +76,69 @@ public class ${className}Resolve implements MessageHandler {
         if (entity.${setProperty} != null) {
             return;
         }
-        Long at = millis(entity.${valueProperty});
+#if($pathLoads.size() > 0)
+        // The hops of the declared paths, loaded AFTER the guards so an event this lookup ignores costs
+        // no reads. Every access is null-guarded, so a missing link leaves the operand null and the
+        // lookup reports notFound rather than throwing inside a listener nobody is watching.
+#foreach($load in $pathLoads)
+        Object ${load.local}Fk = ${load.sourceExpression};
+        ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+#end
+        // The operands the register is queried by, read once each: they are tested for null and then
+        // bound into the query, and a path would otherwise re-walk its hops per use.
+#foreach($match in $matches)
+        Object ${match.local} = ${match.recordExpression};
+#end
+        Object on = ${valueExpression};
+        Long at = millis(on);
         java.util.List<${registerEntity}Entity> covering = new java.util.ArrayList<>();
-        if (at != null#foreach($match in $matches) && entity.${match.recordProperty} != null#end) {
+        if (at != null#foreach($match in $matches) && ${match.local} != null#end) {
             // The match keys bind register columns to the record's; the `where:` filters are constants
             // ANDed on top, which is how a register's cancelled and superseded rows stay out of the
             // period comparison instead of covering it forever as a false ambiguous.
-            for (${registerEntity}Entity row : new ${registerEntity}Repository().findAll(Criteria.create()#foreach($match in $matches).eq("${match.registerProperty}", entity.${match.recordProperty})#end#foreach($filter in $filters).eq("${filter.property}", ${filter.literal})#end)) {
+            for (${registerEntity}Entity row : new ${registerEntity}Repository().findAll(Criteria.create()#foreach($match in $matches).eq("${match.registerProperty}", ${match.local})#end#foreach($filter in $filters).eq("${filter.property}", ${filter.literal})#end)) {
                 if (covers(row, at)) {
                     covering.add(row);
                 }
             }
         }
         if (covering.size() == 1) {
-            Integer resolved = covering.get(0).${registerValueProperty};
-            LOG.info("${name}: ${entity} [{}] resolved ${setProperty} to [{}] valid on [{}]", entity.${keyProperty}, resolved,
-                    entity.${valueProperty});
-            stamp(entity.${keyProperty}, "found", resolved#if($writesStatus == "true"), #if($foundStatus != "")${foundStatus}#{else}null#end#end);
+            ${registerEntity}Entity covered = covering.get(0);
+            Integer resolved = covered.${registerValueProperty};
+            LOG.info("${name}: ${entity} [{}] resolved ${setProperty} to [{}] valid on [{}]", entity.${keyProperty}, resolved, on);
+            stamp(entity, "found", resolved, #if($hasCopies == "true")copies(entity, covered)#{else}java.util.Map.of()#end#if($writesStatus == "true"), #if($foundStatus != "")${foundStatus}#{else}null#end#end);
         } else if (covering.isEmpty()) {
             LOG.info("${name}: no ${registerEntity} row covers [{}] for ${entity} [{}]#if($filterSummary != "") (filtered to [${filterSummary}])#end"
-                    + " - ${setProperty} left unresolved", entity.${valueProperty}, entity.${keyProperty});
-            stamp(entity.${keyProperty}, "notFound", null#if($writesStatus == "true"), #if($notFoundStatus != "")${notFoundStatus}#{else}null#end#end);
+                    + " - ${setProperty} left unresolved", on, entity.${keyProperty});
+            stamp(entity, "notFound", null, java.util.Map.of()#if($writesStatus == "true"), #if($notFoundStatus != "")${notFoundStatus}#{else}null#end#end);
         } else {
             LOG.warn("${name}: [{}] ${registerEntity} rows cover [{}] for ${entity} [{}] - ${setProperty} left unresolved for a human",
-                    covering.size(), entity.${valueProperty}, entity.${keyProperty});
-            stamp(entity.${keyProperty}, "ambiguous", null#if($writesStatus == "true"), #if($ambiguousStatus != "")${ambiguousStatus}#{else}null#end#end);
+                    covering.size(), on, entity.${keyProperty});
+            stamp(entity, "ambiguous", null, java.util.Map.of()#if($writesStatus == "true"), #if($ambiguousStatus != "")${ambiguousStatus}#{else}null#end#end);
         }
     }
+#if($hasCopies == "true")
+
+    /**
+     * The scalars of the covering row to write onto the record: the values the row NAMES (a price, a
+     * rate) rather than the relation it points at.
+     *
+     * A field the record already carries a value in is left alone - the never-overwrite rule the
+     * resolved relation has, one field at a time: a line whose price a person typed keeps it even when
+     * the rest of the copy applies, because a lookup correcting a human is the failure this construct
+     * exists to avoid.
+     */
+    private static java.util.Map<String, Object> copies(${entity}Entity entity, ${registerEntity}Entity covered) {
+        java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
+#foreach($copy in $copies)
+        if (entity.${copy.recordProperty} == null) {
+            values.put("${copy.recordProperty}", covered.${copy.registerProperty});
+        }
+#end
+        return values;
+    }
+#end
 
     @Override
     public void onError(String error) {
@@ -119,9 +168,9 @@ public class ${className}Resolve implements MessageHandler {
     /**
      * Persists what this attempt decided, in two writes rather than one, and in that order deliberately.
      *
-     * First the RESULT - the resolved relation and the outcome trace - because that is the work: the
-     * register was read, exactly one row covered the date, and this is the answer. Then, separately, the
-     * ROUTING status.
+     * First the RESULT - the resolved relation, the copied scalars and the outcome trace - because that
+     * is the work: the register was read, exactly one row covered the date, and this is the answer.
+     * Then, separately, the ROUTING status.
      *
      * They were one updateProperties call, and the DAO runs the lifecycle and checks gates against the
      * post-write row BEFORE persisting anything, so a rejected status move discarded the relation and the
@@ -134,12 +183,17 @@ public class ${className}Resolve implements MessageHandler {
      * event, so the routing write carries the "-transitioned" topic itself - the flip and its
      * announcement commit together through the outbox.
      */
-    private static void stamp(Object id, String outcome, Integer resolved#if($writesStatus == "true"), Integer status#end) {
+    private static void stamp(${entity}Entity entity, String outcome, Integer resolved, java.util.Map<String, Object> copied#if($writesStatus == "true"), Integer status#end) {
+        Object id = entity.${keyProperty};
         ${entity}Repository repository = new ${entity}Repository();
         java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
         if (resolved != null) {
             values.put("${setProperty}", resolved);
         }
+        // The copied scalars ride the RESULT write, not one of their own: they are the same answer the
+        // register just gave, so a partial commit would leave a line pointing at a price list with no
+        // price on it - and one targeted UPDATE is one row version for a concurrent writer to lose.
+        values.putAll(copied);
 #if($outcomeProperty != "")
         values.put("${outcomeProperty}", outcome);
 #end

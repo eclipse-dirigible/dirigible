@@ -1033,9 +1033,11 @@ class IntentEngineIT extends IntegrationTest {
 
         String lookup = contentOf("gen/events/fines/IdentifyDriverResolve.java");
         // The filters are chained onto the SAME Criteria as the match keys, so they narrow the query
-        // rather than being applied after the period comparison.
+        // rather than being applied after the period comparison. The match key rides its hoisted local
+        // (the operand is read once, whether it is a column of the record or a path off it).
+        assertTrue(lookup.contains("Object key0 = entity.Vehicle;"), "the match key must be hoisted, got: " + lookup);
         assertTrue(lookup.contains(
-                "new VehicleAssignmentRepository().findAll(Criteria.create().eq(\"Vehicle\", entity.Vehicle).eq(\"Status\", 7).eq(\"Kind\", \"PRIMARY\"))"),
+                "new VehicleAssignmentRepository().findAll(Criteria.create().eq(\"Vehicle\", key0).eq(\"Status\", 7).eq(\"Kind\", \"PRIMARY\"))"),
                 "the register filter must be ANDed into the lookup's Criteria, got: " + lookup);
         // 7 is the REGISTER's ACTIVE; the record's own nomenclature seeds ACTIVE as 2.
         assertFalse(lookup.contains("eq(\"Status\", 2)"),
@@ -1125,6 +1127,111 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(lookup.contains("repository.updateProperty(id, \"Resolution\", outcome + \"-notRouted\")"),
                 "a rejected route should amend the trace so the record shows what happened");
         assertTrue(lookup.contains("could not be routed to status"), "a rejected route should also be logged");
+    }
+
+    @Test
+    void resolve_prices_a_line_from_the_header_and_copies_the_found_scalar() {
+        // The case dirigible #6712 named and could not express (#7025): an invoice LINE priced from the
+        // price list its HEADER's customer carries, valid on the HEADER's date, with the price itself -
+        // a scalar of the covering row - written onto the line. Neither operand is a column of the
+        // line, and the value needed is not the relation the row points at, so before paths and
+        // `copy:` the only way to get either was `dependsOn`, which is a UI-time copy: a REST create, a
+        // `generates:` create-from or a schedule fan-out never runs it, and those lines stayed unpriced
+        // while the interactive path looked correct.
+        writeIntent("""
+                name: billing
+                entities:
+                  - name: PriceList
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Product
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                    relations:
+                      - { name: priceList, kind: manyToOne, to: PriceList }
+                  - name: PriceListItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: price, type: decimal }
+                      - { name: validFrom, type: date }
+                      - { name: validTo, type: date }
+                    relations:
+                      - { name: priceList, kind: manyToOne, to: PriceList }
+                      - { name: product, kind: manyToOne, to: Product }
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: issuedOn, type: date }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                  - name: SalesInvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: price, type: decimal }
+                    relations:
+                      - { name: salesInvoice, kind: manyToOne, to: SalesInvoice, composition: true }
+                      - { name: product, kind: manyToOne, to: Product }
+                      - { name: priceListItem, kind: manyToOne, to: PriceListItem }
+                resolves:
+                  - name: priceFromList
+                    event: { onCreate: SalesInvoiceItem }
+                    set: priceListItem
+                    from: PriceListItem
+                    match:
+                      product: product
+                      priceList: salesInvoice.customer.priceList
+                    between: { start: validFrom, end: validTo, value: salesInvoice.issuedOn }
+                    copy: { price: price }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "billing.glue");
+        String lookup = codeOf("gen/events/billing/PriceFromListResolve.java");
+
+        // Both hops are loaded, in order, each through the generated repository and each null-guarded -
+        // and the header is loaded ONCE although two operands read through it.
+        assertTrue(
+                lookup.contains("Object hop0Fk = entity.SalesInvoice;\n"
+                        + "        gen.billing.data.salesinvoice.SalesInvoiceEntity hop0 = hop0Fk == null ? null"
+                        + " : new gen.billing.data.salesinvoice.SalesInvoiceRepository().findById(hop0Fk);"),
+                "the first hop must load the header off the line's own FK, got: " + lookup);
+        // The second hop's FK is read off the FIRST hop's local, null-guarded - the walk never
+        // dereferences a link that is not there.
+        assertTrue(lookup.contains("Object hop1Fk = (hop0 == null ? null : hop0.Customer);"),
+                "the second hop must read its FK off the first hop's local, null-guarded, got: " + lookup);
+        assertEquals(1, occurrencesOf(lookup, "SalesInvoiceRepository().findById"),
+                "two operands through the same header must share ONE load");
+
+        // The operands are hoisted, so a path is walked once and the same value is null-tested and bound.
+        assertTrue(lookup.contains("Object key1 = (hop1 == null ? null : hop1.PriceList);"),
+                "the header path must be hoisted into the match local, got: " + lookup);
+        assertTrue(lookup.contains("Object on = (hop0 == null ? null : hop0.IssuedOn);"),
+                "the period date must be read off the header, got: " + lookup);
+        assertTrue(lookup.contains("findAll(Criteria.create().eq(\"Product\", key0).eq(\"PriceList\", key1))"),
+                "the register query must bind the hoisted operands, got: " + lookup);
+        assertTrue(lookup.contains("if (at != null && key0 != null && key1 != null)"),
+                "an unresolvable path must leave the operand null and skip the query, got: " + lookup);
+
+        // set: points at the REGISTER itself - a value-bearing register, where the row IS what the line
+        // links to - so the resolved value is the covering row's own key.
+        assertTrue(lookup.contains("Integer resolved = covered.Id;"),
+                "a lookup whose set: is the register must resolve to the covering row's own key, got: " + lookup);
+
+        // The copy is per field and never overwrites, and it rides the RESULT write rather than one of
+        // its own: a partial commit would leave a line pointing at a price-list item with no price.
+        assertTrue(lookup.contains("if (entity.Price == null) {\n            values.put(\"Price\", covered.Price);"),
+                "a copy must skip a field the record already carries a value in, got: " + lookup);
+        assertTrue(lookup.contains("values.putAll(copied);"), "the copied scalars must ride the result write, got: " + lookup);
+        assertFalse(lookup.contains("updateProperty(id, \"Price\""), "a copy must not be a write of its own, got: " + lookup);
     }
 
     @Test
@@ -3821,6 +3928,18 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(first >= 0, "anchor not found in the generated code: [" + anchor + "]");
         assertEquals(first, code.lastIndexOf(anchor), "anchor [" + anchor + "] occurs more than once - pick a more specific one");
         return first;
+    }
+
+    /**
+     * How many times a snippet occurs in the generated code - for the assertions whose point is that
+     * something is emitted ONCE (two operands reading through the same relation share one load).
+     */
+    private static int occurrencesOf(String code, String snippet) {
+        int count = 0;
+        for (int at = code.indexOf(snippet); at >= 0; at = code.indexOf(snippet, at + snippet.length())) {
+            count++;
+        }
+        return count;
     }
 
     /** Run a language template against a generated model through the real generation service. */

@@ -97,8 +97,16 @@ class GlueResolvesTest {
         assertEquals("Driver", resolve.get("setProperty"));
         assertEquals("VehicleAssignment", resolve.get("registerEntity"));
         assertEquals("Driver", resolve.get("registerValueProperty"));
-        assertEquals(List.of(Map.of("registerProperty", "Vehicle", "recordProperty", "Vehicle")), resolve.get("matches"));
+        // A bare property renders exactly as it did before header paths existed: the record's own column,
+        // hoisted into a local so it is read once for the null test and the query.
+        assertEquals(List.of(
+                Map.of("registerProperty", "Vehicle", "recordProperty", "Vehicle", "recordExpression", "entity.Vehicle", "local", "key0")),
+                resolve.get("matches"));
         assertEquals("Vehicle = Vehicle", resolve.get("matchSummary"));
+        assertEquals("entity.ViolationAt", resolve.get("valueExpression"));
+        assertEquals(List.of(), resolve.get("pathLoads"));
+        assertEquals(List.of(), resolve.get("copies"));
+        assertEquals("false", resolve.get("hasCopies"));
 
         assertEquals("ValidFrom", resolve.get("startProperty"));
         assertEquals("ValidTo", resolve.get("endProperty"));

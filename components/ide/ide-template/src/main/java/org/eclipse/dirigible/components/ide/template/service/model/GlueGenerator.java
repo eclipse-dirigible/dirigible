@@ -857,7 +857,7 @@ class GlueGenerator {
      */
     private static void bindResolve(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "keyProperty", "topicSuffix", "guardExpression", "setProperty",
-                "registerEntity", "registerPerspective", "registerValueProperty", "matches", "matchSummary", "startProperty", "endProperty",
+                "registerEntity", "registerPerspective", "registerValueProperty", "matchSummary", "startProperty", "endProperty",
                 "valueProperty", "outcomeProperty", "statusProperty", "foundStatus", "notFoundStatus", "ambiguousStatus", "writesStatus");
         // The `where:` filter keys arrived after resolves shipped, so a `.glue` written before them
         // carries neither - and `copy` REMOVES an absent key, which Velocity then renders as its own
@@ -868,6 +868,59 @@ class GlueGenerator {
         context.put("filterSummary", strOr(item, "filterSummary", ""));
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("javaRegisterPerspective", sanitize(item, "registerPerspective"));
+        // The header-path and scalar-copy keys (dirigible #7025) arrived after resolves shipped, so a
+        // `.glue` written before them carries none - defaulted to the no-path, no-copy shape for the
+        // same reason `filters` is: an absent key renders as its own literal in Velocity, which here
+        // would be a load of a record named `${load.entity}` and a lookup that does not compile.
+        context.put("matches", resolveMatches(item.get("matches"), parameters));
+        context.put("valueExpression", strOr(item, "valueExpression", "entity." + str(item, "valueProperty")));
+        context.put("pathLoads", resolvePathLoads(item.get("pathLoads"), parameters));
+        context.put("copies", item.containsKey("copies") ? item.get("copies") : java.util.List.of());
+        context.put("hasCopies", strOr(item, "hasCopies", "false"));
+        context.put("copySummary", strOr(item, "copySummary", ""));
+    }
+
+    /**
+     * A lookup's match keys, each hoisted into a local by the generated handler. A descriptor written
+     * before header paths existed carries only the record's own column, which is exactly what the
+     * default expression reads.
+     *
+     * @param raw the declared match keys
+     * @param parameters the generation parameters
+     * @return the resolved match keys
+     */
+    private static List<Object> resolveMatches(Object raw, Map<String, Object> parameters) {
+        List<Object> matches = new ArrayList<>();
+        for (Map<String, Object> match : asMaps(raw)) {
+            Map<String, Object> resolved = ModelValues.copy(match);
+            resolved.put("recordExpression", strOr(match, "recordExpression", "entity." + str(match, "recordProperty")));
+            resolved.put("local", strOr(match, "local", "key" + matches.size()));
+            matches.add(resolved);
+        }
+        return matches;
+    }
+
+    /**
+     * Resolves each hop of a lookup's header path to the generated classes it loads. A cross-model hop
+     * resolves against the owner model's generation folder, as every other cross-model reference does.
+     *
+     * @param raw the declared hops
+     * @param parameters the generation parameters
+     * @return the resolved hops
+     */
+    private static List<Object> resolvePathLoads(Object raw, Map<String, Object> parameters) {
+        List<Object> loads = new ArrayList<>();
+        for (Map<String, Object> load : asMaps(raw)) {
+            String genFolder = truthy(load, "crossModel") ? sanitize(load, "targetModel") : str(parameters, "javaGenFolderName");
+            String qualified = "gen." + genFolder + ".data." + sanitize(load, "perspective") + "." + str(load, "entity");
+            Map<String, Object> resolved = new LinkedHashMap<>();
+            resolved.put("local", load.get("local"));
+            resolved.put("sourceExpression", load.get("sourceExpression"));
+            resolved.put("entityClass", qualified + "Entity");
+            resolved.put("repositoryClass", qualified + "Repository");
+            loads.add(resolved);
+        }
+        return loads;
     }
 
     /**

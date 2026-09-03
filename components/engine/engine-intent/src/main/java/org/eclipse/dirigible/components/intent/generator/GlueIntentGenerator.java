@@ -122,7 +122,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> postings = buildPostings(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> posts = buildPosts(model, byName, compositionParents);
         List<Map<String, Object>> aggregates = buildAggregates(model, byName, compositionParents);
-        List<Map<String, Object>> resolves = buildResolves(model, byName, compositionParents, settings);
+        List<Map<String, Object>> resolves = buildResolves(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
         List<Map<String, Object>> snapshots =
                 SnapshotSupport.buildSnapshots(model, byName, compositionParents, crossModelLookup(model, context));
@@ -1944,7 +1944,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * one.
      */
     private static List<Map<String, Object>> buildResolves(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (org.eclipse.dirigible.components.intent.model.ResolveIntent resolve : model.getResolves()) {
             if (resolve.getName() == null || resolve.getName()
@@ -1963,19 +1963,51 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             RelationIntent filled = toOneRelation(record, resolve.getSet());
-            RelationIntent value = filled == null ? null : soleToOneTo(register, filled.getTo());
-            if (filled == null || value == null) {
+            if (filled == null) {
                 continue;
             }
+            // A record pointing at the REGISTER itself is resolved to the covering row's own key: the
+            // row carries the value (a price-list item's price), so the row IS what the record links
+            // to and there is no column to disambiguate.
+            boolean registerIsTheValue = register.getName()
+                                                 .equals(filled.getTo());
+            RelationIntent value = registerIsTheValue ? null : soleToOneTo(register, filled.getTo());
+            if (!registerIsTheValue && value == null) {
+                continue;
+            }
+            // The paths of one lookup share their prefixes, so a line's header is loaded once for the
+            // key AND the date it contributes. A bare property is NOT walked - it renders exactly as it
+            // always did, so an existing model generates byte-identically.
+            ResolvePathSupport.Walker walker =
+                    ResolvePathSupport.walker(record, byName, compositionParents, crossModelLookup(model, context));
             List<Map<String, String>> matches = new ArrayList<>();
+            boolean pathsResolved = true;
             for (Map.Entry<String, String> pair : resolve.getMatch()
                                                          .entrySet()) {
+                ResolvePathSupport.Path path = operand(pair.getValue(), walker);
+                if (path == null) {
+                    reportDroppedGlue(context, "resolve [" + resolve.getName() + "] match value [" + pair.getValue()
+                            + "] is not a resolvable path off [" + record.getName() + "] - the lookup was NOT generated");
+                    pathsResolved = false;
+                    break;
+                }
                 Map<String, String> match = new LinkedHashMap<>();
                 match.put("registerProperty", IntentNaming.pascalCase(pair.getKey()));
-                match.put("recordProperty", IntentNaming.pascalCase(pair.getValue()));
+                match.put("recordProperty", path.label());
+                match.put("recordExpression", path.expression());
+                match.put("local", "key" + matches.size());
                 matches.add(match);
             }
-            if (matches.isEmpty()) {
+            if (!pathsResolved || matches.isEmpty()) {
+                continue;
+            }
+            ResolvePathSupport.Path period = operand(resolve.getBetween()
+                                                            .get("value"),
+                    walker);
+            if (period == null) {
+                reportDroppedGlue(context, "resolve [" + resolve.getName() + "] between.value [" + resolve.getBetween()
+                                                                                                          .get("value")
+                        + "] is not a resolvable path off [" + record.getName() + "] - the lookup was NOT generated");
                 continue;
             }
             Map<String, Object> e = new LinkedHashMap<>();
@@ -1989,7 +2021,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("setProperty", IntentNaming.pascalCase(filled.getName()));
             e.put("registerEntity", register.getName());
             e.put("registerPerspective", IntentEntities.resolvePerspective(register.getName(), compositionParents, model));
-            e.put("registerValueProperty", IntentNaming.pascalCase(value.getName()));
+            e.put("registerValueProperty",
+                    registerIsTheValue ? IntentEntities.keyFieldName(register) : IntentNaming.pascalCase(value.getName()));
             e.put("matches", matches);
             // The static register narrowing, pre-rendered as Java literals: the template only chains
             // them onto the Criteria, so nothing about a value's type has to be decided in Velocity.
@@ -2012,8 +2045,24 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                    .get("start")));
             e.put("endProperty", property(resolve.getBetween()
                                                  .get("end")));
-            e.put("valueProperty", property(resolve.getBetween()
-                                                   .get("value")));
+            e.put("valueProperty", period.label());
+            e.put("valueExpression", period.expression());
+            // The hops EVERY path of this lookup needs, accumulated once - registered while the longer
+            // path was still being walked, so a prefix always precedes what hangs off it.
+            e.put("pathLoads", pathLoads(walker.hops()));
+            List<Map<String, String>> copies = new ArrayList<>();
+            for (Map.Entry<String, String> pair : resolve.getCopy()
+                                                         .entrySet()) {
+                Map<String, String> copy = new LinkedHashMap<>();
+                copy.put("registerProperty", IntentNaming.pascalCase(pair.getKey()));
+                copy.put("recordProperty", IntentNaming.pascalCase(pair.getValue()));
+                copies.add(copy);
+            }
+            e.put("copies", copies);
+            e.put("hasCopies", String.valueOf(!copies.isEmpty()));
+            e.put("copySummary", copies.stream()
+                                       .map(copy -> copy.get("registerProperty") + " -> " + copy.get("recordProperty"))
+                                       .collect(java.util.stream.Collectors.joining(", ")));
             e.put("outcomeProperty", property(resolve.getOutcome()));
             String statusProperty = entityStatusProperty(record);
             String foundStatus = status(resolve.getFound());
@@ -2030,6 +2079,42 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * One authored operand of a lookup - a {@code match} value or {@code between.value}. A bare
+     * property renders as the record's own column, exactly as before paths existed; a dotted one is
+     * walked, and {@code null} reports a walk the generator could not complete (a cross-model owner
+     * whose model is not resolvable here - the parser cannot see that far).
+     *
+     * @param authored the authored operand
+     * @param walker the lookup's path walker
+     * @return the resolved operand, or {@code null} when a path did not resolve
+     */
+    private static ResolvePathSupport.Path operand(String authored, ResolvePathSupport.Walker walker) {
+        if (!ResolvePathSupport.isPath(authored)) {
+            String pascal = IntentNaming.pascalCase(authored);
+            return new ResolvePathSupport.Path(ResolvePathSupport.RECORD_LOCAL + "." + pascal, pascal, null, null);
+        }
+        ResolvePathSupport.Path path = walker.resolve(authored);
+        return path.resolved() ? path : null;
+    }
+
+    /** The glue projection of a lookup's path hops - the records the handler loads before it reads. */
+    private static List<Map<String, Object>> pathLoads(List<ResolvePathSupport.Hop> hops) {
+        List<Map<String, Object>> loads = new ArrayList<>();
+        for (ResolvePathSupport.Hop hop : hops) {
+            Map<String, Object> load = new LinkedHashMap<>();
+            load.put("local", hop.local());
+            load.put("sourceExpression", hop.sourceExpression());
+            load.put("entity", hop.entity());
+            load.put("perspective", hop.perspective());
+            load.put("crossModel", hop.crossModel());
+            load.put("targetModel", hop.targetModel());
+            load.put("targetProject", hop.targetProject());
+            loads.add(load);
+        }
+        return loads;
     }
 
     /**
@@ -2095,7 +2180,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /** Test hook: build the {@code resolves} glue collection without a repository. */
     static List<Map<String, Object>> buildResolvesForTest(IntentModel model) {
-        return buildResolves(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
+        return buildResolves(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                null);
     }
 
     /**

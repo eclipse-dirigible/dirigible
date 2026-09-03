@@ -3193,9 +3193,10 @@ resolves:
     event: { onCreate: Fine }               # onCreate or onUpdate, optional `when` guard
     set: driver                             # the to-one of Fine this fills
     from: VehicleAssignment                 # the register
-    match: { vehicle: vehicle }             # register property <- record property (one or more)
+    match: { vehicle: vehicle }             # register property <- record property or PATH (one or more)
     where: { status: ACTIVE }               # optional: constant register filter (one or more, ANDed)
     between: { start: validFrom, end: validTo, value: violationAt }
+    copy: { rate: rate }                    # optional: register field -> record field, on found only
     outcome: resolution                     # optional string field stamped found/notFound/ambiguous
     found:     { setStatus: IDENTIFIED }
     notFound:  { setStatus: NO_MATCH }
@@ -3238,15 +3239,60 @@ processes:
       - { name: done, kind: end }
 ```
 
+**The register is queried by the DOCUMENT, not only by the record.** A `match` value and
+`between.value` may be a **to-one path off the record**, so an invoice LINE can be priced from the
+list its header's customer carries, valid on the header's date - neither of which is a column of the
+line:
+
+```yaml
+resolves:
+  - name: priceFromList
+    event: { onCreate: SalesInvoiceItem }
+    set: priceListItem                                # the line points at the price-list ROW
+    from: PriceListItem                               # PriceList x Product x validity x price
+    match:
+      product: product                                # the line's own column
+      priceList: salesInvoice.customer.priceList      # a path off the line - the header's customer's list
+    between: { start: validFrom, end: validTo, value: salesInvoice.date }
+    where: { status: ACTIVE }
+    copy: { price: price }                            # the scalar the found row NAMES
+```
+
+Do **not** reach for `dependsOn` here. Copying the header's list and date down onto every line is a
+UI-time copy: a REST create, a `generates:` create-from (proforma -> invoice) and a schedule fan-out
+(a recurring template) never run it, so the lines produced by exactly the automated paths stay
+unpriced - and the interactive path looks correct, so nothing reports it. A path is resolved on every
+write path, which is the whole reason it is a path and not a column.
+
+Every segment but the last is a to-one relation; the last is a field or a to-one, whose foreign key is
+then what the register column is matched against. A cross-model relation may only be the **last** hop
+(a projection carries the target's own properties but not its relations, so there is nothing left to
+walk on). Two paths through the same header load it once.
+
+**`copy:` is for the values the found row NAMES**, as opposed to the relation it points at:
+`{ <register field>: <record field> }`, written only when exactly ONE row covers, and only into a
+field the record does not already carry a value in - so a price a person typed survives while the rest
+of the copy applies. Both sides must be plain fields of the same declared type; a relation on either
+side is refused, because the relation the row points at is what `set:` fills.
+
 **Semantics worth knowing:**
 - The value copied is **derived**: the register must have exactly ONE to-one relation to the same
-  entity as `set:`. Zero or two is an error - name the register's column unambiguously instead.
+  entity as `set:`. Zero or two is an error - name the register's column unambiguously instead. The
+  one exception is a **value-bearing** register, where `set:` points at the register ITSELF
+  (`set: priceListItem` / `from: PriceListItem`): the row carries the value, so the row is what the
+  record links to and the resolved value is that row's own key.
 - A record that already carries the relation is skipped, so a manual correction is never overwritten.
+- **A copied value moves a document's totals, but does not re-fire an `-updated` reaction.** The write
+  is targeted, so a header-items master resums itself from it (a copied line price reaches the
+  document total), but a `rollups:` handler over some other relation binds `-updated` and a targeted
+  write publishes none - deliberately, since an automatic write is not a person's edit. When a
+  consumer must observe a copied value, give the record a `phases:` moment and bind `onPhase`.
 - `between.start` / `between.end` are register date fields, `between.value` the record's date. Either
   bound may be omitted (open-ended = still valid); the end is **inclusive**, and a date-only bound
   covers its whole day.
-- Only the resolved relation, the outcome and the status are written - nothing else of the record,
-  and the RESULT (relation + outcome) is written FIRST, separately from the routing status. A
+- Only the resolved relation, the copied scalars, the outcome and the status are written - nothing
+  else of the record - and the RESULT (relation + copies + outcome) is written FIRST, separately from
+  the routing status. A
   status the record cannot take where it stands - an unmodeled `lifecycle:` move, a `checks:`
   gate - is rejected by the repository, and batching the three meant that rejection discarded the
   identification and the trace along with it. Split, the routing can fail without taking the work
@@ -3273,10 +3319,12 @@ processes:
 
 **Rules:** `event` binds `onCreate` or `onUpdate` of a declared entity (never `onDelete`); `set` is a
 to-one of that entity; `from` is an entity declared in **this** model; `match` needs at least one pair
-(left = register property, right = record property); each optional `where` key is a register
-property carrying a scalar literal and may not repeat a `match` key; `between.value` is required and every period
-field must be a `date` or `timestamp`; `outcome` must be a `string` field of the record, long enough for
-the values written (9, or 19 once any outcome routes by `setStatus` - the amended trace); a
+(left = register property, right = a record property or a to-one path off the record); each optional
+`where` key is a register property carrying a scalar literal and may not repeat a `match` key;
+`between.value` is required and every period field must be a `date` or `timestamp` (a path must END at
+one); each optional `copy` pair names a plain field on both sides, of the same type, and may not target
+the filled relation, the `outcome` field, the primary key, or a field another pair already targets;
+`outcome` must be a `string` field of the record, long enough for the values written (9, or 19 once any outcome routes by `setStatus` - the amended trace); a
 `setStatus` needs the record to declare a `function: EntityStatus` relation, and may be a seed id
 or a seeded name.
 
