@@ -292,6 +292,25 @@ public final class IntentEntities {
         return null;
     }
 
+    /**
+     * The entity's {@code function: EntityStatus} relation - the to-one FK its lifecycle is written to
+     * - or {@code null} when the entity declares none.
+     *
+     * @param entity the entity, may be {@code null}
+     * @return the status relation, or {@code null}
+     */
+    public static RelationIntent entityStatusRelation(EntityIntent entity) {
+        if (entity == null || entity.getRelations() == null) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.isEntityStatus()) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
     /** The PascalCase name of the entity's primary-key property (defaults to {@code Id}). */
     public static String keyFieldName(EntityIntent entity) {
         FieldIntent pk = primaryKeyOf(entity);

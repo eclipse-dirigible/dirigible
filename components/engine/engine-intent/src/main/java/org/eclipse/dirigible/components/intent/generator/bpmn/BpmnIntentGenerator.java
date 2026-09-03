@@ -44,11 +44,13 @@ import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
+import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.PermissionIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
+import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -172,14 +174,19 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 }
             }
         }
+        List<SetFieldSupport.Setter> setters = SetFieldSupport.setters(model);
         Map<String, String> setterByProcessTask = new HashMap<>();
-        for (SetFieldSupport.Setter setter : SetFieldSupport.setters(model)) {
+        for (SetFieldSupport.Setter setter : setters) {
             String key = setter.process() + "/" + setter.step();
             if (setter.relation() && userTaskKeys.contains(key)) {
                 setterByProcessTask.put(key, setter.className());
             }
         }
         Map<String, EntityIntent> byName = IntentEntities.byName(model);
+        // The status writes a checks: gate stands in front of run INSIDE the completing transaction
+        // (no flowable:async), so their rejection reaches the person who acted - see
+        // synchronousNodes.
+        Map<String, Set<String>> synchronousByProcess = synchronousNodes(setters, byName, userTaskKeys, writerByProcessTask);
         // Extra candidate groups from the .settings (defaults to ADMINISTRATOR) appended to every user
         // task, so an administrator can always claim a task in addition to the task's own role.
         String candidateGroupsExtra = String.join(",", context.getSettings()
@@ -238,7 +245,102 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     render(process, rolesByLowerName, context.getProjectName(), IntentNaming.eventsPackage(context), processResolvers,
                             processFieldLoads, processTimerLoads, processStepEvents, ownFieldPascalCase(process, byName),
                             candidateGroupsExtra, writerByTask, setterByTask,
-                            IntentNaming.processTaskCatalog(context.getProjectName(), context)));
+                            IntentNaming.processTaskCatalog(context.getProjectName(), context),
+                            synchronousByProcess.getOrDefault(process.getName(), Set.of())));
+        }
+    }
+
+    /**
+     * The BPMN nodes that must run <b>inside the transaction of the action that reached them</b>,
+     * indexed by process - i.e. emitted without {@code flowable:async}.
+     *
+     * <p>
+     * A {@code checks:} gate is enforced by the generated repository when the document is persisted
+     * carrying the gate status, and the whole point of the gate is that the person who moved the
+     * document there is told why it was refused. An asynchronous status-set cannot do that: Flowable
+     * commits the user-task completion, schedules the setter as a detached job, and the
+     * {@code ValidationException} the gate raises then fails <em>that job</em> - it dead-letters as a
+     * process incident, the task is already gone from the Inbox, and the approver sees nothing (issue
+     * #7014). Run in the completing transaction instead, the rejection rolls the completion back and
+     * travels out of {@code POST /services/inbox/tasks/&lt;id&gt;} carrying the authored message.
+     *
+     * <p>
+     * A setter declared on the {@code serviceTask} itself is that one node. A setter declared on a
+     * {@code userTask} is the delegate inserted after the task - and the writer that persists the
+     * reviewer's edits is inserted <em>before</em> it, so that one has to stay in the transaction too
+     * or its own async boundary commits the completion before the gate is ever reached. Everything else
+     * on the chain (number stamping, snapshots, mail) keeps its async boundary.
+     *
+     * @param setters every validated field setter of the model
+     * @param byName the model's entities, by name
+     * @param userTaskKeys the {@code <process>/<step>} keys of the authored user tasks
+     * @param writerByProcessTask the writer delegate class per {@code <process>/<task>} key
+     * @return the node ids to emit synchronously, per process name
+     */
+    private static Map<String, Set<String>> synchronousNodes(List<SetFieldSupport.Setter> setters, Map<String, EntityIntent> byName,
+            Set<String> userTaskKeys, Map<String, String> writerByProcessTask) {
+        Map<String, Set<String>> byProcess = new HashMap<>();
+        for (SetFieldSupport.Setter setter : setters) {
+            if (!setter.relation() || !gatesACheck(byName.get(setter.entity()), setter.field(), setter.value())) {
+                continue;
+            }
+            String key = setter.process() + "/" + setter.step();
+            Set<String> nodes = byProcess.computeIfAbsent(setter.process(), process -> new HashSet<>());
+            if (userTaskKeys.contains(key)) {
+                nodes.add(IntentNaming.camelCase(setter.className()));
+                String writer = writerByProcessTask.get(key);
+                if (writer != null) {
+                    nodes.add(IntentNaming.camelCase(writer));
+                }
+            } else {
+                nodes.add(setter.step());
+            }
+        }
+        return byProcess;
+    }
+
+    /**
+     * Whether a setter writes the entity's {@code function: EntityStatus} FK to a status one of its
+     * document-level {@code checks:} gates on - the only writes whose failure a person is waiting for.
+     *
+     * @param entity the trigger entity the setter writes, may be {@code null}
+     * @param field the PascalCase property the setter assigns
+     * @param value the assigned value (a status seed id for a relation setter)
+     * @return {@code true} when the write is gated by a check
+     */
+    private static boolean gatesACheck(EntityIntent entity, String field, String value) {
+        if (entity == null || entity.getChecks() == null) {
+            return false;
+        }
+        RelationIntent status = IntentEntities.entityStatusRelation(entity);
+        if (status == null || !IntentNaming.pascalCase(status.getName())
+                                           .equals(field)) {
+            return false;
+        }
+        Integer target = seedId(value);
+        if (target == null) {
+            return false;
+        }
+        for (CheckIntent check : entity.getChecks()) {
+            // Only the document-level kinds carry a status gate; a guard's own status is its rejection
+            // outcome (setStatus), not a precondition on the write.
+            if (target.equals(check.getStatus())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The setter's value as a status seed id, or {@code null} when it is not an integer. */
+    private static Integer seedId(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(value.trim());
+        } catch (NumberFormatException e) {
+            LOGGER.debug("Setter value [{}] is not a status seed id", LoggedValue.of(value), e);
+            return null;
         }
     }
 
@@ -307,7 +409,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, String eventsPackage,
             List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, List<StepEventSupport.Emitter> stepEvents,
             Map<String, String> ownFieldPascalCase, String candidateGroupsExtra, Map<String, String> writerByTask,
-            Map<String, String> setterByTask, String taskLabelCatalog) {
+            Map<String, String> setterByTask, String taskLabelCatalog, Set<String> synchronousNodes) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
         // mutating the shared model (the glue generator runs after this one and must still see the
@@ -448,7 +550,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                                               .isBlank()) {
                 continue;
             }
-            appendStepElement(sb, step, rolesByLowerName, projectName, processId, eventsPackage, candidateGroupsExtra, clearsByStep);
+            appendStepElement(sb, step, rolesByLowerName, projectName, processId, eventsPackage, candidateGroupsExtra, clearsByStep,
+                    synchronousNodes);
         }
         for (BoundaryTimer timer : boundaryTimers) {
             appendBoundaryTimer(sb, timer);
@@ -597,7 +700,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("      </startEvent>\n");
         String afterStart = endId;
         if (cleanup != null) {
-            appendServiceTask(sb, cleanup, projectName, processId, eventsPackage, clearsFor(cleanup, clearsByStep));
+            appendServiceTask(sb, cleanup, projectName, processId, eventsPackage, clearsFor(cleanup, clearsByStep), true);
             afterStart = cleanup.getName();
         }
         sb.append("      <endEvent id=\"")
@@ -884,7 +987,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
-            String processName, String eventsPackage, String candidateGroupsExtra, Map<String, List<String>> clearsByStep) {
+            String processName, String eventsPackage, String candidateGroupsExtra, Map<String, List<String>> clearsByStep,
+            Set<String> synchronousNodes) {
         String kind = step.getKind() == null ? "userTask" : step.getKind();
         List<String> clears = clearsFor(step, clearsByStep);
         switch (kind) {
@@ -893,7 +997,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 break;
             case "serviceTask":
             case "script":
-                appendServiceTask(sb, step, projectName, processName, eventsPackage, clears);
+                appendServiceTask(sb, step, projectName, processName, eventsPackage, clears, !synchronousNodes.contains(step.getName()));
                 break;
             case "decision":
                 appendExclusiveGateway(sb, step);
@@ -988,7 +1092,11 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName, String processName, String eventsPackage,
-            List<String> clears) {
+            List<String> clears, boolean async) {
+        // `async` is false only for a node synchronousNodes marked - a check-gated status write, which
+        // has to run in the transaction of the action that reached it. Everything else keeps the async
+        // boundary. A `delegate:` step is never marked (the parser refuses it a setField /
+        // setRelationField), so appendDelegateServiceTask stays unconditionally async.
         // Five service-task shapes:
         // - a generator-synthesized resolver carries a javaHandler (a client JavaDelegate FQN) -> JavaTask;
         // - an author-declared serviceTask with a `setField` -> JavaTask bound to the <events
@@ -1041,7 +1149,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append(escapeXmlAttribute(step.getName()))
           .append("\" name=\"")
           .append(escapeXmlAttribute(IntentNaming.humanize(step.getName())))
-          .append("\" flowable:async=\"true\" flowable:delegateExpression=\"")
+          .append(async ? "\" flowable:async=\"true\" flowable:delegateExpression=\"" : "\" flowable:delegateExpression=\"")
           .append(java ? "${JavaTask}" : "${JSTask}")
           .append("\">\n");
         boolean hasHandler = handlerValue != null && !handlerValue.isBlank();

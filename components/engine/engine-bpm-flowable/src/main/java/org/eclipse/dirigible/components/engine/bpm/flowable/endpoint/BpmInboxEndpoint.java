@@ -150,7 +150,23 @@ public class BpmInboxEndpoint extends BaseEndpoint {
             bpmService.unclaimTask(taskId);
         } else if (COMPLETE.getActionName()
                            .equals(actionData.getAction())) {
-            bpmService.completeTask(taskId, actionData.getData());
+            try {
+                bpmService.completeTask(taskId, actionData.getData());
+            } catch (RuntimeException ex) {
+                String rejection = ClientValidationFailure.messageOf(ex);
+                if (rejection == null) {
+                    throw ex;
+                }
+                // A declarative gate refused the transition the completion drives (an intent
+                // `checks:` rule - a document with no line items, an unbalanced entry). The
+                // completion has rolled back with it, so the task is still in the inbox: answer the
+                // person who acted with the authored message instead of a 500 (issue #7014). The
+                // message is the BODY, not a ResponseStatusException reason - Spring Boot strips the
+                // reason from the default error payload, and the task form reads the body.
+                logger.debug("Completion of task [{}] was rejected: {}", taskId, rejection, ex);
+                return ResponseEntity.badRequest()
+                                     .body(rejection);
+            }
         } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                                  .body("Invalid action id provided [" + actionData.getAction() + "]");
