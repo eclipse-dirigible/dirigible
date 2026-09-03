@@ -692,7 +692,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 FieldIntent groupingPk = primaryKeyOf(entity);
                 entityMap.put("groupingSourcePk", groupingPk == null ? "Id" : IntentNaming.pascalCase(groupingPk.getName()));
             }
-            List<Map<String, Object>> checkMaps = buildChecks(entity, byName, model.getAggregates());
+            List<Map<String, Object>> checkMaps = buildChecks(entity, entities, model.getAggregates());
             if (!checkMaps.isEmpty()) {
                 // Declarative validations. A List, so it lives only in the .model twin (the scalar-only
                 // .edm XML skips it via the Iterable guard), consumed by the DAO/REST templates.
@@ -2008,7 +2008,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * back-reference FK property, and the EntityStatus gate property - everything the DAO/REST
      * templates need without re-deriving model structure.
      */
-    private static List<Map<String, Object>> buildChecks(EntityIntent entity, Map<String, EntityIntent> byName,
+    private static List<Map<String, Object>> buildChecks(EntityIntent entity, List<EntityIntent> entities,
             List<AggregateIntent> aggregates) {
         List<Map<String, Object>> checkMaps = new ArrayList<>();
         if (entity.getChecks() == null) {
@@ -2085,27 +2085,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                             .map(IntentNaming::pascalCase)
                                             .toList());
             } else {
-                EntityIntent items = null;
-                String itemsFk = null;
-                for (EntityIntent candidate : byName.values()) {
-                    if (candidate.getRelations() == null) {
-                        continue;
-                    }
-                    for (RelationIntent relation : candidate.getRelations()) {
-                        if (relation.isComposition() && entity.getName()
-                                                              .equals(relation.getTo())) {
-                            items = candidate;
-                            itemsFk = IntentNaming.pascalCase(relation.getName());
-                            break;
-                        }
-                    }
-                    if (items != null) {
-                        break;
-                    }
-                }
+                // The document's LINES - the shared resolution, so the guard counts the rows the
+                // document layout renders. Scanning for "some composition child" made a multi-child
+                // document (an invoice also owns allocations, promotions and printed snapshots) bind
+                // to whichever child the hash order yielded (#7027).
+                EntityIntent items = IntentEntities.documentItemsChild(entity.getName(), entities);
                 if (items == null) {
                     continue; // the parser already reported it
                 }
+                String itemsFk = IntentEntities.itemsBackReference(items, entity.getName());
                 checkMap.put("itemsEntity", items.getName());
                 checkMap.put("itemsFk", itemsFk);
                 checkMap.put("status", String.valueOf(check.getStatus()));

@@ -145,6 +145,108 @@ public final class IntentEntities {
         return current;
     }
 
+
+    /**
+     * The document-items child of {@code master}: the composition child that carries the document's
+     * LINES. It is the one answer to "what are this document's items" that every consumer must give -
+     * the document (header-items) layout, a document-level {@code checks:} gate, a {@code postings:}
+     * {@code creates:} target and the print feeder - because a master can own several composition
+     * children (an invoice also owns its payment allocations, its promotions, its printed
+     * {@code function: Snapshot} copies and its reminders) and only one of them is its lines.
+     * <p>
+     * Resolution, in entity-declaration order so the answer never depends on hash order:
+     * <ol>
+     * <li>a child flagged {@code function: DocumentItem} - the authored answer;</li>
+     * <li>else the legacy {@code *Item}-named child ({@code SalesInvoice} -&gt;
+     * {@code SalesInvoiceItem});</li>
+     * <li>else the SOLE composition child - a master with exactly one child has no ambiguity to
+     * resolve;</li>
+     * <li>else the first composition child in declaration order - deterministic, and the author
+     * disambiguates by flagging the lines child.</li>
+     * </ol>
+     * This is the same preference {@code EdmIntentGenerator.documentMasters} applies to pick the lines
+     * table of a document layout; resolving a check against a different child made the same authored
+     * document give two different answers, and a guard on a multi-child document counted printed
+     * snapshots instead of lines (#7027).
+     *
+     * @param master the document entity's name
+     * @param entities every entity of the model, in declaration order
+     * @return the items child, or {@code null} when the master owns no composition child
+     */
+    public static EntityIntent documentItemsChild(String master, Collection<EntityIntent> entities) {
+        if (master == null || entities == null) {
+            return null;
+        }
+        EntityIntent flagged = null;
+        EntityIntent named = null;
+        EntityIntent first = null;
+        int children = 0;
+        for (EntityIntent candidate : entities) {
+            if (candidate.getName() == null || !master.equals(compositionParentOf(candidate))) {
+                continue;
+            }
+            children++;
+            if (first == null) {
+                first = candidate;
+            }
+            if (flagged == null && candidate.isDocumentItem()) {
+                flagged = candidate;
+            }
+            if (named == null && candidate.getName()
+                                          .endsWith("Item")) {
+                named = candidate;
+            }
+        }
+        if (flagged != null) {
+            return flagged;
+        }
+        if (named != null) {
+            return named;
+        }
+        return children == 0 ? null : first;
+    }
+
+    /**
+     * The composition parent of {@code entity}: the target of its first {@code composition: true}
+     * to-one relation, or {@code null} when it is not a dependent entity. The single-entity form of
+     * {@link #compositionParents(IntentModel)}.
+     *
+     * @param entity the entity
+     * @return the parent entity's name, or {@code null}
+     */
+    public static String compositionParentOf(EntityIntent entity) {
+        if (entity == null || entity.getRelations() == null) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && relation.isComposition() && relation.getTo() != null) {
+                return relation.getTo();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The items child's composition FK property (PascalCase) pointing back at {@code master} - the
+     * column a per-document query filters on.
+     *
+     * @param items the items child
+     * @param master the document entity's name
+     * @return the PascalCase FK property, or {@code null}
+     */
+    public static String itemsBackReference(EntityIntent items, String master) {
+        if (items == null || items.getRelations() == null) {
+            return null;
+        }
+        for (RelationIntent relation : items.getRelations()) {
+            if (relation.isComposition() && master.equals(relation.getTo()) && relation.getName() != null) {
+                return IntentNaming.pascalCase(relation.getName());
+            }
+        }
+        return null;
+    }
+
     /** The entity's primary-key field, or null when none is declared. */
     /**
      * The property a to-one target's records are LABELED by, resolving broader than the authored

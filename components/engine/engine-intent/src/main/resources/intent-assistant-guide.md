@@ -474,7 +474,12 @@ field may declare:
   - `{ kind: itemsMin, count: 1, status: 2, message: "..." }` (document-level): minimum item count,
     same gate.
   A failed document check aborts the transition (the workflow task completion fails with the
-  authored message).
+  authored message). **Which child is "the items":** the document's LINES, resolved as a child
+  flagged `function: DocumentItem`, else the `*Item`-named child, else the sole composition child,
+  else the first declared - the same preference the document (header-items) layout uses. A document
+  that owns several composition children (an invoice also owns its payment allocations, its
+  promotions and its printed `function: Snapshot` copies) should flag its lines child
+  `function: DocumentItem` and say so, rather than rely on the fallback.
 - `postings:` (top-level) - **declarative posting**: when a (usually cross-model) source document
   reaches a status - or, for a source with no status lifecycle, when it is created; or when it
   reaches a declared enrichment `phases:` moment, the only trigger that may read an amount a

@@ -3207,7 +3207,7 @@ public final class IntentParser {
             }
             if (entity.getChecks() != null) {
                 for (CheckIntent check : entity.getChecks()) {
-                    validateCheck(entity, check, byName, model.getAggregates(), issues);
+                    validateCheck(entity, check, byName, model.getEntities(), model.getAggregates(), issues);
                 }
             }
             if (!entity.getUnique()
@@ -4013,7 +4013,8 @@ public final class IntentParser {
     }
 
     private static void validateCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
-            List<org.eclipse.dirigible.components.intent.model.AggregateIntent> aggregates, List<String> issues) {
+            java.util.List<EntityIntent> entities, List<org.eclipse.dirigible.components.intent.model.AggregateIntent> aggregates,
+            List<String> issues) {
         String subject = "entity [" + entity.getName() + "] check [" + (check.getKind() == null ? "?" : check.getKind()) + "]";
         String kind = check.getKind();
         if ("guard".equals(kind)) {
@@ -4067,7 +4068,7 @@ public final class IntentParser {
             return;
         }
         if ("itemsSumEqual".equals(kind) || "itemsMin".equals(kind)) {
-            EntityIntent items = compositionChildOf(entity, byName);
+            EntityIntent items = compositionChildOf(entity, entities);
             if (items == null) {
                 issues.add(subject + " requires the entity to own a composition child (the document's items)");
                 return;
@@ -4153,20 +4154,15 @@ public final class IntentParser {
         return false;
     }
 
-    /** The entity's composition child (the first entity declaring a composition to-one back to it). */
-    private static EntityIntent compositionChildOf(EntityIntent entity, java.util.Map<String, EntityIntent> byName) {
-        for (EntityIntent candidate : byName.values()) {
-            if (candidate.getRelations() == null) {
-                continue;
-            }
-            for (RelationIntent relation : candidate.getRelations()) {
-                if (relation.isComposition() && entity.getName()
-                                                      .equals(relation.getTo())) {
-                    return candidate;
-                }
-            }
-        }
-        return null;
+    /**
+     * The entity's document-items child - its LINES, through the one shared resolution every consumer
+     * must agree on ({@code function: DocumentItem}, else the {@code *Item} name, else the sole child,
+     * else the first declared). Scanning a hash-ordered index for "some composition child" gave a
+     * multi-child document a different answer here than the document layout got, so a check's `over`
+     * fields were validated against a printed-snapshot child (#7027).
+     */
+    private static EntityIntent compositionChildOf(EntityIntent entity, java.util.List<EntityIntent> entities) {
+        return entity == null ? null : IntentEntities.documentItemsChild(entity.getName(), entities);
     }
 
     /**
@@ -6021,7 +6017,7 @@ public final class IntentParser {
                 issues.add(subject + " `creates` must name a local entity");
                 continue;
             }
-            EntityIntent itemsEntity = compositionChildOf(creates, byName);
+            EntityIntent itemsEntity = compositionChildOf(creates, model.getEntities());
             if (itemsEntity == null) {
                 issues.add(subject + " `creates` entity [" + creates.getName() + "] must own a composition items child");
                 continue;
@@ -6385,7 +6381,7 @@ public final class IntentParser {
                 validateMapTarget(crossModel || items.getTo() == null ? null : byName.get(items.getTo()), items.getMap(),
                         "generates [" + name + "]", "items map", issues);
             }
-            validateGeneratesItemLines(g, name, source, byName, crossModel, issues);
+            validateGeneratesItemLines(g, name, source, byName, model.getEntities(), crossModel, issues);
             validateGeneratesPrompt(g, name, byName, crossModel, issues);
             validateGeneratesReopen(g, name, byName, crossModel, model, issues);
         }
@@ -6778,7 +6774,7 @@ public final class IntentParser {
      * deferral the mirror form's cross-model {@code map} uses.
      */
     private static void validateGeneratesItemLines(GeneratesIntent g, String name, EntityIntent source, Map<String, EntityIntent> byName,
-            boolean crossModel, List<String> issues) {
+            java.util.List<EntityIntent> entities, boolean crossModel, List<String> issues) {
         List<Map<String, String>> itemLines = g.getItemLines();
         if (itemLines == null || itemLines.isEmpty()) {
             return;
@@ -6789,7 +6785,7 @@ public final class IntentParser {
         }
         EntityIntent itemsChild = null;
         if (!crossModel && g.getTo() != null && byName.get(g.getTo()) != null) {
-            itemsChild = compositionChildOf(byName.get(g.getTo()), byName);
+            itemsChild = compositionChildOf(byName.get(g.getTo()), entities);
             if (itemsChild == null) {
                 issues.add(
                         subject + " declares computed item lines but the target [" + g.getTo() + "] has no composition line-items child");

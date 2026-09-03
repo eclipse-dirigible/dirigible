@@ -1043,7 +1043,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     itemEntityName = child.childEntity();
                     itemMetas = crossModelCellMetas(child);
                 } else {
-                    EntityIntent itemEntity = compositionChild(byName.get(g.getTo()), byName);
+                    EntityIntent itemEntity = compositionChild(byName.get(g.getTo()), model);
                     if (itemEntity == null) {
                         throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(
                                 List.of("generates [" + g.getName() + "] declares computed item lines but the target [" + g.getTo()
@@ -2168,7 +2168,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             EntityIntent creates = byName.get(effective.getCreates());
-            EntityIntent itemsEntity = creates == null ? null : compositionChild(creates, byName);
+            EntityIntent itemsEntity = creates == null ? null : compositionChild(creates, model);
             if (creates == null || itemsEntity == null) {
                 continue; // parser already reported it
             }
@@ -2364,20 +2364,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 null);
     }
 
-    /** The entity's composition child (first entity declaring a composition to-one back to it). */
-    private static EntityIntent compositionChild(EntityIntent entity, Map<String, EntityIntent> byName) {
-        for (EntityIntent candidate : byName.values()) {
-            if (candidate.getRelations() == null) {
-                continue;
-            }
-            for (RelationIntent relation : candidate.getRelations()) {
-                if (relation.isComposition() && entity.getName()
-                                                      .equals(relation.getTo())) {
-                    return candidate;
-                }
-            }
-        }
-        return null;
+    /**
+     * The entity's document-items child - its LINES, through the one shared resolution every consumer
+     * must agree on ({@code function: DocumentItem}, else the {@code *Item} name, else the sole child,
+     * else the first declared). A hash-ordered scan for "some composition child" let a posting emit its
+     * lines into a document's snapshot/allocation child instead (#7027).
+     */
+    private static EntityIntent compositionChild(EntityIntent entity, IntentModel model) {
+        return entity == null ? null : IntentEntities.documentItemsChild(entity.getName(), model.getEntities());
     }
 
     /** The entity's field by authored name (case-insensitive), or null. */
