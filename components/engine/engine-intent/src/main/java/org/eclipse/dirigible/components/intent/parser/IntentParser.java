@@ -27,6 +27,7 @@ import org.eclipse.dirigible.components.intent.generator.EventBinding;
 import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.FileNameSupport;
+import org.eclipse.dirigible.components.intent.generator.NotificationSupport;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
@@ -203,6 +204,12 @@ public final class IntentParser {
     /** The {@code {record.<path>}} placeholders of a subject / body. */
     private static final java.util.regex.Pattern RECORD_PLACEHOLDER =
             java.util.regex.Pattern.compile("\\{(" + RECORD_SCOPE + "\\.[A-Za-z0-9_.]*)\\}");
+    /** A {@code {path}} placeholder of a notify subject / body - a field or a one-hop path. */
+    private static final java.util.regex.Pattern NOTIFY_PLACEHOLDER =
+            java.util.regex.Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?)\\}");
+    /** A notify path (a field, a one-hop {@code relation.field}, or a reserved link token). */
+    private static final java.util.regex.Pattern NOTIFY_PATH =
+            java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*");
     /** One {@code {...}} interpolation of a {@code fileName:} pattern. */
     private static final java.util.regex.Pattern FILE_NAME_TOKEN = java.util.regex.Pattern.compile("\\{([^{}]*)\\}");
     /** A one-hop path inside a {@code fileName:} token: a field, or a to-one relation and one field. */
@@ -889,18 +896,129 @@ public final class IntentParser {
             } else if (!hasNotify && !hasGenerate) {
                 issues.add("schedule [" + name + "] has no action (add a notify or a generate)");
             } else if (hasNotify) {
-                // v1 scope: the notify machinery resolves recipients/placeholders/relation loads against a
-                // LOCAL EntityIntent; a cross-model source has only TargetInfo metadata, so notify is not
-                // yet supported there. Keep the schedule in the source's model, or drop model:.
                 if (crossModelSource) {
-                    issues.add("schedule [" + name + "] uses a cross-model source with notify - a cross-model schedule source"
-                            + " supports the generate action; notify needs the source's relation metadata - keep the schedule in the"
-                            + " source's model or drop model:");
+                    // The source's own properties are the OWNER's, resolved at GENERATION time against
+                    // its .model (dirigible #7030) - the same split validation the where / map / generate
+                    // references already use, so the local path checks below are skipped here. What stays
+                    // refused is only what the owner alone can supply, checked next.
+                    validateCrossModelScheduleNotify(schedule.getNotify(), "schedule [" + name + "] notify", schedule.getEntity(), issues);
+                    validateNotifyBlock(schedule.getNotify(), "schedule [" + name + "] notify", null, model, false, issues);
                 } else {
                     validateNotifyBlock(schedule.getNotify(), "schedule [" + name + "] notify", schedule.getEntity(), model, false, issues);
                 }
             } else {
                 validateScheduleGenerate(schedule, source, byName, entityNames, usesAliases, issues);
+            }
+        }
+    }
+
+    /**
+     * The extra rules a {@code notify} carries when the schedule's SOURCE lives in another model
+     * ({@code model: <uses alias>}, dirigible #7030). Everything about the source row - its properties,
+     * the recipient, the placeholders, a bound report parameter - is resolved at generation time
+     * against the owner's {@code .model}, exactly as the {@code where} / {@code map} / {@code generate}
+     * references are. Three things cannot be, and are refused here rather than emitted as a job that
+     * cannot compile or a mail that points somewhere wrong:
+     *
+     * <ul>
+     * <li><b>A {@code relation.field} path on the source.</b> A foreign entity's relations are known
+     * only to its owner model (the same rule a cross-model {@code generate map} states) - so a hop off
+     * the source row has no target to load. Name a direct field of the row.</li>
+     * <li><b>The {@code recordUrl} deep link.</b> The route it composes is this application's; the
+     * record it would link lives in the owner's. A message that needs to point at it says so with
+     * {@code appUrl} plus the owner's own path.</li>
+     * <li><b>{@code attach: print} / {@code recordPrint}.</b> The rendered document's print feeder is
+     * generated in the model that owns the entity, so only the owner can attach the source's own
+     * document. A report ({@code attach: { report, bind }}) is this model's and is the point of the
+     * lift.</li>
+     * </ul>
+     *
+     * @param notify the block, may be {@code null}
+     * @param subject the message prefix identifying the call site
+     * @param sourceEntity the cross-model source entity name, for the messages
+     * @param issues the collected issues
+     */
+    private static void validateCrossModelScheduleNotify(NotificationIntent notify, String subject, String sourceEntity,
+            List<String> issues) {
+        if (notify == null) {
+            return;
+        }
+        Map<String, String> paths = new LinkedHashMap<>();
+        addSourcePath(paths, "recipient", notify.getTo());
+        addSourcePath(paths, "languageFrom", notify.getLanguageFrom());
+        collectNotifyPlaceholders(notify.getSubject(), paths);
+        collectNotifyPlaceholders(notify.getBody(), paths);
+        collectFileNamePaths(notify.getFileName(), paths);
+        NotificationIntent.ReportAttachment report = notify.getReportAttachment();
+        if (report != null) {
+            for (Map.Entry<String, String> bound : report.bind()
+                                                         .entrySet()) {
+                addSourcePath(paths, "attach bind [" + bound.getKey() + "]", bound.getValue());
+            }
+        }
+        for (Map.Entry<String, String> path : paths.entrySet()) {
+            if (path.getValue()
+                    .indexOf('.') >= 0) {
+                issues.add(subject + " " + path.getKey() + " [" + path.getValue() + "] hops through a relation of the cross-model source ["
+                        + sourceEntity + "], whose relations are known only to the [" + sourceEntity
+                        + "] owner model - name a direct field of the source row, or keep the schedule in that model");
+            }
+        }
+        if (paths.containsValue(NotificationSupport.RECORD_URL_TOKEN)) {
+            issues.add(subject + " uses {" + NotificationSupport.RECORD_URL_TOKEN
+                    + "}, which links a record of THIS application - the cross-model source [" + sourceEntity
+                    + "] is a record of its own owner's application, so compose that link with {appUrl} and the owner's path");
+        }
+        String outcome = notify.getOutcome();
+        if (outcome != null && !outcome.isBlank()) {
+            issues.add(subject + " declares outcome [" + outcome.trim() + "] on the cross-model source [" + sourceEntity
+                    + "] - the stamp is written through that record's own repository and announced on its own failure topic, both of"
+                    + " which are generated in the [" + sourceEntity + "] owner model; record the attempt where the record lives");
+        }
+        String attach = notify.getAttach();
+        if (attach != null && !attach.isBlank() && !NotificationIntent.ATTACH_REPORT.equals(attach)) {
+            issues.add(subject + " attaches [" + attach.trim() + "], the print of the cross-model source [" + sourceEntity
+                    + "] - a document's print feeder is generated in the model that owns it, so only [" + sourceEntity
+                    + "]'s own model can attach it; attach a report of this model instead");
+        }
+    }
+
+    /**
+     * Records a non-blank, path-shaped value under its call-site label (a literal address is not one).
+     */
+    private static void addSourcePath(Map<String, String> paths, String label, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        String trimmed = value.trim();
+        if (NOTIFY_PATH.matcher(trimmed)
+                       .matches()) {
+            paths.put(label, trimmed);
+        }
+    }
+
+    /** The {@code {path}} placeholders of one subject / body, appended under their own labels. */
+    private static void collectNotifyPlaceholders(String text, Map<String, String> paths) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        java.util.regex.Matcher matcher = NOTIFY_PLACEHOLDER.matcher(text);
+        while (matcher.find()) {
+            paths.put("placeholder [{" + matcher.group(1) + "}]", matcher.group(1));
+        }
+    }
+
+    /** The operand paths of a {@code fileName:} pattern's {@code {...}} tokens (formats stripped). */
+    private static void collectFileNamePaths(String pattern, Map<String, String> paths) {
+        if (pattern == null || pattern.isBlank()) {
+            return;
+        }
+        java.util.regex.Matcher matcher = FILE_NAME_TOKEN.matcher(pattern);
+        while (matcher.find()) {
+            for (String operand : matcher.group(1)
+                                         .split("\\|")) {
+                int colon = operand.indexOf(':');
+                addSourcePath(paths, "fileName token [" + operand.trim() + "]", colon < 0 ? operand : operand.substring(0, colon));
             }
         }
     }

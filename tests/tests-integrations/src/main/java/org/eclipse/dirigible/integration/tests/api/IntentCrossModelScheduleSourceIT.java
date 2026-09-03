@@ -11,6 +11,7 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.both;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.lessThan;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -132,6 +133,68 @@ class IntentCrossModelScheduleSourceIT extends IntegrationTest {
                 """.formatted(whereField);
     }
 
+    /**
+     * The owner module of the customer-statement case: the mailed rows are its customers.
+     */
+    private static final String STATEMENT_OWNER_INTENT = """
+            name: xmsource
+            description: cross-model schedule source fixture - owns the mailed customers
+
+            entities:
+              - name: Customer
+                fields:
+                  - { name: id,          type: integer, primaryKey: true, generated: true }
+                  - { name: name,        type: string,  required: true, length: 100 }
+                  - { name: email,       type: string,  length: 100 }
+                  - { name: openBalance, type: decimal, precision: 15, scale: 2 }
+            """;
+
+    /**
+     * The consumer module of the customer-statement case (dirigible #7030): it owns the invoices and
+     * therefore the statement REPORT, so the monthly mail can only be declared here - and its source,
+     * the customer, is cross-model. {@code recipientField} is the notify recipient, so a mistyped one
+     * exercises the loud drop.
+     */
+    private static String statementConsumerIntent(String recipientField) {
+        return """
+                name: xmconsumer
+                description: cross-model schedule notify fixture - owns the statement report
+
+                uses:
+                  - { model: xmsource }
+
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: issuedOn, type: date }
+                      - { name: total,    type: decimal, precision: 15, scale: 2 }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer, model: xmsource }
+
+                reports:
+                  - name: CustomerStatement
+                    source: SalesInvoice
+                    dimensions: [issuedOn]
+                    measures: ["sum(total)"]
+                    parameters:
+                      - { name: customer, target: Customer.name, op: like }
+
+                schedules:
+                  - name: monthlyCustomerStatements
+                    cron: "0 0 7 1 * ?"
+                    entity: Customer
+                    model: xmsource
+                    where:
+                      - { field: openBalance, op: gt, value: 0 }
+                    notify:
+                      to: %s
+                      subject: "Your account statement"
+                      body: "Dear {name}, your statement is attached."
+                      attach: { report: CustomerStatement, bind: { customer: name } }
+                """.formatted(recipientField);
+    }
+
     @Autowired
     private IRepository repository;
     @Autowired
@@ -221,6 +284,48 @@ class IntentCrossModelScheduleSourceIT extends IntegrationTest {
                            .anyMatch(w -> w.contains("monthlyProjectTimesheets") && w.contains("where field [nonexistentField]")
                                    && w.contains("xmsource")),
                 "expected a where-field warning naming the schedule, field and owner model, got: " + warnings);
+    }
+
+    @Test
+    void cross_model_source_schedule_mails_the_statement_it_owns_the_report_for() {
+        // The suite layout #6931's mechanism was filed for: the statement report lives with the
+        // invoices, the customer lives in the owner module, and the schedule has no other legal home -
+        // so its source is cross-model and its action is notify.
+        generateProject(OWNER, STATEMENT_OWNER_INTENT);
+        generateProject(CONSUMER, statementConsumerIntent("email"));
+
+        String job = contentOf(CONSUMER, "gen/events/xmconsumer/MonthlyCustomerStatementsJob.java");
+        assertTrue(job.contains("import gen.xmsource.data.customer.CustomerEntity;"), "the mailed row is the OWNER's entity: " + job);
+        assertTrue(job.contains("new CustomerRepository().findAll("), "the rows come from the owner's repository: " + job);
+        assertTrue(job.contains("String to = entity.Email;"), "the recipient is a field of the cross-model row: " + job);
+        assertTrue(job.contains("reportFilter.put(\"customer\", reportValue(entity.Name));"),
+                "the report parameter is bound from the row, so the PDF is this customer's: " + job);
+        assertTrue(job.contains("CustomerStatementRepository"), "the attached report is the CONSUMER's own: " + job);
+
+        // Layer 2: it compiles. The whole point of resolving the owner's facts is a job that builds.
+        publishProject(OWNER);
+        publishProject(CONSUMER);
+        synchronizationProcessor.forceProcessSynchronizers();
+        String ours = "findAll { it.category == 'Compilation' && it.location.startsWith('/" + CONSUMER + "/') }";
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/ide/problems")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(ours + ".size()", equalTo(0)),
+                60);
+    }
+
+    @Test
+    void mistyped_notify_recipient_drops_the_schedule_naming_the_owner_model() {
+        // A direct path is emitted as a plain field read, so a name the owner does not carry would
+        // reach javac: it is caught against the owner's .model and the schedule is dropped instead.
+        generateProject(OWNER, STATEMENT_OWNER_INTENT);
+        writeIntent(CONSUMER, statementConsumerIntent("mailbox"));
+        List<String> warnings = generateWarnings(CONSUMER);
+        assertTrue(warnings.stream()
+                           .anyMatch(w -> w.contains("monthlyCustomerStatements") && w.contains("notify recipient [mailbox]")
+                                   && w.contains("xmsource")),
+                "expected a notify-recipient warning naming the schedule, field and owner model, got: " + warnings);
     }
 
     private int createProject() {

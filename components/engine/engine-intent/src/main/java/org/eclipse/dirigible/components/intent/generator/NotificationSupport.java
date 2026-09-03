@@ -84,7 +84,7 @@ public final class NotificationSupport {
      * message is about. The anchor record is reachable for VALUES through {@code {record.<field>}}, but
      * not as a link - a fan-out that wants to point at its anchor should say so with {@code {appUrl}}.
      */
-    static final String RECORD_URL_TOKEN = "recordUrl";
+    public static final String RECORD_URL_TOKEN = "recordUrl";
 
     /**
      * The reserved {@code {inboxUrl}} placeholder name - the deep link to the recipient's process

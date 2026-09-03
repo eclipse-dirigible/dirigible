@@ -1756,7 +1756,7 @@ class IntentParserTest {
     }
 
     @Test
-    void crossModelScheduleSourceWithNotifyIsRejected() {
+    void crossModelScheduleSourceMayNotify() {
         String yaml = """
                 name: timesheets
                 uses:
@@ -1775,11 +1775,14 @@ class IntentParserTest {
                       subject: "x"
                       body: "y"
                 """;
-        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
-        assertTrue(ex.getIssues()
-                     .stream()
-                     .anyMatch(i -> i.contains("notify needs the source's relation metadata")),
-                "expected a cross-model-notify-unsupported issue, got: " + ex.getIssues());
+        // The source's fields are the owner's, resolved at generation against its .model (#7030) - the
+        // same split validation the where / map references use. See CrossModelScheduleNotifyIntentTest
+        // for what only the owner can supply and is therefore still refused.
+        assertEquals("contactEmail", IntentParser.parse(yaml)
+                                                 .getSchedules()
+                                                 .get(0)
+                                                 .getNotify()
+                                                 .getTo());
     }
 
     @Test

@@ -2837,9 +2837,36 @@ schedules:
           map: { Employee: Employee }
 ```
 
-- **v1 scope: `generate` only.** A cross-model source with a `notify` action is rejected at parse
-  (notify needs the source's relation metadata, which only a local entity carries) - keep such a
-  schedule in the source's model, or drop `model:`.
+- **A cross-model source may `notify` too** - the customer-statement mail, where the module that owns
+  the statement report is not the one that owns the customer, so the schedule has no other legal home:
+
+```yaml
+uses:
+  - { model: customers }
+reports:
+  - { name: CustomerStatement, source: SalesInvoice, parameters: [ { name: customer, target: Customer.name, op: like } ] }
+schedules:
+  - name: monthlyCustomerStatements
+    cron: "0 0 7 1 * ?"
+    entity: Customer
+    model: customers                     # cross-model source
+    where:
+      - { field: openBalance, op: gt, value: 0 }
+    notify:
+      to: email                          # a field of the cross-model row
+      subject: "Your account statement"
+      body: "Dear {name}, your statement is attached."
+      attach: { report: CustomerStatement, bind: { customer: name } }
+```
+
+  The recipient, the `{placeholder}`s and the `bind:` sources are **fields of the source row**,
+  resolved at generation against the owner's `.model`. Three things only the owner can supply and are
+  refused at parse: a `relation.field` hop off the source row (a foreign entity's relations are known
+  only to its owner - the same rule the `generate map` states), `{recordUrl}` (it links a record of
+  THIS application; compose the owner's link with `{appUrl}`), `attach: print` / `recordPrint`
+  (a document's print feeder is generated in the model that owns the document - a report of this model
+  is what the lift is for), and `outcome:` (the stamp writes through that record's own repository and
+  announces on its own failure topic, both generated in the owner model).
 - **Validation split** (the same one relations use): that `model:` names a declared `uses:` alias is
   checked at parse; the source entity's existence and the `where` / `map` / `match` field references
   are checked at **generation** against the owner's `.model` (generate the owner model first, or
@@ -2847,8 +2874,8 @@ schedules:
   warning in the generate response - it never emits a job that cannot compile.
 
 **Rules:** unique name, a `cron`, a declared `entity` (local, or a cross-model source via `model:`),
-`where` operators from the allowed list, and **exactly one** of `notify` (valid recipient; local source
-only) / `generate` (a declared/cross-model `to`, a `map` over the row's fields/to-one relations,
+`where` operators from the allowed list, and **exactly one** of `notify` (valid recipient) /
+`generate` (a declared/cross-model `to`, a `map` over the row's fields/to-one relations,
 optional `children`). Composition-item cloning via `items:` is **not** available on a schedule (it needs
 a selected document) - use an on-demand `generates` action for document-to-document cloning, or
 `generate.children` for the fan-out shape above.
