@@ -36,7 +36,7 @@ log.info("file size: {}", Files.size("/users/admin/workspace/proj/foo.txt"));
 | `core/context`                       | `sdk.core.Context`                                             |       |
 | `core/env`                           | `sdk.core.Env`                                                 |       |
 | `core/globals`                       | `sdk.core.Globals`                                             |       |
-| `db/database` + `db/sequence` + `db/query` + `db/insert` + `db/update` + `db/sql` + `db/procedure` | `sdk.db.Database` | One static facade with the full `DatabaseFacade` surface. |
+| `db/database` + `db/sequence` + `db/query` + `db/insert` + `db/update` + `db/sql` + `db/procedure` | `sdk.db.Database` | One static facade with the full `DatabaseFacade` surface. The user and schema DDL on it is **Java-only** - `createUser`, `setUserPassword`, `dropUser`, `existsUser`, `createSchema`, `dropSchema`, `existsSchema`, dialect-translated like the sequence DDL beside it, with no TS counterpart. `existsUser` is implemented for PostgreSQL, H2 and MSSQL and throws `SQLFeatureNotSupportedException` elsewhere. |
 | `db/store`                           | `sdk.db.Store`                                                 | Dynamic-entity Hibernate store. For typed `@Entity` CRUD on client classes, resolve `JavaEntityStore` via `BeanProvider`. |
 | `etcd/client`                        | `sdk.etcd.Client`                                              | Returns the raw `io.etcd.jetcd.KV`. |
 | `extensions/extensions`              | `sdk.extensions.Extensions`                                    | Java callers should prefer `List<...>` collection injection or `Extensions.find(Class<T>)`; see "Extension points" below. |

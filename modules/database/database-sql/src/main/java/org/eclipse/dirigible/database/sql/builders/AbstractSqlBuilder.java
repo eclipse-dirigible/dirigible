@@ -126,6 +126,44 @@ public abstract class AbstractSqlBuilder implements ISqlBuilder {
     }
 
     /**
+     * Quotes an identifier that comes from outside the platform, doubling any embedded escape symbol.
+     *
+     * <p>
+     * DDL takes no bind parameters, so an identifier reaches the statement by concatenation. Doubling
+     * is what keeps a name carrying the escape symbol from ending the quoted identifier early and
+     * having its remainder read as SQL. An already-quoted name is returned untouched, which is the same
+     * contract {@link #encapsulate(String, boolean)} offers.
+     *
+     * @param identifier the identifier
+     * @return the quoted identifier, or null when the identifier is null
+     */
+    protected String encapsulateIdentifier(String identifier) {
+        if (identifier == null) {
+            return null;
+        }
+        String escapeSymbol = String.valueOf(getEscapeSymbol());
+        if (identifier.length() > 1 && identifier.startsWith(escapeSymbol) && identifier.endsWith(escapeSymbol)) {
+            return identifier;
+        }
+        return escapeSymbol + identifier.replace(escapeSymbol, escapeSymbol + escapeSymbol) + escapeSymbol;
+    }
+
+    /**
+     * Quotes a string literal that comes from outside the platform, doubling any embedded quote symbol.
+     *
+     * @param literal the literal value
+     * @param quoteSymbol the symbol the dialect quotes literals with
+     * @return the quoted literal, or null when the literal is null
+     */
+    protected String encapsulateLiteral(String literal, char quoteSymbol) {
+        if (literal == null) {
+            return null;
+        }
+        String quote = String.valueOf(quoteSymbol);
+        return quote + literal.replace(quote, quote + quote) + quote;
+    }
+
+    /**
      * Gets the dialect.
      *
      * @return the dialect

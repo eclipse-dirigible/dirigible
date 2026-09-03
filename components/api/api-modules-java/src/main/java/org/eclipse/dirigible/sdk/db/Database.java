@@ -40,6 +40,21 @@ import org.eclipse.dirigible.database.sql.SqlFactory;
  * <p>
  * Sequences ({@code nextval}, {@code createSequence}, {@code dropSequence}) work across H2,
  * PostgreSQL, Oracle, and MS SQL — the platform translates the call into the appropriate dialect.
+ *
+ * <p>
+ * Users and schemas ({@code createUser}, {@code setUserPassword}, {@code dropUser},
+ * {@code existsUser}, {@code createSchema}, {@code dropSchema}, {@code existsSchema}) are
+ * translated the same way, which is the point of having them here: an application that manages
+ * database principals — setting up the schemas and users it expects, or giving an isolated part of
+ * itself a database identity of its own — would otherwise hand-write the DDL of one database and
+ * stop working on the next. What "a user" means is not uniform, and the dialect absorbs that: on
+ * SQL Server one is a server login plus a database user, so creating it emits two statements and
+ * dropping it removes both.
+ *
+ * <p>
+ * {@code existsUser} has no portable answer and says so rather than guessing — SQL standardises
+ * {@code information_schema} for schemata but not for principals. It is implemented for PostgreSQL,
+ * H2 and SQL Server; elsewhere it throws {@link java.sql.SQLFeatureNotSupportedException}.
  */
 public final class Database {
 
@@ -167,6 +182,165 @@ public final class Database {
 
     public static void dropSequence(String sequence, String datasourceName) throws Throwable {
         DatabaseFacade.dropSequence(sequence, datasourceName);
+    }
+
+    /**
+     * Creates a database user in the default data source.
+     *
+     * @param userId the user id
+     * @param password the password
+     * @throws Throwable the throwable
+     */
+    public static void createUser(String userId, String password) throws Throwable {
+        DatabaseFacade.createUser(userId, password);
+    }
+
+    /**
+     * Creates a database user.
+     *
+     * @param userId the user id
+     * @param password the password
+     * @param datasourceName the datasource name
+     * @throws Throwable the throwable
+     */
+    public static void createUser(String userId, String password, String datasourceName) throws Throwable {
+        DatabaseFacade.createUser(userId, password, datasourceName);
+    }
+
+    /**
+     * Sets the password of an existing database user in the default data source.
+     *
+     * @param userId the user id
+     * @param password the new password
+     * @throws Throwable the throwable
+     */
+    public static void setUserPassword(String userId, String password) throws Throwable {
+        DatabaseFacade.setUserPassword(userId, password);
+    }
+
+    /**
+     * Sets the password of an existing database user.
+     *
+     * @param userId the user id
+     * @param password the new password
+     * @param datasourceName the datasource name
+     * @throws Throwable the throwable
+     */
+    public static void setUserPassword(String userId, String password, String datasourceName) throws Throwable {
+        DatabaseFacade.setUserPassword(userId, password, datasourceName);
+    }
+
+    /**
+     * Drops a database user from the default data source.
+     *
+     * @param userId the user id
+     * @throws Throwable the throwable
+     */
+    public static void dropUser(String userId) throws Throwable {
+        DatabaseFacade.dropUser(userId);
+    }
+
+    /**
+     * Drops a database user.
+     *
+     * @param userId the user id
+     * @param datasourceName the datasource name
+     * @throws Throwable the throwable
+     */
+    public static void dropUser(String userId, String datasourceName) throws Throwable {
+        DatabaseFacade.dropUser(userId, datasourceName);
+    }
+
+    /**
+     * Whether a database user exists in the default data source.
+     *
+     * @param userId the user id
+     * @return true, if the user exists
+     * @throws Throwable the throwable
+     */
+    public static boolean existsUser(String userId) throws Throwable {
+        return DatabaseFacade.existsUser(userId);
+    }
+
+    /**
+     * Whether a database user exists.
+     *
+     * @param userId the user id
+     * @param datasourceName the datasource name
+     * @return true, if the user exists
+     * @throws Throwable the throwable
+     */
+    public static boolean existsUser(String userId, String datasourceName) throws Throwable {
+        return DatabaseFacade.existsUser(userId, datasourceName);
+    }
+
+    /**
+     * Creates a schema in the default data source.
+     *
+     * @param schema the schema
+     * @param owner the user to own the schema, or null to leave ownership to the database
+     * @throws Throwable the throwable
+     */
+    public static void createSchema(String schema, String owner) throws Throwable {
+        DatabaseFacade.createSchema(schema, owner);
+    }
+
+    /**
+     * Creates a schema.
+     *
+     * @param schema the schema
+     * @param owner the user to own the schema, or null to leave ownership to the database
+     * @param datasourceName the datasource name
+     * @throws Throwable the throwable
+     */
+    public static void createSchema(String schema, String owner, String datasourceName) throws Throwable {
+        DatabaseFacade.createSchema(schema, owner, datasourceName);
+    }
+
+    /**
+     * Drops a schema from the default data source.
+     *
+     * @param schema the schema
+     * @param cascade whether to drop the objects the schema contains as well
+     * @throws Throwable the throwable
+     */
+    public static void dropSchema(String schema, boolean cascade) throws Throwable {
+        DatabaseFacade.dropSchema(schema, cascade);
+    }
+
+    /**
+     * Drops a schema.
+     *
+     * @param schema the schema
+     * @param cascade whether to drop the objects the schema contains as well
+     * @param datasourceName the datasource name
+     * @throws Throwable the throwable
+     */
+    public static void dropSchema(String schema, boolean cascade, String datasourceName) throws Throwable {
+        DatabaseFacade.dropSchema(schema, cascade, datasourceName);
+    }
+
+    /**
+     * Whether a schema exists in the default data source.
+     *
+     * @param schema the schema
+     * @return true, if the schema exists
+     * @throws Throwable the throwable
+     */
+    public static boolean existsSchema(String schema) throws Throwable {
+        return DatabaseFacade.existsSchema(schema);
+    }
+
+    /**
+     * Whether a schema exists.
+     *
+     * @param schema the schema
+     * @param datasourceName the datasource name
+     * @return true, if the schema exists
+     * @throws Throwable the throwable
+     */
+    public static boolean existsSchema(String schema, String datasourceName) throws Throwable {
+        return DatabaseFacade.existsSchema(schema, datasourceName);
     }
 
     public static SqlFactory getDefaultSqlFactory() {

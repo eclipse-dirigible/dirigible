@@ -390,6 +390,29 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
     }
 
     /**
+     * Exists user.
+     *
+     * <p>
+     * There is no portable answer: SQL standardises {@code information_schema} for schemata but not for
+     * principals, so every database keeps its users in a catalog of its own - {@code pg_roles},
+     * {@code sys.database_principals}, {@code mysql.user}. A dialect that knows where to look overrides
+     * this; the rest say so rather than guess, because a wrong "no" would have a caller create a user
+     * that already exists.
+     *
+     * @param connection the connection
+     * @param userId the user id
+     * @return true, if successful
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    public boolean existsUser(Connection connection, String userId) throws SQLException {
+        throw new SQLFeatureNotSupportedException(
+                "Checking whether a user exists is not implemented for database [" + connection.getMetaData()
+                                                                                               .getDatabaseProductName()
+                        + "]");
+    }
+
+    /**
      * Checks if is schema filter supported.
      *
      * @return true, if is schema filter supported

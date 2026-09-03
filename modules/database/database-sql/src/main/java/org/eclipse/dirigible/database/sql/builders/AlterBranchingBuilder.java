@@ -13,6 +13,7 @@ import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.SqlException;
 import org.eclipse.dirigible.database.sql.builders.sequence.AlterSequenceBuilder;
 import org.eclipse.dirigible.database.sql.builders.table.AlterTableBuilder;
+import org.eclipse.dirigible.database.sql.builders.user.AlterUserBuilder;
 
 /**
  * The Create Branching Builder.
@@ -36,6 +37,17 @@ public class AlterBranchingBuilder extends AbstractSqlBuilder {
      */
     public AlterTableBuilder table(String table) {
         return new AlterTableBuilder(getDialect(), table);
+    }
+
+    /**
+     * User.
+     *
+     * @param userId the user id
+     * @param password the new password
+     * @return the alter user builder
+     */
+    public AlterUserBuilder user(String userId, String password) {
+        return new AlterUserBuilder(this.getDialect(), userId, password);
     }
 
     /**

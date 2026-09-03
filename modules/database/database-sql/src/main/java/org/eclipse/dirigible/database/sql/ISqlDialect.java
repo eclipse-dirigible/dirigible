@@ -155,6 +155,17 @@ public interface ISqlDialect<SELECT extends SelectBuilder, INSERT extends Insert
     Map<String, List<String>> uniqueConstraints(Connection connection, String table) throws SQLException;
 
     /**
+     * Check existence of a user (or role - the two are the same object on most databases).
+     *
+     * @param connection the current connection
+     * @param userId the user id
+     * @return true if the user exists and false otherwise
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    boolean existsUser(Connection connection, String userId) throws SQLException;
+
+    /**
      * Checks if the database is capable of schema-level filtering statements (e.g. to reduce the
      * provisioned schemas down to those that the current user is entitled to see).
      *

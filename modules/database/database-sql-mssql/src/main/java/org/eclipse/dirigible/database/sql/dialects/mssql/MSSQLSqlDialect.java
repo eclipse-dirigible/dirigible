@@ -31,7 +31,7 @@ import java.util.Set;
  * The MSSQL SQL Dialect.
  */
 public class MSSQLSqlDialect extends
-        DefaultSqlDialect<MSSQLSelectBuilder, InsertBuilder, UpdateBuilder, DeleteBuilder, MSSQLCreateBranchingBuilder, AlterBranchingBuilder, DropBranchingBuilder, MSSQLNextValueSequenceBuilder, LastValueIdentityBuilder> {
+        DefaultSqlDialect<MSSQLSelectBuilder, InsertBuilder, UpdateBuilder, DeleteBuilder, MSSQLCreateBranchingBuilder, MSSQLAlterBranchingBuilder, MSSQLDropBranchingBuilder, MSSQLNextValueSequenceBuilder, LastValueIdentityBuilder> {
 
     public static final String FUNCTION_CURRENT_DATE = "CAST(GETDATE() AS DATE)"; //$NON-NLS-1$
     public static final String FUNCTION_CURRENT_TIME = "CAST(GETDATE() AS TIME)"; //$NON-NLS-1$
@@ -78,6 +78,26 @@ public class MSSQLSqlDialect extends
     @Override
     public MSSQLCreateBranchingBuilder create() {
         return new MSSQLCreateBranchingBuilder(this);
+    }
+
+    /**
+     * Alter.
+     *
+     * @return the mssql alter branching builder
+     */
+    @Override
+    public MSSQLAlterBranchingBuilder alter() {
+        return new MSSQLAlterBranchingBuilder(this);
+    }
+
+    /**
+     * Drop.
+     *
+     * @return the mssql drop branching builder
+     */
+    @Override
+    public MSSQLDropBranchingBuilder drop() {
+        return new MSSQLDropBranchingBuilder(this);
     }
 
     /**
@@ -174,6 +194,31 @@ public class MSSQLSqlDialect extends
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, schema);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
+            }
+        }
+    }
+
+    /**
+     * Exists user.
+     *
+     * <p>
+     * {@code sys.database_principals} holds the database user; the server login it maps to lives in
+     * {@code sys.server_principals}. The database user is what the schema is authorized to, so it is
+     * the one asked about here.
+     *
+     * @param connection the connection
+     * @param userId the user id
+     * @return true, if successful
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    public boolean existsUser(Connection connection, String userId) throws SQLException {
+        String sql = "SELECT * FROM sys.database_principals WHERE name = ?";
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, userId);
             try (ResultSet resultSet = statement.executeQuery()) {
                 return resultSet.next();
             }

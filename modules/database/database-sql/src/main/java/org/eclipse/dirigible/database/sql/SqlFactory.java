@@ -277,6 +277,19 @@ public class SqlFactory<SELECT extends SelectBuilder, INSERT extends InsertBuild
     }
 
     /**
+     * Exists user.
+     *
+     * @param connection the connection
+     * @param userId the user id
+     * @return true, if successful
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    public boolean existsUser(Connection connection, String userId) throws SQLException {
+        return this.dialect.existsUser(connection, userId);
+    }
+
+    /**
      * Lastval.
      *
      * @param args the args
