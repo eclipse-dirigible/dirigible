@@ -83,6 +83,46 @@ formats in the form money pattern `### ### ### ##0.00`).
   the target `CMS_SEED_PATH`, so the seeding phase does
   not re-read the repository.
 
+## Images in a template (`PrintImageResolver`)
+
+`<image src="...">` is resolved **here**, not in the parser library and not in the browser:
+`PrintImageResolver` (a `@Component`, handed to `XslFoRenderer` by `PrintRenderer`) reads the source
+and inlines the bytes as a `data:` URI, so all three render paths - the Harmonia Print button
+(`POST /services/print/{entity}`), the `attach: print` mail and the `function: Snapshot` PDF - carry
+the same image from the same template. The shape of the source says what it is:
+
+| source | resolution |
+| --- | --- |
+| `data:...` or any other `scheme:` | emitted unchanged (the data carried the image inline, or FOP addresses it itself) |
+| anything else | a path in the tenant CMS - read, size-checked, base64-inlined |
+
+Points worth keeping:
+
+- **Inlining is not an optimization.** The renderer's output is a self-contained stylesheet handed
+  to FOP with no session, no credentials and no tenant scope; a source left as a CMS reference could
+  only be fetched by opening that content to an unauthenticated read. Resolution happens while the
+  caller's own scope still applies. (FOP reads `data:` URIs natively - `InternalResourceResolver` -
+  so nothing had to be configured for this; `PDFFacadeTest.generatePdfWithInlineImageTest` pins it.)
+- **Every failure is soft.** A missing file, an oversized one, a document whose media type is not a
+  plain `image/<subtype>` (matched in full, not by prefix - an attachment's content type is whatever
+  the uploading browser claimed, and it lands inside the data URI), a path carrying a `..` segment and
+  an unreadable store all resolve to `null`, and the
+  renderer then omits the image entirely. A logo that cannot be read must not cost the invoice - and
+  a missing logo is the everyday state of a tenant that has not uploaded one yet.
+- **The ceiling is `DIRIGIBLE_PRINT_IMAGE_MAX_SIZE`** (2 MB). The bound is checked against the
+  declared length first (so an oversized document is never streamed) and again while reading, because
+  a CMS backend may report no length or a stale one.
+- The generated scaffolds (`PrintIntentGenerator`, `ReportPrintTemplate`) emit one shared logo slot,
+  `Templates/Print/logo.png` - **one path for the whole application**, since a company has a logo and
+  not an invoice-logo, so branding a deployment is a single upload (Documents perspective) or a single
+  `doc/Templates/Print/logo.png` shipped with the project. It is emitted unconditionally exactly
+  because a missing image renders nothing: a deployment that never uploads one prints as before, and
+  one that does needs no regeneration of a template it may already have customized.
+- **A file of the record** works through the same `src`: a `function: Attachment` row's
+  `StoragePath` IS a CMS path, so `<image src="{{document.<Relation>.StoragePath}}"/>` renders it
+  wherever the print feeder carries that relation (same-model to-one graph, depth 2). No modeling
+  construct was added for this - a relation to the attachment row is an ordinary to-one.
+
 ## Renderer v1 limits (documented in `XslFoRenderer`, deliberate)
 
 Header/footer render once in-flow (not repeated `fo:static-content` regions); `repeatHeader` and

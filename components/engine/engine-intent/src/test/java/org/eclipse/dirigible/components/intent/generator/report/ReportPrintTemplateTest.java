@@ -121,6 +121,19 @@ class ReportPrintTemplateTest {
         assertTrue(template.contains("{{document.toDate}}"), template);
     }
 
+    /** A statement mailed to a customer is as much the issuer's paper as an invoice is. */
+    @Test
+    void aMailedReportCarriesTheSameLogoSlotAsADocument() {
+        IntentModel model = IntentParser.parse(INTENT);
+        Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                            .get(0));
+        String template = ReportPrintTemplate.build(model.getReports()
+                                                         .get(0),
+                columns(document));
+
+        assertTrue(template.contains("<image src=\"Templates/Print/logo.png\" width=\"120\"/>"), template);
+    }
+
     @Test
     void theTemplatePathIsTheOneThePrintRenderResolvesByName() {
         // sdk.print.Print.render("<report>", ...) looks the template up by that name, which is why the

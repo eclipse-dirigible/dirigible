@@ -60,9 +60,11 @@ class PrintEndpoint extends BaseEndpoint {
                                                       .create();
 
     private final CmsStore cmsStore;
+    private final PrintImageResolver imageResolver;
 
-    PrintEndpoint(CmsStore cmsStore) {
+    PrintEndpoint(CmsStore cmsStore, PrintImageResolver imageResolver) {
         this.cmsStore = cmsStore;
+        this.imageResolver = imageResolver;
     }
 
     /**
@@ -101,7 +103,7 @@ class PrintEndpoint extends BaseEndpoint {
         String templateSource = findTemplate(entity, language);
         Map<String, Object> data = GSON.fromJson(body, new TypeToken<Map<String, Object>>() {}.getType());
 
-        byte[] pdf = PrintRenderer.renderPdf(templateSource, data);
+        byte[] pdf = PrintRenderer.renderPdf(templateSource, data, imageResolver);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_PDF);

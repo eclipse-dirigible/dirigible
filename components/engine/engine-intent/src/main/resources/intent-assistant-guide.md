@@ -140,7 +140,11 @@ The three categories, and the extension point that carries each:
    one. The modeled hooks are **`calculatedActionOnCreate` / `calculatedActionOnUpdate`** on a field
    or a to-one relation, and a serviceTask **`delegate:`** - both implemented under `custom/`.
 3. **Statutory or designed form** - the exact legally mandated print layout. The `.print` template is
-   generated create-if-absent **by design**: it is adapted by hand and never regenerated over.
+   generated create-if-absent **by design**: it is adapted by hand and never regenerated over. The
+   ISSUER'S LOGO is not a DSL key either and never will be: it is per-tenant branding, so the
+   generated scaffold already carries an `<image src="Templates/Print/logo.png"/>` slot and the answer
+   is to upload the file there (Documents perspective), or ship a default as
+   `doc/Templates/Print/logo.png`. A missing file prints nothing.
 
 Also outside: a bespoke screen (an `actions:` custom page), a bespoke dashboard number (a `widgets:`
 tile backed by a developer endpoint).

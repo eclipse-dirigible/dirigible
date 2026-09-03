@@ -13,6 +13,7 @@ import org.eclipse.dirigible.components.api.pdf.PDFFacade;
 import org.eclipse.dirigible.parsers.document.Node;
 import org.eclipse.dirigible.parsers.document.binding.DataBinder;
 import org.eclipse.dirigible.parsers.document.parser.DocumentParser;
+import org.eclipse.dirigible.parsers.document.renderer.ImageResolver;
 import org.eclipse.dirigible.parsers.document.renderer.XslFoRenderer;
 
 import java.util.Map;
@@ -36,11 +37,12 @@ final class PrintRenderer {
      *
      * @param templateSource the {@code .print} template source
      * @param data the document data context
+     * @param imageResolver resolves each {@code <image>} source into embeddable content
      * @return the XSL-FO stylesheet with the data merged in
      */
-    static String renderFo(String templateSource, Map<String, Object> data) {
+    static String renderFo(String templateSource, Map<String, Object> data, ImageResolver imageResolver) {
         Node bound = new DataBinder().bind(new DocumentParser().parse(templateSource), data);
-        return new XslFoRenderer().renderBound(bound);
+        return new XslFoRenderer(imageResolver).renderBound(bound);
     }
 
     /**
@@ -48,9 +50,10 @@ final class PrintRenderer {
      *
      * @param templateSource the {@code .print} template source
      * @param data the document data context
+     * @param imageResolver resolves each {@code <image>} source into embeddable content
      * @return the PDF bytes
      */
-    static byte[] renderPdf(String templateSource, Map<String, Object> data) {
-        return PDFFacade.generate(renderFo(templateSource, data), EMPTY_DATA_SOURCE);
+    static byte[] renderPdf(String templateSource, Map<String, Object> data, ImageResolver imageResolver) {
+        return PDFFacade.generate(renderFo(templateSource, data, imageResolver), EMPTY_DATA_SOURCE);
     }
 }
