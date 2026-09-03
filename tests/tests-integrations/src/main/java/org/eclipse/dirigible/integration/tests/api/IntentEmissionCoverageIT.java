@@ -2774,6 +2774,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(reportTemplate.contains("{{Count}}"), "the template must bind the report's own column alias, got: " + reportTemplate);
         assertTrue(reportTemplate.contains("{{document.minTotal}}") && reportTemplate.contains("{{document.note}}"),
                 "the bound parameters must be the template's header, got: " + reportTemplate);
+        // The issuer's logo slot (#7024): one shared content-store path, resolved and inlined at render
+        // time, printing nothing until a tenant uploads a file there.
+        assertTrue(reportTemplate.contains("<image src=\"Templates/Print/logo.png\" width=\"120\"/>"),
+                "a mailed report carries the issuer's logo slot, got: " + reportTemplate);
         String billBpmn = contentOf("BillFlow.bpmn");
         assertTrue(billBpmn.contains("gen.events.emission.BillFlowMailBillSend"),
                 "the BPMN service task must bind the generated sender delegate");

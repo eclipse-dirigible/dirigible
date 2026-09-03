@@ -13,6 +13,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
@@ -44,13 +45,18 @@ class PrintRenderIT extends IntegrationTest {
     /** Registry-relative locations: the seeded template and the client-Java controller source. */
     private static final String TEMPLATE_LOCATION = "/" + PROJECT + "/doc/Templates/TestDoc/Print/en/standard.print";
     private static final String BG_TEMPLATE_LOCATION = "/" + PROJECT + "/doc/Templates/LangDoc/Print/bg/standard.print";
+    private static final String IMAGE_TEMPLATE_LOCATION = "/" + PROJECT + "/doc/Templates/ImageDoc/Print/en/standard.print";
+    private static final String LOGO_LOCATION = "/" + PROJECT + "/doc/Templates/Print/logo.png";
     private static final String CONTROLLER_LOCATION = "/" + PROJECT + "/api/PrintTestController.java";
     private static final String TEMPLATE_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + TEMPLATE_LOCATION;
     private static final String BG_TEMPLATE_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + BG_TEMPLATE_LOCATION;
+    private static final String IMAGE_TEMPLATE_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + IMAGE_TEMPLATE_LOCATION;
+    private static final String LOGO_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + LOGO_LOCATION;
     private static final String CONTROLLER_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + CONTROLLER_LOCATION;
 
     private static final String ENDPOINT = "/services/java/" + PROJECT + "/api/PrintTestController/render";
     private static final String LANGUAGE_ENDPOINT = "/services/java/" + PROJECT + "/api/PrintTestController/renderDefaultLanguage";
+    private static final String IMAGE_ENDPOINT = "/services/java/" + PROJECT + "/api/PrintTestController/renderWithImage";
 
     private static final long ASSERTION_TIMEOUT_SECONDS = 30;
 
@@ -106,10 +112,35 @@ class PrintRenderIT extends IntegrationTest {
         }
     }
 
+    /**
+     * The logo on a printed document, end to end: a PNG shipped under the project's {@code doc/} folder
+     * is seeded into the tenant CMS as any other file, the template names it by its CMS path, and the
+     * render inlines the bytes so the PDF really carries an image object. The same template also names
+     * a logo that does NOT exist - the render must still succeed and simply carry one image, because a
+     * tenant that has not uploaded its logo yet is the everyday state and must not lose its invoice.
+     */
+    @Test
+    void embedsAContentStoreImageAndSkipsAMissingOne() {
+        repository.createResource(LOGO_PATH, Base64.getDecoder()
+                                                   .decode(ONE_PIXEL_PNG_BASE64),
+                false, "image/png", true);
+        repository.createResource(IMAGE_TEMPLATE_PATH, IMAGE_TEMPLATE.getBytes(StandardCharsets.UTF_8), false, "text/plain", true);
+        repository.createResource(CONTROLLER_PATH, controllerSource().getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(IMAGE_ENDPOINT)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(containsString("\"head\": \"%PDF"))
+                                                 .body(containsString("\"images\": 1")),
+                ASSERTION_TIMEOUT_SECONDS);
+    }
+
     @AfterEach
     void cleanup() {
         boolean any = false;
-        for (String path : new String[] {TEMPLATE_PATH, BG_TEMPLATE_PATH, CONTROLLER_PATH}) {
+        for (String path : new String[] {TEMPLATE_PATH, BG_TEMPLATE_PATH, IMAGE_TEMPLATE_PATH, LOGO_PATH, CONTROLLER_PATH}) {
             if (repository.hasResource(path)) {
                 repository.removeResource(path);
                 any = true;
@@ -138,6 +169,24 @@ class PrintRenderIT extends IntegrationTest {
             </document>
             """;
 
+    /**
+     * A 1x1 red PNG - the smallest valid image, so the assertion is about the pipeline, not the file.
+     */
+    private static final String ONE_PIXEL_PNG_BASE64 =
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
+
+    private static final String IMAGE_TEMPLATE = """
+            <document id="image-doc">
+                <page>
+                    <image src="Templates/Print/logo.png" width="120"/>
+                    <image src="Templates/Print/missing.png" width="120"/>
+                    <section>
+                        <field label="Number">{{document.number}}</field>
+                    </section>
+                </page>
+            </document>
+            """;
+
     private static String controllerSource() {
         return """
                 package api;
@@ -158,6 +207,22 @@ class PrintRenderIT extends IntegrationTest {
                         int n = Math.min(5, pdf.length);
                         String head = new String(pdf, 0, n, StandardCharsets.ISO_8859_1);
                         return "{\\"size\\": " + pdf.length + ", \\"head\\": \\"" + head + "\\"}";
+                    }
+
+                    @Get("/renderWithImage")
+                    public String renderWithImage() {
+                        String data = "{\\"document\\":{\\"number\\":\\"INV-003\\"},\\"items\\":[]}";
+                        byte[] pdf = Print.render("ImageDoc", "en", data);
+                        String content = new String(pdf, StandardCharsets.ISO_8859_1);
+                        int images = 0;
+                        int at = content.indexOf("/Subtype /Image");
+                        while (at >= 0) {
+                            images++;
+                            at = content.indexOf("/Subtype /Image", at + 1);
+                        }
+                        int n = Math.min(5, pdf.length);
+                        String head = new String(pdf, 0, n, StandardCharsets.ISO_8859_1);
+                        return "{\\"images\\": " + images + ", \\"head\\": \\"" + head + "\\"}";
                     }
 
                     @Get("/renderDefaultLanguage")

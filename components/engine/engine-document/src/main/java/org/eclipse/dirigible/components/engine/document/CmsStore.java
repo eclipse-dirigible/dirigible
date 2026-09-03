@@ -39,6 +39,8 @@ import java.util.Optional;
  * <li><b>Print reads</b> — {@link #listLanguages(String)} / {@link #findTemplate(String, String)}
  * resolve print templates under {@code Templates/<EntityName>/Print/<language>/} for the print
  * endpoint.</li>
+ * <li><b>Binary reads</b> — {@link #readDocument(String, long)} reads any document's raw bytes and
+ * media type, bounded, for an image a print template embeds.</li>
  * </ul>
  */
 @Component
@@ -143,6 +145,60 @@ class CmsStore {
             return Optional.empty();
         }
         return Optional.of(readContent(template));
+    }
+
+    /**
+     * Reads a document's raw bytes and media type, refusing anything larger than {@code maxBytes}.
+     *
+     * <p>
+     * The bound is checked twice on purpose: against the declared length first (so an oversized
+     * document is never streamed at all), and again while reading, because a CMS backend may report no
+     * length or a stale one and the caller's ceiling exists to protect the heap.
+     *
+     * @param cmsPath the absolute CMS path
+     * @param maxBytes the largest content that may be read, in bytes
+     * @return the content, empty when the path names no document or the content exceeds the bound
+     * @throws IOException on CMS access failure other than absence
+     */
+    Optional<Content> readDocument(String cmsPath, long maxBytes) throws IOException {
+        String normalized = cmsPath.startsWith(PATH_SEPARATOR) ? cmsPath : PATH_SEPARATOR + cmsPath;
+        CmisSession session = CmisSessionFactory.getSession();
+        CmisObject object;
+        try {
+            object = session.getObjectByPath(normalized);
+        } catch (IOException ex) {
+            logger.debug("CMS document [{}] does not exist", LoggedPath.of(normalized), ex);
+            return Optional.empty();
+        }
+        if (!(object instanceof CmisDocument document)) {
+            logger.debug("CMS object [{}] is not a document", LoggedPath.of(normalized));
+            return Optional.empty();
+        }
+        CmisContentStream stream = document.getContentStream();
+        if (stream.getLength() > maxBytes) {
+            logger.warn("CMS document [{}] is {} bytes, above the {} byte limit - it is skipped", LoggedPath.of(normalized),
+                    stream.getLength(), maxBytes);
+            return Optional.empty();
+        }
+        byte[] content;
+        try (InputStream inputStream = stream.getStream()) {
+            content = inputStream.readNBytes((int) Math.min(maxBytes + 1, Integer.MAX_VALUE));
+        }
+        if (content.length > maxBytes) {
+            logger.warn("CMS document [{}] is above the {} byte limit - it is skipped", LoggedPath.of(normalized), maxBytes);
+            return Optional.empty();
+        }
+        String mediaType = stream.getMimeType();
+        return Optional.of(new Content(content, mediaType == null || mediaType.isBlank() ? mediaType(normalized) : mediaType));
+    }
+
+    /**
+     * A document's content as read from the CMS.
+     *
+     * @param content the raw bytes
+     * @param mediaType the media type the CMS reports, falling back to the one implied by the extension
+     */
+    record Content(byte[] content, String mediaType) {
     }
 
     private String printFolderPath(String entityName) {

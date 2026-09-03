@@ -291,7 +291,15 @@ public enum DirigibleConfig {
      * is absolute - it starts at arming and is never renewed by activity - so a state left armed and
      * forgotten stops hiding the real identity's world on its own.
      */
-    ACT_AS_TTL_SECONDS("DIRIGIBLE_ACT_AS_TTL_SECONDS", "1800");
+    ACT_AS_TTL_SECONDS("DIRIGIBLE_ACT_AS_TTL_SECONDS", "1800"),
+
+    /**
+     * Largest image, in bytes, a {@code .print} template may embed. An image is inlined into the
+     * stylesheet as base64 (which is a third larger again) and the whole document is rendered in
+     * memory, so a print that reaches for a 20 MB photograph must fail soft - print without it - rather
+     * than take the render down. 2 MB is far above any logo or stamp.
+     */
+    PRINT_IMAGE_MAX_SIZE("DIRIGIBLE_PRINT_IMAGE_MAX_SIZE", "2097152");
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleConfig.class);

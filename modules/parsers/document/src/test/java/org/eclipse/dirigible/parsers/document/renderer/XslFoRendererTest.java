@@ -32,6 +32,11 @@ public class XslFoRendererTest {
         return renderer.renderBound(bound);
     }
 
+    private String renderTemplate(String template, Map<String, Object> data, ImageResolver imageResolver) {
+        Node bound = binder.bind(parser.parse(template), data);
+        return new XslFoRenderer(imageResolver).renderBound(bound);
+    }
+
     @Test
     public void emitsASelfContainedStylesheetWithPageGeometry() {
         String fo =
@@ -207,5 +212,41 @@ public class XslFoRendererTest {
         assertTrue(fo.contains("302.00"));
         assertFalse("discount line must be dropped", fo.contains("Discount"));
         assertFalse("no unresolved placeholders may leak", fo.contains("{{"));
+    }
+
+    /**
+     * Without a host resolver every source is emitted as authored - the library reads no storage of its
+     * own.
+     */
+    @Test
+    public void resolvesAnImageSourceThroughTheHostResolver() {
+        String fo = renderTemplate("<document><image src=\"{{logo}}\" width=\"120\"/></document>", Map.of("logo", "Templates/logo.png"),
+                source -> "data:image/png;base64,QUJD");
+        assertTrue(fo.contains("<fo:external-graphic src=\"data:image/png;base64,QUJD\" content-width=\"120pt\"/>"));
+    }
+
+    /**
+     * A source the host declines renders NOTHING - not an empty block, not a placeholder. A printed
+     * business document whose logo is missing is correct output; a broken-image box is not.
+     */
+    @Test
+    public void anImageTheResolverDeclinesRendersNothing() {
+        String fo = renderTemplate("<document><text>Kept</text><image src=\"{{logo}}\"/></document>", Map.of("logo", "Templates/logo.png"),
+                source -> null);
+        assertFalse("no graphic may be emitted", fo.contains("external-graphic"));
+        assertTrue("the rest of the document still renders", fo.contains(">Kept</fo:block>"));
+    }
+
+    @Test
+    public void sizesAnImageByBothHints() {
+        String fo = renderTemplate("<document><image src=\"/logo.png\" width=\"120\" height=\"60\"/></document>", Map.of());
+        assertTrue(fo.contains("content-width=\"120pt\""));
+        assertTrue(fo.contains("content-height=\"60pt\""));
+    }
+
+    @Test
+    public void anImageWithNoSizeHintKeepsItsIntrinsicSize() {
+        String fo = renderTemplate("<document><image src=\"/logo.png\"/></document>", Map.of());
+        assertTrue(fo.contains("<fo:external-graphic src=\"/logo.png\"/>"));
     }
 }

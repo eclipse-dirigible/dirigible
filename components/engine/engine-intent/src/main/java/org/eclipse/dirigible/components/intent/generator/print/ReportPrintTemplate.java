@@ -71,7 +71,9 @@ public final class ReportPrintTemplate {
                 .append("     Templates/")
                 .append(report.getName())
                 .append("/Print/<lang>/ where it can be customized (download/upload) through the\n")
-                .append("     Documents perspective. Written once - a later Generate will not overwrite it. -->\n");
+                .append("     Documents perspective. Written once - a later Generate will not overwrite it.\n")
+                .append(PrintLogo.comment())
+                .append("     -->\n");
         template.append("<document id=\"")
                 .append(IntentNaming.upperSnake(report.getName())
                                     .toLowerCase(Locale.ROOT)
@@ -82,6 +84,7 @@ public final class ReportPrintTemplate {
         template.append("    <page width=\"842\" height=\"595\" padding=\"40\">\n\n");
 
         template.append("        <header>\n");
+        PrintLogo.append(template, "            ");
         template.append("            <text style=\"title\">")
                 .append(escape(label))
                 .append("</text>\n");
