@@ -363,7 +363,11 @@ final class StatusSymbolResolver {
         if (trigger == null) {
             return null;
         }
-        for (String event : List.of("onCreate", "onUpdate", "onDelete", "onTransition")) {
+        // Every kind EventBinding knows, because this runs on the RAW tree before the typed mapping and
+        // therefore cannot read EventBinding itself: a kind missing here stops the trigger entity from
+        // resolving, so a status NAME anywhere in that process is refused with a message about the
+        // nomenclature rather than about the trigger.
+        for (String event : List.of("onCreate", "onUpdate", "onDelete", "onTransition", "onNotifyFailed")) {
             String entity = text(trigger, event);
             if (entity != null) {
                 return entity;

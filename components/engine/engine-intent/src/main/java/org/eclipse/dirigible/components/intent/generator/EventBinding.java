@@ -33,6 +33,14 @@ import java.util.Map;
  * reads the un-enriched row - with every step green. Reading the suffix therefore needs the whole
  * binding map, which is what {@link #topicSuffix(Map)} is for; {@link #topicSuffix(String)} answers
  * for the kind-only channels and cannot resolve a phase.
+ *
+ * <p>
+ * {@code onNotifyFailed} is the DELIVERY axis (dirigible #7023): a notify block is fail-soft, so a
+ * mail that never leaves used to be a server log line and nothing else - the document sat in SENT
+ * and no construct in the DSL could observe it. A notify block declaring {@code outcome:} stamps
+ * the failure on the record and rides {@code -notifyFailed} into the outbox with that write, so the
+ * flip of the trace and its announcement commit together. Only the FAILURE is announced: a delivery
+ * that worked is the normal path and needs no channel of its own.
  */
 public final class EventBinding {
 
@@ -44,7 +52,15 @@ public final class EventBinding {
     /** The key naming which declared phase an {@link #ON_PHASE} binding observes. */
     public static final String PHASE_KEY = "phase";
 
-    private static final String[] KINDS = {"onCreate", "onUpdate", "onDelete", "onTransition", ON_PHASE};
+    /** The delivery axis: a notify block about the bound entity could not send its message. */
+    public static final String ON_NOTIFY_FAILED = "onNotifyFailed";
+
+    /**
+     * The topic suffix {@link #ON_NOTIFY_FAILED} binds - published so the senders cannot mistype it.
+     */
+    public static final String NOTIFY_FAILED_SUFFIX = "-notifyFailed";
+
+    private static final String[] KINDS = {"onCreate", "onUpdate", "onDelete", "onTransition", ON_NOTIFY_FAILED, ON_PHASE};
 
     private EventBinding() {}
 
@@ -103,7 +119,7 @@ public final class EventBinding {
     /**
      * @param kind the event kind
      * @return the topic suffix ({@code ""} for create, else
-     *         {@code -updated}/{@code -deleted}/{@code -transitioned})
+     *         {@code -updated}/{@code -deleted}/{@code -transitioned}/{@code -notifyFailed})
      * @throws IllegalArgumentException for {@code onPhase}, whose suffix is the phase name and lives in
      *         the binding - a consumer that can bind a phase must read {@link #topicSuffix(Map)}, and
      *         answering the create topic here would silently bind the un-enriched moment, which is the
@@ -121,6 +137,9 @@ public final class EventBinding {
         }
         if ("onTransition".equals(kind)) {
             return "-transitioned";
+        }
+        if (ON_NOTIFY_FAILED.equals(kind)) {
+            return NOTIFY_FAILED_SUFFIX;
         }
         return "";
     }

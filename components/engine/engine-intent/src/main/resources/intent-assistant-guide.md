@@ -217,6 +217,11 @@ not as an apology.
 - **A recipient that cannot be resolved is surfaced, not silent.** If `to` names a field/relation that
   does not exist, that notification or schedule is dropped and reported in the generate response's
   `warnings` (as well as the server log) - fix the reference so the glue is emitted.
+- **A DELIVERY that fails is surfaced too, if you declare where.** Add `outcome: <string field>` to any
+  notify block and the send stamps `sent` / `failed: <reason>` on the record the message was about, a
+  failure additionally publishing `<Entity>-notifyFailed` for glue to bind. Without it a notify block is
+  fail-soft AND silent: the flip commits, the mail never leaves, and the only trace is a server log
+  line. See *record what a delivery did*.
 - **Names are identifiers** within their block and must be unique.
 - **Only the keys documented here exist, and they are case-sensitive.** A key the schema does not
   declare - an invented one, or a case slip (`Required:` for `required:`, `contributionScheme:` for
@@ -2497,8 +2502,100 @@ absent both, the first entry of the tenant's application language set is used at
 - **A missing recipient is a no-op**, logged and skipped - a record with nobody to mail must not stall
   a flow (the same rule a schedule's notify has always had).
 - **A transition's mail is fail-soft**: the status flip is the endpoint's contract and has already
-  committed, so an SMTP problem is logged and the transition still returns success. A `serviceTask`
-  send, whose whole purpose IS the message, fails the task instead so the engine retries.
+  committed, so an SMTP problem cannot turn a successful transition into an error. It is no longer
+  *silent*, though - the transition's response carries the delivery outcome and the button reports a
+  failed send as a warning, and with `outcome:` declared the record carries it too (see *record what a
+  delivery did*). A `serviceTask` send, whose whole purpose IS the message, fails the task instead so
+  the engine retries.
+- **A schedule's notify is fail-soft PER ROW.** A tick is a batch - a dunning run mails every overdue
+  invoice - so one unreachable mailbox is logged with its row's key and the run carries on; the tick
+  logs `mailed [m] of [n] matching row(s), no recipient [k], failed [f]`.
+
+### record what a delivery did - `outcome:` on a notify block
+
+**Use when:** the message matters to the business - the invoice a customer must receive, the payslip an
+employee must get, the dunning reminder that is the legal step before collection. A notify block is
+**fail-soft** everywhere, and until you name an outcome field it is also **silent**: the transition
+commits, the mail never leaves the server, and the only trace is a log line nobody reads. The user
+finds out weeks later, from the customer.
+
+```yaml
+transitions:
+  - name: SendInvoice
+    forEntity: SalesInvoice
+    from: [1]
+    setStatus: 2
+    notify:
+      to: Customer.email
+      subject: "Invoice {Number}"
+      body: "Please find your invoice attached."
+      attach: print
+      outcome: SendOutcome        # a string field, length >= 64
+```
+
+`outcome:` names a **string field of the record the message is about** - the ROW inside a `forEach`
+fan-out, since that is the record carrying the recipient. Each attempt stamps it:
+
+| stamp | means |
+|---|---|
+| `sent` | the mail was handed to the mail server |
+| `failed: <reason>` | it was not - the reason is the mail server's own message, truncated to 64 chars |
+
+The stamp is a **targeted** write, so it re-fires no `onUpdate` reaction and cannot revert a concurrent
+edit; and it never throws, because a record OF an outcome must not become a second failure.
+
+**Three surfaces light up from that one key:**
+
+1. **The record.** A list column or a report can show "sent / failed (reason)" per document, so
+   "which of last night's 400 reminders did not go out" is a filter rather than a log search.
+2. **The person who pressed the button.** A `transitions[]` endpoint that mails answers
+   `{ record, notify: { status, message } }`, and the generated button reports `failed` as a **warning**
+   toast naming the reason - never a green "done" on a mail that did not leave. (`skipped` is its own
+   status: a record with nobody to mail is not a failure.)
+3. **Glue.** A `failed` stamp publishes **`<Entity>-notifyFailed`**, so anything on the glue event axis
+   can react without a line of Java:
+
+```yaml
+processes:
+  - name: ChaseDelivery                            # open a task for whoever must chase it
+    trigger: { onNotifyFailed: SalesInvoice }
+    steps:
+      - { name: chase, kind: userTask, args: { assignee: billing, setRelationField: Status, value: SEND_FAILED, next: done } }
+      - { name: done, kind: end }
+
+notifications:
+  - name: tellOpsAboutABounce                      # or just tell operations
+    event: { onNotifyFailed: SalesInvoice }
+    to: "ops@example.com"
+    subject: "Invoice {Number} could not be mailed"
+    body: "The mail server said: {SendOutcome}"
+```
+
+`onNotifyFailed` is available wherever the glue event axis is - `notifications[]`, `integrations[]`,
+`outbound[]` and a process `trigger:` - and, like every other kind, a trigger still binds exactly one
+moment. Only the FAILURE has a channel: a delivery that worked is the normal path, and announcing it
+would give every reaction a second copy of an event it already has.
+
+**Resend is a `transitions[]` button, not a new key.** Route the failure to a status of its own and
+declare the way back with the same notify block - the retry is then the ordinary guarded flip, with the
+same guards, the same audit trail and the same outcome stamp:
+
+```yaml
+transitions:
+  - name: ResendInvoice
+    forEntity: SalesInvoice
+    from: [9]                    # SEND_FAILED
+    setStatus: 2                 # SENT
+    label: Resend
+    icon: send
+    notify: { to: Customer.email, subject: "Invoice {Number}", body: "Please find your invoice attached.", attach: print, outcome: SendOutcome }
+```
+
+**Rules:** `outcome` is a plain `string` field of the record the message is about (a fan-out's row), not
+its primary key and not a relation - a status the failure should route to is what
+`event: { onNotifyFailed: ... }` is for, and two writers of one status column is the collision the layer
+prevents. It must be at least **64** characters long: the trace exists to be read afterwards, and a
+shorter column truncates the reason in the database, where nothing reports what was cut.
 
 ### mail a REPORT - `attach: { report, bind }`
 
@@ -3296,6 +3393,7 @@ or a seeded name.
 | notify `attach` | `print` (the record the block is about - inside a fan-out, the ROW), `recordPrint` (a fan-out's anchor record, rendered once); whichever is rendered must be a document. Or the map form `{ report: <name>, bind: { <parameter>: <field> } }` - a rendered REPORT, scoped to the recipient by its own parameters |
 | notify `forEach` | a declared entity with exactly ONE to-one relation back to the record (one message per row; every bare path resolves against the row, `{record.<field>}` against the anchor record) - on `transitions[].notify` and `serviceTask` `args.notify` only |
 | notify block sites | `notifications[]`, `schedules[].notify`, `transitions[].notify`, `serviceTask` `args.notify` |
+| notify `outcome` | a `string` field (length >= 64) of the record the message is about - a fan-out's ROW - stamped `sent` / `failed: <reason>`; a failure publishes `<Entity>-notifyFailed` |
 | schedule `where` `op` | `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `like` |
 | integration `method` | `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
 | entity `function` | `Document`, `DocumentItem`, `Master`, `Detail`, `List`, `Setting`, `Calendar` (reserved-and-rejected: `Board`, `Gantt`, `Timeline`) |
@@ -3336,6 +3434,7 @@ or a seeded name.
 - "send the invoice / payslip / document itself to its customer or employee by e-mail" -> a **notify block with `attach: print`** (on a `serviceTask` step, a `transitions[]`, or a `schedules[]`)
 - "mail each customer their statement / activity list for the period" -> a **notify block with `attach: { report, bind }`** over a report whose `parameters:` scope it to the recipient (a `schedules[]` for the periodic run, a `transitions[]` for on demand)
 - "every day/hour, check X and notify" -> **schedules** (`notify`)
+- "show whether the invoice / payslip / reminder actually went out, and react when it did not" -> **`outcome:` on the notify block** plus, for the reaction, `event: { onNotifyFailed: <Entity> }` on a `notifications:` / `integrations:` / `outbound:` entry or a process `trigger:`; the retry is an ordinary `transitions[]` button from the failure status carrying the same notify block
 - "on a schedule / every month, create a Y for each X / recurring invoices / auto-generate timesheets" -> **schedules** (`generate`)
 - "post / notify / create from a value a listener computes AFTER the record is inserted (a moving-average cost, a snapshot column, an external lookup)" -> declare a **`phases:`** entry on the entity and bind **`event: { onPhase: <Entity>, phase: <name> }`** - never `onCreate`, which races the listener
 - "call an external API when X changes" -> **integrations**

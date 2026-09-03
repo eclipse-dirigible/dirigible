@@ -189,6 +189,45 @@ public final class NotifySupport {
     }
 
     /**
+     * The longest delivery trace the generated sender writes - the parser holds an {@code outcome:}
+     * field to at least this length, and the sender truncates to it, so the value the column stores is
+     * the value the code decided rather than whatever the database happened to keep.
+     */
+    public static final int OUTCOME_LENGTH = 64;
+
+    /**
+     * The glue keys the optional {@code outcome:} field contributes, always present so the templates
+     * can compare them ({@code notifyOutcomeProperty} empty = the block records nothing, which is what
+     * every notify block did before dirigible #7023).
+     *
+     * <p>
+     * The stamp lands on the record the message is ABOUT - the ROW inside a fan-out, since that is the
+     * record carrying the recipient whose delivery succeeded or failed - so the entity, its perspective
+     * and its key all come from {@code about} rather than from the call site's own record.
+     *
+     * @param notify the notify block, may be {@code null}
+     * @param about the entity the message is about (a fan-out's row), may be {@code null}
+     * @param compositionParents composition-parent map (to resolve that entity's perspective)
+     * @param settingEntities the setting entities (same)
+     * @return the {@code notifyOutcome*} keys
+     */
+    public static Map<String, Object> outcomeFields(NotificationIntent notify, EntityIntent about, Map<String, String> compositionParents,
+            java.util.Set<String> settingEntities) {
+        String authored = notify == null ? null : notify.getOutcome();
+        boolean stamps = about != null && authored != null && !authored.isBlank();
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("notifyOutcomeProperty", stamps ? IntentNaming.pascalCase(authored.trim()) : "");
+        fields.put("notifyOutcomeEntity", stamps ? about.getName() : "");
+        // The RAW perspective, because the failure topic is built from it - the sanitized form is only
+        // the Java package (the numbering descriptor draws the same distinction).
+        fields.put("notifyOutcomePerspective",
+                stamps ? IntentEntities.resolvePerspective(about.getName(), compositionParents, settingEntities) : "");
+        fields.put("notifyOutcomeKeyProperty", stamps ? IntentEntities.keyFieldName(about) : "");
+        fields.put("notifyOutcomeLength", String.valueOf(OUTCOME_LENGTH));
+        return fields;
+    }
+
+    /**
      * The glue keys the reserved deep-link tokens contribute, always present so the templates can
      * compare them. The two {@code uses*} flags say which link locals the events template must declare;
      * the other two are the only facts the intent layer supplies towards the record link - the entity

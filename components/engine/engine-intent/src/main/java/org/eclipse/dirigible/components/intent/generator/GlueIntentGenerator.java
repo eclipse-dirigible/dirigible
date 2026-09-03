@@ -482,6 +482,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("bodyExpression", plan.bodyExpression());
             entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment));
             entry.putAll(NotifySupport.deepLinkFields(plan, byName.get(entity)));
+            entry.putAll(NotifySupport.outcomeFields(notification, byName.get(entity), compositionParents,
+                    IntentEntities.settingEntities(byName.values())));
             notifications.add(entry);
         }
         return notifications;
@@ -1519,6 +1521,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         // shapes), the ANCHOR record's for `attach: recordPrint`.
         fields.put("attachKeyProperty", send && attachment != null ? IntentEntities.keyFieldName(document) : "");
         fields.putAll(NotifySupport.deepLinkFields(send ? plan : null, about));
+        // Where this delivery attempt is recorded - on the record the message is about, so a fan-out
+        // stamps each ROW rather than the record they hang off.
+        fields.putAll(NotifySupport.outcomeFields(send ? notify : null, about, compositionParents,
+                IntentEntities.settingEntities(byName.values())));
         return fields;
     }
 
@@ -3603,6 +3609,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // absence.
             entry.putAll(NotifySupport.attachmentFields(null));
             entry.putAll(NotifySupport.deepLinkFields(null, null));
+            entry.putAll(NotifySupport.outcomeFields(null, null, compositionParents, IntentEntities.settingEntities(byName.values())));
 
             if (generates) {
                 // Scheduled record generation: the queried row is the source, so its create-from maps the
@@ -3689,6 +3696,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.put("bodyExpression", plan.bodyExpression());
                 entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment));
                 entry.putAll(NotifySupport.deepLinkFields(plan, byName.get(entity)));
+                // A schedule already runs once per matched row, so the row IS the record the message is
+                // about and the stamp lands on it - which is what makes a dunning run auditable per
+                // invoice instead of one aggregate line per tick.
+                entry.putAll(NotifySupport.outcomeFields(schedule.getNotify(), byName.get(entity), compositionParents,
+                        IntentEntities.settingEntities(byName.values())));
             }
             schedules.add(entry);
         }

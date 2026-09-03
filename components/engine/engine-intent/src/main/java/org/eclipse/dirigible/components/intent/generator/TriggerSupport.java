@@ -34,7 +34,8 @@ public final class TriggerSupport {
 
     /**
      * The lifecycle event kind the process triggers on
-     * ({@code onCreate}/{@code onUpdate}/{@code onDelete}), or null.
+     * ({@code onCreate}/{@code onUpdate}/{@code onDelete}/{@code onTransition}/{@code onNotifyFailed}),
+     * or null.
      */
     public static String triggerKind(ProcessIntent process) {
         return EventBinding.kind(process.getTrigger());

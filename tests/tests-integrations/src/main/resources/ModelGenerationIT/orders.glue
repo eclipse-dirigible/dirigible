@@ -503,7 +503,63 @@
             "usesRecordUrl": false,
             "usesInboxUrl": false,
             "recordUrlEntity": "",
-            "recordUrlKeyProperty": ""
+            "recordUrlKeyProperty": "",
+            "notifyOutcomeProperty": "StatementDelivery",
+            "notifyOutcomeEntity": "Customer",
+            "notifyOutcomePerspective": "Partners",
+            "notifyOutcomeKeyProperty": "Id",
+            "notifyOutcomeLength": "64"
+        }
+    ],
+    "transitions": [
+        {
+            "name": "void-order",
+            "className": "VoidOrder",
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "statusProperty": "Status",
+            "setStatus": "8",
+            "allowedExpr": "currentStatus == 3 || currentStatus == 4",
+            "fromStatuses": "3, 4",
+            "guardExpr": "",
+            "guardText": "",
+            "notify": "true",
+            "notifyRelationLoads": [
+                {
+                    "local": "Customer",
+                    "targetEntity": "Customer",
+                    "targetPerspective": "Partners",
+                    "fkProperty": "Customer",
+                    "crossModel": false,
+                    "targetModel": "",
+                    "targetProject": ""
+                }
+            ],
+            "notifyToExpression": "(Customer == null ? null : Customer.Email)",
+            "notifySubjectExpression": "\"Order \" + entity.Number + \" was voided\"",
+            "notifyBodyExpression": "\"The order has been cancelled.\"",
+            "notifyRecordScoped": "false",
+            "forEach": "",
+            "forEachPerspective": "",
+            "forEachFkProperty": "",
+            "forEachKeyProperty": "",
+            "attach": "",
+            "attachEntity": "",
+            "attachKeyProperty": "",
+            "attachLanguageExpression": "",
+            "attachLanguageFkProperty": "",
+            "attachLanguageTargetEntity": "",
+            "attachFileNameExpression": "",
+            "attachReport": "",
+            "usesRecordUrl": "false",
+            "usesInboxUrl": "false",
+            "recordUrlEntity": "",
+            "recordUrlKeyProperty": "",
+            "notifyOutcomeProperty": "VoidNotice",
+            "notifyOutcomeEntity": "SalesOrder",
+            "notifyOutcomePerspective": "Sales Orders",
+            "notifyOutcomeKeyProperty": "Id",
+            "notifyOutcomeLength": "64"
         }
     ]
 }

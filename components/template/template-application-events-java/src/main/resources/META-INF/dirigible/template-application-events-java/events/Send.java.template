@@ -264,7 +264,13 @@ public class ${className} implements JavaDelegate {
 #if($forEach != "")
         try {
             Mail.send(from, new String[] {to}, new String[0], new String[0], ${notifySubjectExpression}, parts);
+#if($notifyOutcomeProperty != "")
+            stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, null);
+#end
         } catch (Exception ex) {
+#if($notifyOutcomeProperty != "")
+            stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, ex);
+#end
             // Rethrown for the per-row counter above; the fan-out never fails the task (see the note).
             throw new RuntimeException(ex.getMessage(), ex);
         }
@@ -272,13 +278,22 @@ public class ${className} implements JavaDelegate {
 #else
         try {
             Mail.send(from, new String[] {to}, new String[0], new String[0], ${notifySubjectExpression}, parts);
+#if($notifyOutcomeProperty != "")
+            stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, null);
+#end
         } catch (Exception ex) {
+#if($notifyOutcomeProperty != "")
+            // Stamped BEFORE the rethrow: a sending step FAILS the task on purpose (the message is its
+            // whole work, so the engine retries it), and the record must carry the reason meanwhile -
+            // a retry that finally succeeds overwrites it with `sent`.
+            stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, ex);
+#end
             throw new RuntimeException("Failed to send the ${step} mail of the ${process} process", ex);
         }
 #end
     }
-
 #if($attach == "report")
+
     /**
      * A bound report parameter as the generated report repository reads one - a String, because the
      * value is JSON-encoded for the named-parameter binder and only a JSON primitive is accepted
@@ -288,6 +303,59 @@ public class ${className} implements JavaDelegate {
      */
     private static String reportValue(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+#end
+#if($notifyOutcomeProperty != "")
+
+    /**
+     * Record what this delivery attempt did, on the record the message was about - the notify block's
+     * `outcome: ${notifyOutcomeProperty}` field.
+     *
+     * A notify block is FAIL-SOFT: the transition, the schedule tick or the process step must not break
+     * because a mailbox is unreachable. Until this stamp existed the only trace of a mail that never
+     * left was a server log line - the document sat in its sent status, the person who asked for it saw
+     * success, and nothing downstream could react. The stamp is that missing trace.
+     *
+     * It is a TARGETED write, so no "-updated" re-fires and a concurrent edit to any other column of the
+     * row cannot be reverted. A FAILURE additionally carries the "-notifyFailed" topic into the outbox
+     * with the write, so the trace and its announcement commit together and glue bound to
+     * `event: { onNotifyFailed: ${notifyOutcomeEntity} }` observes exactly what the record shows. A
+     * delivery that WORKED announces nothing: it is the normal path, and a channel for it would only
+     * give every reaction a second copy of an event it already has.
+     *
+     * The stamp itself never throws. It is a record OF an outcome, so letting it fail would turn a
+     * diagnostic into a second and louder failure - and on the per-row paths it would abort the rows
+     * still to send. A `checks:` gate refusing the write is exactly such a case: an unbalanced document
+     * refuses every authored write, and it must not also lose the reason its mail did not go out.
+     */
+    private static void stampNotifyOutcome(Object id, Exception failure) {
+        if (id == null) {
+            return;
+        }
+        String value = failure == null ? "sent" : "failed: " + notifyFailureReason(failure);
+        // Truncated HERE, to the length the parser holds the field to: a column that truncates does it
+        // in the database, where nothing reports what was cut.
+        if (value.length() > ${notifyOutcomeLength}) {
+            value = value.substring(0, ${notifyOutcomeLength});
+        }
+        try {
+            new ${notifyOutcomeRepositoryClass}().updateProperties(id, java.util.Map.of("${notifyOutcomeProperty}", value),
+                    failure == null ? null : "${projectName}-${notifyOutcomePerspective}-${notifyOutcomeEntity}-notifyFailed");
+        } catch (Exception ex) {
+            LOG.error("Could not record the delivery outcome [{}] on ${notifyOutcomeEntity} [{}]", value, id, ex);
+        }
+    }
+
+    /**
+     * What to tell a person about a failed delivery. An exception with no message (an NPE, a socket
+     * closed without one) still has to say something actionable, so its class name stands in rather
+     * than the literal "null".
+     */
+    private static String notifyFailureReason(Exception failure) {
+        String message = failure == null ? null : failure.getMessage();
+        return message == null || message.isBlank() ? failure.getClass()
+                                                             .getSimpleName()
+                : message;
     }
 #end
 }

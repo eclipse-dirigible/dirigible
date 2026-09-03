@@ -30,7 +30,9 @@ import org.springframework.stereotype.Component;
  * {@code <name>-transition-action.js} (the action descriptor). Like a
  * {@link org.eclipse.dirigible.components.intent.model.GeneratesIntent generates} action the
  * descriptor carries an {@code endpoint}: the shared {@code customActions} store POSTs the selected
- * record's id to it and toasts the result.
+ * record's id to it and toasts the result. A transition declaring a {@code notify:} block
+ * additionally carries {@code notifies}, which tells that store the response is {@code { record,
+ * notify }} and its delivery outcome is worth a warning.
  *
  * <p>
  * The endpoint is the REST {@code @Controller} generated (server half) from the {@code .glue}
@@ -95,6 +97,14 @@ public class TransitionsIntentGenerator implements IntentTargetGenerator {
                 + "Transition/run");
         view.put("view", t.getForEntity());
         view.put("type", "entity");
+        if (t.getNotify() != null) {
+            // A transition that mails answers { record, notify } instead of the bare record (dirigible
+            // #7023), so the shell reports a failed delivery as a warning instead of a green toast.
+            // Declared here rather than sniffed from the response: which shape an endpoint returns is
+            // decided when it is generated, and a client guessing from the payload is how a body change
+            // turns into a silently wrong toast.
+            view.put("notifies", true);
+        }
         if (t.getIcon() != null && !t.getIcon()
                                      .isBlank()) {
             view.put("icon", t.getIcon());
