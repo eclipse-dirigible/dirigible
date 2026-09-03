@@ -930,16 +930,19 @@ class IntentEngineIT extends IntegrationTest {
                 lookup.contains("@Component") && lookup.contains("class AssignSalesRepResolve implements MessageHandler")
                         && lookup.contains("return \"intent-test-Order-Order\""),
                 "the lookup should be a @Component MessageHandler bound to the record's create topic");
-        assertTrue(lookup.contains("new CustomerAssignmentRepository().findAll(Criteria.create().eq(\"Customer\", entity.Customer))"),
+        // Every operand is hoisted into a local before it is null-tested and bound, so a path is walked
+        // once; a bare property - which is what this lookup declares - hoists the record's own column.
+        assertTrue(lookup.contains("Object key0 = entity.Customer;"), "the match key should be hoisted into a local");
+        assertTrue(lookup.contains("new CustomerAssignmentRepository().findAll(Criteria.create().eq(\"Customer\", key0))"),
                 "the lookup should query the register with a typed Criteria built from the match keys");
         assertTrue(
-                lookup.contains("Long at = millis(entity.OrderDate)") && lookup.contains("Long from = millis(row.ValidFrom)")
-                        && lookup.contains("Long to = endExclusive(row.ValidTo)"),
+                lookup.contains("Object on = entity.OrderDate;") && lookup.contains("Long at = millis(on)")
+                        && lookup.contains("Long from = millis(row.ValidFrom)") && lookup.contains("Long to = endExclusive(row.ValidTo)"),
                 "the lookup should compare the record's date against both period bounds");
         assertTrue(lookup.contains("if (entity.SalesRep != null)"),
                 "an already-resolved record should be skipped, so a manual correction is never overwritten");
         assertTrue(
-                lookup.contains("stamp(entity.Id, \"found\", resolved)") && lookup.contains("\"notFound\"")
+                lookup.contains("stamp(entity, \"found\", resolved, java.util.Map.of())") && lookup.contains("\"notFound\"")
                         && lookup.contains("\"ambiguous\""),
                 "all three outcomes should be generated - an ambiguous register is never resolved by picking one");
         // The RESULT - the relation and the trace - is one targeted update. The routing status is a
