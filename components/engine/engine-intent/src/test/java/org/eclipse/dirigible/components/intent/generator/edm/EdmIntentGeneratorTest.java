@@ -98,16 +98,18 @@ class EdmIntentGeneratorTest {
 
         // stampOn: issue -> a UUID placeholder on create (reusing the uuid auto-fill) + the series markers.
         Map<String, Object> siNumber = propertyByName(entityByName(entities, "SalesInvoice"), "Number");
-        assertEquals("issue", siNumber.get("numberStampOn"));
         assertEquals("SalesInvoice", siNumber.get("numberSeries"));
         assertEquals("true", siNumber.get("generatedUuid"));
         assertNull(siNumber.get("numberStampOnCreate"));
 
         // stampOn: create -> the real number is stamped on insert (numberStampOnCreate), no placeholder.
         Map<String, Object> pfNumber = propertyByName(entityByName(entities, "Proforma"), "Number");
-        assertEquals("create", pfNumber.get("numberStampOn"));
         assertEquals("true", pfNumber.get("numberStampOnCreate"));
         assertNull(pfNumber.get("generatedUuid"));
+        // Neither carries a documentary `numberStampOn`: an attribute no template and no generation
+        // stage reads is a liability, not documentation (#6543).
+        assertNull(siNumber.get("numberStampOn"));
+        assertNull(pfNumber.get("numberStampOn"));
         // The model carries the series REFERENCE and (optionally) the partition - never the shape. The
         // prefix and width live in the .numbers artefact and the tenant's settings, so one application
         // serves jurisdictions with different conventions without being regenerated.
