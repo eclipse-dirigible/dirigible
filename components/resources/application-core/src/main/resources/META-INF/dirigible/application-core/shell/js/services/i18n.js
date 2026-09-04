@@ -26,10 +26,21 @@
 (() => {
   const I18NEXT_WEBJAR = '/webjars/i18next/dist/umd/i18next.min.js';
   const LOCALES_SERVICE = '/services/js/platform-core/extension-services/locales.js';
+  const COUNTRY_SERVICE = '/services/js/platform-core/services/application-country.js';
   const STORAGE_KEY = 'codbex.harmonia.language';
   const DEFAULT_LOCALE = 'en-US';
 
   let catalogsReady = false;
+
+  // The tenant's country label overrides, once resolved: { <translation key>: <label> }. A label that
+  // depends on JURISDICTION cannot ride the language catalogs - which term a national identifier goes
+  // by follows the company's country, not the language its users read the UI in, so keying it off the
+  // language gets it wrong for every user whose language and company disagree. The overrides are
+  // generated into the app's config (App.config.countryLabels, per ISO 3166-1 alpha-2 code) and win
+  // over BOTH a catalog entry and the baked fallback, in every language.
+  let countryLabels = null;
+
+  const countryLabel = (key) => (countryLabels && key ? countryLabels[key] : undefined);
 
   // Interpolate {{name}}-style placeholders into a baked fallback. The fallback path (default
   // language, catalogs not loaded, or an untranslated key) returns the authored English literal,
@@ -59,6 +70,8 @@
       t(key, fallback, options) {
         this.version; // reactive dependency - see above
         if (!key) return fallback !== undefined ? interpolate(fallback, options) : '';
+        const local = countryLabel(key);
+        if (local !== undefined) return interpolate(local, options);
         if (this.ready && window.i18next
             && i18next.exists(key, Object.assign({ fallbackLng: false }, options))) {
           return i18next.t(key, options);
@@ -72,6 +85,8 @@
   window.T = (key, fallback, options) => {
     const store = window.Alpine && Alpine.store('i18n');
     if (store) return store.t(key, fallback, options);
+    const local = countryLabel(key);
+    if (local !== undefined) return interpolate(local, options);
     return interpolate(fallback !== undefined ? fallback : key, options);
   };
 
@@ -138,6 +153,32 @@
   };
 
   initPromise = init();
+
+  // Resolve the tenant's country and apply the app's overrides for it. Only an app that actually
+  // declares country labels pays for the request; every other page skips it entirely. Already-rendered
+  // T() bindings pick the overrides up through the store's version bump, exactly as a late catalog is
+  // picked up - the base label renders first and swaps once the country is known.
+  const applyCountryLabels = async () => {
+    const declared = window.App && App.config && App.config.countryLabels;
+    if (!declared || !Object.keys(declared).length) return;
+    try {
+      const response = await fetch(COUNTRY_SERVICE, {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      });
+      if (!response.ok) throw new Error('country service returned ' + response.status);
+      const country = ((await response.json()).country || '').trim().toUpperCase();
+      if (!country || !declared[country]) return;
+      countryLabels = declared[country];
+      const store = window.Alpine && Alpine.store('i18n');
+      if (store) store.version++;
+    } catch (e) {
+      // The base labels keep rendering - the app stays fully usable without the country overrides.
+      console.error('i18n: tenant country unavailable, using the base labels', e);
+    }
+  };
+
+  applyCountryLabels();
 
   // Load additional catalog namespaces AFTER init - the shared application shell calls this with
   // the projects of the perspectives it aggregates (their generated entity/label keys live in each

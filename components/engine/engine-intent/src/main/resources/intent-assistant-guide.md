@@ -284,6 +284,27 @@ field may declare:
   `- { name: hours, type: decimal, defaultValue: 8 }` /
   `- { name: billable, type: boolean, defaultValue: true }`.
 - `unique: true` - a UNIQUE constraint (e.g. a `uuid` business key or a code).
+- `label: <text>` - the field's display label, replacing the humanized field name everywhere it is
+  rendered (form caption, list column header, details block) and seeding its en-US catalog entry, so
+  it is translated like any other label. Author it for what humanizing cannot produce: an acronym
+  (`- { name: nationalId, type: string, label: National ID }` instead of "National Id"), a unit, a
+  term of art. Do NOT author it just to restate the humanized name.
+- `countryLabels: { <ISO 3166-1 alpha-2>: <text>, ... }` - label variants resolved from the **tenant's
+  country** (`DIRIGIBLE_APPLICATION_COUNTRY`), not from the language the user reads the UI in. A
+  national identification number is called ЕГН in Bulgaria and Steuer-ID in Germany: which term
+  applies is a property of the company, so keying it off the language catalogs gets it wrong for every
+  user whose language and company disagree. A variant wins over the label in EVERY language; a country
+  that declares none falls back to `label:` (else the humanized name). The keys are country codes,
+  so a code that is no country (`EN`) is rejected at parse time rather than never matching a tenant.
+
+  ```yaml
+  - name: nationalId
+    type: string
+    label: National ID
+    countryLabels:
+      BG: ЕГН
+      DE: Steuer-ID
+  ```
 - `major: false` - keep the field <b>off the entity list table</b> (it is still shown in forms and the
   record details pane). Defaults to `true` (every field is a list column). Use it to declutter the list
   of wide/secondary fields (e.g. `uuid`, long notes).

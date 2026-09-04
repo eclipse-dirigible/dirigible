@@ -1134,6 +1134,30 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return ordered;
     }
 
+    /**
+     * A field's country-scoped labels, canonicalized to upper-case ISO 3166-1 alpha-2 keys - the shape
+     * the runtime compares the tenant's configured country against. The parser has already refused a
+     * code that is not a country, so this only normalizes the case the author happened to write.
+     *
+     * @param field the authored field
+     * @return the variants by country code, empty when none are declared
+     */
+    private static Map<String, String> countryLabels(FieldIntent field) {
+        Map<String, String> canonical = new LinkedHashMap<>();
+        for (Map.Entry<String, String> variant : field.getCountryLabels()
+                                                      .entrySet()) {
+            if (variant.getKey() == null || !notBlank(variant.getValue())) {
+                continue;
+            }
+            canonical.put(variant.getKey()
+                                 .trim()
+                                 .toUpperCase(java.util.Locale.ROOT),
+                    variant.getValue()
+                           .trim());
+        }
+        return canonical;
+    }
+
     private static Map<String, Object> propertyMap(String entityName, FieldIntent field) {
         String column = IntentNaming.upperSnake(entityName) + "_" + IntentNaming.upperSnake(field.getName());
         String dataType = mapDataType(field.getType());
@@ -1141,6 +1165,22 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // Property names are PascalCase (Dirigible convention); the physical column dataName
         // stays UPPER_SNAKE, derived from the authored field name above.
         p.put("name", IntentNaming.pascalCase(field.getName()));
+        // The authored display label (#6424): the model's own widgetLabel, which every generated
+        // surface renders and which seeds the property's en-US catalog entry - so an acronym or a unit
+        // is expressed in the intent instead of hand-edited into a catalog the next Generate rewrites.
+        // Absent, the pipeline derives the humanized field name exactly as before.
+        if (notBlank(field.getLabel())) {
+            p.put("widgetLabel", field.getLabel()
+                                      .trim());
+        }
+        // Country-scoped label variants (#6424). A Map, so it lives only in the `.model` twin (the
+        // scalar-only `.edm` XML skips it via the Iterable guard); the UI generation turns it into the
+        // application's country overlay, which the shared i18n runtime prefers over the language
+        // catalogs for the tenant's own country.
+        Map<String, String> countryLabels = countryLabels(field);
+        if (!countryLabels.isEmpty()) {
+            p.put("widgetCountryLabels", countryLabels);
+        }
         p.put("description", field.getDescription() == null ? "" : field.getDescription());
         p.put("tooltip", "");
         p.put("dataName", column);

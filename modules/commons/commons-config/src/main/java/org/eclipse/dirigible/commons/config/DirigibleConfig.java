@@ -78,6 +78,14 @@ public enum DirigibleConfig {
 
     APPLICATION_LANGUAGES("DIRIGIBLE_APPLICATION_LANGUAGES", "en"), //
 
+    /**
+     * The tenant's country as an ISO 3166-1 alpha-2 code (e.g. {@code BG}), blank when the deployment
+     * has none. It resolves the label variants a generated application declares per country - what a
+     * national identifier is called is a property of the company, not of the language its users read
+     * the UI in - and is tenant-overridable through the tenant configuration.
+     */
+    APPLICATION_COUNTRY("DIRIGIBLE_APPLICATION_COUNTRY", ""), //
+
     MAIL_USERNAME("DIRIGIBLE_MAIL_USERNAME", null), //
 
     MAIL_PASSWORD("DIRIGIBLE_MAIL_PASSWORD", null), //

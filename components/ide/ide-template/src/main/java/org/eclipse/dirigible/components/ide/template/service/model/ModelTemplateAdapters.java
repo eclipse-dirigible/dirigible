@@ -150,7 +150,46 @@ final class ModelTemplateAdapters {
         parameters.put("appLanguages",
                 JavaScriptJson.compact(languages.isEmpty() ? List.of(DEFAULT_APP_LANGUAGE) : new ArrayList<>(languages)));
         parameters.put("customWidgets", model.get("widgets") == null ? new ArrayList<>() : model.get("widgets"));
+        // Country-scoped field labels, rendered into the application's configuration as a JSON object
+        // the shared i18n runtime prefers over the language catalogs (see countryLabelOverlay).
+        parameters.put("countryLabels", JavaScriptJson.compact(countryLabelOverlay(model, parameters)));
         return new PreparedModel(model, true);
+    }
+
+    /**
+     * The application's country label overlay: the property labels that are resolved from the tenant's
+     * country instead of the reader's language, as <code>{ &lt;country&gt;: { &lt;translation key&gt;:
+     * &lt;label&gt; } }</code>.
+     *
+     * <p>
+     * Keyed by the very translation key the generated views bind - {@code <project>:<tprefix>.t.<data
+     * name>} - so the runtime resolves an overlay with one exact lookup and needs to know nothing about
+     * how a key is composed. The overlay deliberately does NOT travel in the language catalogs: those
+     * are per language and are not even loaded in the default one, which is exactly the mismatch a
+     * country-scoped label suffers from (dirigible #6424).
+     *
+     * @param model the entity model
+     * @param parameters the generation parameters, for the project name and the catalog prefix
+     * @return the overlay, empty when no field declares a country label
+     */
+    private static Map<String, Object> countryLabelOverlay(Map<String, Object> model, Map<String, Object> parameters) {
+        String namespace = str(parameters, "projectName") + ":" + ModelTranslations.catalogPrefix(str(parameters, "filePath")) + ".t.";
+        Map<String, Object> overlay = new LinkedHashMap<>();
+        for (Map<String, Object> entity : asMaps(model.get("entities"))) {
+            for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+                Map<String, Object> variants = asMap(property.get("widgetCountryLabels"));
+                if (variants == null || str(property, "dataName") == null) {
+                    continue;
+                }
+                for (Map.Entry<String, Object> variant : variants.entrySet()) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> labels =
+                            (Map<String, Object>) overlay.computeIfAbsent(variant.getKey(), country -> new LinkedHashMap<String, Object>());
+                    labels.put(namespace + str(property, "dataName"), variant.getValue());
+                }
+            }
+        }
+        return overlay;
     }
 
     /**
