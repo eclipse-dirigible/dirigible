@@ -716,6 +716,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // same-model source may be declared after the entity that lists it, so every entity has to be
         // built before any register can read one.
         buildRelatedRegisters(context, entities, builtByName, usesByAlias);
+        // The reverse link of a scoped calendar: the record the calendar filters by gets a way to open
+        // it. Same sweep reason as the registers above - the scope target may be declared after the
+        // calendar entity that names it.
+        buildScopedCalendars(entities, builtByName);
         // Append the synthesized PROJECTION entities (read-only cross-model references). They carry no
         // perspective so they stay out of this app's navigation, and downstream filters skip them for
         // table / DAO / controller / role generation.
@@ -2254,6 +2258,81 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
     }
 
+    /**
+     * Emits the {@code scopedCalendars} model attribute on the entity a calendar is SCOPED BY - the
+     * reverse of {@code calendar.scope}.
+     *
+     * <p>
+     * A scoped calendar filters its events to one parent through {@code /<Calendar>?<Scope>=<id>}, but
+     * nothing pointed there: the URL was knowledge the author had to type. Each entry gives the scope
+     * target's record surfaces (form, document, master detail pane) the facts to render an "open the
+     * calendar for this record" affordance - which calendar entity, which foreign key filters it, and
+     * how to caption it.
+     *
+     * <p>
+     * Same-model only, and deliberately so: the entry is consumed by pages the OWNING model generates,
+     * and a cross-model scope target's pages belong to another application's registry entirely (the
+     * reason {@code related:} is declared on the referenced side instead). A cross-model scope keeps
+     * working - it is only the generated link that cannot exist - so it is logged, not failed.
+     *
+     * @param entities the authored entities
+     * @param builtByName every built entity map, by name
+     */
+    private static void buildScopedCalendars(List<EntityIntent> entities, Map<String, Map<String, Object>> builtByName) {
+        for (EntityIntent entity : entities) {
+            CalendarIntent cal = entity.getCalendar();
+            if (cal == null || !notBlank(cal.getScope())) {
+                continue;
+            }
+            Map<String, Object> calendarMap = builtByName.get(entity.getName());
+            // Only a calendar that HAS a page of its own to link to: a composition child renders as its
+            // master's embedded panel (detailCalendar) and has no calendar route.
+            if (calendarMap == null || !"true".equals(calendarMap.get("calendarView"))) {
+                continue;
+            }
+            RelationIntent scope = toOneNamed(entity, cal.getScope());
+            if (scope == null) {
+                continue; // reported by the parser
+            }
+            if (scope.isCrossModel()) {
+                LOGGER.warn("No calendar link generated on [{}] - calendar.scope [{}] of [{}] targets model [{}]",
+                        LoggedValue.of(scope.getTo()), LoggedValue.of(cal.getScope()), LoggedValue.of(entity.getName()),
+                        LoggedValue.of(scope.getModel()));
+                continue;
+            }
+            Map<String, Object> targetMap = builtByName.get(scope.getTo());
+            if (targetMap == null) {
+                LOGGER.warn("No calendar link generated on [{}] - the scope target of [{}] was not generated",
+                        LoggedValue.of(scope.getTo()), LoggedValue.of(entity.getName()));
+                continue;
+            }
+            Map<String, Object> link = new LinkedHashMap<>();
+            link.put("entity", entity.getName());
+            link.put("label", str(calendarMap.get("menuLabel")));
+            // The calendar's table name keys its label catalog, so the button caption translates through
+            // the entry that entity's own navigation already contributes.
+            link.put("dataName", str(calendarMap.get("dataName")));
+            link.put("scopeProperty", IntentNaming.pascalCase(cal.getScope()));
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> links =
+                    (List<Map<String, Object>>) targetMap.computeIfAbsent("scopedCalendars", key -> new ArrayList<Map<String, Object>>());
+            links.add(link);
+        }
+    }
+
+    /** The entity's to-one relation with the given authored name, or null when there is none. */
+    private static RelationIntent toOneNamed(EntityIntent entity, String name) {
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.getName() != null && relation.getName()
+                                                      .trim()
+                                                      .equalsIgnoreCase(name.trim())
+                    && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
     /** The property keys a related register's column carries into the {@code .model}. */
     private static final List<String> RELATED_COLUMN_KEYS =
             List.of("name", "widgetLabel", "dataName", "dataType", "dataScale", "widgetType", "widgetPattern", "widgetDropDownKey",
@@ -3457,7 +3536,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * it twice and round-trip it as a duplicate.
      */
     private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys",
-            "relatedEntities", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
+            "relatedEntities", "scopedCalendars", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

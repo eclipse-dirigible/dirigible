@@ -27,6 +27,18 @@ function basePage() {
     refreshIcons() {},
 
     /**
+     * Open a calendar that is SCOPED BY the record in front of us (intent `calendar.scope`): the
+     * calendar entity's own page, filtered to this record through the query parameter its scope
+     * foreign key reads - the same URL the calendar page itself builds when it navigates to create.
+     * Without this the filter was reachable only by typing the URL. Same application always: the
+     * scope target's pages and the calendar's are generated from one model.
+     */
+    openScopedCalendar(entity, scopeProperty, id) {
+      if (id === null || id === undefined || id === '') return;
+      window.PineconeRouter.navigate('/' + entity + '?' + scopeProperty + '=' + encodeURIComponent(id));
+    },
+
+    /**
      * Role-scoped fields (intent `visibleTo:`) this caller may not see. The SERVER decides: it strips
      * those properties from every response and ignores them on writes, and its /restricted endpoint
      * says which ones they are for the caller in front of us. The page asks once and leaves the

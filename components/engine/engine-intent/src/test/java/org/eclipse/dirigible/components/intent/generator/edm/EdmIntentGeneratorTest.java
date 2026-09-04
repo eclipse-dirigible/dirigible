@@ -1586,6 +1586,89 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    // A scoped calendar is reachable only through /<Calendar>?<Scope>=<id>; the scope target carries
+    // the facts its record surfaces render that link from.
+    void scopedCalendarEmitsTheLinkOnItsScopeTarget() {
+        String yaml = """
+                name: timesheets
+                entities:
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: string }
+                  - name: EmployeeDayAllocation
+                    view: calendar
+                    calendar: { start: day, title: hours, scope: timesheet }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: day, type: date, required: true }
+                      - { name: hours, type: decimal }
+                    relations:
+                      - { name: timesheet, kind: manyToOne, to: EmployeeTimesheet, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "timesheets");
+        List<Map<String, Object>> entities = entities(model);
+
+        List<Map<String, Object>> links = (List<Map<String, Object>>) entityByName(entities, "EmployeeTimesheet").get("scopedCalendars");
+        assertEquals(1, links.size(), "the scope target links to the calendar it scopes");
+        Map<String, Object> link = links.get(0);
+        assertEquals("EmployeeDayAllocation", link.get("entity"));
+        assertEquals("Employee Day Allocations", link.get("label"));
+        assertEquals("TIMESHEETS_EMPLOYEE_DAY_ALLOCATION", link.get("dataName"));
+        assertEquals("Timesheet", link.get("scopeProperty"), "the FK the calendar filters by, as the REST row names it");
+
+        // Nothing is stamped on the calendar entity itself - it already carries calendarScopeProperty.
+        assertNull(entityByName(entities, "EmployeeDayAllocation").get("scopedCalendars"));
+    }
+
+    @Test
+    // A calendar with no scope filters nothing, so there is no per-record link to offer.
+    void unscopedCalendarLinksNowhere() {
+        String yaml = """
+                name: timesheets
+                entities:
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: EmployeeDayAllocation
+                    view: calendar
+                    calendar: { start: day }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: day, type: date, required: true }
+                    relations:
+                      - { name: timesheet, kind: manyToOne, to: EmployeeTimesheet, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "timesheets");
+        assertNull(entityByName(entities(model), "EmployeeTimesheet").get("scopedCalendars"));
+    }
+
+    @Test
+    // A composition child's calendar renders as its master's embedded panel - it has no page of its
+    // own, so there is nothing for a link to open.
+    void embeddedDetailCalendarLinksNowhere() {
+        String yaml = """
+                name: timesheets
+                entities:
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: EmployeeDayAllocation
+                    view: calendar
+                    calendar: { start: day, scope: timesheet }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: day, type: date, required: true }
+                    relations:
+                      - { name: timesheet, kind: manyToOne, to: EmployeeTimesheet, composition: true, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "timesheets");
+        List<Map<String, Object>> entities = entities(model);
+        assertEquals("true", entityByName(entities, "EmployeeDayAllocation").get("detailCalendar"));
+        assertNull(entityByName(entities, "EmployeeTimesheet").get("scopedCalendars"));
+    }
+
+    @Test
     // `related:` emits a read-only register carrying the source's key, its back-reference and the
     // metadata its columns render from - and no URL, which belongs to the generation parameters.
     void relatedEmitsTheReverseOfTheIncomingAssociation() {

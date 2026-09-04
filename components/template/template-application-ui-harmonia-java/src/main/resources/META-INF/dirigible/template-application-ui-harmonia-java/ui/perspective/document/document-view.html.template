@@ -44,6 +44,15 @@
          page renders read-only and says so (the controller's 409 stays authoritative). -->
     <span x-h-badge class="shrink-0" data-variant="warning" x-show="!mutable" :title="T('$projectName:${tprefix}.messages.immutable', '#if($periodLock && !$immutableStatusProperty && !$immutableAlways)This record is read-only - its accounting period is closed; book the correction in an open period.#{else}This record is read-only in its current status - corrections go through the workflow.#end')" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
 #end
+#if($scopedCalendars)
+    <!-- Scoped calendars (intent `calendar.scope`): an entity whose calendar filters its events to
+         THIS record. The filter is a query parameter on the calendar's own route, so without a
+         button here the URL is knowledge the user has to type. Edit/preview only - a record that is
+         not saved yet has no id to filter by. -->
+#foreach($scopedCalendar in $scopedCalendars)
+    <button type="button" x-h-button data-variant="outline" data-size="sm" class="shrink-0" x-show="isEdit || isPreview" @click="openScopedCalendar('${scopedCalendar.entity}', '${scopedCalendar.scopeProperty}', id)"><i role="img" x-h-lucide data-lucide="calendar-days"></i><span x-text="T('$projectName:${tprefix}.t.${scopedCalendar.dataName}_plural', '${scopedCalendar.label}')"></span></button>
+#end
+#end
     <button type="button" x-h-button data-variant="transparent" @click="backToList()" x-text="T('$projectName:${tprefix}.defaults.backToList', 'Back to list')"></button>
   </div>
 

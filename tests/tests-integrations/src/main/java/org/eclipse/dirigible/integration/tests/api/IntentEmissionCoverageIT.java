@@ -109,7 +109,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     /** What a {@code type: text} field's column is sized to (EdmIntentGenerator's TEXT_LENGTH). */
     private static final int TEXT_COLUMN_LENGTH = 4000;
 
-    private static final String INTENT_YAML = """
+    private static final String INTENT_YAML_ENTITIES = """
             name: emission
             description: DSL emission coverage fixture - every feature here has an enforcement assert
             languages: [en, bg]
@@ -382,6 +382,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Campaign, kind: manyToOne, to: Campaign, composition: true, required: true }
 
+              # A calendar SCOPED by a MASTER (#6546). The scope target's record surfaces must link
+              # into the filtered calendar - for a master that surface is the detail PANE of the
+              # selected row, which is a different template from the form Person covers below. The
+              # relation is a plain to-one, not a composition: a composition child's calendar renders
+              # as the master's embedded panel and has no page of its own to open.
+              - name: CampaignEvent
+                view: calendar
+                calendar: { start: day, title: name, scope: Campaign }
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 100 }
+                  - { name: day,  type: date, required: true }
+                relations:
+                  - { name: Campaign, kind: manyToOne, to: Campaign, required: true }
+
               # identity/personal/sensitive: Person maps the logged-in user (the IT runs as
               # admin - the seed below maps it); Claim is the personal entity with a sensitive
               # field; ClaimLine inherits the personal scope through its composition parent.
@@ -558,7 +573,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # while the calendar owns the landing route.
               - name: Leave
                 view: range
-                calendar: { start: fromDate, end: toDate, title: Person }
+                # scope: the calendar filters to one Person - and the Person's own record surfaces
+                # (master pane + form) must LINK into it (#6546), or the filter is a hand-typed URL.
+                calendar: { start: fromDate, end: toDate, title: Person, scope: Person }
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: fromDate, type: date, required: true }
@@ -920,7 +937,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
                 relations:
                   - { name: Pledge, kind: manyToOne, to: Pledge, composition: true, required: true }
+            """;
 
+    // The rest of the same fixture. It is a SECOND constant only because a Java string constant
+    // caps at 65535 UTF-8 bytes and the entities above reach it; `concat` keeps the joined value out
+    // of the constant pool, which a `+` would not (the compiler folds it back into one over-long
+    // constant). Nothing about the model is split - the two halves are one document.
+    private static final String INTENT_YAML_GLUE = """
             aggregates:
               - name: ledgerTotal
                 of: Ledger
@@ -1510,6 +1533,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { id: 901, date: "2026-01-10", debit: 100, Account: 3, Status: 2 }
                   - { id: 902, date: "2026-01-11", credit: 40, Account: 3, Status: 2 }
             """;
+
+    /** The whole fixture, as the two halves above spell it. */
+    private static final String INTENT_YAML = INTENT_YAML_ENTITIES.concat(INTENT_YAML_GLUE);
 
     @Autowired
     private IRepository repository;
@@ -2595,6 +2621,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the calendar must offer the switch back to the entity's own browse page");
         assertTrue(contentOf("gen/emission/views/my/Leave-list.html").contains("goCalendar()"),
                 "the personal list must offer the switch to the personal calendar");
+
+        // #6546: a scoped calendar filters through /<Calendar>?<Scope>=<id>, so the record it filters
+        // BY must link there. Both of the scope target's record surfaces carry the affordance - the
+        // master's detail pane (selected row) and the entity's own form (open record).
+        assertTrue(leaveCalendar.contains("scopeId"), "a scoped calendar must read its scope from the route");
+        assertTrue(
+                contentOf("gen/emission/views/Campaign/Campaign-master.html").contains(
+                        "openScopedCalendar('CampaignEvent', 'Campaign', selectedId)"),
+                "the scope target's master pane must open the calendar filtered to the selected record");
+        assertTrue(personForm.contains("openScopedCalendar('Leave', 'Person', id)"),
+                "the scope target's form must open the calendar filtered to the open record");
+        assertTrue(contentOf("gen/emission/views/Person/Person-manage-list.html").contains(
+                "openScopedCalendar('Leave', 'Person', selectedId)"), "...and so must the record pane of its browse list");
 
         // The slot picker follows the same additive rule: a DOCUMENT master declaring view: slots keeps
         // its document layout (slot-click creates a document, not a bare form), the document list stays
