@@ -116,10 +116,22 @@ public final class IntentNaming {
      * @return the sanitized module segment, never blank
      */
     public static String javaModule(IntentGenerationContext context) {
-        String name = baseName(context).toLowerCase(Locale.ROOT);
-        StringBuilder out = new StringBuilder(name.length() + 1);
-        for (int i = 0; i < name.length(); i++) {
-            char c = name.charAt(i);
+        return javaIdentifier(baseName(context));
+    }
+
+    /**
+     * The template engine's {@code NamingHelper.sanitizeJavaIdentifier}, for any name the generators
+     * must spell the same way the generated code does - a module segment, a perspective segment in a
+     * controller URL ({@code Sales Orders} -> {@code sales_orders}).
+     *
+     * @param name the name to sanitize (may be null or empty)
+     * @return the sanitized segment, never blank
+     */
+    public static String javaIdentifier(String name) {
+        String lower = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        StringBuilder out = new StringBuilder(lower.length() + 1);
+        for (int i = 0; i < lower.length(); i++) {
+            char c = lower.charAt(i);
             out.append((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' ? c : '_');
         }
         if (out.length() == 0) {

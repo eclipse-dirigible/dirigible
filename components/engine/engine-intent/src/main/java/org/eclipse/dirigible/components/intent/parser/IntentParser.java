@@ -366,6 +366,7 @@ public final class IntentParser {
         validateSettlements(model, issues);
         validateResolves(model, entityNames, issues);
         validateIdempotencyGuardOwnership(model, issues);
+        validatePermissions(model, issues);
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
         }
@@ -4076,6 +4077,46 @@ public final class IntentParser {
             if (target != null && (target.getIdentity() == null || target.getIdentity()
                                                                          .isBlank())) {
                 issues.add(subject + " declares partner but its target [" + relation.getTo() + "] declares no identity");
+            }
+        }
+    }
+
+    /**
+     * The {@code permissions} block: every grant needs a role name, and every {@code can:} token must
+     * be a {@code Resource:action} pair. Only the SHAPE is enforced here - the resource and action
+     * halves are bound to the generated gates by {@code PermissionSupport}, which reports an undeclared
+     * resource and an action outside the read/write vocabulary at Generate, where the entity and report
+     * inventory is the one the generators actually emit. A malformed token belongs here instead,
+     * because there is nothing to bind it to and no reading of it that could be right.
+     *
+     * @param model the typed model
+     * @param issues the issues collected so far, appended to
+     */
+    private static void validatePermissions(IntentModel model, List<String> issues) {
+        for (PermissionIntent permission : model.getPermissions()) {
+            String role = permission.getRole();
+            if (isBlank(role)) {
+                issues.add("permission has no role name");
+                continue;
+            }
+            for (String token : permission.getCan()) {
+                String subject = "permission [" + role.trim() + "] can [" + token + "]";
+                if (isBlank(token)) {
+                    issues.add("permission [" + role.trim() + "] lists a blank can token");
+                    continue;
+                }
+                int colon = token.indexOf(':');
+                if (colon < 0) {
+                    issues.add(subject + " is not a Resource:action pair");
+                    continue;
+                }
+                if (token.indexOf(':', colon + 1) >= 0) {
+                    issues.add(subject + " carries more than one colon - a token is exactly Resource:action");
+                    continue;
+                }
+                if (isBlank(token.substring(0, colon)) || isBlank(token.substring(colon + 1))) {
+                    issues.add(subject + " has an empty half - a token is exactly Resource:action");
+                }
             }
         }
     }

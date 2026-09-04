@@ -4034,12 +4034,18 @@ class IntentEngineIT extends IntegrationTest {
 
         assertTrue(edmXml.contains("generateDefaultRoles=\"true\""),
                 "entities should carry generateDefaultRoles=\"true\" so the REST template enforces access control");
-        assertTrue(edmXml.contains("roleRead=\"") && edmXml.contains("OrderReadOnly\""),
-                "a secured entity must carry a roleRead (<project>.<perspective>.<Entity>ReadOnly)");
-        assertTrue(edmXml.contains("roleWrite=\"") && edmXml.contains("OrderFullAccess\""),
-                "a secured entity must carry a roleWrite (<project>.<perspective>.<Entity>FullAccess)");
+        // The intent grants `Sales` can [Customer:read, Order:create], so Order and Customer are gated
+        // by the AUTHORED roles - the gate the controller checks is the role the author declared
+        // (#6760). The convention names are neither the gate nor declared for a covered entity.
+        assertTrue(edmXml.contains("roleRead=\"Sales\"") && edmXml.contains("roleWrite=\"Sales\""),
+                "an entity a permissions can: token names must be gated by the authored role");
+        assertFalse(edmXml.contains("OrderFullAccess"), "a covered entity must not fall back to the convention gate no grant mentions");
+        // Country is named by no token, so it keeps the convention gates - and its own domain
+        // perspective, like the codbex convention.
         assertTrue(edmXml.contains(".Country.CountryReadOnly\""),
-                "a setting entity's role must use its own domain perspective (Country), like the codbex convention");
+                "an entity no can: token names must keep the convention roleRead (<project>.<perspective>.<Entity>ReadOnly)");
+        assertTrue(edmXml.contains(".Country.CountryFullAccess\""),
+                "an entity no can: token names must keep the convention roleWrite (<project>.<perspective>.<Entity>FullAccess)");
         assertFalse(edmXml.contains(".Settings.CountryReadOnly\""), "a setting entity's role must NOT use the Settings shell perspective");
 
         // The EDM editor renders the canvas ONLY from mxGraphModel - without it the editor opens
@@ -4053,8 +4059,10 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(resource("orders.model").exists(), "orders.model should be generated");
         String modelBody = contentOf("orders.model");
         assertTrue(modelBody.contains("\"entities\""), "model JSON should have an entities array");
-        assertTrue(modelBody.contains("\"generateDefaultRoles\": \"true\"") && modelBody.contains("OrderFullAccess"),
+        assertTrue(modelBody.contains("\"generateDefaultRoles\": \"true\"") && modelBody.contains("CountryFullAccess"),
                 "the .model JSON (which drives generation) must carry generateDefaultRoles + the role names");
+        assertTrue(modelBody.contains("\"roleWrite\": \"Sales\""),
+                "the .model JSON must carry the authored gate for an entity a permissions can: token names");
         assertTrue(modelBody.contains("\"perspectives\""), "model JSON should carry the perspectives array like editor-written files");
         assertTrue(modelBody.contains("\"navigations\""), "model JSON should carry the navigations array like editor-written files");
         // Process glue (triggers, resolvers) is NOT in the EDM model - it lives in the .glue file.
@@ -4308,6 +4316,58 @@ class IntentEngineIT extends IntegrationTest {
         // The developer's settings file is preserved verbatim, not overwritten by the scaffold.
         assertTrue(contentOf("orders.settings").contains("\"generate\": false"),
                 "the edited settings must be preserved across regeneration");
+    }
+
+    /**
+     * The URL-shaped half of the access model. The generated app's web surface had no gate at all -
+     * nothing emitted an {@code .access} - and a hand-authored one at the project root is scrub-owned,
+     * so it survived only under {@code custom/}, which was documented nowhere. Generate now derives the
+     * constraints for the paths the templates publish from the same {@code can:} tokens, opt-in through
+     * the project's {@code .settings} because the paths belong to the stack its recipes name (#6760).
+     */
+    @Test
+    void access_constraints_are_generated_from_the_can_tokens_when_the_settings_ask() {
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        assertFalse(resource("orders.access").exists(), "the access artefact must not appear until the settings ask for it");
+
+        writeProjectFile("orders.settings", """
+                {
+                  "access": { "generate": true }
+                }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("written", hasItem("orders.access")));
+        String access = contentOf("orders.access");
+        // Order is gated by `Sales` (can: [Order:create]); the constraint covers the controller
+        // subtree and the generated pages, with method * - the read/write split stays in the
+        // controller, which reads through POST .../search.
+        assertTrue(access.contains("/services/java/" + PROJECT + "/gen/orders/api/order/OrderController/**"), access);
+        assertTrue(access.contains("/services/web/" + PROJECT + "/gen/orders/views/Order/Order-*.html"), access);
+        assertTrue(access.contains("\"method\": \"*\""), access);
+        assertTrue(access.contains("\"Sales\""), access);
+        // Country is named by no token, so it keeps the convention gates and gets no constraint.
+        assertFalse(access.contains("CountryController"), access);
+
+        // Turning it back off scrubs the artefact - .access is intent-owned, which is exactly why a
+        // hand-authored one at the project root cannot live here.
+        writeProjectFile("orders.settings", """
+                {
+                  "access": { "generate": false }
+                }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("scrubbed", hasItem("orders.access")));
+        assertFalse(resource("orders.access").exists(), "a no-longer-generated access artefact must be scrubbed");
     }
 
     private void assertBpmn() {

@@ -35,6 +35,7 @@ import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.TransitionIntent;
 import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
+import org.eclipse.dirigible.components.intent.generator.PermissionSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
@@ -205,6 +206,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // generated DAO enforces it synchronously (the DAO is generated from this .model, which otherwise
         // does not see the roll-ups - those live in the .glue).
         Map<String, Map<String, Object>> rollupGuards = buildRollupGuards(model, byName, compositionParents);
+        // The read / write gates the intent's `permissions[].can:` tokens authorize. An entity a token
+        // names is gated by the roles the author declared instead of the convention-derived names,
+        // which nothing else in the intent mentions.
+        PermissionSupport.Gates gates = PermissionSupport.gates(model);
         int perspectiveOrder = 1;
 
         for (EntityIntent entity : entities) {
@@ -227,7 +232,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             String perspective = perspectiveFor(name, compositionParents, settingEntities);
             String rolePerspective = IntentEntities.compositionPerspective(name, compositionParents);
             Map<String, Object> entityMap = entityDefaults(name, entity.getDescription(), entity.getIcon(), dependent, setting, perspective,
-                    tablePrefix, perspectiveOrder, projectName, rolePerspective);
+                    tablePrefix, perspectiveOrder, projectName, rolePerspective, gates);
             if (extension) {
                 // No table, no perspective/nav: type EXTENSION + the base reference the merge keys on.
                 // extensionReferencedModel is the base model's plain name (its project) - what the
@@ -1057,8 +1062,33 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return perspective;
     }
 
+    /**
+     * The entity's default {@code .edm} attributes, including its read / write GATES.
+     *
+     * <p>
+     * The gates are the authored ones whenever a {@code permissions[].can:} token names this entity -
+     * or, for a composition child, names the master it is managed under - so the role the author
+     * declared is the role the generated controller checks. Both halves then come from the tokens and
+     * the convention roles are neither emitted nor declared ({@code generateDefaultRoles=false}): a
+     * covered entity that no grant may WRITE keeps a write gate no declared role satisfies, which is
+     * what an allow-list of read-only grants says. An entity no token names keeps the convention
+     * behaviour unchanged.
+     *
+     * @param name the entity's declared name
+     * @param description the entity description
+     * @param icon the entity icon
+     * @param dependent whether the entity is a composition child
+     * @param setting whether the entity lives under the shared Settings perspective
+     * @param perspective the perspective the entity is managed under
+     * @param tablePrefix the physical table prefix
+     * @param order the perspective order
+     * @param projectName the project name (the convention roles' prefix)
+     * @param rolePerspective the composition-root name the convention roles key on
+     * @param gates the authored read / write role sets
+     * @return the entity's attribute map
+     */
     private static Map<String, Object> entityDefaults(String name, String description, String icon, boolean dependent, boolean setting,
-            String perspective, String tablePrefix, int order, String projectName, String rolePerspective) {
+            String perspective, String tablePrefix, int order, String projectName, String rolePerspective, PermissionSupport.Gates gates) {
         String dataName = tablePrefix + "_" + IntentNaming.upperSnake(name);
         Map<String, Object> entity = new LinkedHashMap<>();
         entity.put("name", name);
@@ -1089,9 +1119,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         entity.put("perspectiveNavId", "");
         entity.put("perspectiveRole", "");
         entity.put("generateReport", "false");
-        entity.put("generateDefaultRoles", "true");
-        entity.put("roleRead", projectName + "." + rolePerspective + "." + name + "ReadOnly");
-        entity.put("roleWrite", projectName + "." + rolePerspective + "." + name + "FullAccess");
+        String conventionRead = projectName + "." + rolePerspective + "." + name + "ReadOnly";
+        String conventionWrite = projectName + "." + rolePerspective + "." + name + "FullAccess";
+        // A composition child is managed under its master, so it is gated by the master's grants when
+        // it carries none of its own - otherwise granting write on a document would not extend to its
+        // line items and the generated app would refuse the very edits the grant describes.
+        String gateName = gates.covers(name) ? name : rolePerspective;
+        boolean covered = gates.covers(gateName);
+        String authoredRead = covered ? gates.readRoles(gateName) : null;
+        String authoredWrite = covered ? gates.writeRoles(gateName) : null;
+        entity.put("generateDefaultRoles", covered ? "false" : "true");
+        entity.put("roleRead", authoredRead != null ? authoredRead : conventionRead);
+        entity.put("roleWrite", authoredWrite != null ? authoredWrite : conventionWrite);
         return entity;
     }
 

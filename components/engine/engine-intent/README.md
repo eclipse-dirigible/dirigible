@@ -48,7 +48,7 @@ filters) are covered at the generation layer by `IntentEngineIT` and the parser 
 | [`integrations`](#integrations--outbound-http) | outbound HTTP on a data change |
 | [`inbound`](#inbound--webhooks-queues-and-drop-folders) | an arrival that creates records, optionally gated and mapped |
 | [`outbound`](#outbound--emit-on-a-queue-or-topic) | emit a record on a queue or topic on an event |
-| [`permissions`](#permissions--roles) | roles |
+| [`permissions`](#permissions---roles-and-gates) | roles + access gates |
 | [Planned](#planned--recognised-but-not-yet-implemented) | recognised, not yet implemented |
 
 ## entities
@@ -824,12 +824,37 @@ when the queue or topic is a contract with a system outside this deployment (the
 [#6766](https://github.com/eclipse-dirigible/dirigible/issues/6766) - the name is passed through
 verbatim, so nothing in the intent layer resolves it).
 
-## permissions - roles
+## permissions - roles and gates
 
 ```yaml
 permissions:
   - { role: Librarian, can: [Member:read, Member:write, Loan:approve] }
+  - { role: Member,    can: [Book:read] }
 ```
+
+Each entry declares a role - emitted into `<intent>.roles` - and the resources it may act on. The
+`can: [Resource:action]` tokens are **what the generated application enforces**: an entity (or
+report) a token names is gated by the roles the author declared, instead of the convention-derived
+`<project>.<perspective>.<Entity>ReadOnly` / `FullAccess` names, and a composition child inherits the
+grants of the master it is managed under. An entity no token names keeps the convention gates, which
+stay declared and grantable.
+
+| action | gate |
+|---|---|
+| `read`, `view`, `list` | read |
+| `write`, `create`, `update`, `edit`, `delete`, `manage` | write, **and read with it** |
+| `*`, `all` | both |
+| anything else (`approve`, `start`, ...) | none - reported as a generation advisory |
+
+A grant is an allow-list: if no role may write a covered entity, nothing may - the write gate names a
+role that is never declared. A token naming a resource the intent does not declare is a generation
+issue (it would gate nothing); a token that is not a `Resource:action` pair is refused at parse.
+
+Turning on `{"access": {"generate": true}}` in the project's `.settings` additionally emits
+`<intent>.access` - the URL constraints over the controller subtrees, generated pages and report
+pages the templates publish, from the same tokens. A **hand-authored `.access` at the project root is
+deleted by the next Generate** (`.access` is an intent-owned extension); hand-written constraints
+belong under `custom/`.
 
 ## Print, tests and the shell (generated automatically)
 
