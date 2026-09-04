@@ -28,10 +28,11 @@ import org.springframework.web.server.ResponseStatusException;
  * The caller of this API is a program driving a provisioning process, and every refusal it can get
  * is one it has to act on differently: a password the database rejected, a data source that has to
  * be registered first, a subdomain another tenant holds. Without the reason it sees "Bad Gateway"
- * and can only give up, and the operator reading its logs learns nothing either. The platform's
- * {@code server.error.include-message=always} was meant to cover this and does not reach a
- * {@code ResponseStatusException} raised here, so the body is written explicitly rather than left
- * to chance - it is part of what this API promises.
+ * and can only give up, and the operator reading its logs learns nothing either. The body is
+ * therefore written explicitly rather than left to the platform's error attributes - the shape this
+ * API answers with is part of what it promises. (The platform's {@code include-message} option was
+ * silently unbound when this was written, which is why it had to be written at all; that is fixed
+ * in #6994.)
  *
  * <p>
  * Scoped to this component's endpoints: how the rest of the platform renders its errors is not this
