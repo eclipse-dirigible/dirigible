@@ -91,8 +91,12 @@ class IntentEngineIT extends IntegrationTest {
                   - { name: id,      type: integer, primaryKey: true, generated: true }
                   - { name: name,    type: string,  required: true, length: 100 }
                   # An ISO alpha-2 code identifies exactly one country, which is what makes it legal
-                  # as an arrival's business key (an inbound lookup refuses a non-unique `by`).
-                  - { name: code2,   type: string,  length: 2, unique: true }
+                  # as an arrival's business key (an inbound lookup refuses a non-unique `by`). Being
+                  # that key is also why it is `translatable: false` (#6545): on a multilingual entity
+                  # every string property would otherwise get a column in COUNTRY_LANG and be overlaid
+                  # on every read, and the arrival's `by: code2` would stop resolving the moment a
+                  # translation existed - silently, since the lookup simply finds nothing.
+                  - { name: code2,   type: string,  length: 2, unique: true, translatable: false }
 
               - name: Customer
                 fields:
@@ -3345,6 +3349,13 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(schema.contains("\"name\": \"Language\""), "the language table should carry the Language column");
         assertTrue(schema.contains("\"name\": \"GUID\""), "the language table should carry the GUID primary key");
         assertFalse(schema.contains("ORDERS_CUSTOMER_LANG"), "a non-multilingual entity must not get a language table");
+        // The language table's columns are named after the PROPERTY (the base table's are the physical
+        // UPPER_SNAKE names), so `Name` and `Code2` here can only be language columns. The label gets
+        // one; the arrival's business key, marked `translatable: false`, must not (#6545) - a
+        // translated key is overlaid on every read and then matches the authored literal never again.
+        assertTrue(schema.contains("\"name\": \"Name\""), "the translatable label should get a language column");
+        assertFalse(schema.contains("\"name\": \"Code2\""),
+                "a field marked translatable: false must get no language column at all: " + schema);
 
         // Java DAO: every read overlays the translations for the caller's Accept-Language.
         String repository = codeOf("gen/orders/data/settings/CountryRepository.java");

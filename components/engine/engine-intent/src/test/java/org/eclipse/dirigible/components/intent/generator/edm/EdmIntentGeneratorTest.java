@@ -1306,6 +1306,33 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void aKeyFieldOfAMultilingualEntityCarriesTheNonTranslatableMarker() {
+        String yaml = """
+                name: uoms
+                languages: [en, bg]
+                entities:
+                  - name: UoM
+                    kind: setting
+                    multilingual: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                      - { name: iso, type: string, length: 10, translatable: false }
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        List<Map<String, Object>> entities = entities(EdmIntentGenerator.buildModelJsonForTest(parsed, "uoms"));
+        Map<String, Object> uom = entityByName(entities, "UoM");
+
+        // The ISO code is a KEY: a determination rule matches on it, so it must not be translated. The
+        // schema template keys the language table's columns on this attribute, so the column is simply
+        // never emitted and there is no translation to overlay on a read (#6545).
+        assertEquals("false", propertyByName(uom, "Iso").get("translatable"),
+                "a field marked translatable: false must carry the attribute the schema template excludes it by");
+        assertNull(propertyByName(uom, "Name").get("translatable"),
+                "an ordinary translatable property must not carry the attribute - the default is translated");
+    }
+
+    @Test
     void multilingualEntityAndLanguagesFlowIntoTheModel() {
         String yaml = """
                 name: uoms

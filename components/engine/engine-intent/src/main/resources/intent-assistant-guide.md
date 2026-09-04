@@ -774,6 +774,29 @@ entities:
       - { name: name, type: string, required: true, length: 100 }
 ```
 
+**A key is not a label (`translatable: false`).** On a multilingual entity EVERY string property is
+translatable, which is right for a label and wrong for a **key** - a code a posting's determination
+rule matches on, a business key an arrival resolves a relation by. Translating a key breaks the match
+with no symptom: the read overlay hands the UI the translated value, saving the row writes it back
+into the base column, and from then on nothing matches the literal the model was authored with. Mark
+such a field `translatable: false` and it gets no language column at all, so there is nothing to
+overlay - in a read, in a report column, or in a translation seed:
+
+```yaml
+entities:
+  - name: PostingRule
+    kind: setting
+    multilingual: true
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string }                                  # a label - translated
+      - { name: documentType, type: string, translatable: false }      # a key - never translated
+```
+
+Generation REFUSES a rule `match:` column and an arrival lookup `by:` field that is translated, naming
+this marker; and it refuses the marker itself where it cannot mean anything (a non-multilingual entity,
+a non-string field).
+
 **Custom imports (`imports:` on an entity):** a multi-line string of Java `import ...;` lines injected
 verbatim into that entity's generated repository, so a calculated-field action (or any custom class)
 can be referenced from the calculated fields by simple name. Pair it with `calculatedActionOnCreate`:
@@ -2402,7 +2425,8 @@ seeds:
 
 **Translations (`language:` on a seed).** For a `multilingual: true` entity, a seed with a short
 language code carries per-language values - it lands in the entity's `<TABLE>_LANG` table. Rows carry
-the base row's `id` plus translatable (string/text) fields only:
+the base row's `id` plus translatable (string/text) fields only - a field marked `translatable: false`
+has no column there and is refused:
 
 ```yaml
 seeds:

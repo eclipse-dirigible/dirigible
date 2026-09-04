@@ -144,6 +144,20 @@ public class FieldIntent {
      */
     private Boolean major;
     /**
+     * Whether this string field participates in the sibling <code>&lt;TABLE&gt;_LANG</code> translation
+     * table of a {@code multilingual} entity. Defaults to {@code true} - on a multilingual entity every
+     * character-typed property is translatable, which is right for a label and wrong for a <b>key</b>:
+     * a code a determination rule matches on, a business key an arrival resolves a relation by. Such a
+     * value is not text to be translated but the identity of the row, and translating it breaks the
+     * match silently - the read overlay hands the UI the translated value, saving the form writes it
+     * back into the BASE column, and from then on nothing matches the literal the model was authored
+     * with (dirigible #6545). {@code translatable: false} keeps the field out of the language table
+     * altogether, so it has no translation to overlay anywhere: not in a read, not in a report column,
+     * not in a translation seed. {@code Boolean} (nullable) so an unset value keeps the default-true
+     * behaviour.
+     */
+    private Boolean translatable;
+    /**
      * Optional form-control width as a 12-column grid span (3/4/6/12: 3 = quarter, 4 = third, 6 = half,
      * 12 = full). Emitted as the property's {@code widgetSize}; the Harmonia form maps it to
      * {@code grid-column: span N}. Absent (the default) leaves it unset (the form falls back to half
@@ -391,6 +405,45 @@ public class FieldIntent {
     /** Whether this field is a list-table column - defaults to true when {@code major} is unset. */
     public boolean isMajor() {
         return major == null || major;
+    }
+
+    public Boolean getTranslatable() {
+        return translatable;
+    }
+
+    public void setTranslatable(Boolean translatable) {
+        this.translatable = translatable;
+    }
+
+    /**
+     * Whether the field is translatable at all - defaults to true when {@code translatable} is unset.
+     *
+     * @return false only when {@code translatable: false} is authored
+     */
+    public boolean isTranslatable() {
+        return translatable == null || translatable;
+    }
+
+    /**
+     * Whether a {@code multilingual} entity's language table carries a column for this field - the one
+     * predicate every consumer of the translation overlay must agree on: the schema template that EMITS
+     * the language column, the report generator that overlays it, the CSVIM generator that seeds it,
+     * and the parser that refuses a translation seeding what has no column. A character-typed field
+     * that is neither the primary key (the language row's own reference to the base row) nor calculated
+     * (assigned by the repository on every write) nor marked {@code translatable: false}.
+     *
+     * <p>
+     * Says nothing about the owning entity: a field of a non-multilingual entity has no language table
+     * to have a column in, so the caller pairs this with {@code entity.isMultilingual()}.
+     *
+     * @return true when the field's value can carry a per-language translation
+     */
+    public boolean hasLanguageColumn() {
+        if (primaryKey || isCalculated() || !isTranslatable()) {
+            return false;
+        }
+        String logical = type == null ? "string" : type.toLowerCase(java.util.Locale.ROOT);
+        return "string".equals(logical) || "text".equals(logical);
     }
 
     public String getDefaultValue() {

@@ -317,7 +317,7 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
     private static String renderLanguageCsv(EntityIntent entity, SeedIntent seed) {
         List<FieldIntent> translatable = new ArrayList<>();
         for (FieldIntent field : orderedFieldsOf(entity)) {
-            if (field.isPrimaryKey() || !isTranslatableType(field)) {
+            if (!field.hasLanguageColumn()) {
                 continue;
             }
             for (Map<String, Object> row : seed.getRows()) {
@@ -353,14 +353,6 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
               .append('\n');
         }
         return sb.toString();
-    }
-
-    /** Whether the field's logical type maps to a translatable (string) column. */
-    private static boolean isTranslatableType(FieldIntent field) {
-        String type = field.getType() == null ? "string"
-                : field.getType()
-                       .toLowerCase(java.util.Locale.ROOT);
-        return "string".equals(type) || "text".equals(type);
     }
 
     /** The entity's primary-key field name ({@code id} by convention). */

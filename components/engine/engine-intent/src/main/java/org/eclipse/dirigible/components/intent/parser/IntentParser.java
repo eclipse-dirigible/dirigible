@@ -3345,6 +3345,9 @@ public final class IntentParser {
                                                       .isEmpty()) {
                     validateLabels("entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
+                if (field.getTranslatable() != null) {
+                    validateTranslatable(entity, "entity [" + name + "] field [" + field.getName() + "]", field, issues);
+                }
                 if (field.isSensitive()) {
                     if (field.isPrimaryKey()) {
                         issues.add("entity [" + name + "] field [" + field.getName()
@@ -4865,6 +4868,66 @@ public final class IntentParser {
             java.util.regex.Pattern.compile(field.getPattern()); // lgtm[java/regex-injection]
         } catch (java.util.regex.PatternSyntaxException ex) {
             issues.add(subject + " `pattern` is not a valid regular expression: " + ex.getDescription());
+        }
+    }
+
+    /**
+     * The determination rule's {@code match} column must not be a translated one. The selector is a
+     * literal authored in the model and compared against the rule row's own column, so the moment that
+     * column carries per-language values the match is on a moving target: the read overlay hands the UI
+     * the translated value, saving the rule row writes it back into the base column, and from then on
+     * the posting silently stops firing - no error, no half-posted document, just nothing (#6545). The
+     * column is a key, so it is marked {@code translatable: false} - which is also the fix this message
+     * names.
+     *
+     * @param subject the message prefix identifying the posting
+     * @param ruleEntity the determination-rule entity
+     * @param match the single-entry match selector
+     * @param issues the collected issues, appended to
+     */
+    private static void validateRuleMatchIsNotTranslated(String subject, EntityIntent ruleEntity, java.util.Map<?, ?> match,
+            List<String> issues) {
+        if (!ruleEntity.isMultilingual()) {
+            return;
+        }
+        String column = String.valueOf(match.keySet()
+                                            .iterator()
+                                            .next());
+        FieldIntent field = fieldByName(ruleEntity, column);
+        if (field != null && field.hasLanguageColumn()) {
+            issues.add(subject + " rule.match selects on [" + column + "], a translated property of the multilingual rule entity ["
+                    + ruleEntity.getName()
+                    + "] - a translated value would silently stop matching the literal; declare `translatable: false` on it");
+        }
+    }
+
+    /**
+     * A field's {@code translatable} marker: the escape hatch that keeps a <b>key</b> out of a
+     * multilingual entity's language table (a code a determination rule matches on, a business key an
+     * arrival resolves a relation by - #6545). Two ways it cannot mean anything, both refused rather
+     * than accepted and ignored: on an entity that keeps no per-language values there is no language
+     * table to be left out of, and on a non-character field there is no column in it either. The
+     * default is {@code true}, so declaring it explicitly true is a no-op and left alone.
+     *
+     * @param entity the owning entity
+     * @param subject the message prefix identifying the field
+     * @param field the field carrying the marker
+     * @param issues the collected issues, appended to
+     */
+    private static void validateTranslatable(EntityIntent entity, String subject, FieldIntent field, List<String> issues) {
+        if (field.isTranslatable()) {
+            return;
+        }
+        if (!entity.isMultilingual()) {
+            issues.add(subject + " declares `translatable: false` but [" + entity.getName()
+                    + "] is not multilingual - there is no language table to keep the field out of");
+        }
+        String type = field.getType() == null ? "string"
+                : field.getType()
+                       .toLowerCase(Locale.ROOT);
+        if (!"string".equals(type) && !"text".equals(type)) {
+            issues.add(subject + " declares `translatable: false` on a [" + field.getType()
+                    + "] field - only a string/text property is ever translated");
         }
     }
 
@@ -6417,6 +6480,8 @@ public final class IntentParser {
                     issues.add(subject + " rule.entity must name a local entity");
                 } else if (!(match instanceof java.util.Map) || ((java.util.Map<?, ?>) match).size() != 1) {
                     issues.add(subject + " rule.match must be a single `column: literal` selector");
+                } else {
+                    validateRuleMatchIsNotTranslated(subject, ruleEntity, (java.util.Map<?, ?>) match, issues);
                 }
             }
             // items
@@ -9053,10 +9118,10 @@ public final class IntentParser {
             if (field.getName() == null) {
                 continue;
             }
-            String type = field.getType() == null ? "string"
-                    : field.getType()
-                           .toLowerCase(Locale.ROOT);
-            if (field.isPrimaryKey() || "string".equals(type) || "text".equals(type)) {
+            // A field marked `translatable: false` has no column in the language table, so a row
+            // setting it would seed a column that does not exist - the CSVIM fails on the import, which
+            // is a runtime symptom for something the model already says.
+            if (field.isPrimaryKey() || field.hasLanguageColumn()) {
                 allowed.add(field.getName());
             }
         }
