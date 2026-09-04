@@ -19,6 +19,7 @@ import org.eclipse.dirigible.components.jobs.telemetry.JobFailuresCountListener;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.impl.jdbcjobstore.JobStoreTX;
+import org.quartz.impl.matchers.GroupMatcher;
 import org.quartz.utils.DBConnectionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,22 +60,46 @@ class QuartzConfig {
         scheduler.getListenerManager()
                  .addJobListener(jobFailuresCountListener);
 
+        verifyTriggersAreReadable(scheduler);
+
         return scheduler;
+    }
+
+    /**
+     * Reads the trigger keys once so that a job store which cannot talk to its own tables is reported
+     * at startup. Without it a mismatched driver delegate degrades into a healthy looking instance that
+     * fires nothing, its only trace an ERROR repeating on every scheduler poll.
+     *
+     * @param scheduler the scheduler
+     */
+    private void verifyTriggersAreReadable(Scheduler scheduler) {
+        try {
+            scheduler.getTriggerKeys(GroupMatcher.anyTriggerGroup());
+        } catch (SchedulerException ex) {
+            logger.error(
+                    "The scheduler cannot read its triggers from the system database - no scheduled job will fire."
+                            + " Check that the Quartz tables exist there and that the driver delegate matches that database -"
+                            + " set [{}] to its delegate, for example [{}] for PostgreSQL",
+                    QuartzDriverDelegateResolver.DELEGATE_OVERRIDE_KEY, QuartzDriverDelegateResolver.POSTGRESQL_DELEGATE, ex);
+        }
     }
 
     /**
      * Scheduler factory bean.
      *
      * @param jobFactory the job factory
+     * @param systemDataSourceName the name of the system data source
+     * @param systemDataSource the system data source the job store runs on
+     * @param transactionManager the transaction manager
      * @return the scheduler factory bean
      * @throws IOException Signals that an I/O exception has occurred.
      */
     @Bean
     SchedulerFactoryBean schedulerFactoryBean(AutoWiringSpringBeanJobFactory jobFactory, @SystemDataSourceName String systemDataSourceName,
-            PlatformTransactionManager transactionManager) throws IOException {
+            @Qualifier("SystemDB") DataSource systemDataSource, PlatformTransactionManager transactionManager) throws IOException {
         SchedulerFactoryBean factory = new SchedulerFactoryBean();
         factory.setJobFactory(jobFactory);
-        factory.setQuartzProperties(quartzProperties(systemDataSourceName));
+        factory.setQuartzProperties(quartzProperties(systemDataSourceName, systemDataSource));
         factory.setTransactionManager(transactionManager);
         factory.setWaitForJobsToCompleteOnShutdown(false);
 
@@ -89,7 +114,7 @@ class QuartzConfig {
      * @return the properties
      * @throws IOException Signals that an I/O exception has occurred.
      */
-    private Properties quartzProperties(String systemDataSourceName) throws IOException {
+    private Properties quartzProperties(String systemDataSourceName, DataSource systemDataSource) throws IOException {
         PropertiesFactoryBean propertiesFactoryBean = new PropertiesFactoryBean();
         propertiesFactoryBean.setLocation(new ClassPathResource("/quartz.properties"));
         propertiesFactoryBean.afterPropertiesSet();
@@ -98,8 +123,7 @@ class QuartzConfig {
         String jobStoreClass = properties.getProperty("org.quartz.jobStore.class");
         if (null != jobStoreClass && jobStoreClass.equals(JobStoreTX.class.getCanonicalName())) {
             properties.setProperty("org.quartz.jobStore.dataSource", systemDataSourceName);
-            properties.setProperty("org.quartz.jobStore.driverDelegateClass", org.eclipse.dirigible.commons.config.Configuration.get(
-                    "DIRIGIBLE_SCHEDULER_DATABASE_DELEGATE", "org.quartz.impl.jdbcjobstore.StdJDBCDelegate"));
+            properties.setProperty("org.quartz.jobStore.driverDelegateClass", QuartzDriverDelegateResolver.resolve(systemDataSource));
         }
         return properties;
     }
