@@ -870,6 +870,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                         .isBlank()) {
                 continue;
             }
+            // A MUTUAL cross-model cycle has no first project (#6539): this create-from needs the
+            // target model's .model, which holds a foreign key back here and so needs ours. Asked
+            // before any resolution, because the answer decides whether this entry is emitted at all.
+            GeneratesBootstrap.AbsentOwner absent = GeneratesBootstrap.absentOwner(g, model, context);
+            if (absent != null) {
+                if (context == null || !context.isBootstrap()) {
+                    throw GeneratesBootstrap.required(g.getName(), absent);
+                }
+                reportDroppedGlue(context, GeneratesBootstrap.skipWarning(g.getName(), absent));
+                continue;
+            }
             // The SOURCE is normally a local entity; with `fromUses:` it is owned by another model and
             // resolved from that model's .model exactly as a cross-model TARGET is. Authoring the
             // create-from on the TARGET's module is what keeps the two modules' generated Java a DAG:

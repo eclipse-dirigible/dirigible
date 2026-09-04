@@ -278,11 +278,37 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         }
     };
 
-    $scope.generate = () => {
+    // A mutual cross-model cycle has no first project (#6539): this model's create-from needs the
+    // target model, which holds a foreign key back here and needs this one. The server answers such a
+    // Generate with 422 + `bootstrap: true`, meaning "the same pass succeeds if you let it skip that
+    // create-from" - offered here as a retry, so the developer never strips the block by hand.
+    const offerBootstrap = (issues) => {
+        dialogHub.showDialog({
+            title: 'Generate without the create-from?',
+            message: `${issues.join('\n')}\n\nGenerate everything else now? Then generate the other model, and Generate here again to emit the create-from.`,
+            preformatted: true,
+            buttons: [{
+                id: 'bootstrap',
+                state: ButtonStates.Emphasized,
+                label: 'Generate anyway',
+            },
+            {
+                id: 'cancel',
+                state: ButtonStates.Transparent,
+                label: 'Cancel',
+            }]
+        }).then((buttonId) => {
+            if (buttonId === 'bootstrap') {
+                $scope.$evalAsync(() => $scope.generate(true));
+            }
+        });
+    };
+
+    $scope.generate = (bootstrap) => {
         const location = fileLocation();
         $scope.state.isBusy = true;
         dialogHub.showBusyDialog('Generating model files and code');
-        $http.post(`${GENERATE_URL}?workspace=${encodeURIComponent(location.workspace)}&project=${encodeURIComponent(location.project)}&path=${encodeURIComponent(location.path)}`)
+        $http.post(`${GENERATE_URL}?workspace=${encodeURIComponent(location.workspace)}&project=${encodeURIComponent(location.project)}&path=${encodeURIComponent(location.path)}${bootstrap ? '&bootstrap=true' : ''}`)
              .then((response) => {
                  $scope.issues = []; // a successful generate clears any pinned cross-model issue from a prior attempt
                  $scope.warnings = response.data.warnings || [];
@@ -297,6 +323,9 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                      $scope.state.isBusy = false;
                      if (response.status === 422 && response.data && response.data.issues) {
                          $scope.issues = response.data.issues;
+                         if (response.data.bootstrap) {
+                             offerBootstrap(response.data.issues);
+                         }
                      } else {
                          dialogHub.showAlert({
                              title: 'Failed to generate',

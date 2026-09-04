@@ -21,6 +21,7 @@ import org.eclipse.dirigible.components.ide.workspace.domain.Project;
 import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.eclipse.dirigible.components.intent.LoggedValue;
+import org.eclipse.dirigible.components.intent.generator.BootstrapRequiredException;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationService;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
@@ -143,14 +144,26 @@ public class IntentEndpoint {
     /**
      * Generate the derived model files for the given intent file into its workspace project.
      *
+     * <p>
+     * {@code bootstrap=true} is the declared first pass of a MUTUAL cross-model cycle (dirigible #6539)
+     * - model A mints a document into model B while B holds a foreign key back to A, so neither project
+     * can be generated first. It emits everything except the create-from whose target model does not
+     * exist yet, and names it in {@code warnings}; the sequence is bootstrap here, generate the
+     * dependency, regenerate here normally. A default pass answers {@code 422} for that case with
+     * {@code bootstrap: true} alongside the issues, so a caller can offer exactly this retry.
+     *
      * @param workspace the workspace name, e.g. {@code workspace}
      * @param project the project name
      * @param path the intent file path within the project, e.g. {@code app.intent}
+     * @param bootstrap {@code "true"} to run the bootstrap pass; anything else (including absent) is a
+     *        normal pass. Taken as text and parsed rather than bound as a {@code boolean}, so a client
+     *        that sends the flag empty gets a normal pass instead of an opaque {@code 400} from the
+     *        type conversion
      * @return the written and scrubbed file names, or {@code 422} with the validation issues
      */
     @PostMapping(value = "/generate", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> generate(@RequestParam("workspace") String workspace, @RequestParam("project") String project,
-            @RequestParam("path") String path) {
+            @RequestParam("path") String path, @RequestParam(value = "bootstrap", required = false) String bootstrap) {
         Workspace workspaceObject = workspaceService.getWorkspace(workspace);
         if (!workspaceObject.exists()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace [" + workspace + "] does not exist");
@@ -166,13 +179,20 @@ public class IntentEndpoint {
         }
         String yaml = new String(intentFile.getContent(), StandardCharsets.UTF_8);
         try {
-            IntentGenerationService.GenerationResult result =
-                    generationService.generate(yaml, projectObject.getPath(), project, workspace, baseName(path));
+            IntentGenerationService.GenerationResult result = generationService.generate(yaml, projectObject.getPath(), project, workspace,
+                    baseName(path), Boolean.parseBoolean(bootstrap));
             // "warnings" carries non-fatal dropped glue (e.g. an unresolvable notify recipient): the
             // generation succeeded, but the caller must be able to see what was NOT emitted rather than
             // it living only in a server log line (dirigible #6360).
             return ResponseEntity.ok(Map.of("workspace", workspace, "project", project, "written", result.written(), "scrubbed",
                     result.scrubbed(), "codeGenerations", result.codeGenerations(), "warnings", result.issues()));
+        } catch (BootstrapRequiredException e) {
+            // A cross-model create-from whose target model does not exist yet. Answered as the ordinary
+            // 422 plus the one fact the caller cannot derive from the text: this pass would succeed in
+            // bootstrap mode, so the editor can offer that retry instead of leaving the developer to
+            // strip the block by hand (dirigible #6539).
+            return ResponseEntity.unprocessableEntity()
+                                 .body(Map.of("issues", e.getIssues(), "bootstrap", Boolean.TRUE));
         } catch (IntentValidationException e) {
             return ResponseEntity.unprocessableEntity()
                                  .body(Map.of("issues", e.getIssues()));

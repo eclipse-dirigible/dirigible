@@ -107,9 +107,30 @@ public class IntentGenerationService {
      *         has structural problems
      */
     public GenerationResult generate(String yaml, String projectRoot, String projectName, String workspaceName, String fallbackName) {
+        return generate(yaml, projectRoot, projectName, workspaceName, fallbackName, false);
+    }
+
+    /**
+     * The same pass, optionally as the declared BOOTSTRAP of a mutual cross-model cycle (dirigible
+     * #6539): a {@code generates} whose target model has not been generated yet is skipped, and named
+     * in the returned issues, instead of failing the whole Generate. Nothing else is relaxed - see
+     * {@link BootstrapRequiredException}.
+     *
+     * @param yaml the raw {@code .intent} document
+     * @param projectRoot repository path of the target project root
+     * @param projectName the target project name
+     * @param workspaceName the workspace the project lives in
+     * @param fallbackName base name used for single-file outputs when the YAML omits {@code name:}
+     * @param bootstrap whether an unresolvable cross-model create-from may be skipped
+     * @return the files written and scrubbed
+     * @throws org.eclipse.dirigible.components.intent.parser.IntentValidationException if the document
+     *         has structural problems
+     */
+    public GenerationResult generate(String yaml, String projectRoot, String projectName, String workspaceName, String fallbackName,
+            boolean bootstrap) {
         IntentModel model = IntentParser.parse(yaml);
         IntentGenerationContext context =
-                new IntentGenerationContext(model, projectRoot, projectName, workspaceName, fallbackName, repository);
+                new IntentGenerationContext(model, projectRoot, projectName, workspaceName, fallbackName, repository, false, bootstrap);
         context.setSettings(loadOrScaffoldSettings(context));
         LOGGER.info("Generating model files for intent [{}] under [{}] via {} generator(s)", LoggedValue.of(IntentNaming.baseName(context)),
                 LoggedValue.of(projectRoot), generators.size());

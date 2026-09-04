@@ -16,6 +16,7 @@ import java.util.Map;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.LoggedValue;
+import org.eclipse.dirigible.components.intent.generator.GeneratesBootstrap;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
@@ -71,6 +72,14 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
             String name = g.getName();
             if (name == null || name.isBlank()) {
                 LOGGER.warn("Skipping generates action with no name");
+                continue;
+            }
+            if (GeneratesBootstrap.skipped(g, model, context)) {
+                // The bootstrap pass of a mutual cross-model cycle (dirigible #6539) left the server
+                // controller out, so the button must go with it: a descriptor whose endpoint does not
+                // exist is a click that 404s. The glue generator already reported the skip.
+                LOGGER.debug("Generates action [{}] is skipped by the bootstrap pass - contributing no client action",
+                        LoggedValue.of(name));
                 continue;
             }
             if (!g.hasButton()) {
