@@ -66,6 +66,17 @@ public final class IntentGenerationContext {
      */
     private final boolean dryRun;
 
+    /**
+     * A BOOTSTRAP pass: a cross-model {@code generates} target whose owner model does not exist yet is
+     * skipped (with a reported warning) instead of failing the whole Generate (dirigible #6539). It is
+     * the declared escape from a MUTUAL cross-model cycle - model A mints a document into model B while
+     * B holds a foreign key back to A - where neither project can be generated first. Nothing else is
+     * relaxed: an owner model that IS there but declares no such entity still fails loudly, and a
+     * cross-model RELATION never falls back to a guess (its table / key column / FK type cannot be
+     * invented without emitting a broken schema).
+     */
+    private final boolean bootstrap;
+
     /** The project's {@code .settings} (loaded or scaffolded by the service before generators run). */
     private IntentSettings settings;
 
@@ -95,6 +106,12 @@ public final class IntentGenerationContext {
 
     IntentGenerationContext(IntentModel model, String projectRoot, String projectName, String workspaceName, String fallbackName,
             IRepository repository, boolean dryRun) {
+        this(model, projectRoot, projectName, workspaceName, fallbackName, repository, dryRun, false);
+    }
+
+    IntentGenerationContext(IntentModel model, String projectRoot, String projectName, String workspaceName, String fallbackName,
+            IRepository repository, boolean dryRun, boolean bootstrap) {
+        this.bootstrap = bootstrap;
         this.model = model;
         this.projectRoot = projectRoot;
         this.projectName = projectName;
@@ -231,6 +248,16 @@ public final class IntentGenerationContext {
      */
     public boolean isDryRun() {
         return dryRun;
+    }
+
+    /**
+     * Whether this pass may skip a cross-model {@code generates} whose owner model does not exist yet
+     * (dirigible #6539) - the declared bootstrap of a mutual cross-model cycle.
+     *
+     * @return {@code true} for a bootstrap pass
+     */
+    public boolean isBootstrap() {
+        return bootstrap;
     }
 
     public String getProjectName() {

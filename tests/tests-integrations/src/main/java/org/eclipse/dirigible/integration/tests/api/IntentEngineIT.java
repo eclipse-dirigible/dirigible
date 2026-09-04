@@ -57,6 +57,15 @@ class IntentEngineIT extends IntegrationTest {
     private static final String GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
     /**
+     * The sibling project of the mutual cross-model pair (dirigible #6539). Its name IS the model alias
+     * the source intent declares in {@code uses:} - that is how the owner's {@code .model} is located.
+     */
+    private static final String DEPENDENCY_PROJECT = "quotations";
+    private static final String DEPENDENCY_PROJECT_PATH =
+            IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/" + DEPENDENCY_PROJECT;
+    private static final String DEPENDENCY_GENERATE_URL =
+            "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + DEPENDENCY_PROJECT + "&path=app.intent";
+    /**
      * The generated -transitioned publish, matched on its sendToTopic argument. The code comments that
      * explain the flip mention "-transitioned" as well, and they sit before the target save - matching
      * the bare word would find a comment and read as a publish in the wrong place.
@@ -4556,10 +4565,113 @@ class IntentEngineIT extends IntegrationTest {
         assertFalse(resource("countries-extra.csv").exists(), "a file seed must not generate a CSV body");
     }
 
+    /**
+     * A MUTUAL cross-model {@code generates} pair has no project to generate first (dirigible #6539):
+     * the opportunities model mints a quotation into the quotations model, which holds a foreign key
+     * back to the opportunity - so a fresh bootstrap used to be impossible without stripping the
+     * create-from by hand, generating, and putting it back. The declared bootstrap pass is the whole
+     * sequence: bootstrap here, generate the dependency, regenerate here.
+     */
+    @Test
+    void mutual_cross_model_generates_bootstraps() {
+        writeIntent(MUTUAL_SOURCE_INTENT);
+        writeDependencyIntent(MUTUAL_TARGET_INTENT);
+
+        // 1. The default pass refuses - and says the one thing the generic cross-model message cannot,
+        // namely that this pass would succeed if it were allowed to skip the create-from.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("bootstrap", equalTo(true))
+                                                 .body("issues", hasItem(containsString("mutual cross-model cycle"))));
+
+        // 2. The bootstrap pass emits the model and names what it left out.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL + "&bootstrap=true")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("warnings", hasItem(containsString("quotation-from-opportunity"))));
+        assertTrue(resource("opportunities.model").exists(),
+                "the bootstrap pass must generate everything the create-from does not depend on");
+        assertFalse(resource("opportunities.glue").exists(),
+                "the skipped create-from was this model's only glue, so no .glue is emitted yet");
+        // Both halves of a create-from make the same decision: a button whose server controller was
+        // left out would be a click that 404s.
+        assertFalse(resource("quotation-from-opportunity-generate-action.extension").exists(),
+                "the client button must be skipped with the controller it calls");
+
+        // 3. The dependency can now be generated: it resolves its foreign key against the model the
+        // bootstrap pass just wrote - the half of the cycle that was unreachable before.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(DEPENDENCY_GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // 4. And the ordinary pass now completes the cycle, with nothing left to warn about.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("warnings", not(hasItem(containsString("quotation-from-opportunity")))));
+        String glue = contentOf("opportunities.glue");
+        assertTrue(glue.contains("\"name\": \"quotation-from-opportunity\""),
+                "the create-from must be emitted once its target model exists");
+        assertTrue(glue.contains("\"toModel\": \"quotations\""), "the emitted create-from must point at the owner model");
+        assertTrue(resource("quotation-from-opportunity-generate-action.extension").exists(), "and the button comes back with it");
+    }
+
+    /** The source half of the mutual pair: it mints a document into a model it does not own. */
+    private static final String MUTUAL_SOURCE_INTENT = """
+            name: opportunities
+            uses:
+              - { model: quotations }
+            entities:
+              - name: Opportunity
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: subject, type: string,  length: 200 }
+            generates:
+              - name: quotation-from-opportunity
+                from: Opportunity
+                to: Quotation
+                uses: quotations
+                map:
+                  Subject: subject
+                  Opportunity: id
+            """;
+
+    /** The target half: it holds the foreign key back, which is what closes the cycle. */
+    private static final String MUTUAL_TARGET_INTENT = """
+            name: quotations
+            uses:
+              - { model: opportunities, project: intent-test }
+            entities:
+              - name: Quotation
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: subject, type: string,  length: 200 }
+                relations:
+                  - { name: Opportunity, kind: manyToOne, to: Opportunity, model: opportunities }
+            """;
+
+    private void writeDependencyIntent(String yaml) {
+        String path = DEPENDENCY_PROJECT_PATH + "/app.intent";
+        IResource existing = repository.getResource(path);
+        if (existing.exists()) {
+            existing.setContent(yaml.getBytes(StandardCharsets.UTF_8));
+        } else {
+            repository.createResource(path, yaml.getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
     @AfterEach
     void removeProject() {
         if (repository.hasCollection(PROJECT_PATH)) {
             repository.removeCollection(PROJECT_PATH);
+        }
+        if (repository.hasCollection(DEPENDENCY_PROJECT_PATH)) {
+            repository.removeCollection(DEPENDENCY_PROJECT_PATH);
         }
     }
 }

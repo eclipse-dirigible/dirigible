@@ -121,7 +121,7 @@ public final class CrossModelSupport {
         if (fromWorkspace != null) {
             return fromWorkspace;
         }
-        String registryPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project + "/" + alias + ".model";
+        String registryPath = registryModelPath(uses);
         TargetInfo fromRegistry = readTarget(repository, registryPath, targetEntity, defaults);
         if (fromRegistry != null) {
             return fromRegistry;
@@ -173,7 +173,7 @@ public final class CrossModelSupport {
         if (fromWorkspace != null) {
             return fromWorkspace;
         }
-        String registryPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project + "/" + alias + ".model";
+        String registryPath = registryModelPath(uses);
         ItemsChildInfo fromRegistry = readItemsChild(repository, registryPath, masterEntity);
         if (fromRegistry != null) {
             return fromRegistry;
@@ -230,7 +230,7 @@ public final class CrossModelSupport {
         if (fromWorkspace != null) {
             return fromWorkspace;
         }
-        String registryPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project + "/" + alias + ".model";
+        String registryPath = registryModelPath(uses);
         RelatedSourceInfo fromRegistry = readRelatedSource(repository, registryPath, sourceEntity, referencedEntity, via);
         if (fromRegistry != null) {
             return fromRegistry;
@@ -580,6 +580,45 @@ public final class CrossModelSupport {
         String keyColumn = IntentNaming.upperSnake(targetEntity) + "_ID";
         return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null, null, null,
                 java.util.Set.of());
+    }
+
+    /**
+     * The repository path of the owner model's PUBLISHED copy under the registry - the second of the
+     * two equally valid sources {@link #resolve} reads, and the only one a prebuilt, prepackaged module
+     * ever has.
+     *
+     * @param uses the {@code uses:} entry naming the owner model
+     * @return the registry-absolute path of the owner's {@code .model}
+     */
+    private static String registryModelPath(UsesIntent uses) {
+        return IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + uses.resolveProject() + "/" + uses.getModel() + ".model";
+    }
+
+    /**
+     * Whether the owner model's {@code .model} FILE is readable from either source - the workspace copy
+     * or the published one. This is the "the dependency has not been generated yet" question, and it is
+     * deliberately narrower than {@link #resolve} succeeding: a model that IS there but declares no
+     * such entity is an authoring error, and must keep failing loudly even where the absence is
+     * tolerated (the {@code generates} bootstrap pass, dirigible #6539).
+     *
+     * @param context the generation context; without a repository or a project root there is nothing to
+     *        read from and resolution falls back to convention rather than failing, so the answer is
+     *        {@code true}
+     * @param uses the {@code uses:} entry naming the owner model
+     * @return {@code true} when either source has the owner's {@code .model}
+     */
+    public static boolean ownerModelExists(IntentGenerationContext context, UsesIntent uses) {
+        if (context == null || context.getRepository() == null || context.getProjectRoot() == null) {
+            return true;
+        }
+        IRepository repository = context.getRepository();
+        String workspacePath = siblingModelPath(context.getProjectRoot(), uses.resolveProject(), uses.getModel());
+        if (workspacePath != null && repository.getResource(workspacePath)
+                                               .exists()) {
+            return true;
+        }
+        return repository.getResource(registryModelPath(uses))
+                         .exists();
     }
 
     /**
