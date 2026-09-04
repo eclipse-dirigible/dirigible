@@ -228,8 +228,9 @@ browser-IDE developer sees what's wrong without reading the server log.
 - Controller routing: base path = class FQN with slashes; longest base path wins, literal beats
   `{placeholder}`; `TypeCoercer` → `400` on parse failure; `@Body` via Spring's primary `ObjectMapper`;
   return `void`/`String`/other → write-yourself / `text/plain` / JSON.
-- Spring Boot strips `ResponseStatusException.getReason()` from the JSON body — ITs assert status code
-  only, not body text.
+- `ControllerInvoker` renders its own compact `{status, error, message}` body, so a generated
+  controller's validation reason reaches the caller verbatim. The platform-wide error body carries the
+  reason too since #6994; the ITs here still assert status codes only.
 
 ## Tests
 

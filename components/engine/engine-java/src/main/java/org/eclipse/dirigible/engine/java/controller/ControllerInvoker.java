@@ -79,12 +79,12 @@ public class ControllerInvoker {
      *
      * <p>
      * Every {@link ResponseStatusException} raised on this path is rendered HERE, with its reason in
-     * the JSON body: Spring Boot 4 drops {@code getReason()} from the error body it builds, so
-     * {@code server.error.include-message=always} no longer surfaces it and a caller receives a bare
-     * {@code 400 Bad Request} for a perfectly actionable failure ("The 'Email' does not match the
-     * required pattern", "Entry needs at least one line"). Generated controllers carry their validation
-     * messages in exactly that reason, so dropping it makes the whole generated validation layer
-     * undiagnosable over REST.
+     * the JSON body. Generated controllers carry their validation messages in exactly that reason ("The
+     * 'Email' does not match the required pattern", "Entry needs at least one line"), so a caller that
+     * receives only {@code 400 Bad Request} cannot tell which of a form's rules it broke. The compact
+     * {@code {status, error, message}} body written here is this path's own contract; the platform
+     * error body carries the reason as well since the {@code include-message} property was repaired
+     * (#6994), so this is no longer the only place it survives.
      */
     public void invoke(RouteMatch match, HttpServletRequest request, HttpServletResponse response) {
         try {
@@ -102,9 +102,9 @@ public class ControllerInvoker {
         try {
             args = bindParameters(route, match.pathParameters(), request, response);
         } catch (BindingException e) {
-            // Spring Boot 4 strips ResponseStatusException.getReason() from the JSON response body, so
-            // without this log line the caller sees a bare 400 with no clue what failed (e.g. a
-            // mistyped JSON field that Jackson couldn't coerce into the target Java type).
+            // Logged as well as answered: the caller gets the reason, but a mistyped JSON field that
+            // Jackson could not coerce into the target Java type is a deployment problem the developer
+            // reads in the log, not something only the calling program sees.
             LOGGER.warn("Bad request binding for [{}#{}]: {}", match.entry()
                                                                     .fqn(),
                     route.method()
