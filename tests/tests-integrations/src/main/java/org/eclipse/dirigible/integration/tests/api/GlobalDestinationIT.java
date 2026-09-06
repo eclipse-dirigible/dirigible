@@ -22,9 +22,6 @@ import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
-import org.quartz.JobKey;
-import org.quartz.Scheduler;
-import org.quartz.SchedulerException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 
@@ -66,12 +63,9 @@ class GlobalDestinationIT extends IntegrationTest {
     @Autowired
     private TenantContext tenantContext;
 
-    @Autowired
-    private Scheduler scheduler;
-
     @Test
     @Order(1)
-    void aGlobalDestinationIsReachedByItsBareNameFromOutsideTheTenant() throws SchedulerException {
+    void aGlobalDestinationIsReachedByItsBareNameFromOutsideTheTenant() {
         provisionTenant();
 
         publish(DestinationNameManager.GLOBAL_MARKER + GLOBAL_QUEUE);
@@ -82,7 +76,7 @@ class GlobalDestinationIT extends IntegrationTest {
 
     @Test
     @Order(2)
-    void aDestinationWithoutTheMarkerStaysScopedToItsTenant() throws SchedulerException {
+    void aDestinationWithoutTheMarkerStaysScopedToItsTenant() {
         provisionTenant();
 
         publish(TENANT_SCOPED_QUEUE);
@@ -103,21 +97,13 @@ class GlobalDestinationIT extends IntegrationTest {
         });
     }
 
-    /**
-     * Provision the shared tenant, once per class.
-     *
-     * <p>
-     * The provisioning job is triggered explicitly rather than waited for: its schedule is
-     * {@code DIRIGIBLE_TENANTS_PROVISIONING_FREQUENCY_SECONDS} wide, so a test that merely waited would
-     * be racing the single firing at startup.
-     */
-    private void provisionTenant() throws SchedulerException {
+    /** Provision the shared tenant, once per class. */
+    private void provisionTenant() {
         if (tenant != null) {
             return;
         }
         DirigibleTestTenant created = new DirigibleTestTenant("global-destination-it");
         createTenants(created);
-        scheduler.triggerJob(JobKey.jobKey("TenantsProvisioningJob", "system"));
         waitForTenantProvisioning(created);
         tenant = created;
     }
