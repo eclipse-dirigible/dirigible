@@ -9,7 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.generator.bpmn;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -187,6 +189,10 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // (no flowable:async), so their rejection reaches the person who acted - see
         // synchronousNodes.
         Map<String, Set<String>> synchronousByProcess = synchronousNodes(setters, byName, userTaskKeys, writerByProcessTask);
+        // The authored steps whose status write a gate stands in front of - what render() walks BACK
+        // from, to pull the rest of the completing transaction (the delegates a reaching user task
+        // inserts, the resolvers of the nodes between) in with them.
+        Map<String, Set<String>> gatedStepsByProcess = gatedSteps(setters, byName);
         // Extra candidate groups from the .settings (defaults to ADMINISTRATOR) appended to every user
         // task, so an administrator can always claim a task in addition to the task's own role.
         String candidateGroupsExtra = String.join(",", context.getSettings()
@@ -246,7 +252,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                             processFieldLoads, processTimerLoads, processStepEvents, ownFieldPascalCase(process, byName),
                             candidateGroupsExtra, writerByTask, setterByTask,
                             IntentNaming.processTaskCatalog(context.getProjectName(), context),
-                            synchronousByProcess.getOrDefault(process.getName(), Set.of())));
+                            synchronousByProcess.getOrDefault(process.getName(), Set.of()),
+                            gatedStepsByProcess.getOrDefault(process.getName(), Set.of())));
         }
     }
 
@@ -294,6 +301,30 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 }
             } else {
                 nodes.add(setter.step());
+            }
+        }
+        return byProcess;
+    }
+
+    /**
+     * The authored steps that carry a check-gated status write, per process name.
+     *
+     * <p>
+     * {@link #synchronousNodes} answers <em>which nodes</em> must lose their async boundary from the
+     * setter's own position; this answers <em>where the gate is</em>, so {@link #render} can walk back
+     * from it to the user task whose completion the refusal has to roll back and take everything in
+     * between along (issue #7063).
+     *
+     * @param setters every validated field setter of the model
+     * @param byName the model's entities, by name
+     * @return the authored step names carrying a gated status write, per process name
+     */
+    private static Map<String, Set<String>> gatedSteps(List<SetFieldSupport.Setter> setters, Map<String, EntityIntent> byName) {
+        Map<String, Set<String>> byProcess = new HashMap<>();
+        for (SetFieldSupport.Setter setter : setters) {
+            if (setter.relation() && gatesACheck(byName.get(setter.entity()), setter.field(), setter.value())) {
+                byProcess.computeIfAbsent(setter.process(), process -> new HashSet<>())
+                         .add(setter.step());
             }
         }
         return byProcess;
@@ -406,10 +437,127 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         return "/services/web/" + projectName + "/gen/" + form + "/forms/" + form + "/index.html";
     }
 
+    /**
+     * Every node that must run <b>inside the transaction of the user action that reaches a
+     * {@code checks:} gate</b> - the setter nodes {@link #synchronousNodes} already found, plus
+     * everything the execution passes through on its way from the completing user task to the gate.
+     *
+     * <p>
+     * #7014 took the async boundary off the gated status set itself, and off the writer when the setter
+     * was declared on the very user task that completes. A gate one hop further down - the shape every
+     * approve/reject flow has, where the user task falls through a {@code decision} into the
+     * {@code serviceTask} that sets the status (BusinessIntents' four billing documents, issue #7063) -
+     * still had a boundary in front of it: the writer that persists the reviewer's edits, a resolver
+     * inserted before the decision, a step-completed emitter. Any one of them commits the user-task
+     * completion, and the gate then fails a detached job: the task is gone from the Inbox, the document
+     * never moved, the refusal shows up as a dead-letter incident in Monitoring, and only an
+     * administrator can retry it. So the walk goes back from the gate to the user tasks that reach it
+     * through routing alone, and every node on the way loses its boundary too.
+     *
+     * <p>
+     * The walk stops at anything that is not a {@code decision}: a second user task is its own wait
+     * state, and an authored service task in between is real asynchronous work whose completion the
+     * person is no longer waiting on - the action it belongs to has already succeeded, so its gate is
+     * legitimately a background incident.
+     *
+     * @param process the authored process
+     * @param gatedSteps the authored step names carrying a check-gated status write
+     * @param nodesByStep the node ids each authored step expands to, in flow order
+     * @param synchronousSetterNodes the setter/writer nodes already resolved from the setter's own
+     *        position
+     * @return every node id to emit without {@code flowable:async}
+     */
+    private static Set<String> completingTransactionNodes(ProcessIntent process, Set<String> gatedSteps,
+            Map<String, List<String>> nodesByStep, Set<String> synchronousSetterNodes) {
+        Set<String> synchronous = new HashSet<>(synchronousSetterNodes);
+        if (gatedSteps.isEmpty()) {
+            return synchronous;
+        }
+        Map<String, StepIntent> byName = new LinkedHashMap<>();
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() != null && !step.getName()
+                                               .isBlank()) {
+                byName.put(step.getName(), step);
+            }
+        }
+        for (StepIntent step : process.getSteps()) {
+            if (!"userTask".equals(step.getKind()) || step.getName() == null) {
+                continue;
+            }
+            // The nodes of the user task itself, minus everything up to and including the wait state: the
+            // delegates inserted BEFORE it ran when the execution arrived, in the previous transaction.
+            List<String> ownNodes = nodesByStep.getOrDefault(step.getName(), List.of(step.getName()));
+            List<String> afterTheWait = ownNodes.subList(Math.min(ownNodes.indexOf(step.getName()) + 1, ownNodes.size()), ownNodes.size());
+            for (List<String> path : gatedPaths(step, byName, process.getSteps(), gatedSteps)) {
+                synchronous.addAll(afterTheWait);
+                for (String node : path) {
+                    synchronous.addAll(nodesByStep.getOrDefault(node, List.of(node)));
+                }
+            }
+        }
+        return synchronous;
+    }
+
+    /**
+     * The routes from a user task to a gated step, as the authored step names strictly between the task
+     * and the gate plus the gate itself. Empty when no gate is reachable through {@code decision} steps
+     * alone.
+     */
+    private static List<List<String>> gatedPaths(StepIntent userTask, Map<String, StepIntent> byName, List<StepIntent> authored,
+            Set<String> gatedSteps) {
+        List<List<String>> paths = new ArrayList<>();
+        Deque<List<String>> pending = new ArrayDeque<>();
+        for (String target : successors(userTask, authored)) {
+            pending.add(List.of(target));
+        }
+        Set<String> walked = new HashSet<>();
+        while (!pending.isEmpty()) {
+            List<String> path = pending.poll();
+            String name = path.get(path.size() - 1);
+            if (!walked.add(name)) {
+                continue; // a loop back into a step already on some route - its nodes are already taken
+            }
+            if (gatedSteps.contains(name)) {
+                paths.add(path);
+                continue;
+            }
+            StepIntent step = byName.get(name);
+            if (step == null || !"decision".equals(step.getKind())) {
+                continue; // a wait state, real asynchronous work, or `end` - the transaction ends here
+            }
+            for (String target : successors(step, authored)) {
+                List<String> next = new ArrayList<>(path);
+                next.add(target);
+                pending.add(next);
+            }
+        }
+        return paths;
+    }
+
+    /**
+     * The authored steps a step routes on to: its declared routing, or - when it declares none - the
+     * step that follows it in declaration order, which is what the linear chain falls through to.
+     */
+    private static List<String> successors(StepIntent step, List<StepIntent> authored) {
+        List<String> targets = ProcessParallelSupport.routingTargets(step);
+        if (!targets.isEmpty()) {
+            return targets;
+        }
+        int index = authored.indexOf(step);
+        for (int i = index + 1; index >= 0 && i < authored.size(); i++) {
+            String name = authored.get(i)
+                                  .getName();
+            if (name != null && !name.isBlank()) {
+                return List.of(name);
+            }
+        }
+        return List.of();
+    }
+
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, String eventsPackage,
             List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, List<StepEventSupport.Emitter> stepEvents,
             Map<String, String> ownFieldPascalCase, String candidateGroupsExtra, Map<String, String> writerByTask,
-            Map<String, String> setterByTask, String taskLabelCatalog, Set<String> synchronousNodes) {
+            Map<String, String> setterByTask, String taskLabelCatalog, Set<String> synchronousSetterNodes, Set<String> gatedSteps) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
         // mutating the shared model (the glue generator runs after this one and must still see the
@@ -424,6 +572,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         AugmentedSteps augmented = augmentWithResolvers(process.getName(), process.getSteps(), eventsPackage, resolvers, fieldLoads,
                 timerLoads, stepEvents, ownFieldPascalCase, writerByTask, setterByTask);
         List<StepIntent> steps = augmented.steps();
+        // The gate's rejection has to roll back the ACTION that reached it, so nothing between the user
+        // task and the gate may commit first - see completingTransactionNodes.
+        Set<String> synchronousNodes = completingTransactionNodes(process, gatedSteps, augmented.nodesByStep(), synchronousSetterNodes);
         // abortOn: a -transitioned into a listed status cancels the in-flight instance via an
         // interrupting message event subprocess (below). Its optional `then` cleanup is an abort-only
         // serviceTask - pull it out of the main flow (it is emitted inside the event subprocess), and

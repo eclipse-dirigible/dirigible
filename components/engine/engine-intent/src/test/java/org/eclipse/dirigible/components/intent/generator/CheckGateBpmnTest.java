@@ -43,6 +43,10 @@ class CheckGateBpmnTest {
                         fields:
                           - { name: id, type: integer, primaryKey: true, generated: true }
                           - { name: name, type: string }
+                      - name: Customer
+                        fields:
+                          - { name: id,     type: integer, primaryKey: true, generated: true }
+                          - { name: rating, type: integer }
                       - name: Invoice
                         checks:
                           - { kind: itemsMin, count: 1, status: 2, message: "Invoice needs at least one line" }
@@ -51,6 +55,7 @@ class CheckGateBpmnTest {
                           - { name: note, type: string, length: 200 }
                         relations:
                           - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                          - { name: Customer, kind: manyToOne, to: Customer }
                       - name: InvoiceItem
                         fields:
                           - { name: id,       type: integer, primaryKey: true, generated: true }
@@ -70,8 +75,25 @@ class CheckGateBpmnTest {
                         steps:
                           - { name: issue, kind: userTask, args: { assignee: clerk, form: ApproveInvoice, setRelationField: Status, value: 2, next: done } }
                           - { name: done,  kind: end }
+                      - name: InvoiceHandover
+                        trigger: { onCreate: Invoice }
+                        steps:
+                          - { name: hand,     kind: userTask, args: { assignee: clerk, form: ApproveInvoice, next: enrich } }
+                          - { name: enrich,   kind: serviceTask, args: { delegate: custom.billing.Enrich, next: settle } }
+                          - { name: settle,   kind: serviceTask, args: { setRelationField: Status, value: 2, next: over } }
+                          - { name: over,     kind: end }
+                      - name: InvoiceDecision
+                        trigger: { onCreate: Invoice }
+                        steps:
+                          - { name: review,   kind: userTask, args: { assignee: clerk, form: DecideInvoice } }
+                          - { name: decide,   kind: decision, args: { if: "action == 'approve'", then: rated, else: reject } }
+                          - { name: rated,    kind: decision, args: { if: "Customer.rating > 0", then: activate, else: reject } }
+                          - { name: activate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: done } }
+                          - { name: reject,   kind: serviceTask, args: { setRelationField: Status, value: 8, next: done } }
+                          - { name: done,     kind: end }
                     forms:
                       - { name: ApproveInvoice, forEntity: Invoice, fields: [note], editable: [note], actions: [approve] }
+                      - { name: DecideInvoice, forEntity: Invoice, fields: [note], editable: [note], actions: [approve, reject] }
                     permissions:
                       - { role: Clerk, description: Clerk, can: [Invoice:read] }
                     """;
@@ -134,6 +156,37 @@ class CheckGateBpmnTest {
         String bpmn = bpmn("InvoiceApproval");
 
         assertAsynchronous(bpmn, "archive");
+    }
+
+    @Test
+    void aGatedSetterBehindADecisionCarriesTheWriterIntoTheTransaction() {
+        String bpmn = bpmn("InvoiceDecision");
+
+        // The shape every approve/reject flow has (issue #7063): the completing user task falls through
+        // a decision into the service task that sets the gated status. An async writer between them
+        // commits the completion, and the gate then dead-letters instead of refusing the approver.
+        assertSynchronous(bpmn, "invoiceDecisionReviewWrite");
+        // The resolver the second decision needs sits between the task and the gate too - and it is a
+        // service task like any other, so its boundary would commit the completion just the same.
+        assertSynchronous(bpmn, "resolveCustomerRating");
+        assertSynchronous(bpmn, "activate");
+    }
+
+    @Test
+    void anUngatedBranchOfTheSameDecisionKeepsItsAsyncBoundary() {
+        String bpmn = bpmn("InvoiceDecision");
+
+        assertAsynchronous(bpmn, "reject");
+    }
+
+    @Test
+    void authoredWorkBetweenTheTaskAndTheGateKeepsItsAsyncBoundary() {
+        String bpmn = bpmn("InvoiceHandover");
+
+        // The walk back from a gate stops at real asynchronous work: the completion the delegate commits
+        // has already succeeded, so nobody is waiting on the gate behind it.
+        assertAsynchronous(bpmn, "invoiceHandoverHandWrite");
+        assertAsynchronous(bpmn, "enrich");
     }
 
     @Test
