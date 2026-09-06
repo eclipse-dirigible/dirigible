@@ -228,15 +228,15 @@
         <!-- Harmonia date picker: model is YYYY-MM-DD (same as the native date input it replaces), so
              form.${property.name} round-trips unchanged. Readonly (preview) -> the input is disabled. -->
         <div x-h-date-picker>
-          <input type="text" id="f_${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#end />
+          <input type="text" :placeholder="HarmoniaFormat.dateHint()" id="f_${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#end />
           <button x-h-date-picker-trigger aria-label="Choose date"></button>
-          <div x-h-date-picker-popup x-model="form.${property.name}"></div>
+          <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "DATETIME-LOCAL")
         <div x-h-datetime-picker>
           <input type="text" id="f_${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#end />
           <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
-          <div x-h-datetime-picker-popup x-model="form.${property.name}"></div>
+          <div x-h-datetime-picker-popup="HarmoniaFormat.pickerConfig('dateTime')" x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "TIME")
         <div x-h-time-picker>

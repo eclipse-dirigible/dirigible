@@ -340,9 +340,9 @@
                   </template>
                   <template x-if="col.widget === 'DATE'">
                     <div x-h-date-picker.table>
-                      <input type="text" />
+                      <input type="text" :placeholder="HarmoniaFormat.dateHint()" />
                       <button x-h-date-picker-trigger aria-label="Choose date"></button>
-                      <div x-h-date-picker-popup x-model="s.promptValues[col.name]"></div>
+                      <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="s.promptValues[col.name]"></div>
                     </div>
                   </template>
                   <template x-if="!['DROPDOWN','NUMBER','CHECKBOX','DATE'].includes(col.widget)">

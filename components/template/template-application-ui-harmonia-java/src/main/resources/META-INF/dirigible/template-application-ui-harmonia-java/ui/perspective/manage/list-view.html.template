@@ -207,8 +207,21 @@
                         <option :value="opt.value" x-text="opt.text"></option>
                       </template>
                     </select>
-                    <input x-show="col.type !== 'fk' && col.type !== 'none'" x-model="columnFilters[col.name]"
-                           :type="col.type === 'date' ? 'date' : 'text'"
+                    <!-- A date column filters through the same Harmonia picker the forms use, configured from
+                         the instance Date pattern, so the shape it shows and accepts is the one the cells below
+                         it print. A native <input type="date"> renders in the BROWSER's locale instead, which is
+                         how one screen could offer dd.mm.yyyy while the form beside it read the same digits as
+                         m/d/yyyy. The model stays the ISO the search expects; the picker's change event bubbles
+                         to the cell, covering both a typed value and a picked one. -->
+                    <template x-if="col.type === 'date'">
+                      <div x-h-date-picker.table @change="applyServerFilter()">
+                        <input type="text" :placeholder="HarmoniaFormat.dateHint()" />
+                        <button x-h-date-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.filter', 'Filter…')"></button>
+                        <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="columnFilters[col.name]"></div>
+                      </div>
+                    </template>
+                    <input x-show="col.type !== 'fk' && col.type !== 'none' && col.type !== 'date'" x-model="columnFilters[col.name]"
+                           type="text"
                            @input.debounce.400ms="applyServerFilter()"
                            :placeholder="T('$projectName:${tprefix}.defaults.filter', 'Filter…')"
                            class="w-full text-sm rounded-md border border-border bg-transparent px-2 py-1" />

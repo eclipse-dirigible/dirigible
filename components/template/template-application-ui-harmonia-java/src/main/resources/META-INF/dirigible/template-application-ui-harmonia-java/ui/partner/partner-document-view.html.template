@@ -83,15 +83,15 @@
         <span x-h-checkbox><input type="checkbox" x-model="form.${property.name}" /></span>
 #elseif($property.widgetType == "DATE")
         <div x-h-date-picker>
-          <input type="text" />
+          <input type="text" :placeholder="HarmoniaFormat.dateHint()" />
           <button x-h-date-picker-trigger aria-label="Choose date"></button>
-          <div x-h-date-picker-popup x-model="form.${property.name}"></div>
+          <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "DATETIME-LOCAL")
         <div x-h-datetime-picker>
           <input type="text" />
           <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
-          <div x-h-datetime-picker-popup x-model="form.${property.name}"></div>
+          <div x-h-datetime-picker-popup="HarmoniaFormat.pickerConfig('dateTime')" x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "TIME")
         <div x-h-time-picker>
@@ -251,7 +251,7 @@
                 <span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" /></span>
               </template>
               <template x-if="!col.readonly && !col.lookup && col.date">
-                <div x-h-date-picker><input type="text" /><button x-h-date-picker-trigger aria-label="Choose date"></button><div x-h-date-picker-popup x-model="draft[col.name]"></div></div>
+                <div x-h-date-picker><input type="text" :placeholder="HarmoniaFormat.dateHint()" /><button x-h-date-picker-trigger aria-label="Choose date"></button><div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="draft[col.name]"></div></div>
               </template>
               <template x-if="!col.readonly && !col.lookup && !col.date && !col.number && col.widget !== 'CHECKBOX'">
                 <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" />

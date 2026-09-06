@@ -88,9 +88,9 @@
         <div x-h-field>
           <label x-h-label for="$el.id"#tlabel($el)>$!el.label</label>
           <div x-h-date-picker>
-            <input type="text" id="$el.id"#if($el.readonly) disabled#end />
+            <input type="text" :placeholder="HarmoniaFormat.dateHint()" id="$el.id"#if($el.readonly) disabled#end />
             <button x-h-date-picker-trigger aria-label="Choose date"></button>
-            <div x-h-date-picker-popup x-model="model.$el.model"></div>
+            <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="model.$el.model"></div>
           </div>
         </div>
 #elseif($el.controlId == "input-datetime-local")
@@ -99,7 +99,7 @@
           <div x-h-datetime-picker>
             <input type="text" id="$el.id"#if($el.readonly) disabled#end />
             <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
-            <div x-h-datetime-picker-popup x-model="model.$el.model"></div>
+            <div x-h-datetime-picker-popup="HarmoniaFormat.pickerConfig('dateTime')" x-model="model.$el.model"></div>
           </div>
         </div>
 #elseif($el.controlId == "input-time")

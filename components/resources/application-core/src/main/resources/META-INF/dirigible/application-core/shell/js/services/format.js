@@ -20,9 +20,13 @@
  * and dependency-free (no Alpine, no window.App): the standalone BPM task-form iframe loads it by
  * absolute URL and reads the same keys, so a form opened outside the shell formats the same way.
  *
- * DISPLAY formatting (HarmoniaFormat.number / .value) honours the patterns. INPUT round-tripping
- * (HarmoniaFormat.toDateInput) does NOT — an <input type="date|datetime-local|time"> dictates its own
- * value shape (YYYY-MM-DD, ...THH:mm, HH:mm), so that helper stays fixed; it lives here only to dedupe.
+ * DISPLAY formatting (HarmoniaFormat.number / .value) honours the patterns, and so does what a date
+ * INPUT shows and accepts: HarmoniaFormat.pickerConfig() describes the Date pattern to the Harmonia
+ * date pickers, which would otherwise display and parse in the document's (or the browser's) locale —
+ * the one surface where guessing is not merely inconsistent but silently wrong, 06.09.2026 typed into
+ * an m/d/yyyy field being a valid 9 June. The MODEL behind those inputs stays ISO regardless, which is
+ * what HarmoniaFormat.toDateInput produces: an <input> model dictates its own value shape
+ * (YYYY-MM-DD, ...THH:mm, HH:mm), so that helper is pattern-free; it lives here only to dedupe.
  *
  * Number rule (per the design decision): the DECIMAL COUNT and whether-to-group come from the field's
  * own DecimalFormat pattern (money scale 2 vs quantity scale 0 stay distinct); the GROUPING and DECIMAL
@@ -124,6 +128,48 @@
     .replace(/mm/g, pad(c.mi))
     .replace(/ss/g, pad(c.s));
 
+  // An ISO-ish date / date-time string as a backend or a user may write it: "2026-09-06",
+  // "2026-09-06T17:02:31", "2026-09-06 17:02". Anything trailing (a zone, fractional seconds) is
+  // ignored - the components below are all the display patterns can render.
+  const ISO_LIKE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/;
+
+  // Pattern letters that carry a date field, and the order codes the Harmonia picker's config takes.
+  const DATE_FIELDS = { y: 'year', M: 'month', d: 'day' };
+  const ORDER_CODES = { year: 'Y', month: 'M', day: 'D' };
+
+  // Translate a DateTimeFormatter-style pattern into the { order, delimiter, options } config a
+  // Harmonia date picker takes, so the picker DISPLAYS and PARSES exactly what the instance Date
+  // setting says. Without it a picker follows the document language (or, absent one, the browser's),
+  // which is how a form parsed 06.09.2026 as 9 June while the same instance printed dates elsewhere
+  // day-first. A pattern that is not a plain three-field date with one repeated separator yields null,
+  // and the picker keeps its own locale default rather than a half-applied shape.
+  const pickerConfigFrom = (pattern) => {
+    const p = String(pattern);
+    const runs = [];
+    let i = 0;
+    while (i < p.length) {
+      const field = DATE_FIELDS[p[i]];
+      if (!field) { i++; continue; }
+      let j = i;
+      while (p[j] === p[i]) j++;
+      runs.push({ field: field, len: j - i, start: i, end: j });
+      i = j;
+    }
+    if (runs.length !== 3) return null;
+    const fields = runs.map((r) => r.field);
+    if (new Set(fields).size !== 3) return null;
+    const delimiter = p.slice(runs[0].end, runs[1].start);
+    if (!delimiter || delimiter !== p.slice(runs[1].end, runs[2].start)) return null;
+    const options = {};
+    runs.forEach((r) => {
+      // A year is spelled out in full only as yyyy; a month/day is zero-padded only as MM/dd.
+      options[r.field] = r.field === 'year'
+        ? (r.len >= 4 ? 'numeric' : '2-digit')
+        : (r.len >= 2 ? '2-digit' : 'numeric');
+    });
+    return { order: fields.map((f) => ORDER_CODES[f]).join(''), delimiter: delimiter, options: options };
+  };
+
   const HarmoniaFormat = {
     KEYS,
     defaults() {
@@ -164,12 +210,19 @@
         if (v.length >= 5) return applyDatePattern(p.dateTime, { y: v[0], mo: v[1], da: v[2], h: v[3], mi: v[4], s: v[5] || 0 });
         return v.join(', ');
       }
-      if (isDate && typeof v === 'number') {
-        const d = new Date(v < 1e11 ? v * 1000 : v); // epoch seconds or millis
+      if (isDate && (typeof v === 'number' || v instanceof Date)) {
+        const d = v instanceof Date ? v : new Date(v < 1e11 ? v * 1000 : v); // epoch seconds or millis
         if (!isNaN(d.getTime())) {
           return applyDatePattern(p.dateTime, {
             y: d.getFullYear(), mo: d.getMonth() + 1, da: d.getDate(), h: d.getHours(), mi: d.getMinutes(), s: d.getSeconds(),
           });
+        }
+      }
+      if (isDate && typeof v === 'string') {
+        const m = ISO_LIKE.exec(v);
+        if (m) {
+          const c = { y: +m[1], mo: +m[2], da: +m[3], h: +(m[4] || 0), mi: +(m[5] || 0), s: +(m[6] || 0) };
+          return applyDatePattern(m[4] === undefined ? p.date : p.dateTime, c);
         }
       }
       return v;
@@ -193,6 +246,26 @@
       if (v === null || v === undefined) return '';
       const uuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
       return uuid.test(String(v)) ? '' : v;
+    },
+
+    /**
+     * The active Date pattern as an input hint ("dd.mm.yyyy" for dd.MM.yyyy): the same pattern, lower
+     * cased, which is how a date placeholder is conventionally spelled. Shown in the date inputs so the
+     * expected field order is visible before anything is typed.
+     */
+    dateHint() {
+      return patterns().date.toLowerCase();
+    },
+
+    /**
+     * The { order, delimiter, options } configuration a Harmonia date / date-time picker popup takes,
+     * derived from the instance Date (or Timestamp) pattern. `kind` is 'date' (default) or 'dateTime';
+     * only the date half of a Timestamp pattern is described, the time segments being the picker's own.
+     * A pattern the picker cannot be configured from yields an empty config (its locale default).
+     */
+    pickerConfig(kind) {
+      const p = patterns();
+      return pickerConfigFrom(kind === 'dateTime' ? p.dateTime : p.date) || {};
     },
 
     /**

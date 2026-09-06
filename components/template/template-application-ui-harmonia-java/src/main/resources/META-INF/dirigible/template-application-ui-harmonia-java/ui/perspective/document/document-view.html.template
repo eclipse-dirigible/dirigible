@@ -169,15 +169,15 @@
 #elseif($property.widgetType == "DATE")
         <!-- Harmonia date picker: model is YYYY-MM-DD (same as the native date input it replaces). -->
         <div x-h-date-picker>
-          <input type="text" id="f_${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#end />
+          <input type="text" :placeholder="HarmoniaFormat.dateHint()" id="f_${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#end />
           <button x-h-date-picker-trigger aria-label="Choose date"></button>
-          <div x-h-date-picker-popup x-model="form.${property.name}"></div>
+          <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "DATETIME-LOCAL")
         <div x-h-datetime-picker>
           <input type="text" id="f_${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#end />
           <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
-          <div x-h-datetime-picker-popup x-model="form.${property.name}"></div>
+          <div x-h-datetime-picker-popup="HarmoniaFormat.pickerConfig('dateTime')" x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "TIME")
         <div x-h-time-picker>
@@ -726,9 +726,9 @@
               </template>
               <template x-if="!col.readonly && col.widget === 'DATE' && !(draftMode === 'fill' && col.name === fillDateName())">
                 <div x-h-date-picker.table>
-                  <input type="text" :disabled="col.readonly" :aria-invalid="draftFieldError === col.name" />
+                  <input type="text" :placeholder="HarmoniaFormat.dateHint()" :disabled="col.readonly" :aria-invalid="draftFieldError === col.name" />
                   <button x-h-date-picker-trigger aria-label="Choose date"></button>
-                  <div x-h-date-picker-popup x-model="draft[col.name]"></div>
+                  <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="draft[col.name]"></div>
                 </div>
               </template>
               <!-- Fill Month: the fill-target date column picks the MONTH - every working day gets a line. -->
@@ -743,7 +743,7 @@
                 <div x-h-datetime-picker.table>
                   <input type="text" :disabled="col.readonly" :aria-invalid="draftFieldError === col.name" />
                   <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
-                  <div x-h-datetime-picker-popup x-model="draft[col.name]"></div>
+                  <div x-h-datetime-picker-popup="HarmoniaFormat.pickerConfig('dateTime')" x-model="draft[col.name]"></div>
                 </div>
               </template>
               <template x-if="!col.readonly && !['DROPDOWN','MULTISELECT','NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget)">

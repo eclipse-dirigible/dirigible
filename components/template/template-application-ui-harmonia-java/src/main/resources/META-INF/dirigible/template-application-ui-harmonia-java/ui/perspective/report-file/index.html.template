@@ -52,9 +52,9 @@
             <label class="text-xs text-muted-foreground" x-text="paramLabel(p.name)"></label>
             <template x-if="p.kind === 'date'">
               <div x-h-date-picker>
-                <input type="text" @keydown.enter="applyFilters()" />
+                <input type="text" :placeholder="HarmoniaFormat.dateHint()" @keydown.enter="applyFilters()" />
                 <button x-h-date-picker-trigger aria-label="Pick date"></button>
-                <div x-h-date-picker-popup x-model="params[p.name]"></div>
+                <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="params[p.name]"></div>
               </div>
             </template>
             <template x-if="p.kind === 'number'">
@@ -80,15 +80,15 @@
                 <template x-if="col.kind === 'date'">
                   <div class="hbox gap-1 items-center">
                     <div x-h-date-picker>
-                      <input type="text" @keydown.enter="applyFilters()" />
+                      <input type="text" :placeholder="HarmoniaFormat.dateHint()" @keydown.enter="applyFilters()" />
                       <button x-h-date-picker-trigger aria-label="From date"></button>
-                      <div x-h-date-picker-popup x-model="filters[col.key].from"></div>
+                      <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="filters[col.key].from"></div>
                     </div>
                     <span x-h-text.muted>&ndash;</span>
                     <div x-h-date-picker>
-                      <input type="text" @keydown.enter="applyFilters()" />
+                      <input type="text" :placeholder="HarmoniaFormat.dateHint()" @keydown.enter="applyFilters()" />
                       <button x-h-date-picker-trigger aria-label="To date"></button>
-                      <div x-h-date-picker-popup x-model="filters[col.key].to"></div>
+                      <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="filters[col.key].to"></div>
                     </div>
                   </div>
                 </template>

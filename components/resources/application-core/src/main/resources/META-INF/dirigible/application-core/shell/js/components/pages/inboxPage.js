@@ -150,9 +150,12 @@ document.addEventListener('alpine:init', () => {
 
     stopAuto() { if (this._timer) { clearInterval(this._timer); this._timer = null; } },
 
+    // Task timestamps print through the instance Timestamp pattern, like every other date the
+    // application shows. toLocaleString() rendered them in the BROWSER's locale, so the Inbox could
+    // date a task dd/mm/yyyy on an instance whose lists and forms were all ISO.
     fmtTime(t) {
       if (!t) return '';
-      try { return new Date(t).toLocaleString(); } catch (_) { return String(t); }
+      try { return HarmoniaFormat.value(t, true); } catch (_) { return String(t); }
     },
   }));
 }, { once: true });

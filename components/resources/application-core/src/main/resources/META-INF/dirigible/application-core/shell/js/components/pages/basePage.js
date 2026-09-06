@@ -165,7 +165,7 @@ function basePage() {
         + 'th,td{border:1px solid #999;padding:2pt;text-align:left;overflow-wrap:anywhere;word-break:break-word}'
         + 'th{background:#eee}.text-right{text-align:right}'
         + '</style></head><body><h1>' + esc(title) + '</h1>'
-        + '<p class="meta">' + rows.length + ' rows - ' + esc(new Date().toLocaleString()) + '</p>'
+        + '<p class="meta">' + rows.length + ' rows - ' + esc(HarmoniaFormat.value(new Date(), true)) + '</p>'
         + '<table><thead><tr>' + th + '</tr></thead><tbody>' + body + '</tbody></table></body></html>';
       const w = window.open('', '_blank');
       if (!w) return;
