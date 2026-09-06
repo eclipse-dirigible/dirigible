@@ -251,6 +251,80 @@ class GlueSchedulesTest {
         assertEquals("EmployeeProjectAssignment", child.get("forEachPerspective"));
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void theNaturalKeyIsPreRenderedFromTheSameAssignmentsTheTargetIsWrittenFrom() {
+        // Issue #7070: the guard has to look the target up by the values it is about to write, or it
+        // drifts from them. The `now` on a month field is the sharp case - it renders
+        // YearMonth.now().toString(), which is exactly what makes "the same month" comparable at all;
+        // a re-derived LocalDate.now() would never match the row the first tick wrote.
+        String yaml = """
+                name: timesheets
+                entities:
+                  - name: Project
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: status, type: string }
+                  - name: ProjectTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: month }
+                    relations:
+                      - { name: Project, kind: manyToOne, to: Project }
+                schedules:
+                  - name: monthly-project-timesheets
+                    cron: "0 0 2 1 * ?"
+                    entity: Project
+                    generate:
+                      to: ProjectTimesheet
+                      unique: [Project, period]
+                      map:
+                        Project: id
+                      defaults:
+                        Period: now
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(model)
+                                                   .get(0);
+
+        assertEquals(true, s.get("hasGenUnique"));
+        List<Map<String, Object>> unique = (List<Map<String, Object>>) s.get("genUnique");
+        assertEquals(List.of(Map.of("property", "Project", "expr", "entity.Id"),
+                Map.of("property", "Period", "expr", "java.time.YearMonth.now().toString()")), unique);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void aScheduleWithNoDeclaredKeyStillGeneratesAndCarriesNoGuard() {
+        // Backward compatibility is the point: every intent authored before the key existed keeps
+        // generating exactly what it did (the generation reports the advisory separately).
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee }
+                schedules:
+                  - name: monthly-timesheets
+                    cron: "0 0 1 1 * ?"
+                    entity: Employee
+                    generate:
+                      to: EmployeeTimesheet
+                      map:
+                        Employee: id
+                """;
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(IntentParser.parse(yaml))
+                                                   .get(0);
+        assertEquals("generate", s.get("action"));
+        assertEquals(false, s.get("hasGenUnique"));
+        assertTrue(((List<Map<String, Object>>) s.get("genUnique")).isEmpty());
+    }
+
     @Test
     void notifyScheduleStillEmitsMailPlan() {
         String yaml = """

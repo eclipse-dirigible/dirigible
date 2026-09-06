@@ -219,6 +219,31 @@ public class GeneratesIntent {
     private java.util.List<GenerateChildIntent> children;
 
     /**
+     * Scheduled generation only (issue #7070): the natural key that makes a SECOND run of the job a
+     * no-op instead of a duplicate. Each element names a property of {@link #to} that this same block
+     * already assigns through {@link #map} or {@link #defaults}; before the target is built, the target
+     * is looked up by those values and a matching row makes the source row - and every child under it -
+     * skipped.
+     *
+     * <p>
+     * Why a schedule needs its own guard: the at-most-once cardinality of an EVENT-driven create-from
+     * ({@link #event}, {@code mode: once}) is the back-reference to ONE source record, and a schedule's
+     * source is a standing row - the same {@code Project} matches the query every month, so a
+     * back-reference lookup would generate the first project-month and never another. The natural key
+     * is the pair that actually identifies a run's output ({@code [Project, period]}), so a re-run
+     * within the same period finds it and a genuine next period does not. A re-run is not exotic: a
+     * failed deploy, a Quartz misfire recovery and an admin pressing Run in Monitoring all replay a
+     * tick, and without this every one of them double-creates.
+     *
+     * <p>
+     * It is a read-then-create guard, best-effort against two concurrent ticks - the same shape the
+     * event-driven guard has - so a UNIQUE database key on the same columns is still the durable
+     * backstop. Absent, the generation reports an advisory rather than refusing: every intent authored
+     * before this existed keeps generating exactly what it did.
+     */
+    private List<String> unique;
+
+    /**
      * Optional declared input form (issue #6685): a small set of the TARGET's properties the user
      * supplies before the target is created - the values that cannot be derived from the source (which
      * payment, how much). Entries name fields / to-one relations of {@link #to}; the values are posted
@@ -421,6 +446,19 @@ public class GeneratesIntent {
 
     public void setChildren(java.util.List<GenerateChildIntent> children) {
         this.children = children;
+    }
+
+    public List<String> getUnique() {
+        return unique;
+    }
+
+    public void setUnique(List<String> unique) {
+        this.unique = unique;
+    }
+
+    /** Whether a scheduled generation declares the natural key that makes a re-run a no-op. */
+    public boolean hasUnique() {
+        return unique != null && !unique.isEmpty();
     }
 
     public List<PromptFieldIntent> getPrompt() {

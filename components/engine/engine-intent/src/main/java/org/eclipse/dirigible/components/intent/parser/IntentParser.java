@@ -1061,8 +1061,66 @@ public final class IntentParser {
             issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
                     + " use an on-demand generates action for document-to-document cloning");
         }
+        validateScheduleGenerateUnique(name, g, crossModel, byName, issues);
         if (g.getChildren() != null) {
             validateGenerateChildren(name, g.getChildren(), 1, source, entityNames, usesAliases, issues);
+        }
+    }
+
+    /**
+     * The natural key that makes a second run of a scheduled generation a no-op (issue #7070):
+     * {@code unique: [Project, period]} names the TARGET properties whose values identify the output of
+     * one tick, and the generated job skips a source row whose target already exists with those values.
+     *
+     * <p>
+     * Every entry must be a property this same block assigns through {@code map} or {@code defaults},
+     * because the guard queries the target by the values it is about to write - a key column nothing
+     * writes is queried as null, which either matches every row the schedule ever created (nothing is
+     * ever generated again) or none of them (the duplicate this feature exists to stop). Naming it here
+     * and not assigning it is therefore never what the author meant, and the mistake is silent at
+     * runtime in both directions.
+     */
+    private static void validateScheduleGenerateUnique(String name, GeneratesIntent g, boolean crossModel, Map<String, EntityIntent> byName,
+            List<String> issues) {
+        if (!g.hasUnique()) {
+            return;
+        }
+        EntityIntent target = crossModel || g.getTo() == null ? null : byName.get(g.getTo());
+        Set<String> seen = new HashSet<>();
+        Set<String> assigned = new HashSet<>();
+        for (String key : g.getMap()
+                           .keySet()) {
+            if (key != null) {
+                assigned.add(key.toLowerCase(Locale.ROOT));
+            }
+        }
+        for (String key : g.getDefaults()
+                           .keySet()) {
+            if (key != null) {
+                assigned.add(key.toLowerCase(Locale.ROOT));
+            }
+        }
+        for (String property : g.getUnique()) {
+            if (property == null || property.isBlank()) {
+                issues.add("schedule [" + name + "] generate unique has a blank entry");
+                continue;
+            }
+            String key = property.toLowerCase(Locale.ROOT);
+            if (!seen.add(key)) {
+                issues.add("schedule [" + name + "] generate unique repeats [" + property + "]");
+                continue;
+            }
+            if (!assigned.contains(key)) {
+                issues.add("schedule [" + name + "] generate unique [" + property
+                        + "] is not assigned by this generate's map or defaults - the guard queries the target by the values it"
+                        + " is about to write, so a key the generation never sets is queried as null and can only match everything"
+                        + " or nothing");
+                continue;
+            }
+            if (target != null && !hasPropertyIgnoreCase(target, property)) {
+                issues.add("schedule [" + name + "] generate unique [" + property + "] is not a field or to-one relation of ["
+                        + target.getName() + "]");
+            }
         }
     }
 
@@ -6817,6 +6875,15 @@ public final class IntentParser {
                 // implies a cross-model item - resolved in the owner's .model, not here.
                 validateMapTarget(crossModel || items.getTo() == null ? null : byName.get(items.getTo()), items.getMap(),
                         "generates [" + name + "]", "items map", issues);
+            }
+            if (g.hasUnique()) {
+                // The natural key is a SCHEDULE's idempotency guard (issue #7070). An on-demand
+                // create-from already has a cardinality of its own - the event mode, guarded by the
+                // back-reference to the one source record it was triggered from - and accepting a
+                // second, differently-shaped guard here would leave two answers to "may this run
+                // again".
+                issues.add("generates [" + name + "] declares unique - the natural key is a scheduled generation's idempotency guard;"
+                        + " an on-demand create-from's cardinality is its event mode (once / append)");
             }
             validateGeneratesItemLines(g, name, source, byName, model.getEntities(), crossModel, issues);
             validateGeneratesPrompt(g, name, byName, crossModel, issues);

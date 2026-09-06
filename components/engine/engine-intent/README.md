@@ -740,9 +740,18 @@ schedules:
       - { field: status, op: eq, value: ACTIVE }
     generate:
       to: EmployeeTimesheet                   # cross-model target via `uses:` alias
+      unique: [Employee, Period]              # the natural key - a re-run of the job is a no-op
       map: { Employee: id }
       defaults: { Period: now }
 ```
+
+`unique:` names the TARGET properties that identify ONE tick's output. The generated job looks the
+target up by exactly those values - rendered from this same block's `map` / `defaults`, so what is
+looked up and what is written cannot drift - and skips the source row, `children` included, when it
+already exists. Declare it on every scheduled generation: without it a replayed tick (a failed deploy,
+a Quartz misfire recovery, an admin pressing Run) creates a duplicate document with duplicate children.
+Every entry must be assigned by this block's `map`/`defaults`; an on-demand `generates` action refuses
+it, its cardinality being its event `mode`.
 
 A `where` value is a literal or a **moment**: `CURRENT_DATE` / `CURRENT_TIMESTAMP` (`NOW`), optionally
 offset by a single signed ISO-8601 duration resolved against the clock of the run that fires - which is

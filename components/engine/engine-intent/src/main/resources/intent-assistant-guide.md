@@ -2828,11 +2828,37 @@ schedules:
       - { field: status, op: eq, value: ACTIVE }
     generate:
       to: EmployeeTimesheet             # add `uses: <alias>` if the target is in another model
+      unique: [Employee, Period]        # the natural key - a re-run of the job is a no-op
       map:
         Employee: id                    # target.Employee = the employee row's id (FK back-reference)
       defaults:
         Period: now
 ```
+
+**`generate.unique:` - the natural key that makes a re-run a no-op. Declare it on every scheduled
+generation.** Without it a tick creates unconditionally, so running the job a second time - a failed
+deploy replayed, a Quartz misfire recovery, an admin pressing Run in Monitoring - mints a SECOND
+target for the same row, with a duplicate set of `children` under it, and both would bill. `unique:`
+names the TARGET properties whose values identify one tick's output; before anything is built, the
+target is looked up by exactly those values (rendered from this same block's `map` / `defaults`, so
+the value looked up and the value written cannot drift), and a hit skips the source row entirely,
+children included.
+
+Every entry must be a property this same block assigns through `map` or `defaults` - the guard queries
+the target by the values it is about to write, so a key column nothing sets is queried as null and can
+only match everything (nothing is ever generated again) or nothing (the duplicate this exists to
+stop); both are silent at runtime, so it is an authoring error. It is a read-then-create guard,
+best-effort against two concurrent ticks - the same shape the event-driven create-from's `mode: once`
+has - so a UNIQUE database key on the same columns is still the durable backstop. It belongs to
+`schedules[].generate` only: an on-demand `generates` action's cardinality is its **event mode**
+(`once`, guarded by the back-reference to the one source record it was triggered from), and declaring
+`unique:` there is refused rather than leaving two answers to "may this run again". Omitting it is
+still accepted - every intent authored before it keeps generating what it did - but the generation
+reports an advisory saying the second run will duplicate.
+
+Pick the pair that identifies the RUN, not the source: `[Project, period]`, not the back-reference
+alone. A schedule's source is a standing row - the same `Project` matches the query every month - so a
+back-reference-only key would generate the first project-month and never another.
 
 **Per-matched-row child rows (`generate.children`).** A scheduled `generate` may also fan out into
 **child rows** via a `children:` list. Each entry names a `to` target and its `parent`, and a `forEach`
@@ -2879,6 +2905,7 @@ schedules:
       - { field: Status, op: eq, value: 2 }
     generate:
       to: ProjectTimesheet                # now LOCAL (no uses: needed)
+      unique: [Project, period]           # a re-run finds this project-month instead of duplicating it
       map: { Project: id, Customer: Customer }
       defaults: { Period: now }
       children:
@@ -2930,7 +2957,7 @@ schedules:
 **Rules:** unique name, a `cron`, a declared `entity` (local, or a cross-model source via `model:`),
 `where` operators from the allowed list, and **exactly one** of `notify` (valid recipient) /
 `generate` (a declared/cross-model `to`, a `map` over the row's fields/to-one relations,
-optional `children`). Composition-item cloning via `items:` is **not** available on a schedule (it needs
+a `unique:` natural key, optional `children`). Composition-item cloning via `items:` is **not** available on a schedule (it needs
 a selected document) - use an on-demand `generates` action for document-to-document cloning, or
 `generate.children` for the fan-out shape above.
 
