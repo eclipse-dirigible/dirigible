@@ -9938,6 +9938,459 @@
           }
         ]
       }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_CMS_SEEDS",
+        "author": "dirigible",
+        "comment": "The table was left to Hibernate's hbm2ddl fallback, which rendered its content column through whatever dialect was configured - H2's blob against PostgreSQL, whose CREATE was then rejected and swallowed. The content column is added per vendor below.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_CMS_SEEDS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_CMS_SEEDS"
+                    },
+                    "name": "CMS_SEED_ID",
+                    "type": "BIGINT"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "CREATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "CREATED_BY",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "UPDATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "UPDATED_BY",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_DEPENDENCIES",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_DESCRIPTION",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_ERROR",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_KEY",
+                    "type": "VARCHAR(2000)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_STATUS",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_LOCATION",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_NAME",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_PHASE",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_RUNNING",
+                    "type": "BOOLEAN"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_TYPE",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "CMS_SEED_PATH",
+                    "type": "VARCHAR(1020)"
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_CMS_SEEDS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_CMS_SEEDS_ARTEFACT_KEY",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_CMS_SEEDS",
+                  "constraintName": "UK_DIRIGIBLE_CMS_SEEDS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "ARTEFACT_KEY",
+              "constraintName": "UK_DIRIGIBLE_CMS_SEEDS_ARTEFACT_KEY",
+              "tableName": "DIRIGIBLE_CMS_SEEDS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "add-DIRIGIBLE_CMS_SEEDS_CMS_SEED_CONTENT-postgresql",
+        "author": "dirigible",
+        "dbms": "postgresql",
+        "comment": "Liquibase renders BLOB as PostgreSQL oid - an out-of-line large object, which is not what one file's bytes are. bytea matches the entity's @JdbcTypeCode(LONG32VARBINARY) mapping.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "columnExists": {
+                  "tableName": "DIRIGIBLE_CMS_SEEDS",
+                  "columnName": "CMS_SEED_CONTENT"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addColumn": {
+              "tableName": "DIRIGIBLE_CMS_SEEDS",
+              "columns": [
+                {
+                  "column": {
+                    "name": "CMS_SEED_CONTENT",
+                    "type": "BYTEA"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "add-DIRIGIBLE_CMS_SEEDS_CMS_SEED_CONTENT",
+        "author": "dirigible",
+        "dbms": "!postgresql",
+        "comment": "BLOB on H2, varbinary(max) on SQL Server - what the entity's @JdbcTypeCode(LONG32VARBINARY) mapping renders there.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "columnExists": {
+                  "tableName": "DIRIGIBLE_CMS_SEEDS",
+                  "columnName": "CMS_SEED_CONTENT"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addColumn": {
+              "tableName": "DIRIGIBLE_CMS_SEEDS",
+              "columns": [
+                {
+                  "column": {
+                    "name": "CMS_SEED_CONTENT",
+                    "type": "BLOB"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_NUMBER_SERIES_DECLARATIONS",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_NUMBER_SERIES_DECLARATIONS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_NUMBER_SERIES_DECLARATIONS"
+                    },
+                    "name": "DECLARATION_ID",
+                    "type": "BIGINT"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "CREATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "CREATED_BY",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "UPDATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "UPDATED_BY",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_DEPENDENCIES",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_DESCRIPTION",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_ERROR",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_KEY",
+                    "type": "VARCHAR(2000)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_STATUS",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_LOCATION",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_NAME",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_PHASE",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_RUNNING",
+                    "type": "BOOLEAN"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_TYPE",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "DECLARATION_PREFIX",
+                    "type": "VARCHAR(64)"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "DECLARATION_SIZE",
+                    "type": "INT"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "DECLARATION_PARTITION_TABLE",
+                    "type": "VARCHAR(255)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "DECLARATION_PARTITION_KEY",
+                    "type": "VARCHAR(255)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "DECLARATION_PARTITION_LABEL",
+                    "type": "VARCHAR(255)"
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_NUMBER_SERIES_DECLARATIONS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_NUMBER_SERIES_DECLARATIONS_ARTEFACT_KEY",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_NUMBER_SERIES_DECLARATIONS",
+                  "constraintName": "UK_DIRIGIBLE_NUMBER_SERIES_DECLARATIONS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "ARTEFACT_KEY",
+              "constraintName": "UK_DIRIGIBLE_NUMBER_SERIES_DECLARATIONS_ARTEFACT_KEY",
+              "tableName": "DIRIGIBLE_NUMBER_SERIES_DECLARATIONS"
+            }
+          }
+        ]
+      }
     }
   ]
 }
