@@ -33,6 +33,7 @@
       InsufficientPermission: 'You do not have permission to perform this action.',
       TokenExpired:           'Your session has expired. Please sign in again.',
       NotFound:               'The requested item could not be found.',
+      Conflict:               'This is not allowed in the record\u2019s current state.',
       UpstreamError:          'A dependent service is unavailable. Please try again shortly.',
       InternalServerError:    'Something went wrong on our end. Please try again.',
       NetworkError:           'Unable to reach the server. Check your connection and try again.',
@@ -59,6 +60,30 @@
     messageFor(err, fallback) {
       const type = err && err.errorType;
       return (type && this.messages[type]) || fallback || this.default;
+    },
+
+    /**
+     * The message for a REFUSAL - a business rule the server applied to something the user asked for
+     * (a transition outside its `from:` statuses, a `checks:` gate) rather than a fault.
+     *
+     * Those messages are authored, in the intent, to be read by the person who pressed the button
+     * ("VoidSalesInvoice is allowed only from status [3, 4] - current status is [6]"), so here the
+     * server's text IS the user-facing text and the generic catalog line would destroy the only
+     * information the response carried (dirigible #7073). Restricted to the two statuses that mean
+     * "your request was refused" - 400 and 409; every other failure keeps going through messageFor,
+     * where a developer-facing errorMessage never reaches the screen.
+     */
+    refusalMessageFor(err, fallback) {
+      const status = err && err.httpStatus;
+      const message = typeof (err && err.errorMessage) === 'string' ? err.errorMessage.trim() : '';
+      // A refusal is one authored sentence. A markup blob or an essay is a proxy/container error page
+      // that happens to carry the same status - show the catalog line for those rather than pasting
+      // an HTML document into a toast.
+      const readable = message && message.length <= 300 && message.indexOf('<') === -1;
+      if ((status === 400 || status === 409) && readable) {
+        return message;
+      }
+      return this.messageFor(err, fallback);
     },
 
     /** Per-field message for a single 422 errorCauses[] entry. */

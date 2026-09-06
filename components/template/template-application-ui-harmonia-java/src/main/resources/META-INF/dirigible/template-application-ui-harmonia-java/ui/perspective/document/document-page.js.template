@@ -418,6 +418,24 @@ document.addEventListener('alpine:init', () => {
       });
 #end
 #end
+      // A custom action (a transition, a create-from, an action page) changes this document behind
+      // the page's back: its status flips, its totals move, its panels gain rows. Re-read the header
+      // so the status pill, the stepper and the transition buttons - which are filtered by the
+      // CURRENT status - all speak about the record as it now is (issue #7073). The detail panels
+      // re-read themselves (detailPanel does the same on this event).
+      this.onActionDone(async () => {
+        if (!this.isEdit && !this.isPreview) return;
+        try {
+          await this.loadHeader();
+#if($history == "true")
+          await this.loadHistory();
+#end
+          await this.loadItems();
+        } catch (e) {
+          console.error('[${name}DocumentPage] could not refresh after a custom action', e);
+        }
+      });
+
       this.refreshIcons();
     },
 

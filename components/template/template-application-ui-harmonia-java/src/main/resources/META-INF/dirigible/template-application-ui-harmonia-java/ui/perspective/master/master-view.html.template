@@ -162,9 +162,11 @@
         </div>
 #end
 
-        <!-- Developer-contributed per-record actions for this entity (customActions extension point). -->
-        <div x-show="$store.customActions.getActions(caView, 'entity').length" class="hbox gap-2 flex-wrap">
-          <template x-for="action in $store.customActions.getActions(caView, 'entity')" :key="action.id">
+        <!-- Developer-contributed per-record actions for this entity (customActions extension point).
+             The selected row goes to getActions, so a transition its current status can never accept
+             is not offered at all (issue #7073). -->
+        <div x-show="$store.customActions.getActions(caView, 'entity', selected).length" class="hbox gap-2 flex-wrap">
+          <template x-for="action in $store.customActions.getActions(caView, 'entity', selected)" :key="action.id">
             <button x-h-button data-variant="outline" data-size="sm" @click="$store.customActions.trigger(action, selectedId)">
               <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
             </button>

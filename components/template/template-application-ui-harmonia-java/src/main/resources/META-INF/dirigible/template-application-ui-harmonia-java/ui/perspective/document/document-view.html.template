@@ -554,8 +554,10 @@
       </button>
 #end
       <!-- Developer-contributed per-record actions for this document (customActions extension point).
-           Shown for an existing document (edit/preview); passes the document id to the action page. -->
-      <template x-for="action in $store.customActions.getActions(caView, 'entity')" :key="action.id">
+           Shown for an existing document (edit/preview); passes the document id to the action page.
+           The open record goes to getActions so a transition its CURRENT status can never accept is
+           not offered at all - Void on a paid invoice was answered with a 409 the user never saw. -->
+      <template x-for="action in $store.customActions.getActions(caView, 'entity', record)" :key="action.id">
         <button type="button" x-h-button data-variant="outline" x-show="isEdit || isPreview" @click="$store.customActions.trigger(action, id)">
           <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
         </button>

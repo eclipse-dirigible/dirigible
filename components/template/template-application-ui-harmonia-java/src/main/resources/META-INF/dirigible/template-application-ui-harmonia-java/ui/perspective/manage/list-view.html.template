@@ -327,9 +327,11 @@
 #end
 
         <!-- Developer-contributed per-record actions for this entity (customActions extension point).
-             Passes the selected record's id to the action page. -->
-        <div x-show="$store.customActions.getActions(caView, 'entity').length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
-          <template x-for="action in $store.customActions.getActions(caView, 'entity')" :key="action.id">
+             Passes the selected record's id to the action page. The selected ROW also goes to
+             getActions, so a transition its current status can never accept is not offered at all
+             (issue #7073). -->
+        <div x-show="$store.customActions.getActions(caView, 'entity', selected).length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
+          <template x-for="action in $store.customActions.getActions(caView, 'entity', selected)" :key="action.id">
             <button x-h-button data-variant="outline" data-size="sm" @click="$store.customActions.trigger(action, selectedId)">
               <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
             </button>

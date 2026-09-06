@@ -10,13 +10,16 @@
 package org.eclipse.dirigible.components.intent.generator.transition;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
+import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.TransitionIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +36,12 @@ import org.springframework.stereotype.Component;
  * record's id to it and toasts the result. A transition declaring a {@code notify:} block
  * additionally carries {@code notifies}, which tells that store the response is {@code { record,
  * notify }} and its delivery outcome is worth a warning.
+ *
+ * <p>
+ * The descriptor also mirrors the {@code from:} guard ({@code statusProperty} + {@code from}) so
+ * the button can be hidden on a record the transition cannot apply to (dirigible #7073) - Void
+ * offered on a paid invoice and answered with a 409 is the failure that asked for it. The server's
+ * check stays authoritative; this only keeps an impossible button off the screen.
  *
  * <p>
  * The endpoint is the REST {@code @Controller} generated (server half) from the {@code .glue}
@@ -73,7 +82,7 @@ public class TransitionsIntentGenerator implements IntentTargetGenerator {
             String modulePath = project + "/" + fileBase + ".js";
             context.writeModelFile(fileBase + ".extension", buildExtensionJson(project, modulePath, t));
             context.writeModelFile(fileBase + ".js", buildDescriptorModule(project, IntentNaming.javaModule(context), t,
-                    IntentNaming.customActionTranslationKey(project, context, name)));
+                    IntentNaming.customActionTranslationKey(project, context, name), statusProperty(model, t.getForEntity())));
         }
     }
 
@@ -85,7 +94,29 @@ public class TransitionsIntentGenerator implements IntentTargetGenerator {
         return JsonHelper.toJson(extension);
     }
 
-    private static String buildDescriptorModule(String project, String javaModule, TransitionIntent t, String translationKey) {
+    /**
+     * The PascalCase name of the entity's {@code function: EntityStatus} relation - the property the
+     * record carries its current status in, and the one the {@code from:} check reads on the client.
+     * Empty when the entity declares none (the parser already reported that; the button then simply
+     * stays unguarded and the server's 409 remains the only gate).
+     */
+    private static String statusProperty(IntentModel model, String entityName) {
+        for (EntityIntent entity : model.getEntities()) {
+            if (!entity.getName()
+                       .equals(entityName)) {
+                continue;
+            }
+            for (RelationIntent relation : entity.getRelations()) {
+                if (relation.isEntityStatus()) {
+                    return IntentNaming.pascalCase(relation.getName());
+                }
+            }
+        }
+        return "";
+    }
+
+    private static String buildDescriptorModule(String project, String javaModule, TransitionIntent t, String translationKey,
+            String statusProperty) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", project + "-" + t.getForEntity() + "-" + t.getName());
         String label = IntentNaming.customActionLabel(t.getName(), t.getLabel());
@@ -97,6 +128,19 @@ public class TransitionsIntentGenerator implements IntentTargetGenerator {
                 + "Transition/run");
         view.put("view", t.getForEntity());
         view.put("type", "entity");
+        // A status flip is not a create: the shell words its toast from `kind` rather than reporting
+        // "Created <ref>" for a record that already existed (dirigible #7073).
+        view.put("kind", "transition");
+        // The `from:` guard, mirrored onto the client (dirigible #7073). The server's 409 stays
+        // authoritative - this is what lets the button be HIDDEN on a record the transition can
+        // never apply to, instead of offering Void on a paid invoice and answering the click with a
+        // refusal. A `when:` guard is deliberately NOT mirrored: it is a Calc expression over the
+        // stored record, and a client re-implementation of it would drift from the server's.
+        List<Integer> from = t.getFrom();
+        if (statusProperty != null && !statusProperty.isBlank() && from != null && !from.isEmpty()) {
+            view.put("statusProperty", statusProperty);
+            view.put("from", from);
+        }
         if (t.getNotify() != null) {
             // A transition that mails answers { record, notify } instead of the bare record (dirigible
             // #7023), so the shell reports a failed delivery as a warning instead of a green toast.

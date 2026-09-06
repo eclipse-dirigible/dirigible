@@ -41,6 +41,11 @@ document.addEventListener('alpine:init', () => {
 #end
       await this.load();
       this.loadLookups();
+      // A custom action changes rows this view lists (a transition flips a status, a create-from adds
+      // a record) through its own endpoint, not this page's editing path. Re-read on every action so
+      // the table, the selected record's pane and the status-filtered action buttons agree with the
+      // server (issue #7073).
+      this.onActionDone(async () => { await this.load(); this.loadLookups(); });
     },
 
     async load() {

@@ -54,6 +54,10 @@ document.addEventListener('alpine:init', () => {
 #if($titleRelation)
       this.loadTitleLookup();
 #end
+      // A custom action changes rows this view shows (a transition flips a status, a create-from adds
+      // a record) through its own endpoint, not this page's editing path. Re-read on every action so
+      // what is on screen agrees with the server (issue #7073).
+      this.onActionDone(() => this.load());
     },
 #if($titleRelation)
 
