@@ -41,7 +41,30 @@ document.addEventListener('alpine:init', () => {
 #end
 #end
       ];
+#if($layoutType == "REPORT_PIE" || $layoutType == "REPORT_DOUGHNUT" || $layoutType == "REPORT_POLARAREA")
+      // A circular chart's slices ARE the label column's values, named by the legend alone, so each
+      // label carries its share of the first series' total.
+      const values = (series[0] && series[0].data) || [];
+      const total = values.reduce((sum, v) => sum + (v > 0 ? v : 0), 0);
+      const sliceLabels = total > 0
+        ? labels.map((label, i) => {
+            const v = values[i];
+            if (!(v > 0)) return label;
+            const pct = (v / total) * 100;
+            return label + ' - ' + (pct < 10 ? pct.toFixed(1) : String(Math.round(pct))) + '%';
+          })
+        : labels;
+#if($layoutType == "REPORT_POLARAREA")
+      return { labels: sliceLabels, series, legend: true };
+#else
+      // dataLabels off: the chart library prints the raw value inside a pie/doughnut slice with a
+      // percent sign, so a 336-hour sum reads "336%" (codbex/harmonia#113, fixed after 2.14.2). The
+      // share is in the legend instead.
+      return { labels: sliceLabels, series, legend: true, dataLabels: false };
+#end
+#else
       return { labels, series };
+#end
     },
 
     // Print the chart: rasterize the rendered SVG to a PNG (Harmonia.chartToImage) into a minimal

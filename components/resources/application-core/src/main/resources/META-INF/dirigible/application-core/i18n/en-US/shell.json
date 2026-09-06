@@ -122,6 +122,8 @@
       "any": "any",
       "yes": "yes",
       "no": "no",
+      "true": "Yes",
+      "false": "No",
       "min": "min",
       "max": "max",
       "contains": "contains..."

@@ -205,16 +205,47 @@ document.addEventListener('alpine:init', () => {
       const category = this.reportColumns.find(c => c.agg === 'NONE') || this.reportColumns[0];
       let series = this.reportColumns.filter(c => c.agg && c.agg !== 'NONE');
       if (!series.length) series = this.reportColumns.filter(c => c !== category);
-      const labels = this.rows.map(r => this.axisLabel(category ? r[category.key] : ''));
-      return {
-        labels,
-        series: series.map(c => ({ name: c.key, data: this.rows.map(r => Number(r[c.key]) || 0) })),
-        legend: series.length > 1,
-      };
+      const labels = this.rows.map(r => this.axisLabel(category ? r[category.key] : '', category));
+      const data = series.map(c => ({ name: c.key, data: this.rows.map(r => Number(r[c.key]) || 0) }));
+      // A circular chart slices the FIRST measure by the dimension, so the dimension values are named
+      // by the legend alone - it stays on whatever the series count - and each legend entry carries
+      // the slice's share of the measure total. Pie and doughnut additionally suppress the in-slice
+      // data label: the chart library prints the raw measure there with a percent sign, so a 336-hour
+      // sum reads "336%" (codbex/harmonia#113, fixed after 2.14.2). The share belongs in the legend
+      // either way.
+      if (this.chartType === 'pie' || this.chartType === 'doughnut') {
+        return { labels: this.shareLabels(labels, data[0]), series: data, legend: true, dataLabels: false };
+      }
+      if (this.chartType === 'polarArea') {
+        return { labels: this.shareLabels(labels, data[0]), series: data, legend: true };
+      }
+      return { labels, series: data, legend: data.length > 1 };
     },
 
-    // month(date) buckets are YYYYMM integers (e.g. 202607) - render them as "2026-07".
-    axisLabel(v) {
+    // "Billable" -> "Billable - 62%": a slice label with its share of the measure total, so a circular
+    // chart's legend reads as a split. Left untouched when there is no positive total to share, and
+    // when the fetched rows are only a window on the result (the dashboard tile fetches a few) - a
+    // page-local share is not the report's, the same rule the table footer applies to its totals.
+    shareLabels(labels, measure) {
+      if (this.count > this.rows.length) return labels;
+      const values = (measure && measure.data) || [];
+      const total = values.reduce((sum, v) => sum + (v > 0 ? v : 0), 0);
+      if (!(total > 0)) return labels;
+      return labels.map((label, i) => {
+        const v = values[i];
+        if (!(v > 0)) return label;
+        const pct = (v / total) * 100;
+        return label + ' - ' + (pct < 10 ? pct.toFixed(1) : String(Math.round(pct))) + '%';
+      });
+    },
+
+    // month(date) buckets are YYYYMM integers (e.g. 202607) - render them as "2026-07"; a boolean
+    // dimension reads as Yes/No, never as the raw true/false.
+    axisLabel(v, meta) {
+      if (typeof v === 'boolean' || (meta && meta.kind === 'boolean' && v != null && v !== '')) {
+        const yes = v === true || v === 'true' || v === 1;
+        return yes ? T('application-core:shell.report.true', 'Yes') : T('application-core:shell.report.false', 'No');
+      }
       const n = Number(v);
       if (Number.isInteger(n) && n >= 190001 && n <= 999912 && (n % 100) >= 1 && (n % 100) <= 12) {
         return Math.floor(n / 100) + '-' + String(n % 100).padStart(2, '0');

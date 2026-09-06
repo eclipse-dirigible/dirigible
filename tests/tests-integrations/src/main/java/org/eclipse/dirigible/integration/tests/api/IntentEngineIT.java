@@ -261,10 +261,13 @@ class IntentEngineIT extends IntegrationTest {
                 actions: [approve, reject]
 
             reports:
+              # chart: doughnut renders the aggregated rows as a circular chart beside the table -
+              # its slices ARE the dimension values, so the page names them in the legend.
               - name: OrdersByCustomer
                 source: Order
                 dimensions: [customer]
                 measures: ["count(*)", "sum(total)"]
+                chart: doughnut
               # month(field) buckets a date dimension into a sortable YYYYMM integer. The widget
               # turns the report into a dashboard KPI: one aggregate cell, the month pinned to now.
               - name: OrdersByMonth
@@ -3604,6 +3607,16 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(page.contains("align: 'right'"), "decimal measures should be right-aligned");
         assertTrue(page.contains("pattern: '### ### ### ##0.00'"), "the page metadata should carry the money pattern for decimal columns");
         assertTrue(page.contains("limit: 20"), "an ordinary report should page in twenties");
+
+        // A circular chart is sliced by the dimension, so its values are named by the legend alone -
+        // on whatever the series count - and each legend entry carries the slice's share of the
+        // measure total. The in-slice data label stays off for pie/doughnut: the chart library prints
+        // the raw measure there with a percent sign, which turned a 336-hour sum into "336%".
+        assertTrue(page.contains("chartType: 'doughnut'"), "the chart report page should carry its chart type");
+        assertTrue(page.contains("legend: true") && page.contains("dataLabels: false"),
+                "a doughnut should keep its legend and drop the raw-value-as-percentage slice label");
+        assertTrue(page.contains("shareLabels(labels, data[0])"), "doughnut legend entries should carry the slice share");
+        assertTrue(page.contains("shell.report.true"), "a boolean dimension should read Yes/No in the chart, not true/false");
 
         // A statement's rows ARE its structure, so its page fetches the whole statement rather than
         // splitting a balance sheet across pages.
