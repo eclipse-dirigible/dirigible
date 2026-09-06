@@ -27,6 +27,41 @@ function basePage() {
     refreshIcons() {},
 
     /**
+     * Re-read this component's data whenever a custom action finishes.
+     *
+     * The customActions store raises `harmonia:action-done` after every action it runs (a transition,
+     * a create-from, a page action that closed) - and until #7073 nothing listened to it, so a
+     * Record Reminder that had already created its row left the panel showing "No records" until the
+     * user reloaded the page by hand. An action changes server-side state the open page is a view of;
+     * the page has to go and look again.
+     *
+     * `handler` is the component's own reload. Registered once, per component instance, and removed
+     * in destroy() below - a page navigated away from must not keep reloading in the background.
+     */
+    onActionDone(handler) {
+      this._actionDoneHandlers = this._actionDoneHandlers || [];
+      const listener = () => {
+        try {
+          const done = handler.call(this);
+          if (done && typeof done.catch === 'function') done.catch((e) => console.error('[action-done] reload failed', e));
+        } catch (e) {
+          console.error('[action-done] reload failed', e);
+        }
+      };
+      this._actionDoneHandlers.push(listener);
+      window.addEventListener('harmonia:action-done', listener);
+    },
+
+    /**
+     * Alpine calls this when the component's element goes away. A component that overrides destroy()
+     * must call basePage's (or drop its own action-done listeners itself).
+     */
+    destroy() {
+      (this._actionDoneHandlers || []).forEach((listener) => window.removeEventListener('harmonia:action-done', listener));
+      this._actionDoneHandlers = [];
+    },
+
+    /**
      * Open a calendar that is SCOPED BY the record in front of us (intent `calendar.scope`): the
      * calendar entity's own page, filtered to this record through the query parameter its scope
      * foreign key reads - the same URL the calendar page itself builds when it navigates to create.

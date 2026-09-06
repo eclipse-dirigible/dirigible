@@ -72,6 +72,48 @@ public final class ProcessAbortSupport {
         return aborts;
     }
 
+    /**
+     * One delete-abort listener to generate: the {@code MessageHandler} on the trigger entity's
+     * {@code -deleted} topic that cancels this process's own in-flight instance when the row it runs
+     * for is gone (dirigible #7074).
+     *
+     * @param process the owning process
+     * @param entity the trigger entity whose deletion aborts the flow
+     * @param perspective the entity's resolved perspective (its gen data subfolder + the topic name)
+     */
+    public record DeleteAbort(String process, String entity, String perspective) {
+    }
+
+    /**
+     * A delete-abort listener for EVERY process started by an entity event, whatever its
+     * {@code whenDeleted} says. {@code refuse} guards the REST delete, but a repository-level delete (a
+     * cascade, a reaction, a CLI) still reaches the row - and an instance over a deleted row is the
+     * defect however the row went. Processes without an entity trigger (a schedule, a message) have no
+     * row and get nothing.
+     */
+    public static List<DeleteAbort> deleteAborts(IntentModel model) {
+        List<DeleteAbort> aborts = new ArrayList<>();
+        Map<String, EntityIntent> byName = IntentEntities.byName(model);
+        Map<String, String> compositionParents = IntentEntities.compositionParents(model);
+        for (ProcessIntent process : model.getProcesses()) {
+            String entity = TriggerSupport.triggerEntity(process);
+            if (process.getName() == null || entity == null || !byName.containsKey(entity)) {
+                continue; // no entity trigger, or parser-reported
+            }
+            aborts.add(new DeleteAbort(process.getName(), entity, IntentEntities.resolvePerspective(entity, compositionParents, model)));
+        }
+        return aborts;
+    }
+
+    /**
+     * Whether the process declares {@code whenDeleted: refuse} - the REST delete of its trigger entity
+     * is rejected (409) while the instance runs. The default, {@code abort}, is the listener above.
+     */
+    public static boolean refusesDelete(ProcessIntent process) {
+        return process.getWhenDeleted() != null && "refuse".equals(process.getWhenDeleted()
+                                                                          .trim());
+    }
+
     /** The BPMN message an abort event subprocess subscribes to. */
     public static String messageName(String process) {
         return IntentNaming.pascalCase(process) + "Abort";

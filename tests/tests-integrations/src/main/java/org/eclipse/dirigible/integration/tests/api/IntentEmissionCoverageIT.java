@@ -2439,6 +2439,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         && abortHandler.contains("ProcessStamps.idFor(entity.ProcessIds, \"ApprovalFlow\")")
                         && abortHandler.contains("Process.correlateMessageEvent(instance, \"ApprovalFlowAbort\""),
                 "the abort listener must match the status on -transitioned and abort ITS OWN instance, not whichever flow stamped last");
+        // ...and the row's DELETE retires the flow too (#7074): a listener on -deleted for every
+        // entity-triggered process, cancelling ITS OWN still-running instance, whether or not abortOn is
+        // declared - an Inbox task over a row that is gone opens an empty form and can still be completed.
+        String deleteAbort = contentOf("gen/events/emission/ApprovalFlowAbortOnDelete.java");
+        assertTrue(
+                deleteAbort.contains("-deleted") && deleteAbort.contains("ProcessStamps.idFor(entity.ProcessIds, \"ApprovalFlow\")")
+                        && deleteAbort.contains("Process.isRunning(instance)") && deleteAbort.contains("Process.cancel(instance,"),
+                "deleting the trigger row must cancel the process's own running instance");
 
         // ...and the follow-up flow on the same record (#6862) is a listener of its own, on the status
         // channel, guarding on ITS OWN name. Reading the record's single ProcessId here is what made the
@@ -2673,6 +2681,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(myRosterPage.contains("window.HarmoniaCalendar.events") && myRosterPage.contains("RosterItemMyController"),
                 "the personal items calendar must read through the scoped items controller");
 
+        // #7062: the line-item dialog must say which values are mandatory BEFORE the save, and must
+        // say which one was refused AFTER it. The dialog had neither - no required marker (only the
+        // header form carried one) and a generic banner that highlighted whatever field the browser
+        // had marked, so a rejected line named the wrong field and never named the right one.
+        assertTrue(rosterDoc.contains("x-show=\"col.required"), "the line dialog must mark a required column, as the header form does");
+        assertTrue(contentOf("gen/emission/js/components/pages/Roster/RosterItem.detail.js").contains("required: true"),
+                "the item registration must carry the required flag the dialog marker binds to");
+        assertTrue(rosterDoc.contains(":aria-invalid=\"draftFieldError === col.name\""),
+                "the refused column must carry aria-invalid - what Harmonia colours the label and border from");
+        assertTrue(rosterPage.contains("applyDraftError") && rosterPage.contains("namedProperty"),
+                "a rejected line must be mapped onto the property the server named, not onto a generic banner");
+
         // The app-test manifest carries the personal UI-parity metadata the runner's my flow
         // drives (wave 2): the /my route, the layout family the personal page belongs to, and
         // the relation columns that must resolve to labels on the personal list.
@@ -2882,6 +2902,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(stornoPosting.contains("target.Storno = original.Id;"), "the reversal must stamp the storno link to the original");
         String basePosting = contentOf("gen/events/emission/DocPostingPosting.java");
         assertTrue(basePosting.contains("candidate.Storno == null"), "the reversed posting's idempotency guard must exclude reversal rows");
+        // #7071: the second occurrence of the moment (an amended, re-issued source) rewrites the post
+        // it already made instead of reading it as "already posted" - so the comparison covers every
+        // cell the rows assign, the FK dimension included.
+        assertTrue(basePosting.contains("same(stored.Party, derived.Party)"),
+                "an existing post must be compared cell by cell against what the source derives now");
+        assertTrue(basePosting.contains("targetRepository.update(target) : targetRepository.save(target)"),
+                "a diverging post must be rewritten in place, never doubled");
         assertTrue(basePosting.contains("-Doc-transitioned"), "a status-triggered posting must bind the -transitioned topic");
         // source-FK copy (#6533): a to-one relation item cell copies the source FK verbatim onto the
         // line - no Calc, no negation, and it must carry through UNCHANGED onto the reversal line.

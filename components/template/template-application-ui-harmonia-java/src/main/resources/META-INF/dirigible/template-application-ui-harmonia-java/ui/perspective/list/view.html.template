@@ -170,7 +170,9 @@
 #end
 
         <!-- Developer-contributed per-record actions for this entity (customActions extension point).
-             Passes the selected record's id to the action page. -->
+             Passes the selected record's id to the action page. The selected ROW also goes to
+             getActions, so an action its current status can never accept - a transition outside its
+             `from:`, a create-from outside its `fromStatus:` - is not offered at all (#7073, #7068). -->
         <div x-show="$store.customActions.getActions(caView, 'entity', selected).length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
           <template x-for="action in $store.customActions.getActions(caView, 'entity', selected)" :key="action.id">
             <button x-h-button data-variant="outline" data-size="sm" @click="$store.customActions.trigger(action, selectedId)">

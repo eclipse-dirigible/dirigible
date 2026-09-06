@@ -31,9 +31,6 @@ import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.quartz.JobKey;
-import org.quartz.Scheduler;
-import org.quartz.SchedulerException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 
@@ -82,9 +79,6 @@ class TenantProvisioningApiIT extends IntegrationTest {
 
     @Autowired
     private DataSourceService dataSourceService;
-
-    @Autowired
-    private Scheduler scheduler;
 
     @BeforeAll
     static void enableTheApi() {
@@ -231,14 +225,13 @@ class TenantProvisioningApiIT extends IntegrationTest {
      * being untouched is a decision rather than a race the test won.
      */
     @Test
-    void theBuiltInProvisionerLeavesAnExternallyOwnedTenantAlone() throws SchedulerException {
+    void theBuiltInProvisionerLeavesAnExternallyOwnedTenantAlone() {
         String externallyOwned = "provisioning-api-it-untouched";
         restAssuredExecutor.execute(() -> register(externallyOwned, "Untouched").then()
                                                                                 .statusCode(201));
 
         DirigibleTestTenant ownedByThePlatform = new DirigibleTestTenant("provisioning-api-it-builtin");
         createTenants(ownedByThePlatform);
-        scheduler.triggerJob(JobKey.jobKey("TenantsProvisioningJob", "system"));
         waitForTenantProvisioning(ownedByThePlatform);
 
         Tenant tenant = tenantService.findById(externallyOwned)

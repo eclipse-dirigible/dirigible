@@ -227,7 +227,10 @@
         <div class="grid grid-cols-2 gap-4">
           <template x-for="col in itemColumns()" :key="col.name">
             <div x-h-field :class="col.kind === 'text' ? 'col-span-2' : ''">
-              <label x-h-label x-text="T(col.tkey, col.label)"></label>
+              <!-- A required line column carries the same marker as the header form: the dialog is
+                   where the value is entered, so hiding which ones are mandatory only defers the
+                   rejection to the server. -->
+              <label x-h-label><span x-text="T(col.tkey, col.label)"></span><span x-show="col.required &amp;&amp; !col.readonly" class="text-negative"> *</span></label>
               <template x-if="!col.readonly && col.lookup">
                 <div x-h-select data-filter="contains">
                   <input x-h-select-input x-model="draft[col.name]" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select {{name}}...', { name: T(col.tkey, col.label) })" />

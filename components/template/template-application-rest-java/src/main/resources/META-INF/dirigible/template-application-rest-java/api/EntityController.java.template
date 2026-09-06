@@ -348,6 +348,9 @@ public class ${name}Controller {
 #if($masterLock)
         repository.findOne(id).ifPresent(stored -> requireMasterMutable(stored.${masterLock.fkProperty}));
 #end
+#if($processDeleteGuards)
+        repository.findOne(id).ifPresent(this::requireNoRunningProcess);
+#end
 #if($attachmentEntity)
         String storagePath = repository.findOne(id)
                                        .map(a -> a.StoragePath)
@@ -603,6 +606,28 @@ public class ${name}Controller {
 #else
         return #if($immutableStatusProperty)isStatusMutable(existing)#{else}true#end#if($periodLock) && isPeriodOpen(existing.${periodLock.dateProperty})#end;
 #end
+    }
+
+#end
+#if($processDeleteGuards)
+    // Delete guard (intent process `whenDeleted: refuse`): while a flow this record started is still
+    // running, the record cannot be deleted through this REST surface - complete or abort the flow
+    // first. The alternative, `whenDeleted: abort`, cancels the flow instead; both exist so no Inbox
+    // task ever points at a row that is gone. Repository-level deletes are not guarded here - the
+    // generated -deleted listener retires the instance for those.
+    private void requireNoRunningProcess(${name}Entity existing) {
+        for (String guard : "${processDeleteGuards}".split(",")) {
+            String process = guard.substring(0, guard.indexOf(':'));
+            String label = guard.substring(guard.indexOf(':') + 1);
+            String instance = org.eclipse.dirigible.sdk.bpm.ProcessStamps.idFor(existing.ProcessIds, process);
+            if (instance == null && (existing.ProcessIds == null || existing.ProcessIds.isBlank())) {
+                instance = existing.ProcessId;
+            }
+            if (instance != null && !instance.isBlank() && org.eclipse.dirigible.sdk.bpm.Process.isRunning(instance)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "This ${name} is still in its " + label + " flow - complete or cancel it before deleting");
+            }
+        }
     }
 
 #end

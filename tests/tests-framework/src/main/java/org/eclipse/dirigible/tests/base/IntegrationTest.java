@@ -73,11 +73,31 @@ public abstract class IntegrationTest {
         tenants.forEach(tenantCreator::createTenant);
     }
 
+    /**
+     * Provisions the given tenants and waits until every one of them is {@code PROVISIONED}.
+     *
+     * <p>
+     * Creating a tenant only stores it in status {@code INITIAL}; provisioning happens in the Quartz
+     * {@code TenantsProvisioningJob}, whose schedule is 15 minutes wide by default. The job is
+     * therefore triggered explicitly here rather than waited for - otherwise a tenant created after the
+     * job's single boot firing could never be provisioned within the timeout below, and the failure
+     * would surface as a bare {@code ConditionTimeoutException} that reads like a product bug.
+     */
     protected void waitForTenantsProvisioning(List<DirigibleTestTenant> tenants) {
-        tenants.forEach(this::waitForTenantProvisioning);
+        tenantCreator.triggerTenantsProvisioning();
+        tenants.forEach(this::awaitTenantProvisioned);
     }
 
+    /**
+     * Provisions the given tenant and waits until it is {@code PROVISIONED}.
+     *
+     * @see #waitForTenantsProvisioning(List)
+     */
     protected void waitForTenantProvisioning(DirigibleTestTenant tenant) {
+        waitForTenantsProvisioning(List.of(tenant));
+    }
+
+    private void awaitTenantProvisioned(DirigibleTestTenant tenant) {
         Awaitility.await()
                   .pollInterval(3, TimeUnit.SECONDS)
                   .atMost(35, TimeUnit.SECONDS)

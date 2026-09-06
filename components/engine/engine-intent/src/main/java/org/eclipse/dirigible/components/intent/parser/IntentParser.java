@@ -5245,6 +5245,7 @@ public final class IntentParser {
             validateStepResilience(process, issues);
             validateProcessVars(process, issues);
             validateAbortOn(process, triggerEntity, byName, issues);
+            validateWhenDeleted(process, triggerEntity, byName, issues);
             validateParallelSteps(process, issues);
             validateTaskFormActions(process, model, issues);
             validateTaskAssigneePaths(process, triggerEntity, byName, model, issues);
@@ -6118,6 +6119,32 @@ public final class IntentParser {
                             + "] is abort-only and must not be reachable from the main flow (remove it from the step chain / any next/then/else)");
                 }
             }
+        }
+    }
+
+    /**
+     * A process {@code whenDeleted: abort | refuse} says what a DELETE of the trigger entity's row does
+     * to the in-flight instance (dirigible #7074). Omitted means {@code abort}: the generated
+     * {@code -deleted} listener cancels the instance, so no Inbox task points at a row that is gone.
+     * {@code refuse} makes the generated REST delete answer 409 while the instance runs. Anything else
+     * is an issue, as is either value on a process without an entity trigger - a scheduled or
+     * message-started flow has no row whose deletion could mean anything.
+     */
+    private static void validateWhenDeleted(ProcessIntent process, String triggerEntity, Map<String, EntityIntent> byName,
+            List<String> issues) {
+        String whenDeleted = process.getWhenDeleted();
+        if (whenDeleted == null) {
+            return;
+        }
+        String value = whenDeleted.trim();
+        if (!"abort".equals(value) && !"refuse".equals(value)) {
+            issues.add("process [" + process.getName() + "] whenDeleted [" + whenDeleted
+                    + "] must be `abort` (cancel the in-flight instance - the default) or `refuse` (reject the delete while the instance runs)");
+            return;
+        }
+        if (triggerEntity == null || byName.get(triggerEntity) == null) {
+            issues.add("process [" + process.getName()
+                    + "] whenDeleted needs a process trigger entity - it is that entity's DELETE the instance reacts to");
         }
     }
 

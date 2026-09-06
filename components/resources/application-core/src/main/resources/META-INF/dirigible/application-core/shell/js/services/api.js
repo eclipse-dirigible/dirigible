@@ -67,6 +67,7 @@ App.services.api = {
       case 401: return 'Unauthorized';
       case 403: return 'InsufficientPermission';
       case 404: return 'NotFound';
+      case 409: return 'Conflict';
       case 422: return 'ValidationError';
       case 502: return 'UpstreamError';
       default:  return 'InternalServerError';
@@ -142,7 +143,10 @@ App.services.api = {
       ? new ApiError({
           httpStatus: r.status,
           errorType: parsed.errorType || parsed.code || this.typeFromStatus(r.status),
-          errorMessage: parsed.errorMessage || parsed.message || r.statusText,
+          // `error` is what the generated transition/check controllers answer a refusal with
+          // (dirigible #7073); without it their authored "allowed only from status [3, 4]" text was
+          // dropped on the floor and the caller was left with the bare status line.
+          errorMessage: parsed.errorMessage || parsed.message || parsed.error || r.statusText,
           errorCauses: parsed.errorCauses,
         })
       : new ApiError({

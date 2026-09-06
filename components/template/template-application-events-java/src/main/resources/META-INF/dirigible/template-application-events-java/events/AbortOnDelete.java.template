@@ -1,0 +1,78 @@
+package gen.events.${javaGenFolderName};
+
+import org.eclipse.dirigible.sdk.bpm.Process;
+import org.eclipse.dirigible.sdk.bpm.ProcessStamps;
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+
+/**
+ * Cancels the ${process} process when the ${entity} it runs for is deleted.
+ *
+ * Generated for every entity-triggered process - do not edit; it is re-generated with the application.
+ * Bound to the ${entity} -deleted topic (the payload is the row as the deleting transaction read it):
+ * when the deleted row carries a stamp for this process and that instance is still running, the
+ * instance is cancelled - its pending user tasks, parked waits and armed boundary timers with it. A
+ * task left behind would open an empty form over a row that no longer exists and could still be
+ * completed, driving the flow over nothing; this listener is what makes a delete retire the flow
+ * (dirigible #7074). With `whenDeleted: refuse` the REST delete is rejected while the instance runs,
+ * but a repository-level delete still reaches the row, so the listener stays. Correlation rides the
+ * ProcessIds stamp the trigger listener writes back for THIS process - not the record's single
+ * ProcessId, which holds whichever process started last. Fail-soft: no stamp or an instance already
+ * ended is a no-op, never an error.
+ *
+ * Self-describing MessageHandler (strong-interface style): the destination/kind come from the
+ * interface, not an annotation; @Component makes it a managed bean.
+ */
+@Component("${javaGenFolderName}_${process}AbortOnDelete")
+public class ${process}AbortOnDelete implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${process}AbortOnDelete");
+
+    @Override
+    public String destination() {
+        return "${projectName}-${perspective}-${entity}-deleted";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        ${entity}Entity entity = Json.parse(message, ${entity}Entity.class);
+        if (entity == null) {
+            return;
+        }
+        // This process's own instance. The ProcessId fallback covers records stamped before ProcessIds
+        // existed, where the single column is all there is.
+        String instance = ProcessStamps.idFor(entity.ProcessIds, "${process}");
+        if (instance == null && (entity.ProcessIds == null || entity.ProcessIds.isBlank())) {
+            instance = entity.ProcessId;
+        }
+        if (instance == null || instance.isBlank()) {
+            return;
+        }
+        try {
+            if (!Process.isRunning(instance)) {
+                return;
+            }
+            Process.cancel(instance, "The ${entity} this ${process} ran for was deleted");
+            LOG.info("Cancelled ${process} instance [{}]: its ${entity} was deleted", instance);
+        } catch (RuntimeException alreadyEnded) {
+            // The instance ended between the check and the cancel - a no-op by the fail-soft glue
+            // convention, never an error.
+        }
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Abort ${process} on delete: the listener on [{}] failed - [{}]", destination(), error);
+    }
+}

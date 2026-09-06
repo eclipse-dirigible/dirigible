@@ -400,7 +400,8 @@
             <span x-h-avatar class="rounded-full" :data-variant="variant">
               <template x-if="variant === 'positive'"><svg x-h-icon data-icon="circle-success" role="img" aria-label="success"></svg></template>
               <template x-if="variant === 'negative'"><svg x-h-icon data-icon="circle-error" role="img" aria-label="error"></svg></template>
-              <template x-if="variant !== 'positive' && variant !== 'negative'"><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></template>
+              <template x-if="variant === 'warning'"><svg x-h-icon data-icon="circle-warning" role="img" aria-label="warning"></svg></template>
+              <template x-if="variant !== 'positive' && variant !== 'negative' && variant !== 'warning'"><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></template>
             </span>
           </div>
           <span x-h-notification-title class="flex-1" x-text="message"></span>

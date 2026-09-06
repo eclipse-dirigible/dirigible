@@ -67,6 +67,13 @@ export function getTemplate(parameters) {
                 collection: "aborts"
             },
             {
+                location: "/template-application-events-java/events/AbortOnDelete.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{process}}AbortOnDelete.java",
+                engine: "velocity",
+                collection: "deleteAborts"
+            },
+            {
                 location: "/template-application-events-java/events/Writer.java.template",
                 action: "generate",
                 rename: "gen/events/{{javaGenFolderName}}/{{className}}.java",

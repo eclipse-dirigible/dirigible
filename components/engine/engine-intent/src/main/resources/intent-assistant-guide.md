@@ -574,6 +574,13 @@ field may declare:
   and no default - or a null selected column - skips the posting to the unposted worklist. A conditional
   cell already branches the account, so it cannot also carry a row `when`. All writes go through the generated
   repositories, so numbering/status-init/`checks:` fire on the created document.
+  **An amended source rewrites its post.** The handler derives the whole content first and compares it
+  with the post the source already carries: identical is a redelivery (no-op), different is either a
+  half-post to complete or a source that was rejected, edited and re-issued - and then the existing
+  post is REWRITTEN in place (never a second one). The rewrite stops at the created document's own
+  lifecycle: once it has left the status the posting created it in (its `init:`), someone has acted on
+  it, so the divergence is logged and left to a reversing entry. A created document with no
+  `function: EntityStatus` relation is always rewritable.
   **Reversal mode (red storno):** a posting with `reverses: <sibling posting name>` undoes the
   sibling's document when the source is voided/cancelled - pair it with a `transitions:` void:
   ```yaml
@@ -1510,6 +1517,26 @@ Use `abortOn` whenever a document has a manual `transitions:` void/cancel AND a 
 the transition and the abort together retire the record cleanly. A cancelling `expire:` timer that
 needs a guard ("only expire if still SENT") is the same shape - prefer `abortOn` over a hand-written
 guard once the status set is known.
+
+**When the document itself is deleted: `whenDeleted`.** A delete is the other way a row leaves a
+running flow, and it needs no `abortOn` and no status: every entity-triggered process gets a
+`-deleted` listener that cancels its own still-running instance the moment the row is gone - a
+task over a deleted row would open an empty form and could still be completed, driving the flow
+over nothing. The intent chooses between the two safe outcomes:
+
+```yaml
+processes:
+  - name: OrderApproval
+    trigger: { onCreate: SalesOrder }
+    whenDeleted: refuse      # abort (default) | refuse
+```
+
+- `abort` (the default, no key needed) - the delete goes through and the instance is cancelled,
+  pending tasks, parked waits and armed timers with it.
+- `refuse` - the REST delete answers 409 ("still in its Order Approval flow - complete or cancel it
+  before deleting") while the instance runs; the record can be deleted once the flow has ended or
+  was aborted. A repository-level delete (a cascade, a reaction) still reaches the row, so the
+  cancelling listener is generated in both modes - no task may point at a deleted row either way.
 
 ### forms - data-entry UI
 
@@ -3524,6 +3551,7 @@ or a seeded name.
 | serviceTask `onError` | a declared step or `end` - `delegate:` steps only; `{error}` (a whole-value `setField` value) is readable on the route |
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
+| process `whenDeleted` | `abort` (default - deleting the trigger row cancels the in-flight instance), `refuse` (the REST delete answers 409 while the instance runs); needs an entity trigger |
 | trigger `businessKeyStrategy` | `timestamp` |
 | entity event | `onCreate`, `onUpdate`, `onDelete`, `onTransition` (the STATUS channel - a workflow setter / `transitions:` button / `generates` completion hook publishes it, and `onUpdate` never sees those) |
 | notification `channel` | `email` |
@@ -3558,6 +3586,7 @@ or a seeded name.
 - "who/which was assigned / in force / valid on that date (from a register with from-to dates)" -> **resolves**
 - "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)
 - "cancel the in-flight approval when the document is voided/cancelled (no orphaned Inbox task)" -> **processes** (`abortOn:`)
+- "deleting a document under approval must kill the approval / must be refused while it runs" -> **processes** (`whenDeleted: abort | refuse`; the cancelling `-deleted` listener is generated regardless)
 - "retry the flaky external call, and record the failure on the record instead of an incident" -> **processes** (`delegate:` serviceTask with `retry:` + `onError:`, the failure message via `{error}`)
 - "a screen to enter / edit X" -> **forms**
 - "a button on X's view that opens a custom page / action" -> **actions**

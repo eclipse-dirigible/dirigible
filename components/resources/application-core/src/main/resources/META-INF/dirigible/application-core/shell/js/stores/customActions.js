@@ -36,6 +36,11 @@
  * The action page opens in the dialog wired in index.html; on its `harmonia.form.close` message (or an
  * explicit close) the store closes it and raises a `harmonia:action-done` window event, so a view that
  * a mutating action changed (duplicate / create-from / aggregate) can refresh without a manual reload.
+ *
+ * Every outcome is ANNOUNCED - a transient toast plus an entry in the notification centre (issue
+ * #7073). A refusal shows the reason the server sent (a transition outside its `from:` statuses says
+ * so in its 409), a success says what happened, and a page action that finished reports through the
+ * same path. Nothing an action does ends in silence.
  */
 document.addEventListener('alpine:init', () => {
   Alpine.store('customActions', {
@@ -71,9 +76,14 @@ document.addEventListener('alpine:init', () => {
 
     init() {
       this.load();
-      // An action page (opened in the app-wide dialog) asks its host to close when it is done.
+      // An action page (opened in the app-wide dialog) asks its host to close when it is done. That
+      // message means the page FINISHED its work (the user dismissing the dialog closes it directly
+      // instead), so it is also the outcome the toast reports - a page may say so itself with
+      // `status` ('ok' | 'error') and `message`, and one that says nothing still gets the default
+      // "<label> completed" rather than the silence Save as Template used to end in (issue #7073).
       window.addEventListener('message', (e) => {
-        if (e && e.data && e.data.type === 'harmonia.form.close' && this.dialogOpen) this.closeDialog();
+        if (!e || !e.data || e.data.type !== 'harmonia.form.close' || !this.dialogOpen) return;
+        this.closeDialog({ status: e.data.status, message: e.data.message });
       });
       // Re-read the contributions on navigation so a newly published action shows without a full reload.
       document.addEventListener('pinecone:end', () => { if (this.loaded) this.load(); });
@@ -134,23 +144,43 @@ document.addEventListener('alpine:init', () => {
     // is 'page' (a toolbar action on the whole view; matches page or an unset type) or 'entity' (a
     // per-record action). Contributors set `view`/`type` on the descriptor (a `perspective` field, if
     // present, stays informational). The list arrives already order-sorted from the endpoint.
-    // An entity action may carry a `guard` - the statuses of the record it is offered on (issue
-    // #7068). Pass the selected record as `record` and a guarded action disappears while the record
-    // stands in a status it would refuse: a proforma already INVOICED stops carrying a live "Generate
-    // Invoice" button. The record is optional, so a caller that has none (a page action, a shell that
-    // never loaded the row) sees exactly what it saw before - the generated controller's 409 is the
-    // contract, this only stops offering the click.
+    //
+    // `record` (optional, entity actions only) is the record the buttons would act on: an action the
+    // record's current status can never accept is left out entirely rather than offered and refused
+    // (issues #7073 and #7068) - a transition outside its `from:` statuses, and a create-from whose
+    // source has already left the statuses it generates from (a proforma already INVOICED stops
+    // carrying a live "Generate Invoice" button). Callers that have the row - every generated view
+    // does - should pass it; one that has none sees exactly what it saw before, the server's own
+    // refusal staying the contract.
     getActions(view, type, record) {
       return (this.actions || []).filter((a) =>
         a && a.view === view &&
         (type === 'entity' ? a.type === 'entity'
                            : (a.type === 'page' || a.type === undefined || a.type === null)) &&
-        this.isAvailable(a, record));
+        this.appliesTo(a, record) && this.isAvailable(a, record));
     },
 
-    // Whether a guarded action is offered on this record. An absent guard, an absent record or a
-    // record carrying no value for the guarded property all leave the action visible - hiding a
-    // button on a value we do not have is how an action vanishes for no reason the user can see.
+    // Whether an action can apply to a record AT ALL. A transition descriptor mirrors its `from:`
+    // guard (`statusProperty` + `from`, emitted by TransitionsIntentGenerator), so Void stops being
+    // offered on a paid invoice - the case that produced a 409 the user never saw.
+    //
+    // It fails OPEN in every uncertain case: no guard on the descriptor, no record in hand, or a
+    // record that does not carry the status property (a list row projecting other columns). Hiding a
+    // button that WOULD have worked is worse than showing one the server refuses - and the server's
+    // check, including the `when:` guard that is deliberately not mirrored here, stays authoritative.
+    appliesTo(action, record) {
+      if (!action || !Array.isArray(action.from) || !action.from.length || !action.statusProperty) return true;
+      if (!record || typeof record !== 'object') return true;
+      const current = record[action.statusProperty];
+      if (current === undefined || current === null || current === '') return true;
+      return action.from.some((from) => String(from) === String(current));
+    },
+
+    // Whether a guarded create-from is offered on this record (issue #7068). The `guard` descriptor
+    // carries the source statuses the create-from accepts (`allowed`) or refuses (`blocked`). It
+    // fails open for the same reason `appliesTo` does: an absent guard, an absent record or a record
+    // carrying no value for the guarded property all leave the action visible - hiding a button on a
+    // value we do not have is how an action vanishes for no reason the user can see.
     isAvailable(action, record) {
       const guard = action && action.guard;
       if (!guard || !guard.property || !record) return true;
@@ -410,22 +440,37 @@ document.addEventListener('alpine:init', () => {
         } else if (notified && notified.status === 'skipped') {
           this.notify(label, (ref ? ref + ': ' : '') + 'no e-mail address on the record - nothing was sent', 'warning');
         } else {
-          this.notify(label, ref ? 'Created ' + ref : 'Completed', 'positive');
+          // A transition moved a record that already existed; a generate/create-from made a new one.
+          // Reporting a status flip as "Created INV-1" is how the Void toast read before #7073.
+          const done = action.kind === 'transition'
+            ? (ref ? 'Done - ' + ref : 'Done')
+            : (ref ? 'Created ' + ref : 'Completed');
+          this.notify(label, done, 'positive');
         }
         window.dispatchEvent(new CustomEvent('harmonia:action-done'));
       } catch (e) {
-        const msg = (App.services.apiErrors && App.services.apiErrors.messageFor)
-          ? App.services.apiErrors.messageFor(e, 'Action failed')
+        // A refusal (400/409) carries the authored reason the intent wrote for this exact moment -
+        // "allowed only from status [3, 4] - current status is [6]". That is the message the user
+        // needs; the generic catalog line is for faults (issue #7073).
+        const msg = (App.services.apiErrors && App.services.apiErrors.refusalMessageFor)
+          ? App.services.apiErrors.refusalMessageFor(e, 'Action failed')
           : 'Action failed';
         this.notify(label, msg, 'negative');
       }
     },
 
-    // Surface a notification through the shared notifications store (the shell's notification centre),
-    // degrading to the console when it is unavailable so an action never fails silently.
+    // Surface the outcome of an action the user just triggered: a transient toast over the page PLUS
+    // an entry in the shell's notification centre (announce does both). Recording it in the bell
+    // alone - what this did before #7073 - is indistinguishable from nothing happening, which is
+    // exactly how a refused Void came to read as a successful one.
+    // Degrades to the console when the store is unavailable, so an action never fails silently.
     notify(title, description, variant) {
       try {
         const store = window.Alpine && Alpine.store('notifications');
+        if (store && typeof store.announce === 'function') {
+          store.announce({ title: title, description: description, variant: variant });
+          return;
+        }
         if (store && typeof store.add === 'function') {
           store.add({ title: title, description: description, variant: variant });
           return;
@@ -434,9 +479,18 @@ document.addEventListener('alpine:init', () => {
       console.log('customActions: ' + title + (description ? ' - ' + description : ''));
     },
 
-    closeDialog() {
+    // Close the action dialog. `outcome` is present only when the PAGE reported it is done (see the
+    // message listener in init); the dialog's own X calls this with nothing, and a dismissal is not
+    // an outcome worth announcing.
+    closeDialog(outcome) {
+      const label = this.dialogTitle || 'Action';
       this.dialogOpen = false;
       this.dialogUrl = '';
+      if (outcome) {
+        const failed = outcome.status === 'error';
+        this.notify(label, outcome.message || (failed ? 'Action failed' : 'Completed'),
+          failed ? 'negative' : 'positive');
+      }
       // Let the originating view refresh after a (possibly) mutating action.
       window.dispatchEvent(new CustomEvent('harmonia:action-done'));
     },

@@ -14,8 +14,13 @@
  *
  * notifications store — the shell's in-app notification list behind the top-right bell. App code /
  * glue pushes entries via Alpine.store('notifications').add({ title, description, variant }); the
- * bell shows the unread count and the dropdown lists them. (Transient toasts are a separate concern,
- * via Harmonia's $notifications overlay declared in index.html.)
+ * bell shows the unread count and the dropdown lists them.
+ *
+ * announce({ title, description, variant }) is what code that just DID something calls: it records
+ * the entry in the bell AND raises the transient toast over Harmonia's notification overlay (the
+ * `toast` template every shell declares in index.html). Before it existed (dirigible #7073) the only
+ * feedback path was the bell, so a refused transition and a successful one looked exactly the same
+ * on screen - nothing - and the user assumed the click had worked.
  *
  * A first source is wired in: the user's actionable BPM tasks (from the processTasks store) are
  * surfaced as notifications via syncTasks() — a new task shows up here, a completed one drops off.
@@ -37,6 +42,33 @@ document.addEventListener('alpine:init', () => {
         variant: n.variant || 'information',
         unread: true,
       });
+    },
+
+    /**
+     * Record the entry in the bell AND show it as a transient toast. Use this for the OUTCOME of
+     * something the user just did; plain add() stays for background arrivals (a new task) that must
+     * not interrupt.
+     *
+     * The toast overlay is Harmonia's (`_h_notifications`, driven by the `toast` template in the
+     * shell's index.html). Missing overlay / missing template is not a reason to lose the message:
+     * the bell entry is written first, so the worst case is the pre-#7073 behaviour rather than a
+     * broken page.
+     */
+    announce(n) {
+      n = n || {};
+      this.add(n);
+      const variant = n.variant || 'information';
+      const text = [n.title, n.description].filter(Boolean).join(' - ');
+      try {
+        const toasts = window.Alpine && Alpine.store('_h_notifications');
+        if (!toasts || typeof toasts.push !== 'function') return;
+        // A refusal has to be READ; a success only has to be seen. Same reason the variant is
+        // carried through: the overlay template picks the icon from it.
+        const timeout = (variant === 'negative' || variant === 'warning') ? 12000 : 5000;
+        toasts.push(undefined, 'toast', 'top-right', timeout, { message: text, variant });
+      } catch (e) {
+        console.warn('notifications: could not raise the toast for "' + text + '"', e);
+      }
     },
 
     markAllRead() { this.items.forEach(n => { n.unread = false; }); },

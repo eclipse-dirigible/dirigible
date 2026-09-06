@@ -67,6 +67,14 @@ function detailPanel(def, masterId) {
       }
       await this.load();
       this.loadLookups();
+      // A custom action can create or change rows this panel lists (a Record Reminder writes a
+      // PaymentReminder against the open invoice), and it does so behind the panel's back - through
+      // its own endpoint, not this panel's editing path. Re-read on every action so the panel stops
+      // saying "No records" about a record that exists (issue #7073).
+      this.onActionDone(async () => {
+        await this.load();
+        this.loadLookups();
+      });
     },
 
     // Fetch the referenced rows for each relationship column once, keyed by FK -> the whole row (so both

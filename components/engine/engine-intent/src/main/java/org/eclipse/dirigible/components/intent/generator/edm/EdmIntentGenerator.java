@@ -36,6 +36,7 @@ import org.eclipse.dirigible.components.intent.model.TransitionIntent;
 import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.PermissionSupport;
+import org.eclipse.dirigible.components.intent.generator.ProcessAbortSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
@@ -624,6 +625,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 }
             }
             putPeriod(entityMap, entity);
+            putProcessDeleteGuards(entityMap, entity, model);
             putLifecycle(entityMap, entity, model);
             if (entity.getHierarchy() != null && !entity.getHierarchy()
                                                         .isBlank()) {
@@ -2220,6 +2222,32 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * does; the parser has already rejected an unseeded or self-referencing edge, so what is emitted
      * here is a valid graph.
      */
+    /**
+     * The processes whose {@code whenDeleted: refuse} guards this entity's REST delete (dirigible
+     * #7074): {@code processDeleteGuards} = {@code <Process>:<Process label>} pairs, comma-separated -
+     * the controller template reads the row's {@code ProcessIds} stamp for each and answers 409 while
+     * that instance is still running. A scalar, so it reaches the {@code .edm} twin as an attribute
+     * like {@code immutableStatusValues}. Emitted only when some process refuses; the default
+     * ({@code abort}) is a listener under {@code gen/events} and needs nothing on the entity.
+     *
+     * @param entityMap the entity's model map
+     * @param entity the authored entity
+     * @param model the whole intent - the processes are declared beside the entities, not on them
+     */
+    private static void putProcessDeleteGuards(Map<String, Object> entityMap, EntityIntent entity, IntentModel model) {
+        List<String> guards = new ArrayList<>();
+        for (ProcessIntent process : model.getProcesses()) {
+            boolean triggeredByThis = entity.getName() != null && entity.getName()
+                                                                        .equals(TriggerSupport.triggerEntity(process));
+            if (process.getName() != null && triggeredByThis && ProcessAbortSupport.refusesDelete(process)) {
+                guards.add(process.getName() + ":" + IntentNaming.humanize(process.getName()));
+            }
+        }
+        if (!guards.isEmpty()) {
+            entityMap.put("processDeleteGuards", String.join(",", guards));
+        }
+    }
+
     /**
      * The two halves of date-based immutability, each emitted on the entity that DECLARES it.
      *

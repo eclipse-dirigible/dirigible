@@ -108,6 +108,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> timerLoaders = buildTimerLoaders(model, settings);
         List<Map<String, Object>> waits = buildWaits(model, settings);
         List<Map<String, Object>> aborts = buildAborts(model, settings);
+        List<Map<String, Object>> deleteAborts = buildDeleteAborts(model, settings);
         List<Map<String, Object>> writers = buildWriters(model, settings);
         List<Map<String, Object>> setters = buildSetters(model, settings);
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings, context);
@@ -138,11 +139,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> numbering = NumberingSupport.buildNumbering(model, compositionParents);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && assignees.isEmpty() && timerLoaders.isEmpty()
-                && waits.isEmpty() && aborts.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty()
-                && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && inboundMessages.isEmpty() && inboundFiles.isEmpty()
-                && outbound.isEmpty() && stepEvents.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty()
-                && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty()
-                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty() && resolves.isEmpty()) {
+                && waits.isEmpty() && aborts.isEmpty() && deleteAborts.isEmpty() && writers.isEmpty() && setters.isEmpty()
+                && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty()
+                && inboundMessages.isEmpty() && inboundFiles.isEmpty() && outbound.isEmpty() && stepEvents.isEmpty() && rollups.isEmpty()
+                && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty()
+                && postings.isEmpty() && snapshots.isEmpty() && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty()
+                && sends.isEmpty() && resolves.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -155,6 +157,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("timerLoaders", timerLoaders);
         glue.put("waits", waits);
         glue.put("aborts", aborts);
+        glue.put("deleteAborts", deleteAborts);
         glue.put("writers", writers);
         glue.put("setters", setters);
         glue.put("notifications", notifications);
@@ -1623,6 +1626,29 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return aborts;
     }
 
+    /**
+     * One delete-abort listener per entity-triggered process: a {@code MessageHandler} on the trigger
+     * entity's {@code -deleted} topic that cancels this process's own in-flight instance (read from the
+     * deleted row's {@code ProcessIds} stamp) so no Inbox task points at a row that is gone (dirigible
+     * #7074). Fail-soft: no stamp or an instance already ended is a no-op.
+     */
+    private static List<Map<String, Object>> buildDeleteAborts(IntentModel model, IntentSettings settings) {
+        List<Map<String, Object>> aborts = new ArrayList<>();
+        for (ProcessAbortSupport.DeleteAbort abort : ProcessAbortSupport.deleteAborts(model)) {
+            if (!settings.shouldGenerate("deleteAborts", abort.process())) {
+                LOGGER.info("Settings opt-out: keeping existing handler for delete abort [{}] (not generated)",
+                        LoggedValue.of(abort.process()));
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("process", abort.process());
+            entry.put("entity", abort.entity());
+            entry.put("perspective", abort.perspective());
+            aborts.add(entry);
+        }
+        return aborts;
+    }
+
     /** Test hook: build the {@code triggers} glue collection without a repository. */
     static List<Map<String, Object>> buildTriggersForTest(IntentModel model) {
         IntentGenerationContext context =
@@ -1634,6 +1660,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /** Test hook: build the {@code aborts} glue collection without a repository. */
     static List<Map<String, Object>> buildAbortsForTest(IntentModel model) {
         return buildAborts(model, IntentSettings.parse("{}"));
+    }
+
+    /** Test hook: build the {@code deleteAborts} glue collection without a repository. */
+    static List<Map<String, Object>> buildDeleteAbortsForTest(IntentModel model) {
+        return buildDeleteAborts(model, IntentSettings.parse("{}"));
     }
 
     /** Test hook: build the {@code setters} glue collection without a repository. */
@@ -2413,6 +2444,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("targetEntity", creates.getName());
             e.put("targetPerspective", IntentEntities.resolvePerspective(creates.getName(), compositionParents, model));
             e.put("targetPk", IntentEntities.keyFieldName(creates));
+            // Amendment (#7071): a source that is rejected, edited and re-issued raises the SAME
+            // moment again, and the post it already carries no longer describes it. The handler
+            // therefore re-derives the content and rewrites the post - but only while nobody has
+            // acted on the created document, i.e. while its status is still the one the posting's
+            // own create wrote. A target with no status lifecycle at all is always rewritable; one
+            // that has moved on is reported and left alone (unwinding a posted entry is a
+            // correcting entry's job - `reverses:` - not a silent overwrite).
+            e.put("amendableGuard", amendableGuard(creates));
             e.put("itemsEntity", itemsEntity.getName());
             e.put("itemsPerspective", IntentEntities.resolvePerspective(itemsEntity.getName(), compositionParents, model));
             e.put("itemsFk", IntentNaming.pascalCase(creates.getName()));
@@ -2515,11 +2554,48 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 itemRows.add(rendered);
             }
             e.put("itemRows", itemRows);
+            // The union of every property the rows assign - what a stored row is compared on to tell
+            // a plain redelivery (nothing changed) from an amendment. A property no row assigns is
+            // null on both sides and says nothing.
+            Set<String> comparedProperties = new LinkedHashSet<>();
+            for (Map<String, Object> row : itemRows) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> assigns = (List<Map<String, Object>>) row.get("assigns");
+                for (Map<String, Object> assign : assigns) {
+                    comparedProperties.add(String.valueOf(assign.get("targetProp")));
+                }
+            }
+            e.put("itemComparedProps", new ArrayList<>(comparedProperties));
             e.put("usedRuleColumns", new ArrayList<>(usedRuleColumns));
             e.put("conditionalRuleGuards", conditionalRuleGuards);
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * The Java condition under which an ALREADY posted document may be rewritten from an amended source
+     * (#7071), evaluated against the local {@code target}.
+     *
+     * <p>
+     * The posting created the document, so the state it created it in is the one nobody has acted on
+     * yet: its {@code function: EntityStatus} relation still holding the declared {@code init:} value,
+     * or still empty when none is declared. An entity with no status lifecycle has nothing to act on
+     * and is always rewritable - the empty guard.
+     *
+     * @param creates the created (target) entity
+     * @return the guard expression, or the empty string when the target is always rewritable
+     */
+    private static String amendableGuard(EntityIntent creates) {
+        RelationIntent status = IntentEntities.entityStatusRelation(creates);
+        if (status == null || status.getName() == null || status.getName()
+                                                                .isBlank()) {
+            return "";
+        }
+        String property = IntentNaming.pascalCase(status.getName());
+        String init = status.getInit();
+        return init != null && init.matches("-?\\d+") ? "target." + property + " != null && target." + property + " == " + init
+                : "target." + property + " == null";
     }
 
     /**
