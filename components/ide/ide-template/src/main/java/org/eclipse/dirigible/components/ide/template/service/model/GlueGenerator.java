@@ -396,7 +396,11 @@ class GlueGenerator {
         boolean generates = "generate".equals(str(item, "action"));
         copy(context, item, "name", "className", "cron", "entity", "perspective", "criteriaExpression", "toExpression", "subjectExpression",
                 "bodyExpression", "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty",
-                "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport", "genToEntity", "genToPk", "genFieldAssignments");
+                "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport", "genToEntity", "genToPk", "genFieldAssignments",
+                // The scheduled generation's natural key (issue #7070). Absent on a .glue written
+                // before it existed, which `copy` turns into an absent context key - so the guard's
+                // `#if` is false and such a job renders byte-identically to what it always did.
+                "hasGenUnique", "genUnique");
         context.put("javaPerspective", sanitize(item, "perspective"));
         // The source's generation folder is the owner model's when the source is cross-model, else
         // this project's - always supplied, so a local source stays unchanged.

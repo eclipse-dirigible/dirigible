@@ -102,6 +102,7 @@ jobs:
     timeout-minutes: 60
     env:
       POSTGRES_DB: testdb
+      POSTGRES_SYSTEM_DB: systemdb
       POSTGRES_USER: testuser
       POSTGRES_PASS: testpass
     services:
@@ -153,6 +154,9 @@ jobs:
       - name: Verify ttyd installation
         run: ttyd --version
 
+      - name: Create the SystemDB database
+        run: PGPASSWORD=${{ env.POSTGRES_PASS }} psql -h localhost -U ${{ env.POSTGRES_USER }} -d ${{ env.POSTGRES_DB }} -c 'CREATE DATABASE ${{ env.POSTGRES_SYSTEM_DB }}'
+
       - name: Integration tests
         run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
         env:
@@ -160,6 +164,10 @@ jobs:
           DIRIGIBLE_DATASOURCE_DEFAULT_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
           DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME: ${{ env.POSTGRES_USER }}
           DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD: ${{ env.POSTGRES_PASS }}
+          DIRIGIBLE_DATABASE_SYSTEM_DRIVER: org.postgresql.Driver
+          DIRIGIBLE_DATABASE_SYSTEM_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_SYSTEM_DB }}
+          DIRIGIBLE_DATABASE_SYSTEM_USERNAME: ${{ env.POSTGRES_USER }}
+          DIRIGIBLE_DATABASE_SYSTEM_PASSWORD: ${{ env.POSTGRES_PASS }}
 
       - name: Generate a random artifact name
         if: always()

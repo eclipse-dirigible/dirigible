@@ -2090,6 +2090,77 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(job.contains(".EmployeeTimesheetRepository().save(target);"),
                 "the target is saved through its generated repository so create-time logic fires");
         assertFalse(job.contains("Mail.send"), "a generate schedule must not emit the notify (mail) path");
+        assertFalse(job.contains("existed++"),
+                "a schedule that declares no unique: key keeps generating exactly what it did - no guard, no counters");
+    }
+
+    @Test
+    void a_scheduled_generation_with_a_natural_key_skips_a_row_it_already_generated() {
+        // Issue #7070: a tick used to create unconditionally, so a second run of the job - a failed
+        // deploy replayed, a Quartz misfire recovery, an admin pressing Run in Monitoring - minted a
+        // duplicate target with a duplicate set of children under it. `unique:` names the target
+        // properties that identify ONE tick's output; the job looks the target up by those values
+        // BEFORE it builds anything and skips the source row, children included.
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: status, type: string }
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: month }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee }
+                  - name: EmployeeDayAllocation
+                    fields:
+                      - { name: id,  type: integer, primaryKey: true, generated: true }
+                      - { name: day, type: date }
+                    relations:
+                      - { name: EmployeeTimesheet, kind: manyToOne, to: EmployeeTimesheet }
+                schedules:
+                  - name: monthly-timesheets
+                    cron: "0 0 1 1 * ?"
+                    entity: Employee
+                    where:
+                      - { field: status, op: eq, value: ACTIVE }
+                    generate:
+                      to: EmployeeTimesheet
+                      unique: [Employee, Period]
+                      map:
+                        Employee: id
+                      defaults:
+                        Period: now
+                      children:
+                        - to: EmployeeDayAllocation
+                          parent: EmployeeTimesheet
+                          forEach: { days: workingDays }
+                          dayField: day
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "hr.glue");
+
+        String job = codeOf("gen/events/hr/MonthlyTimesheetsJob.java");
+        assertTrue(job.contains(".EmployeeTimesheetRepository().findAll(Criteria.create()"),
+                "the guard should query the TARGET before building anything");
+        assertTrue(job.contains(".eq(\"Employee\", entity.Id)"), "the key term reuses the map assignment's own expression");
+        // The sharp one: a month field's `now` is YearMonth.now().toString(), which is what makes "the
+        // same month" comparable at all - a re-derived LocalDate.now() would never match the row the
+        // first tick wrote.
+        assertTrue(job.contains(".eq(\"Period\", java.time.YearMonth.now().toString())"),
+                "the key term renders in the target field's own shape, exactly as the assignment does");
+        // Skipping the ROW, not just the header: `continue` is what leaves the children alone.
+        assertTrue(job.contains("existed++;"), "a row whose target already exists is counted");
+        assertTrue(
+                job.indexOf(".EmployeeTimesheetRepository().findAll(Criteria.create()") < job.indexOf(".EmployeeTimesheetEntity target ="),
+                "the guard must run BEFORE the target is built");
+        assertTrue(job.contains("already existed [{}]"), "the tick reports what a re-run did nothing about");
     }
 
     @Test

@@ -13,6 +13,8 @@ import java.util.Properties;
 import javax.sql.DataSource;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.jdbc.autoconfigure.DataSourceProperties;
@@ -37,6 +39,9 @@ import jakarta.persistence.EntityManagerFactory;
 @EnableJpaRepositories(entityManagerFactoryRef = "entityManagerFactory", transactionManagerRef = "transactionManager",
         basePackages = {"org.eclipse.dirigible.components", "org.eclipse.dirigible.engine"})
 public class DataSourceSystemConfig {
+
+    /** The Constant LOGGER. */
+    private static final Logger LOGGER = LoggerFactory.getLogger(DataSourceSystemConfig.class);
 
     /** The dirigible scan packages. */
     @Value("${dirigible.scan.packages:org.eclipse.dirigible.components,org.eclipse.dirigible.engine}")
@@ -77,6 +82,16 @@ public class DataSourceSystemConfig {
      * which is exactly what eliminates the historical SYS-lock race between racing Spring contexts.
      * Override {@code DIRIGIBLE_DATABASE_SYSTEM_DDL_AUTO} only when you specifically need a different
      * Hibernate mode (e.g. {@code validate} after Liquibase has been adopted).
+     * <p>
+     * {@code hibernate.dialect} is set ONLY when {@code DIRIGIBLE_DATABASE_SYSTEM_DIALECT} is
+     * configured; otherwise Hibernate resolves it from the SystemDB connection's own metadata. A
+     * hard-coded default here is driver-blind: a deployment that points the SystemDB at PostgreSQL with
+     * the four documented {@code DIRIGIBLE_DATABASE_SYSTEM_*} variables would render its DDL through
+     * the wrong dialect and fail at a distance.
+     * <p>
+     * {@code hibernate.hbm2ddl.halt_on_error} is on: a system table that fails to create is never
+     * survivable, and failing at the cause beats crashing three initializers later on a missing
+     * relation.
      *
      * @param dataSource the data source
      * @return the local container entity manager factory bean
@@ -93,11 +108,15 @@ public class DataSourceSystemConfig {
         em.setJpaVendorAdapter(vendorAdapter);
 
         Properties properties = new Properties();
-        String configuredDialect = Configuration.get("DIRIGIBLE_DATABASE_SYSTEM_DIALECT", "org.hibernate.dialect.H2Dialect");
-        String configDDLAuto = Configuration.get("DIRIGIBLE_DATABASE_SYSTEM_DDL_AUTO", "update");
-
-        properties.setProperty("hibernate.dialect", configuredDialect);
-        properties.setProperty("hibernate.hbm2ddl.auto", configDDLAuto);
+        String configuredDialect = Configuration.get("DIRIGIBLE_DATABASE_SYSTEM_DIALECT");
+        if (configuredDialect != null && !configuredDialect.isBlank()) {
+            properties.setProperty("hibernate.dialect", configuredDialect);
+        } else {
+            LOGGER.debug(
+                    "No [DIRIGIBLE_DATABASE_SYSTEM_DIALECT] configured - Hibernate will detect the dialect from the SystemDB connection");
+        }
+        properties.setProperty("hibernate.hbm2ddl.auto", Configuration.get("DIRIGIBLE_DATABASE_SYSTEM_DDL_AUTO", "update"));
+        properties.setProperty("hibernate.hbm2ddl.halt_on_error", "true");
         em.setJpaProperties(properties);
 
         return em;

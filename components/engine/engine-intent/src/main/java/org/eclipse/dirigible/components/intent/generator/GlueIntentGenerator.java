@@ -3898,6 +3898,28 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
                 entry.put("genFieldAssignments", genFieldAssignments);
                 entry.put("relationLoads", relationLoads(hopLoads));
+                // The natural key that makes a SECOND run of this job a no-op (issue #7070). Every tick
+                // used to create unconditionally, so a redeploy, a Quartz misfire recovery or an admin
+                // pressing Run in Monitoring minted a duplicate project-month / recurring invoice /
+                // payroll run - with duplicate children under it, and both would bill.
+                List<Map<String, Object>> genUnique = uniqueTerms(g, genFieldAssignments);
+                if (genUnique == null) {
+                    reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] generate unique names a property this generate does"
+                            + " not assign through map or defaults - the schedule was NOT generated");
+                    continue;
+                }
+                entry.put("hasGenUnique", !genUnique.isEmpty());
+                entry.put("genUnique", genUnique);
+                if (genUnique.isEmpty()) {
+                    // Advisory, not a refusal: every intent authored before the key existed keeps
+                    // generating exactly what it did. But silence here is what the duplicate looked
+                    // like on sta, so the generation says it out loud.
+                    reportGenerationAdvice(context,
+                            "Schedule [" + schedule.getName() + "] generate declares no unique: natural key, so a SECOND run of the job"
+                                    + " (a redeploy, a Quartz misfire recovery, an admin pressing Run) creates another [" + g.getTo()
+                                    + "] per matching [" + entity + "] - declare unique: with the target properties that identify one"
+                                    + " tick's output to make a re-run a no-op");
+                }
                 if (g.getChildren() != null && !g.getChildren()
                                                  .isEmpty()) {
                     // Collection-driven children: one row per element of a source collection, saved
@@ -4295,6 +4317,62 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (context != null) {
             context.addIssue(message);
         }
+    }
+
+    /**
+     * Report something the author should know about generated glue that WAS emitted - as opposed to
+     * {@link #reportDroppedGlue}, which reports what was refused. Both land in the same generate
+     * response; the wording is what tells them apart.
+     *
+     * @param context the generation context (null in a unit test)
+     * @param message a human-readable description of what was generated and what it will do
+     */
+    private static void reportGenerationAdvice(IntentGenerationContext context, String message) {
+        LOGGER.warn(LoggedValue.of(message));
+        if (context != null) {
+            context.addIssue(message);
+        }
+    }
+
+    /**
+     * The pre-rendered terms of a scheduled generation's natural key (issue #7070): one {@code {
+     * property, expr }} per {@code generate.unique:} entry, the expression being the very one the
+     * target property is about to be assigned from. The generated job queries the target by these
+     * before it builds anything, so a tick that already ran finds its own output and skips the row.
+     *
+     * <p>
+     * Reusing the assignment expression rather than re-deriving one is what keeps the guard honest: the
+     * value looked up and the value written cannot drift, including the shapes {@code now} renders per
+     * target field ({@code YearMonth.now().toString()} for a {@code month}, which is exactly what makes
+     * "the same month" comparable at all).
+     *
+     * @param g the create-from block
+     * @param assignments the already-rendered map/defaults assignments against the loop row
+     * @return the key terms in declared order, empty when no key is declared, or null when an entry
+     *         names a property nothing assigns (the parser reports this too; a generation reached by
+     *         another route drops the schedule rather than emitting a guard on a null column)
+     */
+    private static List<Map<String, Object>> uniqueTerms(GeneratesIntent g, List<Map<String, Object>> assignments) {
+        if (!g.hasUnique()) {
+            return List.of();
+        }
+        Map<String, String> byProperty = new LinkedHashMap<>();
+        for (Map<String, Object> assignment : assignments) {
+            byProperty.put(String.valueOf(assignment.get("targetProp")), String.valueOf(assignment.get("expr")));
+        }
+        List<Map<String, Object>> terms = new ArrayList<>();
+        for (String property : g.getUnique()) {
+            if (property == null || property.isBlank()) {
+                return null;
+            }
+            String targetProp = IntentNaming.pascalCase(property);
+            String expression = byProperty.get(targetProp);
+            if (expression == null) {
+                return null;
+            }
+            terms.add(Map.of("property", targetProp, "expr", expression));
+        }
+        return terms;
     }
 
     /**

@@ -54,6 +54,9 @@ public class ${className}Job implements JobHandler {
         int sent = 0;
         int skipped = 0;
         int failed = 0;
+#elseif($hasGenUnique)
+        int created = 0;
+        int existed = 0;
 #end
         for (${entity}Entity entity : rows) {
 #if($action == "generate")
@@ -63,12 +66,33 @@ public class ${className}Job implements JobHandler {
             // is a legitimate empty value, not a reason to skip the row.
             ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
 #end
+#if($hasGenUnique)
+            // IDEMPOTENCY (intent `generate.unique:` - issue #7070). A tick used to create
+            // unconditionally, so running this job twice - a redeploy, a Quartz misfire recovery, an
+            // admin pressing Run in Monitoring - minted a second ${genToEntity} for the same
+            // ${entity}, with a duplicate set of children under it. The natural key is looked up with
+            // the very values this row is about to be written from, so a re-run finds its own earlier
+            // output and skips the row entirely, children included. Best-effort against two concurrent
+            // ticks, exactly as the event-driven create-from's guard is - a UNIQUE database key on the
+            // same columns is the durable backstop.
+            if (!new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Repository().findAll(Criteria.create()
+#foreach($u in $genUnique)
+                    .eq("${u.property}", ${u.expr})
+#end
+                    ).isEmpty()) {
+                existed++;
+                continue;
+            }
+#end
             gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity target =
                     new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity();
 #foreach($a in $genFieldAssignments)
             target.${a.targetProp} = ${a.expr};
 #end
             var savedTarget = new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Repository().save(target);
+#if($hasGenUnique)
+            created++;
+#end
 #foreach($c in $genChildren)
 #if($c.kind == "days")
             // ${c.toEntity}: one row per working day (Mon-Fri) of the current month.
@@ -225,6 +249,12 @@ public class ${className}Job implements JobHandler {
 #if($action != "generate")
         LOG.info("Schedule ${name}: mailed [{}] of [{}] matching ${entity} row(s), no recipient [{}], failed [{}]", sent, rows.size(),
                 skipped, failed);
+#elseif($hasGenUnique)
+        // "matched 40, created 0, already existed 40" is the line that says a re-run did nothing -
+        // which is the whole point of the natural key, and is otherwise indistinguishable from a tick
+        // that never ran.
+        LOG.info("Schedule ${name}: created [{}] ${genToEntity}(s) from [{}] matching ${entity} row(s), already existed [{}]", created,
+                rows.size(), existed);
 #end
     }
 #if($attach == "report")
