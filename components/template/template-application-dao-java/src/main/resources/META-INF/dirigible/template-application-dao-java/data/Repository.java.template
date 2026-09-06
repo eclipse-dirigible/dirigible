@@ -21,6 +21,9 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
     #if($property.widgetType == "MULTISELECT")
         #set($haveSubsets = "true")
     #end
+    #if(!$property.dataPrimaryKey && $property.dataNotNull && !$property.dataDefaultValue)
+        #set($haveRequired = "true")
+    #end
 ## The comments below start at column 0 on purpose: Velocity gobbles the indentation of a line that
 ## holds only a directive, but NOT of a line that holds only a ## comment - it emits the leading
 ## whitespace and swallows the rest. Indented inside this loop they contributed 28 characters per
@@ -113,6 +116,25 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #end
 #end
 #end
+## Required values: refuse a write that leaves a NOT NULL column empty, naming the property, instead of
+## letting the statement reach the database and come back as a driver-specific constraint violation - an
+## HTTP 500 carrying a message about a physical column nobody outside the schema has heard of, from which
+## the caller cannot tell what to fix (dirigible #7069). It is the same set the schema declares NOT NULL,
+## so nothing that used to be written still is refused: an insert of null into such a column never had
+## another ending. Everything the repository computes itself - a document number, a uuid, a calculated
+## field, a document's totals - is assigned above this point, so what is still null here is genuinely
+## missing from the write. A column carrying a DEFAULT is excluded: the database supplies its value, so
+## an empty one is not missing - an intent relation with `init:` is exactly that, and refusing it would
+## reject every create that leaves the opening status to the model.
+#macro(requiredCheck)
+#foreach($property in $properties)
+#if(!$property.dataPrimaryKey && $property.dataNotNull && !$property.dataDefaultValue)
+        if (entity.${property.name} == null) {
+            throw new ValidationException("${name}.${property.name} is required");
+        }
+#end
+#end
+#end
 ## Aggregate guard (intent `checks: kind: guard`): reject a create/update whose post-state would drop
 ## a keyed aggregate sum below its minimum (negative stock, credit limit). Recomputed synchronously from
 ## THIS entity's store for the incoming row's key-tuple (race-free, not the async-maintained target),
@@ -165,7 +187,7 @@ import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.eclipse.dirigible.sdk.utils.Json;
 #end
-#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges || $haveSubsets)
+#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges || $haveSubsets || $haveRequired)
 import org.eclipse.dirigible.sdk.db.ValidationException;
 #end
 #if($multilingual == "true")
@@ -302,6 +324,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
 #end
+#requiredCheck()
         // The create event is handed to the write itself, which records it in the tenant's event outbox
         // INSIDE the insert's transaction: row and event commit together, so a broker outage can
         // neither swallow an event whose row exists nor fail a call whose row was written. Listeners
@@ -398,6 +421,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
 #end
+#requiredCheck()
 #if($documentItem)
         // The document this line belongs to BEFORE the write: a full-row update may re-point the
         // line's FK to another document, and the one it leaves has no write of its own to resum it -
@@ -465,6 +489,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // the gate check makes an unbalanced document fail the transition, not silently post.
         enforceChecks(entity);
 #end
+#requiredCheck()
 #if($documentItem)
         // The document this line belongs to BEFORE the write - a system write can re-point the FK
         // exactly as a user edit does, and the vacated document has no write of its own to resum it.

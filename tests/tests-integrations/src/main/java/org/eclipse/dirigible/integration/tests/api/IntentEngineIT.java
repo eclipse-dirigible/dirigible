@@ -70,7 +70,7 @@ class IntentEngineIT extends IntegrationTest {
      * explain the flip mention "-transitioned" as well, and they sit before the target save - matching
      * the bare word would find a comment and read as a publish in the wrong place.
      */
-    private static final String TRANSITIONED_PUBLISH = "-transitioned\", Json.stringify(source)";
+    private static final String TRANSITIONED_PUBLISH = "-transitioned\", Json.stringify(transitionedSource)";
     private static final String AGENT_URL = "/services/ide/intent/agent";
     private static final String ASSIST_URL = "/services/ide/intent/assist";
 
@@ -3104,7 +3104,9 @@ class IntentEngineIT extends IntegrationTest {
         // event trigger call - hence sourceId rather than the posted request's id, since #6711.)
         assertTrue(generate.contains("updateProperty(sourceId, \"Status\", 3)"),
                 "the source status must be flipped with the targeted updateProperty write");
-        // ...and reloads before publishing so the -transitioned payload is the committed row...
+        // ...and reloads before publishing so the -transitioned payload is the committed row - which
+        // since #7069 is read back after the unit of work, into its own local, because the commit is
+        // what makes the transition true.
         assertTrue(generate.contains("findById(sourceId)"), "it should reload the source for the -transitioned payload");
         // Anchored on the sendToTopic ARGUMENT, not the bare word: the explanatory comments around the
         // flip name "-transitioned" too, and a comment must not stand in for the publish.
@@ -3123,6 +3125,18 @@ class IntentEngineIT extends IntegrationTest {
         int publish = generate.indexOf(TRANSITIONED_PUBLISH);
         assertTrue(flip < save, "the source flip must precede the target save, got flip@" + flip + " save@" + save);
         assertTrue(save < publish, "the -transitioned publish must follow the target save, got save@" + save + " publish@" + publish);
+
+        // #7069: the header, its lines and the flip are ONE transaction, so a line the target refuses
+        // takes the header and the flip with it. Written as separate transactions, a create-from that
+        // failed on a line left a header-only document behind whose source was already marked as
+        // generated-from - and answered 500 while doing it.
+        assertTrue(generate.contains("UnitOfWork.call(() -> {"), "the create-from body must run as one unit of work");
+        int unit = generate.indexOf("UnitOfWork.call(() -> {");
+        assertTrue(unit < flip && unit < save, "the unit of work must open before the flip and the save");
+        // The announcement stays OUTSIDE it: the commit is what makes the transition true, so publishing
+        // it inside would state a transition a failing commit then rolled back.
+        assertTrue(generate.indexOf("\n        });") < publish,
+                "the -transitioned publish must follow the unit of work's close, got publish@" + publish);
 
         // The custom-action BUTTON localizes like every other label: the descriptor carries the
         // model-catalog translation key (the renderer shows T(translation.key, label)), and the
@@ -3344,6 +3358,34 @@ class IntentEngineIT extends IntegrationTest {
         String config = contentOf("gen/payroll/js/config.js");
         assertTrue(config.contains("countryLabels: {\"BG\":{\"" + PROJECT + ":payroll-model.t.EMPLOYEE_NATIONAL_ID\":\"ЕГН\"}}"),
                 "the overlay must be keyed by the very translation key the views bind, so the runtime needs one exact lookup: " + config);
+    }
+
+    @Test
+    void a_required_value_is_refused_by_name_instead_of_by_the_database() {
+        // #7069: a write that leaves a NOT NULL column empty used to reach the database and come back as
+        // a driver-specific constraint violation - HTTP 500 carrying the physical column name, from which
+        // the caller cannot tell what to fix. It is the same set the schema declares NOT NULL, so nothing
+        // that used to be written is now refused; only the answer changed, to a 400 naming the property.
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "orders.model");
+
+        String repository = codeOf("gen/orders/data/customer/CustomerRepository.java");
+        assertTrue(repository.contains("throw new ValidationException(\"Customer.Name is required\");"),
+                "the required field must be refused by name: " + repository);
+        assertFalse(repository.contains("throw new ValidationException(\"Customer.CreditLimit is required\");"),
+                "an optional field must not be refused");
+        // A column carrying a DEFAULT is deliberately NOT in the set - the database supplies its value,
+        // so an empty one is not missing, which is exactly what an intent relation's `init:` opening
+        // status is. `IntentEmissionCoverageIT` covers that at runtime: creating a document without its
+        // defaulted status still answers 200 and echoes the DB-applied default.
+        // It gates the write: everything the repository computes itself (a document number, a uuid, a
+        // calculated field) is assigned above it, and the insert happens below it.
+        assertTrue(repository.indexOf("is required") < repository.indexOf("super.save(entity,"),
+                "the required check must precede the insert");
     }
 
     @Test

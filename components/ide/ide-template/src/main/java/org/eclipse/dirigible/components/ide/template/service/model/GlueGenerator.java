@@ -671,6 +671,10 @@ class GlueGenerator {
         // perspective, which the intent layer resolves; for the common case it is the same one.
         context.put("fromItemJavaPerspective",
                 NamingHelper.sanitizeJavaIdentifier(strOr(item, "fromItemPerspective", str(item, "fromPerspective"))));
+        // The source line's own key, named when a mapped line is refused (#7069). A .glue written before
+        // the key existed defaults to the intent convention rather than rendering its own literal into
+        // Java that would not compile.
+        context.put("fromItemPk", strOr(item, "fromItemPk", "Id"));
         // The one-hop `relation.field` map sources: one load per distinct relation, which the template
         // emits before the mapping reads a field off it. A .glue written before this key existed carries
         // none, and the loop renders nothing - the direct-property mapping it always had.

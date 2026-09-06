@@ -99,123 +99,156 @@ public class ${className}Generate {
 #end
      */
     public gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity create(Integer sourceId#if($hasPrompt), java.util.Map<String, Object> values#end) {
-        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
-                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(sourceId);
-        if (source == null) {
-            return null;
-        }
-#if($hasEvent && !$appendMode)
-        // Already generated for this source (an event redelivery, or a click after the event) - hand back
-        // the existing document rather than minting a duplicate. Best-effort against two concurrent
-        // deliveries until a UNIQUE key on the back-reference lands, exactly as postings' guard is.
-        java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> existing =
-                new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().findAll(
-                        Criteria.create()
-                                .eq("${backRefProperty}", sourceId));
-#if(!$hasRetiredStatus)
-        if (!existing.isEmpty()) {
-            return existing.get(0);
-        }
-#else
-        // ...unless that document was retired: a ${retiredStatusProperty} classified `cancelled` or `void`
-        // (the seeded `stage:` classification) means the ${toEntity} no longer counts, so the ${fromEntity}
-        // may be generated from again - void and reissue. A draft or live one still blocks (dirigible #6814).
-        for (gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity candidate : existing) {
-            if (candidate.${retiredStatusProperty} == null || !(${retiredStatusCondition})) {
-                return candidate;
-            }
-        }
-#end
-#end
-#foreach($load in $relationLoads)
-        // A one-hop `relation.field` map source: the related row is loaded by the source's foreign key,
-        // once, and read below. Loaded AFTER the at-most-once guard so an already-generated source costs
-        // no extra query, and null-guarded because a nullable relation is a legitimate empty value.
-        gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity ${load.local} = source.${load.fkProperty} == null ? null : new gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository().findById(source.${load.fkProperty});
-#end
-        gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity target =
-                new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity();
-#foreach($a in $fieldAssignments)
-        target.${a.targetProp} = ${a.expr};
-#end
-#if($hasPrompt)
-        // Declared input form (intent `prompt:` - issue #6685): the values the user supplied in the
-        // action dialog, set on the target AFTER map/defaults (the parser rejects overlaps, so every
-        // property has exactly one writer). The required ones were already checked in run(), which is
-        // this method's only caller - a prompted create-from cannot be event-driven, there being
-        // nobody to answer. An absent optional input leaves the target's own default in place.
-#foreach($p in $promptFields)
-        {
-            Object raw = values == null ? null : values.get("${p.prop}");
-            if (!(raw == null || String.valueOf(raw).isBlank())) {
-                target.${p.prop} = ${p.expr};
-            }
-        }
-#end
-#end
 #if($sourceStatusValue != "")
-        // Completion hook (intent `sourceStatus:`): the source document reaches its post-generation status
-        // (e.g. a proforma flips to INVOICED). It runs BEFORE the target is saved, and that ordering is the
-        // whole point: the flip is a lifecycle move the source's repository enforces, so a move its graph
-        // does not declare throws here - with nothing yet created. Flipping AFTER the save left a committed
-        // document behind whose source never transitioned and never published "-transitioned", so every
-        // posting and integration keyed on the new status silently never ran; and because the guard above
-        // returns on the existing document, a redelivery could not repair it either. This way a redelivery
-        // re-runs the flip as a no-op (previous == next) and goes on to create what is missing.
-        // Flip ONLY the status column through the targeted single-column primitive. A full-row
-        // updateWithoutEvent(source) would merge the snapshot loaded at the top of create() and silently
-        // revert any concurrent write to the source row (recalculated totals, a workflow status). Same
-        // reason the process trigger writes ProcessId via updateProperty rather than update().
-        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
-                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository();
-        sourceRepository.updateProperty(sourceId, "${sourceStatusProperty}", ${sourceStatusValue});
+        // Set on the one path that actually generated a document, so the announcement below is skipped
+        // by the early returns (no source, or an existing target the guard handed back).
+        boolean[] transitioned = {false};
 #end
-        gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved =
-                new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().save(target);
-#if($hasItems)
-        for (gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity srcItem :
-                new gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Repository()
-                        .findAll(Criteria.create()
-                                         .eq("${srcFkProperty}", sourceId))) {
-            gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity item =
-                    new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity();
-#foreach($a in $itemFieldAssignments)
-            item.${a.targetProp} = ${a.expr};
-#end
-            item.${toFkProperty} = saved.${toPk};
-            new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Repository().save(item);
-        }
-#end
-#if($hasItemLines)
-        // Computed line-items (intent `items:` list form - issue #6555): a fixed set of synthetic lines
-        // whose cells are expressions over the loaded `source` master (Calc arithmetic / {} string
-        // interpolation / source foreign-key copy), each optionally guarded by a `when` condition. Saved
-        // through the target item repository so the target document's own line logic fires.
-#foreach($row in $itemLines)
-#if($row.guard != "")
-        if (${row.guard})
-#end
-        {
-            gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity item =
-                    new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity();
-#foreach($a in $row.assigns)
-            item.${a.targetProp} = ${a.expr};
-#end
-            item.${toFkProperty} = saved.${toPk};
-            new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Repository().save(item);
-        }
-#end
-#end
+        // ONE transaction for the whole create-from: the target header, its lines and the source's
+        // sourceStatus flip either all become durable or none of them does. Written as separate
+        // transactions, a line that a validation or a constraint refuses left behind a header-only
+        // document whose source was already marked as generated-from - a document that exists, counts
+        // as the period's billing, and is missing exactly what it was for, with no way back but an
+        // administrator (dirigible #7069). Reads inside the block see the block's own writes, so the
+        // reload below carries the flipped status.
+        gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity result =
+                org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+            gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
+                    new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(sourceId);
+            if (source == null) {
+                return null;
+            }
+    #if($hasEvent && !$appendMode)
+            // Already generated for this source (an event redelivery, or a click after the event) - hand back
+            // the existing document rather than minting a duplicate. Best-effort against two concurrent
+            // deliveries until a UNIQUE key on the back-reference lands, exactly as postings' guard is.
+            java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> existing =
+                    new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().findAll(
+                            Criteria.create()
+                                    .eq("${backRefProperty}", sourceId));
+    #if(!$hasRetiredStatus)
+            if (!existing.isEmpty()) {
+                return existing.get(0);
+            }
+    #else
+            // ...unless that document was retired: a ${retiredStatusProperty} classified `cancelled` or `void`
+            // (the seeded `stage:` classification) means the ${toEntity} no longer counts, so the ${fromEntity}
+            // may be generated from again - void and reissue. A draft or live one still blocks (dirigible #6814).
+            for (gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity candidate : existing) {
+                if (candidate.${retiredStatusProperty} == null || !(${retiredStatusCondition})) {
+                    return candidate;
+                }
+            }
+    #end
+    #end
+    #foreach($load in $relationLoads)
+            // A one-hop `relation.field` map source: the related row is loaded by the source's foreign key,
+            // once, and read below. Loaded AFTER the at-most-once guard so an already-generated source costs
+            // no extra query, and null-guarded because a nullable relation is a legitimate empty value.
+            gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity ${load.local} = source.${load.fkProperty} == null ? null : new gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository().findById(source.${load.fkProperty});
+    #end
+            gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity target =
+                    new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity();
+    #foreach($a in $fieldAssignments)
+            target.${a.targetProp} = ${a.expr};
+    #end
+    #if($hasPrompt)
+            // Declared input form (intent `prompt:` - issue #6685): the values the user supplied in the
+            // action dialog, set on the target AFTER map/defaults (the parser rejects overlaps, so every
+            // property has exactly one writer). The required ones were already checked in run(), which is
+            // this method's only caller - a prompted create-from cannot be event-driven, there being
+            // nobody to answer. An absent optional input leaves the target's own default in place.
+    #foreach($p in $promptFields)
+            {
+                Object raw = values == null ? null : values.get("${p.prop}");
+                if (!(raw == null || String.valueOf(raw).isBlank())) {
+                    target.${p.prop} = ${p.expr};
+                }
+            }
+    #end
+    #end
+    #if($sourceStatusValue != "")
+            // Completion hook (intent `sourceStatus:`): the source document reaches its post-generation status
+            // (e.g. a proforma flips to INVOICED). It runs BEFORE the target is saved, and that ordering is the
+            // whole point: the flip is a lifecycle move the source's repository enforces, so a move its graph
+            // does not declare throws here - with nothing yet created. Flipping AFTER the save left a committed
+            // document behind whose source never transitioned and never published "-transitioned", so every
+            // posting and integration keyed on the new status silently never ran; and because the guard above
+            // returns on the existing document, a redelivery could not repair it either. This way a redelivery
+            // re-runs the flip as a no-op (previous == next) and goes on to create what is missing.
+            // Flip ONLY the status column through the targeted single-column primitive. A full-row
+            // updateWithoutEvent(source) would merge the snapshot loaded at the top of create() and silently
+            // revert any concurrent write to the source row (recalculated totals, a workflow status). Same
+            // reason the process trigger writes ProcessId via updateProperty rather than update().
+            gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
+                    new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository();
+            sourceRepository.updateProperty(sourceId, "${sourceStatusProperty}", ${sourceStatusValue});
+    #end
+            gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved =
+                    new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().save(target);
+    #if($hasItems)
+            for (gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity srcItem :
+                    new gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Repository()
+                            .findAll(Criteria.create()
+                                             .eq("${srcFkProperty}", sourceId))) {
+                gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity item =
+                        new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity();
+    #foreach($a in $itemFieldAssignments)
+                item.${a.targetProp} = ${a.expr};
+    #end
+                item.${toFkProperty} = saved.${toPk};
+                try {
+                    new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Repository().save(item);
+                } catch (org.eclipse.dirigible.sdk.db.ValidationException ex) {
+                    // Name the SOURCE line the refused one was mapped from. The target's own message says
+                    // which value is missing; without the row it came from, a document of a hundred lines
+                    // leaves the caller nothing to go and fix (#7069).
+                    throw new org.eclipse.dirigible.sdk.db.ValidationException(
+                            ex.getMessage() + " (from ${fromItemEntity} [" + srcItem.${fromItemPk} + "])", ex);
+                }
+            }
+    #end
+    #if($hasItemLines)
+            // Computed line-items (intent `items:` list form - issue #6555): a fixed set of synthetic lines
+            // whose cells are expressions over the loaded `source` master (Calc arithmetic / {} string
+            // interpolation / source foreign-key copy), each optionally guarded by a `when` condition. Saved
+            // through the target item repository so the target document's own line logic fires.
+    #foreach($row in $itemLines)
+    #if($row.guard != "")
+            if (${row.guard})
+    #end
+            {
+                gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity item =
+                        new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity();
+    #foreach($a in $row.assigns)
+                item.${a.targetProp} = ${a.expr};
+    #end
+                item.${toFkProperty} = saved.${toPk};
+                new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Repository().save(item);
+            }
+    #end
+    #end
+    #if($sourceStatusValue != "")
+            transitioned[0] = true;
+    #end
+            return saved;
+        });
 #if($sourceStatusValue != "")
-        // The transition is only COMPLETE now that the document it was about exists, so this is where it
-        // is announced: a workflow-style system write - no "-updated" re-fire (no onUpdate reactions), but
-        // the dedicated "-transitioned" topic IS published so posting glue / integrations observe it.
-        // Reload so the payload carries the committed row (the flipped status plus any write the target
-        // creation performed on the source), not the stale pre-generation snapshot.
-        source = sourceRepository.findById(sourceId);
-        org.eclipse.dirigible.sdk.messaging.Producer.sendToTopicDurable(
-                "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned", Json.stringify(source));
+        // The transition is only COMPLETE now that the document it was about exists AND is committed, so
+        // this is where it is announced - outside the unit of work, whose commit is the thing that makes
+        // it true. Announcing it inside would state a transition a failing commit then rolled back, and
+        // every posting and integration keyed on the new status would have run against nothing. It is a
+        // workflow-style system write: no "-updated" re-fire (no onUpdate reactions), but the dedicated
+        // "-transitioned" topic IS published so posting glue / integrations observe it. Read back so the
+        // payload carries the committed row (the flipped status plus any write the target creation
+        // performed on the source), not the stale pre-generation snapshot.
+        if (transitioned[0]) {
+            gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity transitionedSource =
+                    new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(sourceId);
+            org.eclipse.dirigible.sdk.messaging.Producer.sendToTopicDurable(
+                    "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned", Json.stringify(transitionedSource));
+        }
 #end
-        return saved;
+        return result;
     }
 }
