@@ -671,12 +671,18 @@
           <template x-for="col in editColumns" :key="col.name">
             <!-- Text and lookup fields span the whole dialog row (long names must be readable while
                  typing); only the short paired widgets - numbers, checkboxes, date/time - share one. -->
-            <div x-h-field :style="['NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget) ? '' : 'grid-column: 1 / -1'">
-              <label x-h-label x-text="T(col.tkey, col.label)"></label>
+            <!-- A rejected save names ONE column (draftFieldError): its control carries aria-invalid,
+                 which is what Harmonia colours the label and the border from - the same marking the
+                 header form's fields use. -->
+            <div x-h-field :style="['NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget) ? '' : 'grid-column: 1 / -1'" :data-invalid="draftFieldError === col.name">
+              <!-- A required line column carries the same marker as the header form: the dialog is
+                   where the value is entered, so hiding which ones are mandatory only defers the
+                   rejection to the server. -->
+              <label x-h-label><span x-text="T(col.tkey, col.label)"></span><span x-show="col.required &amp;&amp; !col.readonly" class="text-negative"> *</span></label>
               <template x-if="!col.readonly && col.widget === 'DROPDOWN'">
                 <div>
                   <div x-h-select data-filter="contains">
-                    <input x-h-select-input x-model="draft[col.name]" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select...', { name: '' })" />
+                    <input x-h-select-input x-model="draft[col.name]" :aria-invalid="draftFieldError === col.name" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select...', { name: '' })" />
                     <div x-h-select-content>
                       <div x-h-select-search></div>
                       <div x-h-select-list>
@@ -699,7 +705,7 @@
                      splits the stored csv; draftPayload joins it back). dialogOptionsFor honours a
                      static `where:` filter; a subset relation carries no Depends-On cascade. -->
                 <div x-h-select data-filter="contains">
-                  <input x-h-select-input x-model="draft[col.name]" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select...', { name: '' })" />
+                  <input x-h-select-input x-model="draft[col.name]" :aria-invalid="draftFieldError === col.name" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select...', { name: '' })" />
                   <div x-h-select-content>
                     <div x-h-select-search></div>
                     <div x-h-select-list>
@@ -711,14 +717,14 @@
                 </div>
               </template>
               <template x-if="!col.readonly && col.widget === 'NUMBER'">
-                <div x-h-input-number><input type="number" step="any" x-model.number="draft[col.name]" :readonly="col.readonly" @input="recalcDraft()" /></div>
+                <div x-h-input-number><input type="number" step="any" x-model.number="draft[col.name]" :readonly="col.readonly" :aria-invalid="draftFieldError === col.name" @input="recalcDraft()" /></div>
               </template>
               <template x-if="!col.readonly && col.widget === 'CHECKBOX'">
-                <span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" :disabled="col.readonly" /></span>
+                <span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" :disabled="col.readonly" :aria-invalid="draftFieldError === col.name" /></span>
               </template>
               <template x-if="!col.readonly && col.widget === 'DATE' && !(draftMode === 'fill' && col.name === fillDateName())">
                 <div x-h-date-picker.table>
-                  <input type="text" :disabled="col.readonly" />
+                  <input type="text" :disabled="col.readonly" :aria-invalid="draftFieldError === col.name" />
                   <button x-h-date-picker-trigger aria-label="Choose date"></button>
                   <div x-h-date-picker-popup x-model="draft[col.name]"></div>
                 </div>
@@ -733,13 +739,13 @@
               </template>
               <template x-if="!col.readonly && col.widget === 'DATETIME-LOCAL'">
                 <div x-h-datetime-picker.table>
-                  <input type="text" :disabled="col.readonly" />
+                  <input type="text" :disabled="col.readonly" :aria-invalid="draftFieldError === col.name" />
                   <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
                   <div x-h-datetime-picker-popup x-model="draft[col.name]"></div>
                 </div>
               </template>
               <template x-if="!col.readonly && !['DROPDOWN','MULTISELECT','NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget)">
-                <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" />
+                <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" :aria-invalid="draftFieldError === col.name" />
               </template>
               <!-- A read-only column (calculated / intent readOnly) is a VALUE, not a control: the
                    save path already ignores it - rendering an input only faked editability. Live

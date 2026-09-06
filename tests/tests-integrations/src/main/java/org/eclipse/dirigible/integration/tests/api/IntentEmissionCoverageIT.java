@@ -2673,6 +2673,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(myRosterPage.contains("window.HarmoniaCalendar.events") && myRosterPage.contains("RosterItemMyController"),
                 "the personal items calendar must read through the scoped items controller");
 
+        // #7062: the line-item dialog must say which values are mandatory BEFORE the save, and must
+        // say which one was refused AFTER it. The dialog had neither - no required marker (only the
+        // header form carried one) and a generic banner that highlighted whatever field the browser
+        // had marked, so a rejected line named the wrong field and never named the right one.
+        assertTrue(rosterDoc.contains("x-show=\"col.required"), "the line dialog must mark a required column, as the header form does");
+        assertTrue(contentOf("gen/emission/js/components/pages/Roster/RosterItem.detail.js").contains("required: true"),
+                "the item registration must carry the required flag the dialog marker binds to");
+        assertTrue(rosterDoc.contains(":aria-invalid=\"draftFieldError === col.name\""),
+                "the refused column must carry aria-invalid - what Harmonia colours the label and border from");
+        assertTrue(rosterPage.contains("applyDraftError") && rosterPage.contains("namedProperty"),
+                "a rejected line must be mapped onto the property the server named, not onto a generic banner");
+
         // The app-test manifest carries the personal UI-parity metadata the runner's my flow
         // drives (wave 2): the /my route, the layout family the personal page belongs to, and
         // the relation columns that must resolve to labels on the personal list.

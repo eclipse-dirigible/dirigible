@@ -66,5 +66,40 @@
       const type = cause && cause.errorType;
       return (type && this.fieldMessages[type]) || this.default;
     },
+
+    /**
+     * The property a server rejection NAMES, or null.
+     *
+     * The generated controllers reject a bad write with a business message that carries the
+     * property in single quotes ("The 'TaxRate' property is required"), as a plain 400 rather
+     * than a structured 422 with errorCauses. Read that way it is a per-field rejection, and
+     * answering it with the generic banner tells the user nothing about which field to fix.
+     *
+     * `knownNames` is the gate that keeps the developer-facing rule intact: only a quoted token
+     * that IS a field of the form in hand is recognised, so an arbitrary 400 (a stack-trace
+     * reason, an internal identifier) still falls back to the catalog message.
+     */
+    namedProperty(err, knownNames) {
+      const text = (err && err.errorMessage) || '';
+      const known = new Set(knownNames || []);
+      const pattern = /'([A-Za-z_][A-Za-z0-9_]*)'/g;
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        if (known.has(match[1])) return match[1];
+      }
+      return null;
+    },
+
+    /**
+     * The server's message rewritten for a person: every quoted property name it carries is
+     * replaced by that property's display label ("The 'Tax Rate' property is required").
+     * `labels` maps a property name to its label; an unmapped name is left as it stands.
+     */
+    messageWithLabels(err, labels) {
+      const text = (err && err.errorMessage) || '';
+      const map = labels || {};
+      return text.replace(/'([A-Za-z_][A-Za-z0-9_]*)'/g,
+        (whole, name) => (Object.prototype.hasOwnProperty.call(map, name) ? `'${map[name]}'` : whole));
+    },
   };
 })(window);

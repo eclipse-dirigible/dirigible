@@ -201,6 +201,9 @@ document.addEventListener('alpine:init', () => {
     draftMode: 'create',     // 'create' | 'edit'
     draftSaving: false,
     draftError: null,
+    // The column a rejected save named, marked aria-invalid in the dialog. One at a time: the
+    // controller rejects on the first failing property.
+    draftFieldError: null,
     // Print (renders the CMS-seeded .print template server-side to PDF)
     printLangOpen: false,
     printLanguages: [],
@@ -1090,6 +1093,7 @@ document.addEventListener('alpine:init', () => {
     openRowDialog(row, preset) {
       if (!this.itemsEnabled || this.isPreview) return;
       this.draftError = null;
+      this.draftFieldError = null;
       this.draftMode = row ? 'edit' : 'create';
       // Suppress the Depends-On watchers while the draft is (re)built - filling an existing row's
       // trigger must not clear/auto-select its stored dependents.
@@ -1146,7 +1150,25 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    closeRowDialog() { this.rowDialogOpen = false; this.draft = {}; this.draftError = null; },
+    // A line the server refuses is refused for ONE reason it states in prose, naming the property:
+    // "The 'TaxRate' property is required". Read that name out of the message and the dialog can do
+    // what the generic banner never could - point at the field that is wrong and repeat the reason
+    // in the dialog's own labels. A message naming no editable column keeps the generic banner.
+    applyDraftError(e, fallback) {
+      const columns = this.editColumns;
+      const named = App.services.apiErrors.namedProperty(e, columns.map(c => c.name));
+      if (named) {
+        const labels = {};
+        for (const col of columns) labels[col.name] = T(col.tkey, col.label);
+        this.draftFieldError = named;
+        this.draftError = App.services.apiErrors.messageWithLabels(e, labels);
+        return;
+      }
+      this.draftFieldError = null;
+      this.draftError = App.services.apiErrors.messageFor(e, fallback);
+    },
+
+    closeRowDialog() { this.rowDialogOpen = false; this.draft = {}; this.draftError = null; this.draftFieldError = null; },
 
     draftPayload() {
       const payload = {};
@@ -1175,6 +1197,7 @@ document.addEventListener('alpine:init', () => {
       if (this.draftMode === 'fill') { await this.fillMonthDraft(); return; }
       this.draftSaving = true;
       this.draftError = null;
+      this.draftFieldError = null;
       try {
         const pk = this.itemsDef.primaryKey;
         const body = this.draftPayload();
@@ -1187,7 +1210,7 @@ document.addEventListener('alpine:init', () => {
         await this.loadItems();   // refresh the rows (server defaults / calculated item fields)
         await this.loadHeader();  // refresh the header + totals (server-side calculated aggregates)
       } catch (e) {
-        this.draftError = App.services.apiErrors.messageFor(e, 'Could not save the line.');
+        this.applyDraftError(e, 'Could not save the line.');
       } finally {
         this.draftSaving = false;
       }
@@ -1217,6 +1240,7 @@ document.addEventListener('alpine:init', () => {
     async fillMonthDraft() {
       this.draftSaving = true;
       this.draftError = null;
+      this.draftFieldError = null;
       try {
         const col = this.fillDateColumn();
         const month = String((col && this.draft[col.name]) || '').slice(0, 7);
@@ -1232,7 +1256,7 @@ document.addEventListener('alpine:init', () => {
         }
         this.rowDialogOpen = false; this.draft = {};
       } catch (e) {
-        this.draftError = App.services.apiErrors.messageFor(e, 'Could not fill the month.');
+        this.applyDraftError(e, 'Could not fill the month.');
       } finally {
         this.draftSaving = false;
         await this.loadItems();   // reflect what was created even on a mid-loop failure
