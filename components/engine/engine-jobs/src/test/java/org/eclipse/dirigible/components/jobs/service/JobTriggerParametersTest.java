@@ -27,7 +27,7 @@ import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.jobs.domain.Job;
 import org.eclipse.dirigible.components.jobs.domain.JobParameter;
 import org.eclipse.dirigible.components.jobs.email.JobEmailProcessor;
-import org.eclipse.dirigible.components.jobs.handler.JobHandlerRunner;
+import org.eclipse.dirigible.components.jobs.handler.JobExecutionService;
 import org.eclipse.dirigible.components.jobs.manager.JobsManager;
 import org.eclipse.dirigible.components.jobs.repository.JobRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -51,10 +51,10 @@ class JobTriggerParametersTest {
 
     private final JobRepository jobRepository = mock(JobRepository.class);
 
-    private final JobHandlerRunner jobHandlerRunner = mock(JobHandlerRunner.class);
+    private final JobExecutionService jobExecutionService = mock(JobExecutionService.class);
 
     private final JobService jobService =
-            new JobService(jobRepository, mock(JobEmailProcessor.class), mock(JobsManager.class), jobHandlerRunner);
+            new JobService(jobRepository, mock(JobEmailProcessor.class), mock(JobsManager.class), jobExecutionService);
 
     @AfterEach
     void cleanUpConfiguration() {
@@ -68,12 +68,12 @@ class JobTriggerParametersTest {
         doAnswer(invocation -> {
             assertEquals("2026-08-14", Configuration.get("REPORT_DATE"), "the job body reads its parameter as a configuration value");
             return null;
-        }).when(jobHandlerRunner)
-          .run("/project/report.mjs", null);
+        }).when(jobExecutionService)
+          .executeJob(JOB_NAME, "/project/report.mjs", null);
 
         jobService.trigger(TRIGGER_PATH, Map.of("REPORT_DATE", "2026-08-14"));
 
-        verify(jobHandlerRunner).run("/project/report.mjs", null);
+        verify(jobExecutionService).executeJob(JOB_NAME, "/project/report.mjs", null);
         assertNull(Configuration.get("REPORT_DATE"), "the parameter must not outlive the run");
     }
 
@@ -85,7 +85,7 @@ class JobTriggerParametersTest {
                 () -> jobService.trigger(TRIGGER_PATH, Map.of(INFRASTRUCTURE_KEY, "http://attacker.example.com")));
 
         assertNull(Configuration.get(INFRASTRUCTURE_KEY), "an undeclared key must never reach the configuration");
-        verifyNoInteractions(jobHandlerRunner);
+        verifyNoInteractions(jobExecutionService);
     }
 
     /**
@@ -101,8 +101,8 @@ class JobTriggerParametersTest {
             reader.start();
             reader.join();
             return null;
-        }).when(jobHandlerRunner)
-          .run("/project/report.mjs", null);
+        }).when(jobExecutionService)
+          .executeJob(JOB_NAME, "/project/report.mjs", null);
 
         jobService.trigger(TRIGGER_PATH, Map.of("REPORT_DATE", "2026-08-14"));
 
@@ -120,8 +120,8 @@ class JobTriggerParametersTest {
         doAnswer(invocation -> {
             assertEquals("Tenant One", Configuration.get("DIRIGIBLE_BRANDING_NAME"));
             return null;
-        }).when(jobHandlerRunner)
-          .run("/project/report.mjs", null);
+        }).when(jobExecutionService)
+          .executeJob(JOB_NAME, "/project/report.mjs", null);
 
         jobService.trigger(TRIGGER_PATH, Map.of("REPORT_DATE", "2026-08-14"));
 

@@ -18,6 +18,9 @@ import org.eclipse.dirigible.components.jobs.domain.JobLog;
 import org.eclipse.dirigible.components.jobs.domain.JobStatus;
 import org.eclipse.dirigible.components.jobs.email.JobEmailProcessor;
 import org.eclipse.dirigible.components.jobs.repository.JobLogRepository;
+import org.eclipse.dirigible.components.jobs.repository.JobRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Example;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,14 +37,17 @@ import java.util.List;
 @Transactional
 public class JobLogService extends BaseArtefactService<JobLog, Long> {
 
+    /** The logger. */
+    private static final Logger LOGGER = LoggerFactory.getLogger(JobLogService.class);
+
     /** The date format. */
     private final String DATE_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX";
 
     /** The job email processor. */
     private final JobEmailProcessor jobEmailProcessor;
 
-    /** The job service. */
-    private final JobService jobService;
+    /** The job repository - the owning job's last-run fields are stamped through it. */
+    private final JobRepository jobRepository;
 
     /** The tenant context. */
     private final TenantContext tenantContext;
@@ -54,15 +60,15 @@ public class JobLogService extends BaseArtefactService<JobLog, Long> {
      *
      * @param repository the repository
      * @param jobEmailProcessor the job email processor
-     * @param jobService the job service
+     * @param jobRepository the job repository
      * @param tenantContext the tenant context
      * @param defaultTenant the default tenant
      */
-    public JobLogService(JobLogRepository repository, JobEmailProcessor jobEmailProcessor, JobService jobService,
+    public JobLogService(JobLogRepository repository, JobEmailProcessor jobEmailProcessor, JobRepository jobRepository,
             TenantContext tenantContext, @DefaultTenant Tenant defaultTenant) {
         super(repository);
         this.jobEmailProcessor = jobEmailProcessor;
-        this.jobService = jobService;
+        this.jobRepository = jobRepository;
         this.tenantContext = tenantContext;
         this.defaultTenant = defaultTenant;
     }
@@ -193,11 +199,15 @@ public class JobLogService extends BaseArtefactService<JobLog, Long> {
         jobLog.setLocation(new SimpleDateFormat(DATE_FORMAT).format(new Date()));
         jobLog.updateKey();
         save(jobLog);
-        Job job = jobService.findByName(name);
+        Job job = findJob(name);
+        if (job == null) {
+            return jobLog;
+        }
         boolean statusChanged = job.getStatus() != JobStatus.FINISHED;
         job.setStatus(JobStatus.FINISHED);
         job.setMessage("");
         job.setExecutedAt(jobLog.getFinishedAt());
+        jobRepository.saveAndFlush(job);
         if (statusChanged) {
             String content =
                     jobEmailProcessor.prepareEmail(job, JobEmailProcessor.emailTemplateNormal, JobEmailProcessor.EMAIL_TEMPLATE_NORMAL);
@@ -229,17 +239,38 @@ public class JobLogService extends BaseArtefactService<JobLog, Long> {
         jobLog.setLocation(new SimpleDateFormat(DATE_FORMAT).format(new Date()));
         jobLog.updateKey();
         save(jobLog);
-        Job job = jobService.findByName(name);
+        Job job = findJob(name);
+        if (job == null) {
+            return jobLog;
+        }
         boolean statusChanged = job.getStatus() != JobStatus.FAILED;
         job.setStatus(JobStatus.FAILED);
         job.setMessage(message);
         job.setExecutedAt(jobLog.getFinishedAt());
+        jobRepository.saveAndFlush(job);
         if (statusChanged) {
             String content =
                     jobEmailProcessor.prepareEmail(job, JobEmailProcessor.emailTemplateError, JobEmailProcessor.EMAIL_TEMPLATE_ERROR);
             jobEmailProcessor.sendEmail(job, JobEmailProcessor.emailSubjectError, content);
         }
         return jobLog;
+    }
+
+    /**
+     * Looks up the job whose run is being recorded. A log may outlive its artefact - a job deleted
+     * between the trigger and the finish leaves nothing to stamp, which is not a failure of the run.
+     *
+     * @param name the job name
+     * @return the job, or null when no artefact by that name exists any more
+     */
+    private Job findJob(String name) {
+        String jobName = (name != null && name.startsWith("/")) ? name.substring(1) : name;
+        Job job = jobRepository.findByName(jobName)
+                               .orElse(null);
+        if (job == null) {
+            LOGGER.warn("Job [{}] has no artefact - its last run was logged but not stamped on the job.", jobName);
+        }
+        return job;
     }
 
     /**

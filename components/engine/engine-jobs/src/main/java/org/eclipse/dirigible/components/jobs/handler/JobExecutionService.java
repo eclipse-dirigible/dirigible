@@ -43,11 +43,13 @@ public class JobExecutionService {
         this.jobHandlerRunner = jobHandlerRunner;
     }
 
+    /**
+     * Runs the job a Quartz trigger just fired, reading its handler and engine off the fire context.
+     *
+     * @param context the Quartz execution context
+     * @throws JobExecutionException when the job body throws
+     */
     public void executeJob(JobExecutionContext context) throws JobExecutionException {
-        executeJobInternal(context);
-    }
-
-    private void executeJobInternal(JobExecutionContext context) throws JobExecutionException {
         String tenantJobName = context.getJobDetail()
                                       .getKey()
                                       .getName();
@@ -57,22 +59,38 @@ public class JobExecutionService {
                                    .getJobDataMap();
         String handler = params.getString(JOB_PARAMETER_HANDLER);
         String engine = params.getString(JOB_PARAMETER_ENGINE);
+
+        context.put("handler", handler);
+        executeJob(name, handler, engine);
+    }
+
+    /**
+     * Runs a job's handler and records the run in the job's execution log.
+     *
+     * <p>
+     * This is the one execution path: the scheduled fire reaches it through the Quartz context above, a
+     * manual "Run now" through {@code JobService.trigger}. Both leave the same trail - a TRIGGRED
+     * entry, then a FINISHED or FAILED one, and the owning job's last-run status, message and timestamp
+     * - because an operator cannot tell a manual run from a scheduled one after the fact, and a run
+     * that leaves no trace is indistinguishable from one that never happened (#7075).
+     *
+     * @param name the job's name, as the artefact declares it
+     * @param handler the job's handler - a client-Java FQN for the Java engine, a repository path
+     *        otherwise
+     * @param engine the job's engine, or null for the default JavaScript one
+     * @throws JobExecutionException when the job body throws
+     */
+    public void executeJob(String name, String handler, String engine) throws JobExecutionException {
         boolean java = JavaJobExecutor.ENGINE_JAVA.equals(engine);
         Span.current()
             .setAttribute("handler", handler);
 
         JobLog triggered = registerTriggered(name, handler);
         try {
-            Span.current()
-                .setAttribute("handler", handler);
-
-            if (triggered != null) {
-                context.put("handler", handler);
-                // A client-Java job dispatches to the Java engine's executor, a JS one to the code
-                // runner - inside the same JobLog wrapping either way, so both are equally
-                // visible/monitored in the Jobs perspective.
-                jobHandlerRunner.run(handler, engine);
-            }
+            // A client-Java job dispatches to the Java engine's executor, a JS one to the code
+            // runner - inside the same JobLog wrapping either way, so both are equally
+            // visible/monitored in the Jobs perspective.
+            jobHandlerRunner.run(handler, engine);
 
             registeredFinished(name, handler, triggered);
         } catch (Exception ex) {
@@ -105,9 +123,12 @@ public class JobExecutionService {
      *
      * @param name the name
      * @param module the module
-     * @param triggered the triggered
+     * @param triggered the TRIGGRED entry this run opened, or null when it could not be written
      */
     private void registeredFinished(String name, String module, JobLog triggered) {
+        if (triggered == null) {
+            return;
+        }
         try {
             jobLogService.jobFinished(name, module, triggered.getId(), new Date(triggered.getTriggeredAt()
                                                                                          .getTime()));
@@ -121,10 +142,13 @@ public class JobExecutionService {
      *
      * @param name the name
      * @param module the module
-     * @param triggered the triggered
+     * @param triggered the TRIGGRED entry this run opened, or null when it could not be written
      * @param ex the ex
      */
     private void registeredFailed(String name, String module, JobLog triggered, Exception ex) {
+        if (triggered == null) {
+            return;
+        }
         try {
             jobLogService.jobFailed(name, module, triggered.getId(), new Date(triggered.getTriggeredAt()
                                                                                        .getTime()),

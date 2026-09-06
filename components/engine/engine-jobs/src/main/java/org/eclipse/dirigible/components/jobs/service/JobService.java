@@ -20,10 +20,11 @@ import org.eclipse.dirigible.components.base.artefact.BaseArtefactService;
 import org.eclipse.dirigible.components.jobs.domain.Job;
 import org.eclipse.dirigible.components.jobs.domain.JobParameter;
 import org.eclipse.dirigible.components.jobs.email.JobEmailProcessor;
-import org.eclipse.dirigible.components.jobs.handler.JobHandlerRunner;
+import org.eclipse.dirigible.components.jobs.handler.JobExecutionService;
 import org.eclipse.dirigible.components.jobs.manager.JobsManager;
 import org.eclipse.dirigible.components.jobs.repository.JobRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -39,8 +40,8 @@ public class JobService extends BaseArtefactService<Job, Long> {
     /** The jobs manager. */
     private final JobsManager jobsManager;
 
-    /** Runs a job's handler on the engine it declares - shared with the scheduled fire. */
-    private final JobHandlerRunner jobHandlerRunner;
+    /** Runs a job's handler and records the run - the same path the scheduled fire takes. */
+    private final JobExecutionService jobExecutionService;
 
     /**
      * Instantiates a new job service.
@@ -48,14 +49,14 @@ public class JobService extends BaseArtefactService<Job, Long> {
      * @param repository the repository
      * @param jobEmailProcessor the job email processor
      * @param jobsManager the jobs manager
-     * @param jobHandlerRunner the job handler runner
+     * @param jobExecutionService the job execution service
      */
     public JobService(JobRepository repository, JobEmailProcessor jobEmailProcessor, JobsManager jobsManager,
-            JobHandlerRunner jobHandlerRunner) {
+            JobExecutionService jobExecutionService) {
         super(repository);
         this.jobEmailProcessor = jobEmailProcessor;
         this.jobsManager = jobsManager;
-        this.jobHandlerRunner = jobHandlerRunner;
+        this.jobExecutionService = jobExecutionService;
     }
 
     /**
@@ -156,6 +157,10 @@ public class JobService extends BaseArtefactService<Job, Long> {
      *         was passed
      * @throws Exception the exception
      */
+    // The run itself must not sit in this service's transaction: the execution log is written as the
+    // run progresses, and a failing job would otherwise roll back the very FAILED entry that records
+    // it. Each log write then gets its own transaction, exactly as on the scheduled path.
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public boolean trigger(String name, Map<String, String> parametersMap) throws Exception {
         Job job = findByName(name);
         Map<String, String> parameters = (parametersMap != null) ? parametersMap : Collections.emptyMap();
@@ -168,7 +173,9 @@ public class JobService extends BaseArtefactService<Job, Long> {
         try {
             // Run it on the engine the job declares - the same dispatch the scheduled fire uses. A
             // client-Java job's handler is a class name, not a JavaScript path (dirigible #6305).
-            jobHandlerRunner.run(job.getHandler(), job.getEngine());
+            // It goes through the execution service rather than the runner directly, so a manual run
+            // leaves the same execution-log trail and last-run stamp a scheduled one does (#7075).
+            jobExecutionService.executeJob(job.getName(), job.getHandler(), job.getEngine());
         } finally {
             Configuration.setThreadConfiguration(outerConfiguration);
         }

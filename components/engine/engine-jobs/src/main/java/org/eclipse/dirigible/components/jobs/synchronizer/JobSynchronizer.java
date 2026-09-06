@@ -148,6 +148,11 @@ public class JobSynchronizer extends MultitenantBaseSynchronizer<Job, Long> {
             Job maybe = getService().findByKey(job.getKey());
             if (maybe != null) {
                 job.setId(maybe.getId());
+                // The last run is history, not something the artefact declares - re-parsing the file
+                // must not reset the job to "never ran" (#7075).
+                job.setStatus(maybe.getStatus());
+                job.setMessage(maybe.getMessage());
+                job.setExecutedAt(maybe.getExecutedAt());
                 job.getParameters()
                    .forEach(p -> {
                        JobParameter m = maybe.getParameter(p.getName());
