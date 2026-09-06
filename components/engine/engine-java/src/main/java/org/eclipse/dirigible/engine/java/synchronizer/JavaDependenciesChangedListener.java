@@ -25,6 +25,10 @@ import org.springframework.stereotype.Component;
  * client sources so the new {@code ClientClassLoader} generation parents on the new modules
  * classloader. Runs synchronously on the swapping thread - the swap pipeline's success includes
  * this reaction.
+ *
+ * <p>
+ * The AOT rediscovery only <b>records</b> its result: the client rebuild that follows dispatches
+ * the union to the consumers exactly once, over a correctly parented loader.
  */
 @Component
 class JavaDependenciesChangedListener {
@@ -69,8 +73,16 @@ class JavaDependenciesChangedListener {
         LOGGER.info("Dependency layer swapped to generation [{}] (added {}, removed {}) - rediscovering AOT modules and rebuilding "
                 + "the client sources", event.getGeneration(), event.getAdded(), event.getRemoved());
         classPathIndex.invalidate();
-        compiledModuleClassProvider.rediscover(modulesLoaderHolder.current());
-        javaSynchronizer.rebuildOnDependenciesChanged();
+        // record only: the rebuild below dispatches the union of the AOT and registry-compiled sets
+        // once, over a ClientClassLoader parented on the new modules generation. Dispatching here as
+        // well would re-instantiate every client bean and re-register every job, JMS listener,
+        // controller mapping and websocket twice per swap - the first time against the retired jars.
+        boolean recorded = compiledModuleClassProvider.rediscover(modulesLoaderHolder.current(), /* dispatch */ false);
+        if (!javaSynchronizer.rebuildOnDependenciesChanged() && recorded) {
+            // the rebuild deferred itself to the next synchronization cycle - dispatch the recorded
+            // compiled set now, so an arriving AOT module never waits for it
+            compiledModuleClassProvider.rediscover(modulesLoaderHolder.current());
+        }
     }
 
 }

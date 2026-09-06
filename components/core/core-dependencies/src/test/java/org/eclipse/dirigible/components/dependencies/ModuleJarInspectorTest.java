@@ -64,6 +64,45 @@ class ModuleJarInspectorTest {
                 "a backslash-bearing name is a path on Windows and must never pass inspection");
     }
 
+    @Test
+    void theRegistryEntriesAreReportedPerFile() throws IOException {
+        Path jar = jarWithEntries("META-INF/dirigible/my-project/file.txt", "META-INF/dirigible/my-project/sub/other.txt");
+
+        ModuleJarInspector.Inspection inspection = ModuleJarInspector.inspect(jar);
+
+        // the removal granularity: only what the jar laid down leaves again, never the whole project
+        assertEquals(Set.of("/my-project/file.txt", "/my-project/sub/other.txt"), inspection.registryEntries(),
+                "every payload entry should be reported");
+    }
+
+    @Test
+    void aSkippedJarCarriesNoProjects() throws IOException {
+        Path jar = jarWithEntries("META-INF/dirigible/.skip", "META-INF/dirigible/my-project/file.txt");
+
+        ModuleJarInspector.Inspection inspection = ModuleJarInspector.inspect(jar);
+
+        // the expansion honors .skip, so nothing of this jar is ever in the registry - reporting the
+        // project would make its removal delete a collection the jar never created (possibly a
+        // developer's own project of that name)
+        assertTrue(inspection.projects()
+                             .isEmpty(),
+                "a .skip jar lays nothing down, so it carries no projects");
+        assertTrue(inspection.registryEntries()
+                             .isEmpty(),
+                "a .skip jar lays nothing down, so it has no registry entries");
+    }
+
+    @Test
+    void versionedAndAppleNativeLibrariesAreDetected() throws IOException {
+        Path jar = jarWithEntries("lib/libfoo.so.1", "lib/libbar.jnilib", "lib/baz.DLL");
+
+        ModuleJarInspector.Inspection inspection = ModuleJarInspector.inspect(jar);
+
+        assertEquals(3, inspection.nativeLibraries()
+                                  .size(),
+                "the versioned, the Apple and the upper-case Windows form are all native libraries: " + inspection.nativeLibraries());
+    }
+
     private Path jarWithEntries(String... entryNames) throws IOException {
         Path jar = tempDir.resolve("module.jar");
         try (OutputStream file = Files.newOutputStream(jar); JarOutputStream out = new JarOutputStream(file)) {

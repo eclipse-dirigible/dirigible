@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.ide.lsp.java.process;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.base.dependencies.DependenciesChangedEvent;
 import org.eclipse.dirigible.engine.java.runtime.ClassPathIndex;
 import org.eclipse.dirigible.engine.java.runtime.JavaCompiledEvent;
 import org.eclipse.dirigible.engine.java.runtime.JavaCompiledOutputDirectory;
@@ -20,6 +21,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationListener;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -91,7 +93,8 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
     private volatile boolean available = false;
 
     /**
-     * Memoised default {@code .classpath} XML, shared by every project. See
+     * Memoised default {@code .classpath} XML, shared by every project. Dropped whenever the dependency
+     * layer swaps, because {@link ClassPathIndex} is invalidated then. See
      * {@link #defaultClasspathXml()}.
      */
     private volatile String defaultClasspathXml;
@@ -184,6 +187,27 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
         instances.values()
                  .forEach(JdtLsInstance::destroy);
         instances.clear();
+    }
+
+    /**
+     * Re-renders the shared {@code .classpath} after a dependency-layer swap and rewrites it for every
+     * live workspace. The index behind it was just invalidated, so the memoised XML is stale: without
+     * this a restartlessly added dependency compiles and serves correctly while the editor still
+     * reports its import as unresolved.
+     *
+     * @param event the swap event
+     */
+    @EventListener
+    public void onDependenciesChanged(DependenciesChangedEvent event) {
+        defaultClasspathXml = null;
+        logger.info("[java-lsp] Dependency layer swapped to generation {} - refreshing the Java editor classpath", event.getGeneration());
+        for (String key : instances.keySet()) {
+            int separator = key.indexOf('/');
+            if (separator <= 0) {
+                continue;
+            }
+            ensureEclipseProjectFilesForWorkspace(workspaceRoot(key.substring(0, separator), key.substring(separator + 1)));
+        }
     }
 
     /**
@@ -344,8 +368,9 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
      * single entry resolves cross-project and published types.</li>
      * </ul>
      * Plus the project's own sources via {@code src path=""}. Memoised because
-     * {@link ClassPathIndex#classPathEntries()} is itself cached for the application lifetime and
-     * {@code compiledOutputDir} is a fixed path, so the rendered XML never changes within a run.
+     * {@link ClassPathIndex#classPathEntries()} is cached and {@code compiledOutputDir} is a fixed
+     * path, so the rendered XML changes only when the dependency layer swaps - which drops the memo
+     * (see {@link #onDependenciesChanged(DependenciesChangedEvent)}).
      */
     private String defaultClasspathXml() {
         String cached = defaultClasspathXml;

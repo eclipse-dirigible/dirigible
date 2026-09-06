@@ -259,12 +259,7 @@ public class JavaLoader {
      *         since the previous compiled install; never registry-source classes)
      */
     public synchronized Set<String> installCompiledModules(List<LoadedClass> classes) {
-        compiledGeneration.clear();
-        for (LoadedClass info : classes) {
-            if (info != null) {
-                compiledGeneration.put(info.fqn(), info);
-            }
-        }
+        recordCompiledModules(classes);
         // No runtime-compiled client code yet → give the holder an empty ClientClassLoader whose parent
         // chain (modules loader → platform classloader) already resolves the compiled-module classes.
         ClientClassLoader loader = loaderHolder.current();
@@ -272,6 +267,25 @@ public class JavaLoader {
             loader = new ClientClassLoader(modulesLoaderHolder.current(), Map.of());
         }
         return applyGeneration(mergedGeneration(), loader);
+    }
+
+    /**
+     * Records the compiled sub-generation <b>without</b> dispatching it - the half of
+     * {@link #installCompiledModules(List)} that a caller uses when a {@link #rebuild(List)} is about
+     * to follow: the rebuild's own {@code applyGeneration} then dispatches the union once, over a
+     * {@code ClientClassLoader} parented on the new modules generation. Dispatching here as well would
+     * re-instantiate every client bean and re-register every job, listener, controller mapping and
+     * websocket twice per swap, the first time against the retired dependency jars.
+     *
+     * @param classes the compiled modules' top-level classes
+     */
+    public synchronized void recordCompiledModules(List<LoadedClass> classes) {
+        compiledGeneration.clear();
+        for (LoadedClass info : classes) {
+            if (info != null) {
+                compiledGeneration.put(info.fqn(), info);
+            }
+        }
     }
 
     /**

@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.initializers.classpath;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.slf4j.Logger;
@@ -25,8 +26,12 @@ import java.net.JarURLConnection;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.Enumeration;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
@@ -133,18 +138,72 @@ public class ClasspathExpander {
     }
 
     /**
-     * Removes a project's content from the registry - the inverse of {@link #expand(Path)}, used when
-     * the module jar carrying the project leaves the running system. The per-artefact synchronizers
-     * clean up the runtime state of the removed files on their next pass.
+     * Removes the given registry paths - the inverse of {@link #expand(Path)}, used when the module jar
+     * carrying them leaves the running system. Only the resources the leaving jar actually carried are
+     * deleted (an upgrade is a remove followed by a re-expand, so deleting the whole project collection
+     * would destroy anything else published under it), and a collection left empty by the removal is
+     * pruned up to - but never including - the registry root. The per-artefact synchronizers clean up
+     * the runtime state of the removed files on their next pass.
      *
-     * @param project the project name directly under the registry root
+     * @param registryPaths the registry-relative paths, in {@code /<project>/<path>} form
      */
-    public void remove(String project) {
-        String path = IRepositoryStructure.PATH_REGISTRY_PUBLIC + IRepository.SEPARATOR + project;
-        if (repository.hasCollection(path)) {
-            repository.removeCollection(path);
-            LOGGER.info("Removed the registry content of project [{}]", project);
+    public void remove(Collection<String> registryPaths) {
+        Set<String> emptyCandidates = new LinkedHashSet<>();
+        int removed = 0;
+        for (String registryPath : registryPaths) {
+            String path = IRepositoryStructure.PATH_REGISTRY_PUBLIC + normalized(registryPath);
+            if (repository.hasResource(path)) {
+                repository.removeResource(path);
+                removed++;
+            }
+            int slash = path.lastIndexOf(IRepository.SEPARATOR.charAt(0));
+            if (slash > 0) {
+                emptyCandidates.add(path.substring(0, slash));
+            }
         }
+        pruneEmptyCollections(emptyCandidates);
+        if (removed > 0) {
+            LOGGER.info("Removed [{}] registry resource(s) laid down by a leaving module jar", removed);
+        }
+    }
+
+    /**
+     * Removes the collections left empty by a payload removal, walking upwards while the parent is
+     * itself empty. The registry root is never removed.
+     *
+     * @param candidates the collections to check
+     */
+    private void pruneEmptyCollections(Set<String> candidates) {
+        for (String candidate : candidates) {
+            String path = candidate;
+            while (path.length() > IRepositoryStructure.PATH_REGISTRY_PUBLIC.length() && repository.hasCollection(path)) {
+                ICollection collection = repository.getCollection(path);
+                if (!collection.getChildren()
+                               .isEmpty()) {
+                    break;
+                }
+                repository.removeCollection(path);
+                int slash = path.lastIndexOf(IRepository.SEPARATOR.charAt(0));
+                if (slash <= 0) {
+                    break;
+                }
+                path = path.substring(0, slash);
+            }
+        }
+    }
+
+    /**
+     * The registry-relative path with exactly one leading separator.
+     *
+     * @param registryPath the path
+     * @return the normalized path
+     */
+    private static String normalized(String registryPath) {
+        String path = registryPath;
+        while (path.startsWith(IRepository.SEPARATOR)) {
+            path = path.substring(1);
+        }
+        return IRepository.SEPARATOR + path;
     }
 
     /**
@@ -176,9 +235,17 @@ public class ClasspathExpander {
                     while (relative.startsWith("/")) {
                         relative = relative.substring(1);
                     }
-                    Path target = relative.isEmpty() || relative.indexOf('\\') >= 0 ? null
-                            : registryRoot.resolve(relative)
-                                          .normalize();
+                    // Path parsing is platform-dependent: on Windows an entry name carrying ':', '?',
+                    // '*' or '"' throws InvalidPathException, which would otherwise abort the whole
+                    // sweep (or the whole swap) over one skippable entry
+                    Path target;
+                    try {
+                        target = relative.isEmpty() || relative.indexOf('\\') >= 0 ? null
+                                : registryRoot.resolve(relative)
+                                              .normalize();
+                    } catch (InvalidPathException e) {
+                        target = null;
+                    }
                     if (target == null || !target.startsWith(registryRoot) || target.equals(registryRoot)) {
                         LOGGER.warn("Skipping the jar entry [{}] - its path would escape the registry root", entry.getName()
                                                                                                                   .replace('\r', '_')

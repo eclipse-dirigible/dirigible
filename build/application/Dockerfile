@@ -33,15 +33,19 @@ COPY target/dirigible-application-*-executable.jar dirigible.jar
 # missing /modules is a no-op. Set LOADER_PATH to use other locations (comma-separated).
 #
 # /root/.dirigible/resolved-modules is where the platform links the maven dependencies declared in
-# project.json files (see DIRIGIBLE_DEPENDENCIES_DIR) - resolved at boot or on demand, they join
-# the classpath on the NEXT restart. Mount /root/.dirigible on a volume to keep them across runs.
+# project.json files (see DIRIGIBLE_DEPENDENCIES_DIR). It is deliberately NOT on loader.path: those
+# jars are served by the swappable modules classloader, which the boot-time resolution installs. On
+# loader.path they would also be defined by the application classloader, and the modules classloader
+# is parent-first - every later upgrade and removal would resolve to that first, stale copy and the
+# swap would silently change nothing. Mount /root/.dirigible on a volume to keep the local maven
+# repository (and so an offline boot, see DIRIGIBLE_DEPENDENCIES_FROZEN) across runs.
 RUN mkdir -p /modules /root/.dirigible/resolved-modules
 
 # A -jar launch: the executable jar's ZIP layout makes PropertiesLauncher the Main-Class (so
 # -Dloader.path keeps working), and -jar is what makes the JVM honor the Launcher-Agent-Class
 # manifest entry - the launcher agent that lets scope-platform dependency jars (JDBC drivers,
 # JNI-bearing libraries) be appended to the system classloader without a restart.
-ENTRYPOINT ["java", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED", "--add-opens", "java.base/java.nio=ALL-UNNAMED", "-Dloader.path=/modules,/root/.dirigible/resolved-modules", "-jar", "/dirigible.jar"]
+ENTRYPOINT ["java", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED", "--add-opens", "java.base/java.nio=ALL-UNNAMED", "-Dloader.path=/modules", "-jar", "/dirigible.jar"]
 
 # 8080 for the spring boot application,
 # 8081 for graalium debug port

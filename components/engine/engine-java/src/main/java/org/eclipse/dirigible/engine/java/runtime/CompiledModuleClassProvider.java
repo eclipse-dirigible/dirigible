@@ -98,14 +98,38 @@ public class CompiledModuleClassProvider {
      * @param classLoader the classloader to scan and load through
      */
     public synchronized void rediscover(ClassLoader classLoader) {
+        rediscover(classLoader, /* dispatch */ true);
+    }
+
+    /**
+     * Re-runs compiled-module discovery through the given classloader and installs the result as the
+     * compiled sub-generation, either dispatching it right away or only recording it.
+     *
+     * <p>
+     * The dependency swap pipeline records without dispatching: the client-source rebuild that follows
+     * it in the same reaction dispatches the union itself, over a {@code ClientClassLoader} parented on
+     * the freshly installed modules generation. Dispatching here too would run the whole generation
+     * dispatch twice per swap - and the first pass would run against the retired dependency jars.
+     *
+     * @param classLoader the classloader to scan and load through
+     * @param dispatch whether the discovered set is dispatched to the consumers right away
+     * @return whether anything was installed or recorded
+     */
+    public synchronized boolean rediscover(ClassLoader classLoader, boolean dispatch) {
         List<LoadedClass> classes = discover(classLoader);
         if (classes.isEmpty() && !installedBefore) {
-            return;
+            return false;
         }
         installedBefore = !classes.isEmpty();
-        javaLoader.installCompiledModules(classes);
+        if (dispatch) {
+            javaLoader.installCompiledModules(classes);
+        } else {
+            javaLoader.recordCompiledModules(classes);
+        }
         LOGGER.info("Registered [{}] class(es) from AOT compiled module(s) on the classpath", classes.size());
+        return true;
     }
+
 
     /**
      * Scan the classpath of the given classloader for {@code .compiled} markers and load every listed

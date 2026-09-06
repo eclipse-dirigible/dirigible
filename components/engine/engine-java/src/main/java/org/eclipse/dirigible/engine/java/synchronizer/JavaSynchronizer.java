@@ -222,12 +222,15 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
      * dependency-layer swap, so client sources compile against the new JAR set and the new
      * {@code ClientClassLoader} generation parents on the new modules classloader. {@code JavaLoader}'s
      * own synchronization serializes this with a concurrently running pass.
+     *
+     * @return whether a generation was installed - false when the rebuild deferred itself to the next
+     *         cycle, in which case the caller still owes the dispatch of whatever it recorded
      */
-    void rebuildOnDependenciesChanged() {
-        rebuildAll();
+    boolean rebuildOnDependenciesChanged() {
+        return rebuildAll();
     }
 
-    private void rebuildAll() {
+    private boolean rebuildAll() {
         List<JavaFile> all = javaFileService.getAll();
         List<JavaLoader.ClientSource> sources = new ArrayList<>(all.size());
         for (JavaFile file : all) {
@@ -242,7 +245,7 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
                 LOGGER.info("Java source [{}] is registered but currently missing - deferring the rebuild to the next cycle",
                         file.getLocation());
                 dirty.set(true);
-                return;
+                return false;
             }
             byte[] bytes;
             try {
@@ -292,6 +295,7 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
                 clearCompilationProblems(file.getLocation());
             }
         }
+        return true;
     }
 
     /**

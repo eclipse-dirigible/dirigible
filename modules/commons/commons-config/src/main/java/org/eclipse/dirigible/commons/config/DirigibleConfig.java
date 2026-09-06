@@ -199,7 +199,9 @@ public enum DirigibleConfig {
     DEPENDENCIES_DYNAMIC_ENABLED("DIRIGIBLE_DEPENDENCIES_DYNAMIC", Boolean.TRUE.toString()),
 
     /**
-     * Directory the resolved dependency JARs are linked into; blank means [user
+     * Directory the resolved dependency JARs are linked into - the inventory of what the declarations
+     * resolve to, not a launch-classpath entry (the swappable modules classloader serves them; on
+     * loader.path the application classloader would shadow every later upgrade). Blank means [user
      * home]/.dirigible/resolved-modules.
      */
     DEPENDENCIES_DIR("DIRIGIBLE_DEPENDENCIES_DIR", null),

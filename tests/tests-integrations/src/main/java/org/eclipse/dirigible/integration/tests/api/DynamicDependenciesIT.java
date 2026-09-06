@@ -18,6 +18,7 @@ import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.framework.util.MavenFixtures;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
@@ -31,6 +32,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.jar.JarEntry;
 import java.util.function.Consumer;
@@ -41,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.anEmptyMap;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasKey;
+import static org.hamcrest.Matchers.not;
 
 /**
  * The restartless dependency lifecycle, end to end over one running platform: an AOT module jar
@@ -67,6 +71,16 @@ class DynamicDependenciesIT extends IntegrationTest {
 
     private static final long AWAIT_SECONDS = 60;
 
+    /** The coordinate of the native-library fixture the module tier refuses. */
+    private static final String NATIVE_COORDINATE = "com.example:native-lib:1.0.0";
+
+    /** The runtime configuration this test overrides, restored afterwards. */
+    private static final List<String> OVERRIDDEN_CONFIGURATION =
+            List.of("DIRIGIBLE_MAVEN_REPOSITORIES", "DIRIGIBLE_MAVEN_LOCAL_REPO", "DIRIGIBLE_DEPENDENCIES_DIR");
+
+    /** The overridden configuration's previous values, null when it was unset. */
+    private static final Map<String, String> PREVIOUS_CONFIGURATION = new LinkedHashMap<>();
+
     @TempDir
     static Path tempDir;
 
@@ -84,6 +98,7 @@ class DynamicDependenciesIT extends IntegrationTest {
 
     @BeforeAll
     static void prepareFixtures() throws IOException {
+        OVERRIDDEN_CONFIGURATION.forEach(key -> PREVIOUS_CONFIGURATION.put(key, Configuration.get(key)));
         fixtureRepo = Files.createDirectories(tempDir.resolve("fixture-repo"));
         localRepository = tempDir.resolve("local-repo");
         // the fixture repository REPLACES Maven Central, so no request can leave the machine
@@ -171,16 +186,18 @@ class DynamicDependenciesIT extends IntegrationTest {
 
     @Test
     @Order(4)
-    void a_native_library_jar_is_rejected_and_the_installed_generation_keeps_serving() {
+    void a_native_library_jar_is_rejected_without_disturbing_the_other_declarations() {
         writeProjectJson("""
                 { "type": "maven", "id": "com.example:hello-module:1.1.0" },
                 { "type": "maven", "id": "com.example:textlib:1.0.0" },
                 { "type": "maven", "id": "com.example:native-lib:1.0.0" }""");
-        resolveExpecting(response -> response.body("failures", hasKey("modules-swap"))
-                                             .body("failures.'modules-swap'", containsString("lib/dummy.so"))
-                                             .body("failures.'modules-swap'", containsString("platform")));
+        // the rejection is per declaration, not per swap: one library shipping a native resource must
+        // not keep every other project's dependencies from activating
+        resolveExpecting(response -> response.body("failures", hasKey(NATIVE_COORDINATE))
+                                             .body("failures.'" + NATIVE_COORDINATE + "'", containsString("lib/dummy.so"))
+                                             .body("failures.'" + NATIVE_COORDINATE + "'", containsString("platform"))
+                                             .body("failures", not(hasKey("modules-swap"))));
 
-        // no partial swap - the previous generation answers as before
         awaitEndpoint(MODULE_ENDPOINT, "hello from 1.1.0 via dirigible-modules");
         awaitEndpoint(CLIENT_ENDPOINT, "DIRIGIBLE!");
     }
@@ -209,6 +226,37 @@ class DynamicDependenciesIT extends IntegrationTest {
         assertThat(repository.hasResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/hello-module/greeting.txt")).isFalse();
         // the surviving dependency keeps serving
         awaitEndpoint(CLIENT_ENDPOINT, "DIRIGIBLE!");
+    }
+
+    /**
+     * The whole shard shares one JVM and one Spring context, and this test's fixtures live under a
+     * {@code @TempDir} that is deleted when the class finishes: a leftover registry project declaring a
+     * dependency that no longer exists would make every later client-Java rebuild in the same fork
+     * compile against a deleted classpath entry, and a leftover {@code DIRIGIBLE_MAVEN_REPOSITORIES}
+     * would point every later resolution at a deleted fixture repository.
+     */
+    @Test
+    @Order(7)
+    void the_fixtures_leave_no_trace_in_the_shared_jvm() {
+        // the declarations go first, so the pipeline deactivates the fixture jars while they still
+        // exist; then the project - source, descriptor and all
+        writeProjectJson("");
+        resolveExpecting(response -> response.body("failures", anEmptyMap()));
+        repository.removeCollection(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT);
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        awaitEndpointStatus(CLIENT_ENDPOINT, 404);
+    }
+
+    @AfterAll
+    static void restoreConfiguration() {
+        PREVIOUS_CONFIGURATION.forEach((key, value) -> {
+            if (value == null) {
+                Configuration.remove(key);
+            } else {
+                Configuration.set(key, value);
+            }
+        });
     }
 
     private void writeProjectJson(String dependencyEntries) {

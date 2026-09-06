@@ -95,8 +95,14 @@ class DependencySynchronizer {
      * @param error the abort reason, null when the swap succeeded or nothing changed
      * @param added the arrived coordinates
      * @param removed the left coordinates
+     * @param rejected the coordinates the module tier refused, with the reason - the rest of the
+     *        resolution still activated
+     * @param shadowed the arrived coordinates the launch classpath already provides, so parent-first
+     *        delegation keeps serving the launch-classpath version and the arrival is inert
+     * @param payloadError the registry-payload reconciliation failure, null when it succeeded
      */
-    record SwapOutcome(boolean swapped, String error, Set<String> added, Set<String> removed) {
+    record SwapOutcome(boolean swapped, String error, Set<String> added, Set<String> removed, Map<String, String> rejected,
+            Set<String> shadowed, String payloadError) {
 
         /**
          * Kept the current generation.
@@ -105,7 +111,17 @@ class DependencySynchronizer {
          * @return the outcome
          */
         static SwapOutcome kept(String error) {
-            return new SwapOutcome(false, error, Set.of(), Set.of());
+            return new SwapOutcome(false, error, Set.of(), Set.of(), Map.of(), Set.of(), null);
+        }
+
+        /**
+         * Kept the current generation, with per-declaration rejections to report.
+         *
+         * @param rejected the rejected coordinates and their reasons
+         * @return the outcome
+         */
+        static SwapOutcome kept(Map<String, String> rejected) {
+            return new SwapOutcome(false, null, Set.of(), Set.of(), rejected, Set.of(), null);
         }
     }
 
@@ -137,25 +153,21 @@ class DependencySynchronizer {
 
         ModulesClassLoader current = loaderHolder.current();
         Set<Path> currentJars = new LinkedHashSet<>(current.jars());
-        if (loaderHolder.generation() > 0 && currentJars.equals(new LinkedHashSet<>(target))) {
-            return SwapOutcome.kept(null);
-        }
-
         Set<Path> platformTier = new LinkedHashSet<>(platformJars);
-        List<Path> added = target.stream()
-                                 .filter(jar -> !currentJars.contains(jar))
-                                 .toList();
-        List<Path> removed = currentJars.stream()
-                                        .filter(jar -> !target.contains(jar))
-                                        .toList();
-        List<Path> addedModuleTier = added.stream()
-                                          .filter(jar -> !platformTier.contains(jar))
-                                          .toList();
+        Set<Path> launchTier = new LinkedHashSet<>(launchClasspathJars);
 
         // validate everything BEFORE the first side effect - an aborted swap leaves generation N
-        // installed and serving, with no partial state anywhere
+        // installed and serving, with no partial state anywhere. Only arriving module-tier jars are
+        // validated: a launch-classpath jar is already loaded by the application classloader, so
+        // vetoing it here would abort every swap for the lifetime of the process over a drop-in
+        // nobody declared.
         Map<Path, Inspection> inspections = new LinkedHashMap<>();
-        for (Path jar : addedModuleTier) {
+        Map<String, String> rejected = new LinkedHashMap<>();
+        Set<Path> rejectedJars = new LinkedHashSet<>();
+        for (Path jar : target) {
+            if (currentJars.contains(jar) || platformTier.contains(jar) || launchTier.contains(jar)) {
+                continue;
+            }
             Inspection inspection;
             try {
                 inspection = ModuleJarInspector.inspect(jar);
@@ -166,23 +178,57 @@ class DependencySynchronizer {
             }
             if (!inspection.nativeLibraries()
                            .isEmpty()) {
-                String error = "Jar [" + jar.getFileName() + "] contains native libraries " + inspection.nativeLibraries()
+                // per-declaration, not per-swap: one library shipping a native resource must not keep
+                // every other project's dependencies from ever activating
+                String reason = "Contains native libraries " + inspection.nativeLibraries()
                         + " which the swappable module tier cannot host (a native library binds to exactly one classloader)."
                         + " Declare it with scope \"platform\" instead, or bake it into the image.";
-                LOGGER.error("Dependency swap aborted: {}", error);
-                return SwapOutcome.kept(error);
+                LOGGER.error("Rejecting the module-tier dependency [{}]: {}", jar.getFileName(), reason);
+                rejected.put(coordinate(localRepository, jar), reason);
+                rejectedJars.add(jar);
+                continue;
             }
             inspections.put(jar, inspection);
         }
+        if (!rejectedJars.isEmpty()) {
+            target.removeAll(rejectedJars);
+            inspections.keySet()
+                       .removeAll(rejectedJars);
+        }
 
-        warnOnPlatformShadowing(inspections);
+        if (loaderHolder.generation() > 0 && currentJars.equals(new LinkedHashSet<>(target))) {
+            return SwapOutcome.kept(rejected);
+        }
+
+        List<Path> added = target.stream()
+                                 .filter(jar -> !currentJars.contains(jar))
+                                 .toList();
+        List<Path> removed = currentJars.stream()
+                                        .filter(jar -> !target.contains(jar))
+                                        .toList();
+        List<Path> addedModuleTier = added.stream()
+                                          .filter(jar -> !platformTier.contains(jar) && !launchTier.contains(jar))
+                                          .toList();
         List<Path> removedModuleTier = removed.stream()
-                                              .filter(jar -> !platformTier.contains(jar))
+                                              .filter(jar -> !platformTier.contains(jar) && !launchTier.contains(jar))
                                               .toList();
-        reconcileRegistryPayload(addedModuleTier, removedModuleTier, inspections);
 
+        Set<Path> shadowedJars = shadowedByLaunchClasspath(inspections);
+
+        // the classloader generation is the authoritative half of the swap and is installed first;
+        // the registry payload follows, guarded - a repository write failure must not leave the
+        // pipeline reporting a 500 with a half-removed payload and no new generation
         loaderHolder.swap(target);
         int generation = loaderHolder.generation();
+        String payloadError = null;
+        try {
+            reconcileRegistryPayload(addedModuleTier, removedModuleTier, inspections);
+        } catch (RuntimeException e) {
+            payloadError = "The dependency layer swapped to generation [" + generation
+                    + "], but reconciling the registry payload failed - some module content may be missing or stale. Cause: "
+                    + e.getMessage();
+            LOGGER.error("Registry payload reconciliation failed after the swap to generation [{}]", generation, e);
+        }
 
         Set<String> addedCoordinates = coordinates(localRepository, added);
         Set<String> removedCoordinates = coordinates(localRepository, removed);
@@ -191,70 +237,78 @@ class DependencySynchronizer {
                     removedCoordinates);
             eventPublisher.publishEvent(new DependenciesChangedEvent(this, addedCoordinates, removedCoordinates, mediated, generation));
         }
-        return new SwapOutcome(true, null, addedCoordinates, removedCoordinates);
+        return new SwapOutcome(true, null, addedCoordinates, removedCoordinates, rejected,
+                coordinates(localRepository, List.copyOf(shadowedJars)), payloadError);
     }
 
     /**
-     * Removes the registry payload of leaving JARs and lays the payload of arriving ones. A project
-     * carried by a JAR that stays is never removed, and an upgraded module's project is removed and
-     * immediately re-laid from the new JAR.
+     * Removes the registry payload of leaving JARs and lays the payload of arriving ones. Only the
+     * entries a leaving JAR actually carried are removed, and only those no remaining JAR still carries
+     * - an upgrade is a remove followed by a re-expand, so removing the whole project collection would
+     * destroy whatever else was published under it.
      *
      * @param added the arriving jars
      * @param removed the leaving jars
      * @param inspections the arriving jars' inspections
      */
     private void reconcileRegistryPayload(List<Path> added, List<Path> removed, Map<Path, Inspection> inspections) {
-        Set<String> removedProjects = new LinkedHashSet<>();
+        Set<String> removedEntries = new LinkedHashSet<>();
         for (Path jar : removed) {
             try {
-                removedProjects.addAll(ModuleJarInspector.inspect(jar)
-                                                         .projects());
+                removedEntries.addAll(ModuleJarInspector.inspect(jar)
+                                                        .registryEntries());
             } catch (IOException e) {
                 // the immutable local-repo file was deleted externally - its payload cannot be
                 // attributed any more; the per-artefact synchronizers will reap orphans over time
                 LOGGER.warn("Cannot inspect the removed jar [{}] for its registry payload", jar, e);
             }
         }
-        if (!removedProjects.isEmpty()) {
-            // a project is only removed when NO remaining jar still carries it
+        if (!removedEntries.isEmpty()) {
+            // an entry is only removed when NO remaining jar still carries it
             ModulesClassLoader current = loaderHolder.current();
             for (Path staying : current.jars()) {
                 if (removed.contains(staying) || !Files.isRegularFile(staying)) {
                     continue;
                 }
                 try {
-                    removedProjects.removeAll(ModuleJarInspector.inspect(staying)
-                                                                .projects());
+                    removedEntries.removeAll(ModuleJarInspector.inspect(staying)
+                                                               .registryEntries());
                 } catch (IOException e) {
                     LOGGER.warn("Cannot inspect the staying jar [{}] while removing registry payload", staying, e);
                 }
             }
-            removedProjects.forEach(classpathExpander::remove);
+            classpathExpander.remove(removedEntries);
         }
         for (Path jar : added) {
-            if (!inspections.get(jar)
-                            .projects()
-                            .isEmpty()) {
+            Inspection inspection = inspections.get(jar);
+            if (inspection != null && !inspection.projects()
+                                                 .isEmpty()) {
                 classpathExpander.expand(jar);
             }
         }
     }
 
     /**
-     * WARN when an arriving artifact is also present on the platform classpath - parent-first
-     * delegation resolves such classes to the platform's version, so the declared version is inert.
+     * The arriving artifacts the launch classpath already provides - parent-first delegation resolves
+     * such classes to the launch-classpath version, so the declared one never serves. Reported as
+     * {@code shadowed} rather than active: a swap that silently changed nothing is the one outcome an
+     * operator cannot debug.
      *
      * @param inspections the arriving jars' inspections
+     * @return the shadowed jars
      */
-    private void warnOnPlatformShadowing(Map<Path, Inspection> inspections) {
+    private Set<Path> shadowedByLaunchClasspath(Map<Path, Inspection> inspections) {
+        Set<Path> shadowed = new LinkedHashSet<>();
         ClassLoader platform = getClass().getClassLoader();
         inspections.forEach((jar, inspection) -> {
             String probe = inspection.representativeClassResource();
             if (probe != null && platform.getResource(probe) != null) {
-                LOGGER.warn("The resolved artifact [{}] is also present on the platform classpath - parent-first delegation serves "
-                        + "the platform's version, not the declared one", jar.getFileName());
+                shadowed.add(jar);
+                LOGGER.warn("The resolved artifact [{}] is also present on the launch classpath - parent-first delegation serves "
+                        + "that version, not the declared one; the arrival is inert", jar.getFileName());
             }
         });
+        return shadowed;
     }
 
     /**

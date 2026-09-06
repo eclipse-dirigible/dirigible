@@ -67,6 +67,12 @@ classes at the jar ROOT are injected by the build itself, with the nested jars k
   honors it natively, so there is no `DIRIGIBLE_*` property for this.
 - `ClassPathIndex` appends the same `loader.path` / `LOADER_PATH` jars to the **compile** classpath, so
   registry sources can still be compiled against a drop-in module's classes.
+- **Never put the resolved-modules directory (`DIRIGIBLE_DEPENDENCIES_DIR`) on `loader.path`.** Those
+  jars are served by the swappable `ModulesClassLoader`, which is parent-first: with the same jars also
+  on the application classloader, an upgrade or a removal resolves to the launch-classpath copy and the
+  swap silently changes nothing. The pipeline detects the case and reports such an artifact as
+  `shadowed` rather than `active`, but the only fix is to keep the directory off the launch classpath
+  (the shipped `Dockerfile` does).
 
 ## The bean container (`ComponentContainer`, `engine-java`)
 

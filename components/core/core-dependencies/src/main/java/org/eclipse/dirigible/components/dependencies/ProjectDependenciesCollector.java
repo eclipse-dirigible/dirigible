@@ -13,6 +13,7 @@ import org.eclipse.dirigible.components.project.ProjectMetadata;
 import org.eclipse.dirigible.components.project.ProjectMetadataDependency;
 import org.eclipse.dirigible.components.project.ProjectMetadataUtils;
 import org.eclipse.dirigible.repository.api.ICollection;
+import org.eclipse.dirigible.repository.api.IEntityInformation;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -44,6 +46,12 @@ class ProjectDependenciesCollector {
 
     /** The diagnostics the previous collection reported, joined - see {@link #report(List)}. */
     private final AtomicReference<String> reported = new AtomicReference<>("");
+
+    /**
+     * The stamp of the declaring resources at the previous check - see
+     * {@link #declarationsMayHaveChanged()}.
+     */
+    private final AtomicReference<String> stamped = new AtomicReference<>("");
 
     /**
      * Instantiates a new collector.
@@ -72,6 +80,58 @@ class ProjectDependenciesCollector {
         }
         report(notices);
         return new DeclaredDependencies(dependencies, errors, declaredBy);
+    }
+
+    /**
+     * A cheap change probe for the watcher: whether anything about the registry's {@code project.json}
+     * files moved since the last call. Reading and JSON-parsing every project descriptor a few times a
+     * minute is real work on a database-backed repository with hundreds of projects, and the watch tick
+     * needs none of it while nothing changes - it only needs to know whether to look.
+     *
+     * <p>
+     * Conservative by construction: when the repository cannot report the metadata, the answer is
+     * "maybe", and the caller collects. The stamp cannot distinguish two writes of equal size within
+     * one filesystem timestamp granularity, so the watcher additionally forces a full collection
+     * periodically.
+     *
+     * @return true when the declarations may have changed
+     */
+    boolean declarationsMayHaveChanged() {
+        String stamp = declarationStamp();
+        return stamp == null || !stamp.equals(stamped.getAndSet(stamp));
+    }
+
+    /**
+     * The stamp of every registry project's {@code project.json} - path, size and modification time.
+     *
+     * @return the stamp, null when the repository cannot report it
+     */
+    private String declarationStamp() {
+        try {
+            StringBuilder stamp = new StringBuilder();
+            ICollection registry = repository.getCollection(IRepositoryStructure.PATH_REGISTRY_PUBLIC);
+            if (!registry.exists()) {
+                return "";
+            }
+            for (ICollection project : registry.getCollections()) {
+                IResource descriptor = project.getResource(ProjectMetadata.PROJECT_METADATA_FILE_NAME);
+                if (!descriptor.exists()) {
+                    continue;
+                }
+                IEntityInformation information = descriptor.getInformation();
+                Date modifiedAt = information.getModifiedAt();
+                stamp.append(project.getName())
+                     .append('|')
+                     .append(information.getSize())
+                     .append('|')
+                     .append(modifiedAt == null ? "?" : modifiedAt.getTime())
+                     .append(';');
+            }
+            return stamp.toString();
+        } catch (RuntimeException e) {
+            LOGGER.debug("Cannot stamp the registry's dependency declarations - collecting them instead", e);
+            return null;
+        }
     }
 
     /**
