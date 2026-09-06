@@ -2275,6 +2275,18 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(onPaymentRekeyed.contains("release(payment.Id, allocated(payment.Id))"),
                 "the re-key recompute must release the whole allocation before re-allocating");
 
+        // Deleting the PAYMENT must take its allocation with it (#7061): the junction FK to the payment
+        // is never a database constraint here, so without this handler the rows outlived the payment as
+        // orphans and the invoice stayed PAID forever. Removing them through the junction repository is
+        // what makes the paid roll-up recompute and the invoice relinquish PAID (#7022).
+        String onPaymentDeleted = contentOf("gen/events/settle/AutoSettleOnPaymentDeleted.java");
+        assertTrue(onPaymentDeleted.contains("class AutoSettleOnPaymentDeleted implements MessageHandler"),
+                "a cleanup listener should be generated for the payment's delete event");
+        assertTrue(onPaymentDeleted.contains("return \"" + PROJECT + "-Payment-Payment-deleted\";"),
+                "it should bind the payment's delete topic");
+        assertTrue(onPaymentDeleted.contains(".eq(\"Payment\", payment.Id)") && onPaymentDeleted.contains("rows.delete(row)"),
+                "it should delete every allocation row of that payment through the junction repository");
+
         String onInvoice = codeOf("gen/events/settle/AutoSettleOnInvoice.java");
         assertTrue(onInvoice.contains("class AutoSettleOnInvoice implements JavaDelegate"),
                 "the onInvoice settlement delegate should be generated");

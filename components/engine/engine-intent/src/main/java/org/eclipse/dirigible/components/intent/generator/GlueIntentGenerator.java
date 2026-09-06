@@ -124,6 +124,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> expansionCleanups = expansionHandlers.cleanups();
         List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> settlementListeners = buildSettlementListeners(settlements);
+        List<Map<String, Object>> settlementCleanups = buildSettlementCleanups(settlements);
         List<Map<String, Object>> generates = buildGenerates(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> transitions = buildTransitions(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> sends = buildSends(model, byName, compositionParents, settings, context);
@@ -172,6 +173,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("expansionCleanups", expansionCleanups);
         glue.put("settlements", settlements);
         glue.put("settlementListeners", settlementListeners);
+        glue.put("settlementCleanups", settlementCleanups);
         glue.put("generates", generates);
         // The event-driven subset (issue #6711) - the SAME descriptors, filtered, so the listener and
         // the create-from it calls can never be built from divergent data. A create-from with no event
@@ -843,6 +845,31 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
         }
         return listeners;
+    }
+
+    /**
+     * One cleanup listener per settlement, bound to the payment's <b>delete</b> moment (issue #7061):
+     * it gives the whole allocation back by removing the payment's junction rows, so the invoice's paid
+     * roll-up recomputes and the parent relinquishes PAID / PARTIAL through the ordinary
+     * allocation-delete path.
+     *
+     * <p>
+     * Nothing else does it: the junction FK to the payment never becomes a database constraint on this
+     * platform, so there is no cascade, and when the payment is cross-model its owner knows nothing of
+     * this settlement and cannot delete rows it does not own. Left unbound, the allocation rows
+     * outlived the payment as orphans pointing at an id that no longer existed and kept the invoice
+     * settled forever. Unlike the re-key handler this one needs no payment repository - only the
+     * payment's key, off the delete payload - so it is emitted for a cross-model payment too.
+     *
+     * @param settlements the settlement descriptors
+     * @return one entry per settlement
+     */
+    private static List<Map<String, Object>> buildSettlementCleanups(List<Map<String, Object>> settlements) {
+        List<Map<String, Object>> cleanups = new ArrayList<>();
+        for (Map<String, Object> settlement : settlements) {
+            cleanups.add(rollupEntry(settlement, String.valueOf(settlement.get("name")) + "OnPaymentDeleted", "-deleted"));
+        }
+        return cleanups;
     }
 
     /**
@@ -1623,6 +1650,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         IntentGenerationContext context =
                 new IntentGenerationContext(model, "/" + model.getName(), model.getName(), "workspace", model.getName(), null);
         return buildSettlementListeners(buildSettlements(model, IntentEntities.byName(model), IntentEntities.compositionParents(model),
+                IntentSettings.parse("{}"), context));
+    }
+
+    /** Test hook: build the {@code settlementCleanups} glue collection without a repository. */
+    static List<Map<String, Object>> buildSettlementCleanupsForTest(IntentModel model) {
+        IntentGenerationContext context =
+                new IntentGenerationContext(model, "/" + model.getName(), model.getName(), "workspace", model.getName(), null);
+        return buildSettlementCleanups(buildSettlements(model, IntentEntities.byName(model), IntentEntities.compositionParents(model),
                 IntentSettings.parse("{}"), context));
     }
 

@@ -179,6 +179,13 @@ export function getTemplate(parameters) {
                 collection: "settlementListeners"
             },
             {
+                location: "/template-application-events-java/events/SettlementCleanup.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}.java",
+                engine: "velocity",
+                collection: "settlementCleanups"
+            },
+            {
                 location: "/template-application-events-java/events/SettlementOnInvoice.java.template",
                 action: "generate",
                 rename: "gen/events/{{javaGenFolderName}}/{{name}}OnInvoice.java",

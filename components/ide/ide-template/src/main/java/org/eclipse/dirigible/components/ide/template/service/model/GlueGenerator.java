@@ -51,9 +51,9 @@ class GlueGenerator {
     /** The names of the collections this generator handles. */
     private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
             "aborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles",
-            "outbound", "stepEvents", "rollups", "expansions", "expansionCleanups", "settlements", "settlementListeners", "generates",
-            "generateEvents", "generateReopens", "transitions", "sends", "posts", "aggregates", "postings", "printFeeders", "snapshots",
-            "numbering", "resolves");
+            "outbound", "stepEvents", "rollups", "expansions", "expansionCleanups", "settlements", "settlementListeners",
+            "settlementCleanups", "generates", "generateEvents", "generateReopens", "transitions", "sends", "posts", "aggregates",
+            "postings", "printFeeders", "snapshots", "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -112,6 +112,9 @@ class GlueGenerator {
             case "expansionCleanups" -> each(collection, source, content, model, parameters, GlueGenerator::bindExpansionCleanup);
             case "settlements" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlement);
             case "settlementListeners" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlementListener);
+            // The payment's delete moment (issue #7061) - the same descriptor, rendered by its own
+            // template, so a settlement contributes exactly one cleanup handler per collection entry.
+            case "settlementCleanups" -> each(collection, source, content, model, parameters, GlueGenerator::bindSettlementListener);
             // All three collections carry the SAME create-from descriptors (generateEvents is the
             // event-driven subset, generateReopens the declared-reopen one), so they share one binding -
             // the listeners and the create-from they surround cannot be rendered from divergent data.
@@ -603,7 +606,7 @@ class GlueGenerator {
 
     /**
      * Binds one payment listener of an auto-settlement - the same descriptor as the settlement itself,
-     * rendered once per bound payment event (create, correction).
+     * rendered once per bound payment event (create, correction, re-key, delete).
      *
      * @param item the descriptor
      * @param context the template context
