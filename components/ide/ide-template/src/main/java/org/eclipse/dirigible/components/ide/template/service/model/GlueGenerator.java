@@ -770,6 +770,12 @@ class GlueGenerator {
         context.put("targetJavaPerspective", sanitize(item, "targetPerspective"));
         context.put("itemsJavaPerspective", sanitize(item, "itemsPerspective"));
         context.put("ruleJavaPerspective", truthy(item, "rulePerspective") ? sanitize(item, "rulePerspective") : "");
+        // The amendment half (issue #7071). A .glue written before it carries neither key, and a bare
+        // reference would render as its own literal - so both fall back to what that shape used to
+        // emit: no compared properties (every existing post reads as unchanged, the old no-op) and no
+        // lifecycle guard around the rewrite.
+        context.put("amendableGuard", strOr(item, "amendableGuard", ""));
+        context.put("itemComparedProps", item.get("itemComparedProps") == null ? new ArrayList<>() : item.get("itemComparedProps"));
     }
 
     /**

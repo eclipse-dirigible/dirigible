@@ -2401,6 +2401,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("targetEntity", creates.getName());
             e.put("targetPerspective", IntentEntities.resolvePerspective(creates.getName(), compositionParents, model));
             e.put("targetPk", IntentEntities.keyFieldName(creates));
+            // Amendment (#7071): a source that is rejected, edited and re-issued raises the SAME
+            // moment again, and the post it already carries no longer describes it. The handler
+            // therefore re-derives the content and rewrites the post - but only while nobody has
+            // acted on the created document, i.e. while its status is still the one the posting's
+            // own create wrote. A target with no status lifecycle at all is always rewritable; one
+            // that has moved on is reported and left alone (unwinding a posted entry is a
+            // correcting entry's job - `reverses:` - not a silent overwrite).
+            e.put("amendableGuard", amendableGuard(creates));
             e.put("itemsEntity", itemsEntity.getName());
             e.put("itemsPerspective", IntentEntities.resolvePerspective(itemsEntity.getName(), compositionParents, model));
             e.put("itemsFk", IntentNaming.pascalCase(creates.getName()));
@@ -2503,11 +2511,48 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 itemRows.add(rendered);
             }
             e.put("itemRows", itemRows);
+            // The union of every property the rows assign - what a stored row is compared on to tell
+            // a plain redelivery (nothing changed) from an amendment. A property no row assigns is
+            // null on both sides and says nothing.
+            Set<String> comparedProperties = new LinkedHashSet<>();
+            for (Map<String, Object> row : itemRows) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> assigns = (List<Map<String, Object>>) row.get("assigns");
+                for (Map<String, Object> assign : assigns) {
+                    comparedProperties.add(String.valueOf(assign.get("targetProp")));
+                }
+            }
+            e.put("itemComparedProps", new ArrayList<>(comparedProperties));
             e.put("usedRuleColumns", new ArrayList<>(usedRuleColumns));
             e.put("conditionalRuleGuards", conditionalRuleGuards);
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * The Java condition under which an ALREADY posted document may be rewritten from an amended source
+     * (#7071), evaluated against the local {@code target}.
+     *
+     * <p>
+     * The posting created the document, so the state it created it in is the one nobody has acted on
+     * yet: its {@code function: EntityStatus} relation still holding the declared {@code init:} value,
+     * or still empty when none is declared. An entity with no status lifecycle has nothing to act on
+     * and is always rewritable - the empty guard.
+     *
+     * @param creates the created (target) entity
+     * @return the guard expression, or the empty string when the target is always rewritable
+     */
+    private static String amendableGuard(EntityIntent creates) {
+        RelationIntent status = IntentEntities.entityStatusRelation(creates);
+        if (status == null || status.getName() == null || status.getName()
+                                                                .isBlank()) {
+            return "";
+        }
+        String property = IntentNaming.pascalCase(status.getName());
+        String init = status.getInit();
+        return init != null && init.matches("-?\\d+") ? "target." + property + " != null && target." + property + " == " + init
+                : "target." + property + " == null";
     }
 
     /**

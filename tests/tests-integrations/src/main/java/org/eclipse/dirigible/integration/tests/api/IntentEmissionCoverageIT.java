@@ -2882,6 +2882,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(stornoPosting.contains("target.Storno = original.Id;"), "the reversal must stamp the storno link to the original");
         String basePosting = contentOf("gen/events/emission/DocPostingPosting.java");
         assertTrue(basePosting.contains("candidate.Storno == null"), "the reversed posting's idempotency guard must exclude reversal rows");
+        // #7071: the second occurrence of the moment (an amended, re-issued source) rewrites the post
+        // it already made instead of reading it as "already posted" - so the comparison covers every
+        // cell the rows assign, the FK dimension included.
+        assertTrue(basePosting.contains("same(stored.Party, derived.Party)"),
+                "an existing post must be compared cell by cell against what the source derives now");
+        assertTrue(basePosting.contains("targetRepository.update(target) : targetRepository.save(target)"),
+                "a diverging post must be rewritten in place, never doubled");
         assertTrue(basePosting.contains("-Doc-transitioned"), "a status-triggered posting must bind the -transitioned topic");
         // source-FK copy (#6533): a to-one relation item cell copies the source FK verbatim onto the
         // line - no Calc, no negation, and it must carry through UNCHANGED onto the reversal line.

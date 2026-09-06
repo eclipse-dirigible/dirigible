@@ -574,6 +574,13 @@ field may declare:
   and no default - or a null selected column - skips the posting to the unposted worklist. A conditional
   cell already branches the account, so it cannot also carry a row `when`. All writes go through the generated
   repositories, so numbering/status-init/`checks:` fire on the created document.
+  **An amended source rewrites its post.** The handler derives the whole content first and compares it
+  with the post the source already carries: identical is a redelivery (no-op), different is either a
+  half-post to complete or a source that was rejected, edited and re-issued - and then the existing
+  post is REWRITTEN in place (never a second one). The rewrite stops at the created document's own
+  lifecycle: once it has left the status the posting created it in (its `init:`), someone has acted on
+  it, so the divergence is logged and left to a reversing entry. A created document with no
+  `function: EntityStatus` relation is always rewritable.
   **Reversal mode (red storno):** a posting with `reverses: <sibling posting name>` undoes the
   sibling's document when the source is voided/cancelled - pair it with a `transitions:` void:
   ```yaml

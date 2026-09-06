@@ -50,6 +50,64 @@ import org.springframework.test.annotation.DirtiesContext;
 @Tag("slow")
 class IntentEngineIT extends IntegrationTest {
 
+    /**
+     * A self-contained posting: an Order transitioning into POSTED (status 2) posts a Ledger with two
+     * LedgerLine rows (debit + credit) determined by a PostingRule. Shared by the tests that vary the
+     * created document's own lifecycle.
+     */
+    private static final String POSTING_YAML = """
+            name: postingtest
+            entities:
+              - name: Account
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string }
+              - name: OrderStatus
+                kind: setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+              - name: PostingRule
+                kind: setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: documentType, type: string }
+                relations:
+                  - { name: DebitAccount, kind: manyToOne, to: Account }
+                  - { name: CreditAccount, kind: manyToOne, to: Account }
+              - name: Order
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string }
+                  - { name: amount, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }
+              - name: Ledger
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: memo, type: string, length: 400 }
+                relations:
+                  - { name: Order, kind: manyToOne, to: Order }
+              - name: LedgerLine
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: debit, type: decimal, precision: 18, scale: 2 }
+                  - { name: credit, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Ledger, kind: manyToOne, to: Ledger, composition: true, required: true }
+                  - { name: Account, kind: manyToOne, to: Account, required: true }
+            postings:
+              - name: orderLedger
+                event: { onTransition: Order, when: "Status == 2" }
+                creates: Ledger
+                backReference: Order
+                map: { memo: "Order {number}" }
+                rule: { entity: PostingRule, match: { documentType: "Order" } }
+                items:
+                  - { Account: rule(debitAccount), debit: "Amount" }
+                  - { Account: rule(creditAccount), credit: "Amount" }
+            """;
+
     private static final String PROJECT = "intent-test";
     private static final String WORKSPACE = "workspace";
     private static final String PROJECT_PATH = IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/" + PROJECT;
@@ -2907,61 +2965,7 @@ class IntentEngineIT extends IntegrationTest {
 
     @Test
     void postings_generates_the_idempotent_resumable_handler() {
-        // A self-contained posting: an Order transitioning into POSTED (status 2) posts a Ledger with
-        // two LedgerLine rows (debit + credit) determined by a PostingRule.
-        String postingYaml = """
-                name: postingtest
-                entities:
-                  - name: Account
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: number, type: string }
-                  - name: OrderStatus
-                    kind: setting
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: name, type: string, required: true, length: 100 }
-                  - name: PostingRule
-                    kind: setting
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: documentType, type: string }
-                    relations:
-                      - { name: DebitAccount, kind: manyToOne, to: Account }
-                      - { name: CreditAccount, kind: manyToOne, to: Account }
-                  - name: Order
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: number, type: string }
-                      - { name: amount, type: decimal, precision: 18, scale: 2 }
-                    relations:
-                      - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }
-                  - name: Ledger
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: memo, type: string, length: 400 }
-                    relations:
-                      - { name: Order, kind: manyToOne, to: Order }
-                  - name: LedgerLine
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: debit, type: decimal, precision: 18, scale: 2 }
-                      - { name: credit, type: decimal, precision: 18, scale: 2 }
-                    relations:
-                      - { name: Ledger, kind: manyToOne, to: Ledger, composition: true, required: true }
-                      - { name: Account, kind: manyToOne, to: Account, required: true }
-                postings:
-                  - name: orderLedger
-                    event: { onTransition: Order, when: "Status == 2" }
-                    creates: Ledger
-                    backReference: Order
-                    map: { memo: "Order {number}" }
-                    rule: { entity: PostingRule, match: { documentType: "Order" } }
-                    items:
-                      - { Account: rule(debitAccount), debit: "Amount" }
-                      - { Account: rule(creditAccount), credit: "Amount" }
-                """;
-        writeIntent(postingYaml);
+        writeIntent(POSTING_YAML);
         restAssuredExecutor.execute(() -> given().when()
                                                  .post(GENERATE_URL)
                                                  .then()
@@ -2972,16 +2976,53 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(glue.contains("\"postings\""), "the .glue should carry the postings collection");
         assertTrue(glue.contains("OrderLedger"), "the posting className should be carried in the glue");
 
-        // Events template: the generated handler is idempotent + resumable (the cloud-native posting
-        // semantics - no cross-step transaction): it skips a complete post and rebuilds a half-post.
+        // Events template: the generated handler is idempotent + resumable + amendable (the
+        // cloud-native posting semantics - no cross-step transaction). It derives the full content
+        // first and compares it with the existing post: identical is a no-op, different is either a
+        // half-post to complete or an amended source to rewrite from (#7071).
         generateFromModel("template-application-events-java/template/template.js", "postingtest.glue");
         String posting = codeOf("gen/events/postingtest/OrderLedgerPosting.java");
         assertTrue(posting.contains("implements MessageHandler"), "the posting is a self-describing message handler");
         assertTrue(posting.contains("-transitioned"), "it listens on the source's -transitioned channel");
-        assertTrue(posting.contains("int expectedItems = 0"), "it computes the expected item count for the completeness check");
+        assertTrue(posting.contains("derivedItems"), "it derives the full item set up front, to write AND to compare");
         assertTrue(posting.contains("existingTargets"), "it looks up an existing post by the back-reference (idempotency)");
-        assertTrue(posting.contains("currentItems.size() >= expectedItems"), "a complete post is a no-op (idempotent)");
-        assertTrue(posting.contains("itemsRepository.delete(stale)"), "a half-post rebuilds its items (resumable)");
+        assertTrue(posting.contains("if (unchanged) {"), "a post that already says what the source derives now is a no-op");
+        assertTrue(posting.contains("same(stored.Debit, derived.Debit)"), "every assigned item cell takes part in the comparison");
+        assertTrue(posting.contains("itemsRepository.delete(stale)"), "a stale or partial item set is cleared before the rewrite");
+        assertTrue(posting.contains("targetRepository.update(target) : targetRepository.save(target)"),
+                "an existing post is rewritten in place, a fresh one created");
+        // The Ledger carries no status lifecycle, so there is nothing to act on and nothing to guard.
+        assertFalse(posting.contains("was NOT rewritten"), "a target with no status lifecycle is always rewritable");
+    }
+
+    @Test
+    void a_post_is_not_rewritten_once_the_created_document_has_left_the_status_it_was_created_in() {
+        // #7071: an amended source (rejected, edited, re-issued) raises the SAME moment again, and the
+        // post it already carries must follow it - but only while nobody has acted on the created
+        // document. Once the entry has moved off the status the posting created it in, someone owns it:
+        // rewriting it behind their back is worse than the divergence, so the handler reports it and
+        // leaves the correction to a reversing entry.
+        writeIntent(POSTING_YAML.replace("""
+                      - { name: Order, kind: manyToOne, to: Order }
+                """, """
+                      - { name: Order, kind: manyToOne, to: Order }
+                      - { name: Status, kind: manyToOne, to: LedgerStatus, function: EntityStatus, init: 1 }
+                  - name: LedgerStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                """));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        generateFromModel("template-application-events-java/template/template.js", "postingtest.glue");
+        String posting = codeOf("gen/events/postingtest/OrderLedgerPosting.java");
+        assertTrue(posting.contains("if (!(target.Status != null && target.Status == 1)) {"),
+                "the rewrite must be gated on the created document still holding the status it was created in");
+        assertTrue(posting.contains("was NOT rewritten"), "a refused rewrite must be reported, never silent");
     }
 
     @Test
