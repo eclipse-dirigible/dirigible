@@ -654,6 +654,43 @@ class EdmIntentGeneratorTest {
         assertNull(entry.get("immutableStatusProperty"));
     }
 
+    /**
+     * A process {@code whenDeleted: refuse} lands on its TRIGGER entity as the guard the controller
+     * reads (dirigible #7074); the default ({@code abort}) is a listener and puts nothing on the
+     * entity.
+     */
+    @Test
+    void whenDeletedRefuseEmitsTheProcessDeleteGuardOnTheTriggerEntity() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: SalesOrder
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                processes:
+                  - name: OrderApproval
+                    trigger: { onCreate: SalesOrder }
+                    whenDeleted: refuse
+                    steps:
+                      - { name: confirm, kind: userTask, args: { assignee: manager, form: ConfirmOrder } }
+                      - { name: end, kind: end }
+                  - name: CustomerReview
+                    trigger: { onCreate: Customer }
+                    steps:
+                      - { name: review, kind: userTask, args: { assignee: manager, form: ReviewCustomer } }
+                      - { name: end, kind: end }
+                forms:
+                  - { name: ConfirmOrder, forEntity: SalesOrder, fields: [id], actions: [confirm] }
+                  - { name: ReviewCustomer, forEntity: Customer, fields: [id], actions: [review] }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        assertEquals("OrderApproval:Order Approval", entityByName(entities(model), "SalesOrder").get("processDeleteGuards"));
+        assertNull(entityByName(entities(model), "Customer").get("processDeleteGuards"));
+    }
+
     @Test
     void immutableWhenEmitsStatusGuardAttributes() {
         String yaml = """

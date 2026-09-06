@@ -27,6 +27,7 @@ public class ProcessIntent {
     private List<ProcessVarIntent> vars = new ArrayList<>();
     private List<StepIntent> steps = new ArrayList<>();
     private Map<String, Object> abortOn = new LinkedHashMap<>();
+    private String whenDeleted;
 
     public String getName() {
         return name;
@@ -84,5 +85,20 @@ public class ProcessIntent {
 
     public void setAbortOn(Map<String, Object> abortOn) {
         this.abortOn = abortOn == null ? new LinkedHashMap<>() : abortOn;
+    }
+
+    /**
+     * Optional {@code whenDeleted: abort | refuse} - what happens to the in-flight instance when the
+     * trigger entity's row is DELETED. {@code abort} (the default when omitted) cancels the instance so
+     * no Inbox task points at a row that is gone; {@code refuse} makes the REST delete answer 409 while
+     * the instance runs, so the document has to be completed or aborted first. Either way no task may
+     * outlive its row.
+     */
+    public String getWhenDeleted() {
+        return whenDeleted;
+    }
+
+    public void setWhenDeleted(String whenDeleted) {
+        this.whenDeleted = whenDeleted;
     }
 }

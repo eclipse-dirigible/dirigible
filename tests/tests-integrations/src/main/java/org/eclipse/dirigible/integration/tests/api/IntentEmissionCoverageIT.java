@@ -2439,6 +2439,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         && abortHandler.contains("ProcessStamps.idFor(entity.ProcessIds, \"ApprovalFlow\")")
                         && abortHandler.contains("Process.correlateMessageEvent(instance, \"ApprovalFlowAbort\""),
                 "the abort listener must match the status on -transitioned and abort ITS OWN instance, not whichever flow stamped last");
+        // ...and the row's DELETE retires the flow too (#7074): a listener on -deleted for every
+        // entity-triggered process, cancelling ITS OWN still-running instance, whether or not abortOn is
+        // declared - an Inbox task over a row that is gone opens an empty form and can still be completed.
+        String deleteAbort = contentOf("gen/events/emission/ApprovalFlowAbortOnDelete.java");
+        assertTrue(
+                deleteAbort.contains("-deleted") && deleteAbort.contains("ProcessStamps.idFor(entity.ProcessIds, \"ApprovalFlow\")")
+                        && deleteAbort.contains("Process.isRunning(instance)") && deleteAbort.contains("Process.cancel(instance,"),
+                "deleting the trigger row must cancel the process's own running instance");
 
         // ...and the follow-up flow on the same record (#6862) is a listener of its own, on the status
         // channel, guarding on ITS OWN name. Reading the record's single ProcessId here is what made the

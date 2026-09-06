@@ -50,8 +50,8 @@ class GlueGenerator {
 
     /** The names of the collections this generator handles. */
     private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
-            "aborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles",
-            "outbound", "stepEvents", "rollups", "expansions", "expansionCleanups", "settlements", "settlementListeners",
+            "aborts", "deleteAborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages",
+            "inboundFiles", "outbound", "stepEvents", "rollups", "expansions", "expansionCleanups", "settlements", "settlementListeners",
             "settlementCleanups", "generates", "generateEvents", "generateReopens", "transitions", "sends", "posts", "aggregates",
             "postings", "printFeeders", "snapshots", "numbering", "resolves");
 
@@ -98,6 +98,7 @@ class GlueGenerator {
             case "timerLoaders" -> each(collection, source, content, model, parameters, GlueGenerator::bindTimerLoader);
             case "waits" -> each(collection, source, content, model, parameters, GlueGenerator::bindWait);
             case "aborts" -> each(collection, source, content, model, parameters, GlueGenerator::bindAbort);
+            case "deleteAborts" -> each(collection, source, content, model, parameters, GlueGenerator::bindDeleteAbort);
             case "setters" -> each(collection, source, content, model, parameters, GlueGenerator::bindSetter);
             case "writers" -> each(collection, source, content, model, parameters, GlueGenerator::bindWriter);
             case "notifications" -> each(collection, source, content, model, parameters, GlueGenerator::bindNotification);
@@ -323,6 +324,19 @@ class GlueGenerator {
      */
     private static void bindAbort(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "process", "entity", "perspective", "messageName", "statusMatchExpression");
+        context.put("javaPerspective", sanitize(item, "perspective"));
+    }
+
+    /**
+     * Binds a delete-abort listener - the handler that cancels a process's own instance when the row it
+     * runs for is deleted.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindDeleteAbort(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "process", "entity", "perspective");
         context.put("javaPerspective", sanitize(item, "perspective"));
     }
 

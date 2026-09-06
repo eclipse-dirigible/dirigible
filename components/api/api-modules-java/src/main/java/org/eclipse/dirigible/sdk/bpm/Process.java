@@ -71,6 +71,18 @@ public final class Process {
         BpmFacade.deleteProcess(processInstanceId, reason);
     }
 
+    /**
+     * Whether the instance is still running - live in the runtime, not ended. The read a reaction asks
+     * before {@link #cancel(String, String)}, and the one a guard asks before refusing a write over a
+     * record a flow still works on. A blank, unknown or completed id is simply {@code false}.
+     *
+     * @param processInstanceId the instance to look up
+     * @return true while the instance is in flight
+     */
+    public static boolean isRunning(String processInstanceId) {
+        return BpmFacade.isProcessRunning(processInstanceId);
+    }
+
     public static Object getVariable(String processInstanceId, String variableName) {
         return BpmFacade.getVariable(processInstanceId, variableName);
     }

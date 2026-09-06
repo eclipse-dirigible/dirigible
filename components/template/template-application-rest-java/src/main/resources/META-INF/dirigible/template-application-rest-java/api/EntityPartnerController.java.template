@@ -209,6 +209,9 @@ public class ${name}PartnerController {
 #if($masterLock)
         requireMasterMutable(existing.${masterLock.fkProperty});
 #end
+#if($processDeleteGuards)
+        requireNoRunningProcess(existing);
+#end
         try {
             repository.deleteById(id);
         } catch (RuntimeException e) {
@@ -384,6 +387,25 @@ public class ${name}PartnerController {
         requirePeriodOpen(existing.${periodLock.dateProperty});
 #end
 #end
+    }
+#end
+#if($processDeleteGuards)
+
+    // Delete guard (intent process `whenDeleted: refuse`): while a flow this record started is still
+    // running, the record cannot be deleted - complete or abort the flow first, as on the power surface.
+    private void requireNoRunningProcess(${name}Entity existing) {
+        for (String guard : "${processDeleteGuards}".split(",")) {
+            String process = guard.substring(0, guard.indexOf(':'));
+            String label = guard.substring(guard.indexOf(':') + 1);
+            String instance = org.eclipse.dirigible.sdk.bpm.ProcessStamps.idFor(existing.ProcessIds, process);
+            if (instance == null && (existing.ProcessIds == null || existing.ProcessIds.isBlank())) {
+                instance = existing.ProcessId;
+            }
+            if (instance != null && !instance.isBlank() && org.eclipse.dirigible.sdk.bpm.Process.isRunning(instance)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "This ${name} is still in its " + label + " flow - complete or cancel it before deleting");
+            }
+        }
     }
 #end
 #if($immutableStatusProperty && !$immutableAlways)

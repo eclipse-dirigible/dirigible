@@ -108,6 +108,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> timerLoaders = buildTimerLoaders(model, settings);
         List<Map<String, Object>> waits = buildWaits(model, settings);
         List<Map<String, Object>> aborts = buildAborts(model, settings);
+        List<Map<String, Object>> deleteAborts = buildDeleteAborts(model, settings);
         List<Map<String, Object>> writers = buildWriters(model, settings);
         List<Map<String, Object>> setters = buildSetters(model, settings);
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings, context);
@@ -138,11 +139,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> numbering = NumberingSupport.buildNumbering(model, compositionParents);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && assignees.isEmpty() && timerLoaders.isEmpty()
-                && waits.isEmpty() && aborts.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty()
-                && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && inboundMessages.isEmpty() && inboundFiles.isEmpty()
-                && outbound.isEmpty() && stepEvents.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty()
-                && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty()
-                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty() && resolves.isEmpty()) {
+                && waits.isEmpty() && aborts.isEmpty() && deleteAborts.isEmpty() && writers.isEmpty() && setters.isEmpty()
+                && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty()
+                && inboundMessages.isEmpty() && inboundFiles.isEmpty() && outbound.isEmpty() && stepEvents.isEmpty() && rollups.isEmpty()
+                && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty()
+                && postings.isEmpty() && snapshots.isEmpty() && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty()
+                && sends.isEmpty() && resolves.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -155,6 +157,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("timerLoaders", timerLoaders);
         glue.put("waits", waits);
         glue.put("aborts", aborts);
+        glue.put("deleteAborts", deleteAborts);
         glue.put("writers", writers);
         glue.put("setters", setters);
         glue.put("notifications", notifications);
@@ -1611,6 +1614,29 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return aborts;
     }
 
+    /**
+     * One delete-abort listener per entity-triggered process: a {@code MessageHandler} on the trigger
+     * entity's {@code -deleted} topic that cancels this process's own in-flight instance (read from the
+     * deleted row's {@code ProcessIds} stamp) so no Inbox task points at a row that is gone (dirigible
+     * #7074). Fail-soft: no stamp or an instance already ended is a no-op.
+     */
+    private static List<Map<String, Object>> buildDeleteAborts(IntentModel model, IntentSettings settings) {
+        List<Map<String, Object>> aborts = new ArrayList<>();
+        for (ProcessAbortSupport.DeleteAbort abort : ProcessAbortSupport.deleteAborts(model)) {
+            if (!settings.shouldGenerate("deleteAborts", abort.process())) {
+                LOGGER.info("Settings opt-out: keeping existing handler for delete abort [{}] (not generated)",
+                        LoggedValue.of(abort.process()));
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("process", abort.process());
+            entry.put("entity", abort.entity());
+            entry.put("perspective", abort.perspective());
+            aborts.add(entry);
+        }
+        return aborts;
+    }
+
     /** Test hook: build the {@code triggers} glue collection without a repository. */
     static List<Map<String, Object>> buildTriggersForTest(IntentModel model) {
         IntentGenerationContext context =
@@ -1622,6 +1648,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /** Test hook: build the {@code aborts} glue collection without a repository. */
     static List<Map<String, Object>> buildAbortsForTest(IntentModel model) {
         return buildAborts(model, IntentSettings.parse("{}"));
+    }
+
+    /** Test hook: build the {@code deleteAborts} glue collection without a repository. */
+    static List<Map<String, Object>> buildDeleteAbortsForTest(IntentModel model) {
+        return buildDeleteAborts(model, IntentSettings.parse("{}"));
     }
 
     /** Test hook: build the {@code setters} glue collection without a repository. */
