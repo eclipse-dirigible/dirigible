@@ -82,9 +82,13 @@
                   <td x-h-table-cell>
                     <div class="vbox gap-1">
                       <span class="font-medium" x-text="$store.processTasks.taskLabel(task)"></span>
+                      <!-- What the task is ABOUT: the record's number, counterparty and total, resolved
+                           live from the locators the task carries. The BPM business key ('Ref 6', the
+                           record id) is shown only when there is no subject to read instead (#7077). -->
+                      <span x-show="$store.processTasks.subject(task)" class="text-sm" x-text="$store.processTasks.subject(task)"></span>
                       <span x-h-text.muted class="text-xs">
                         <span x-h-badge :data-variant="task.mine ? 'positive' : 'outline'" data-size="sm" x-text="task.mine ? T('application-core:shell.inbox.mine', 'Mine') : T('application-core:shell.inbox.available', 'Available')"></span>
-                        <span x-show="task.processInstanceBusinessKey" x-text="' · ' + T('application-core:shell.inbox.ref', 'Ref {{key}}', { key: task.processInstanceBusinessKey })"></span>
+                        <span x-show="task.processInstanceBusinessKey && !$store.processTasks.subject(task)" x-text="' · ' + T('application-core:shell.inbox.ref', 'Ref {{key}}', { key: task.processInstanceBusinessKey })"></span>
                         <span x-show="task.createTime" x-text="' · ' + fmtTime(task.createTime)"></span>
                       </span>
                     </div>
@@ -109,9 +113,10 @@
 
       <div x-show="selected" class="vbox size-full">
         <div x-h-toolbar data-variant="transparent">
-          <span x-h-toolbar-title x-text="selected ? $store.processTasks.taskLabel(selected) : ''"></span>
+          <span x-h-toolbar-title class="shrink-0" x-text="selected ? $store.processTasks.taskLabel(selected) : ''"></span>
+          <span x-show="selected && $store.processTasks.subject(selected)" x-h-text.muted class="text-sm truncate" x-text="selected ? $store.processTasks.subject(selected) : ''"></span>
           <div x-h-toolbar-spacer></div>
-          <span x-show="selected && selected.processInstanceBusinessKey" x-h-badge data-variant="information" x-text="selected ? T('application-core:shell.inbox.ref', 'Ref {{key}}', { key: selected.processInstanceBusinessKey }) : ''"></span>
+          <span x-show="selected && selected.processInstanceBusinessKey && !$store.processTasks.subject(selected)" x-h-badge data-variant="information" x-text="selected ? T('application-core:shell.inbox.ref', 'Ref {{key}}', { key: selected.processInstanceBusinessKey }) : ''"></span>
           <span x-h-badge :data-variant="selected && selected.mine ? 'positive' : 'outline'" x-text="selected && selected.mine ? T('application-core:shell.inbox.assignedToMe', 'Assigned to me') : T('application-core:shell.inbox.available', 'Available')"></span>
         </div>
 

@@ -16,6 +16,7 @@ import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceD
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessLabelKeys;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskActionData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskDTO;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskSubject;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.PrincipalType;
 import org.flowable.common.engine.api.FlowableObjectNotFoundException;
@@ -111,8 +112,31 @@ public class BpmInboxEndpoint extends BaseEndpoint {
                      dto.setNameKey(keys.taskNameKey(task.getTaskDefinitionKey()));
                      dto.setProcessDefinitionNameKey(keys.processNameKey());
                  });
+        dto.setSubject(subjectOf(task));
 
         return dto;
+    }
+
+    /**
+     * What the task is ABOUT, for a row that lists it away from the record's own application. A row
+     * used to read {@code Sales Invoice Approval - Approve - Ref 6} - the BPM business key, which
+     * defaults to the primary key - so an approver had to open every task to learn which customer and
+     * which amount they were approving (issue #7077). The generated trigger seeds the record's locators
+     * and the properties that identify it into the process variables; only those travel, and the client
+     * resolves their values live.
+     * <p>
+     * Best-effort: a task whose variables cannot be read is still listed, without a subject.
+     *
+     * @param task the task
+     * @return the subject locators, or null when the process declares none
+     */
+    private TaskSubject subjectOf(Task task) {
+        try {
+            return TaskSubject.from(bpmService.getTaskVariables(task.getId()));
+        } catch (RuntimeException ex) {
+            logger.debug("Could not read the variables of task [{}] - listing it without a subject", task.getId(), ex);
+            return null;
+        }
     }
 
     @GetMapping(value = "/tasks")

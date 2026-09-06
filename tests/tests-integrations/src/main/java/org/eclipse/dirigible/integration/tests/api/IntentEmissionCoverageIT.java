@@ -2305,6 +2305,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String claimTrigger = contentOf("gen/events/emission/ClaimConfirmTrigger.java");
         assertTrue(claimTrigger.contains("variables.put(\"__personalUser\""),
                 "the trigger listener must seed the __personalUser variable from the identity mapping");
+        // #7077: what a task of this process is ABOUT, for the row that lists it away from this
+        // application. The property NAMES travel - the label the record carries, its first major
+        // to-one, its leading list column - and the reader resolves their values live, so the line
+        // cannot state the total of a document whose lines are added after the process started. The
+        // role-restricted fields (`sensitive: rate`, `visibleTo: bonus`) are never among them.
+        assertTrue(claimTrigger.contains("variables.put(\"__subjectFields\", \"Name:text,Person:relation,Note:text\")"),
+                "the trigger listener must seed the properties a task row identifies its record by");
         // The assignee expression is evaluated when the task is created, INSIDE Process.start, so the
         // variable has to ride the start payload - a setVariable afterwards is too late (and, for a
         // process without a wait state, runs against an instance that already finished).

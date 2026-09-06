@@ -108,9 +108,12 @@ document.addEventListener('alpine:init', () => {
       const tasks = Alpine.store('processTasks');
       const name = tasks ? tasks.taskName(task) : (task.name || 'Task');
       const process = tasks ? tasks.processName(task) : (task.processDefinitionName || '');
+      // ... and WHICH record it is about, once the store has resolved it (#7077): "New task: Approve"
+      // says nothing about which invoice is waiting.
+      const subject = tasks ? tasks.subject(task) : '';
       return {
         title: window.T ? T('application-core:shell.notifications.newTask', 'New task: {{name}}', { name }) : 'New task: ' + name,
-        description: process,
+        description: subject && process ? process + ' · ' + subject : (subject || process),
       };
     },
   });

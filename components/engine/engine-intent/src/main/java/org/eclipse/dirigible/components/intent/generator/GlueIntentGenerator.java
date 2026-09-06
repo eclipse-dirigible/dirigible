@@ -247,6 +247,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // Per to-one relation: enough to build the target controller URL so the task form can resolve
             // each FK to a display name (the form falls back to the raw id when a URL is missing).
             trigger.put("relationLinks", buildRelationLinks(byName.get(entity), model, byName, compositionParents, context));
+            // What a task of this process is ABOUT, wherever it is listed away from its own
+            // application: the property names the reader resolves live against the record (#7077).
+            trigger.put("subjectFields", TaskSubjectSupport.subjectFields(byName.get(entity)));
             putPersonalAssignee(trigger, byName.get(entity), model, byName, compositionParents, context);
             triggers.add(trigger);
         }

@@ -122,6 +122,13 @@ public class ${process}Trigger implements MessageHandler {
         variables.put("__${rl.fkProperty}EntityUrl", "${rl.url}");
         variables.put("__${rl.fkProperty}EntityLabel", "${rl.labelField}");
 #end
+#if($subjectFields && $subjectFields != "")
+        // What a task of this process is ABOUT wherever it is listed away from this application (an
+        // Inbox row, a notification): the property NAMES only, never their values. The reader
+        // resolves them live against __entityUrl/__entityId - a subject minted here would state the
+        // total of a document whose lines are added after the process started.
+        variables.put("__subjectFields", "${subjectFields}");
+#end
 #if($personalFkProperty)
         // Personal task assignment: resolve the record's owner to the mapped login username BEFORE
         // starting - a task's `assignee: personal` expression evaluates at task creation, inside

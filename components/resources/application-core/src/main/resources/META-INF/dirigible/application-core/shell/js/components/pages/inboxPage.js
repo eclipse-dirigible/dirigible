@@ -61,7 +61,8 @@ document.addEventListener('alpine:init', () => {
       // Filter on what the row actually reads — the translated names — as well as the raw ones, so
       // typing what is on screen finds it in any language.
       const base = q
-        ? this.tasks.filter(t => [store.taskLabel(t), t.name, t.processDefinitionName, t.processInstanceBusinessKey, t.assignee]
+        ? this.tasks.filter(t => [store.taskLabel(t), store.subject(t), t.name, t.processDefinitionName,
+                                  t.processInstanceBusinessKey, t.assignee]
             .some(v => v && String(v).toLowerCase().includes(q)))
         : this.tasks;
       return this.sortByTime(base);

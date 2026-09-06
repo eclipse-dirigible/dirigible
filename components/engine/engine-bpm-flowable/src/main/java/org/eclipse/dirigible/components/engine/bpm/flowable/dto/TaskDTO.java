@@ -53,6 +53,9 @@ public class TaskDTO {
     /** The i18n key of the process' name, null when the process declares no catalog. */
     private String processDefinitionNameKey;
 
+    /** Where to read the business identity of the record the task is about; null when undeclared. */
+    private TaskSubject subject;
+
     /**
      * Gets the candidate users.
      *
@@ -275,6 +278,24 @@ public class TaskDTO {
      */
     public void setProcessDefinitionNameKey(String processDefinitionNameKey) {
         this.processDefinitionNameKey = processDefinitionNameKey;
+    }
+
+    /**
+     * Where a row listing this task reads what the task is ABOUT - the record's number, counterparty
+     * and total - instead of the bare business key. Locators only, resolved live by the reader; see
+     * {@link TaskSubject}.
+     *
+     * @return the subject locators, or null when the process declares none
+     */
+    public TaskSubject getSubject() {
+        return subject;
+    }
+
+    /**
+     * @param subject the subject locators of the record the task is about
+     */
+    public void setSubject(TaskSubject subject) {
+        this.subject = subject;
     }
 
 }

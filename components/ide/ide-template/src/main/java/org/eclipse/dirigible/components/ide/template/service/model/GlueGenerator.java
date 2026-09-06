@@ -181,7 +181,7 @@ class GlueGenerator {
      */
     private static void bindTrigger(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "process", "entity", "perspective", "keyProperty", "businessKeyProperty", "generateBusinessKey", "topicSuffix",
-                "guardExpression", "personalFkProperty", "personalIdentityProperty");
+                "guardExpression", "subjectFields", "personalFkProperty", "personalIdentityProperty");
         context.put("javaPerspective", sanitize(item, "perspective"));
         // The identity repository the listener resolves a personal task assignee through. A
         // cross-model target resolves against the owner model's generation folder.

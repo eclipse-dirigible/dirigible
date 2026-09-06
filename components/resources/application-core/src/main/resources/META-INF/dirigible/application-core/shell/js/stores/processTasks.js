@@ -23,6 +23,21 @@
  * The task form is opened in the app-wide dialog wired in index.html; on close the store re-fetches.
  */
 document.addEventListener('alpine:init', () => {
+  // Records already fetched while building subject lines, keyed by '<controller url>/<id>'. Deliberately
+  // outside the store: it is a request cache, not view state, and several tasks of the same document (or
+  // several documents of the same customer) must share one fetch rather than one each. Cleared by an
+  // explicit refresh(), which is what makes a manual Refresh authoritative while the 30s poll stays cheap.
+  const recordCache = new Map();
+
+  const fetchRecord = (url, id) => {
+    const key = url + '/' + id;
+    if (!recordCache.has(key)) {
+      recordCache.set(key, App.services.api.get(url + '/' + encodeURIComponent(id), { baseUrl: '' })
+        .catch(() => null));   // unreachable or not permitted: the subject simply omits what it cannot read
+    }
+    return recordCache.get(key);
+  };
+
   Alpine.store('processTasks', {
     byProcessId: {},
     tasks: [],          // flat list of all the user's tasks (assignee + groups) — the Inbox view
@@ -31,6 +46,7 @@ document.addEventListener('alpine:init', () => {
     formUrl: '',
     formTitle: '',
     formTitleKey: '',   // the open task's translation key; '' for a process that declares no catalog
+    subjects: {},       // taskId -> the resolved business-identity line; '' while unresolved or when there is none
     serverUnavailable: false,   // set once the backend is unreachable; stops the poll until a reload
     _poll: null,
 
@@ -53,9 +69,16 @@ document.addEventListener('alpine:init', () => {
       // store (serverUnavailable back to false) and resumes.
       if (this.serverUnavailable) return;
       try {
+        // A personal shell (`taskScope: 'assignee'`) serves strictly the person's own work, so it asks
+        // only for the tasks assigned to them. The back-office group queues a user's ROLES make them a
+        // candidate for - Credit Note Confirm, Journal Entry Post - belong to the back-office shell;
+        // listing them next to an employee's own Submit tasks made the Personal Inbox a second, wider
+        // back office (#7077). The scope is a display choice: the server gates every task either way.
+        const personalOnly = (window.App && App.config && App.config.taskScope) === 'assignee';
         const [mine, groups] = await Promise.all([
           App.services.api.get('/services/inbox/tasks?type=assignee&limit=100', { baseUrl: '' }),
-          App.services.api.get('/services/inbox/tasks?type=groups&limit=100', { baseUrl: '' }),
+          personalOnly ? Promise.resolve([])
+            : App.services.api.get('/services/inbox/tasks?type=groups&limit=100', { baseUrl: '' }),
         ]);
         const map = {};
         const flat = [];
@@ -74,6 +97,7 @@ document.addEventListener('alpine:init', () => {
         this.tasks = flat;
         this.loaded = true;
         this.loadTaskLabelCatalogs(flat);
+        this.resolveSubjects(flat);
         // Surface the user's actionable tasks in the shell's notification bell.
         const notifications = Alpine.store('notifications');
         if (notifications && notifications.syncTasks) notifications.syncTasks(flat);
@@ -96,7 +120,72 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    refresh() { return this.load(); },
+    // An explicit refresh re-reads the records the subject lines are built from; the periodic poll only
+    // resolves the tasks it has not seen yet, so a shell sitting open does not re-fetch every document
+    // every 30 seconds.
+    refresh() {
+      recordCache.clear();
+      this.subjects = {};
+      return this.load();
+    },
+
+    /**
+     * The business identity of the record a task is about - the document's number, its counterparty and
+     * its total - for the row that lists the task away from its own application. Before this, a row
+     * carried only the BPM business key ('Ref 6', the record id), so the approver had to open every task
+     * to learn what they were approving (#7077).
+     *
+     * The task carries LOCATORS, not values (see the TaskSubject DTO): the record's REST URL and the
+     * properties that identify it. They are resolved here, live, the same way the task form resolves the
+     * record it edits - a subject stamped when the process started would state the total of a document
+     * whose lines are added afterwards.
+     */
+    subject(task) {
+      return (task && this.subjects[task.id]) || '';
+    },
+
+    async resolveSubjects(tasks) {
+      const current = new Set(tasks.map((t) => t.id));
+      Object.keys(this.subjects).forEach((id) => { if (!current.has(id)) delete this.subjects[id]; });
+      const pending = tasks.filter((t) => t.subject && this.subjects[t.id] === undefined);
+      if (!pending.length) return;
+      await Promise.all(pending.map((t) => this.resolveSubject(t)));
+      // The bell bakes an item's text in when it arrives, so it is re-titled once the subjects are in.
+      const notifications = Alpine.store('notifications');
+      if (notifications && notifications.syncTasks) notifications.syncTasks(this.tasks);
+    },
+
+    async resolveSubject(task) {
+      this.subjects[task.id] = '';   // claim it, so a concurrent load does not resolve the same task twice
+      try {
+        const declared = task.subject;
+        const record = await fetchRecord(declared.url, declared.id);
+        if (!record) return;
+        const parts = [];
+        for (const field of declared.fields) {
+          const value = await this.subjectPart(field, record[field.property]);
+          if (value) parts.push(value);
+        }
+        this.subjects[task.id] = parts.join(' · ');
+      } catch (e) {
+        console.warn('processTasks: unable to resolve the subject of task ' + task.id, e);
+      }
+    },
+
+    // One property of a subject line, rendered the way the record's own application renders it.
+    async subjectPart(field, value) {
+      if (value === null || value === undefined || value === '') return '';
+      if (field.kind === 'relation') {
+        const related = await fetchRecord(field.url, value);
+        const label = related && related[field.label];
+        return label === null || label === undefined || label === '' ? '' : String(label);
+      }
+      if (!window.HarmoniaFormat) return String(value);
+      if (field.kind === 'number') return HarmoniaFormat.number(value, null, '');
+      if (field.kind === 'integer') return HarmoniaFormat.number(value, '0', '');
+      if (field.kind === 'date') return HarmoniaFormat.value(value, true);
+      return String(value);
+    },
 
     // A task names its own translation key ('<project>:<model>-model.processes.<task>', minted into
     // the process definition at generation time), and the module that raised it is not necessarily
