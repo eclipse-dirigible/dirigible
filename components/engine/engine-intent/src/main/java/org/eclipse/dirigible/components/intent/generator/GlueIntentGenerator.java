@@ -1067,6 +1067,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("fromItemPerspective", crossModelSource ? CrossModelSupport.resolve(context, fromUses, items.getFrom())
                                                                                  .perspectiveName()
                         : IntentEntities.resolvePerspective(items.getFrom(), compositionParents, model));
+                // The source line's own key, so a line the target refuses is reported with the row it came
+                // from ("... from EmployeeTimesheet [7]") instead of the target property alone - which of a
+                // hundred lines is missing a value is the whole question the caller has (#7069).
+                e.put("fromItemPk", crossModelSource ? CrossModelSupport.resolve(context, fromUses, items.getFrom())
+                                                                        .keyField()
+                        : IntentEntities.keyFieldName(byName.get(items.getFrom())));
                 // A document child's FK back to its master is, by convention, the master entity's name.
                 e.put("srcFkProperty", IntentNaming.pascalCase(g.getFrom()));
                 e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
@@ -1115,6 +1121,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("fromItemEntity", "");
                 e.put("toItemEntity", itemEntityName);
                 e.put("fromItemPerspective", "");
+                e.put("fromItemPk", "");
                 e.put("srcFkProperty", "");
                 e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
                 e.put("itemFieldAssignments", new ArrayList<>());
@@ -1129,6 +1136,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("fromItemEntity", "");
                 e.put("toItemEntity", "");
                 e.put("fromItemPerspective", "");
+                e.put("fromItemPk", "");
                 e.put("srcFkProperty", "");
                 e.put("toFkProperty", "");
                 e.put("itemFieldAssignments", new ArrayList<>());
