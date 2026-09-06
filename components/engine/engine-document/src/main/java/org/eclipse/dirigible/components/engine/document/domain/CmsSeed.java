@@ -10,14 +10,14 @@
 package org.eclipse.dirigible.components.engine.document.domain;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
-import jakarta.persistence.Basic;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 /**
@@ -43,9 +43,19 @@ public class CmsSeed extends Artefact {
     @Column(name = "CMS_SEED_PATH", length = 1020)
     private String cmsPath;
 
-    /** The raw file content (kept so the seed phase does not re-read the repository). */
-    @Lob
-    @Basic
+    /**
+     * The raw file content (kept so the seed phase does not re-read the repository).
+     * <p>
+     * Mapped as inline binary, deliberately NOT as a {@code @Lob}. It renders {@code bytea} on
+     * PostgreSQL and leaves H2 ({@code blob}) and SQL Server ({@code varbinary(max)}) with the column
+     * they already have, so no deployed schema but PostgreSQL's has anything to migrate. On PostgreSQL
+     * Hibernate maps a {@code @Lob byte[]} to an {@code oid} large object, and pgjdbc's large-object
+     * API refuses to run in auto-commit mode - which is exactly how the synchronization thread reads
+     * and writes this row, so every seed save failed there with "Large Objects may not be used in
+     * auto-commit mode". Seed content is a single file's bytes; it belongs in the row, not in a
+     * side-table of large objects.
+     */
+    @JdbcTypeCode(SqlTypes.LONG32VARBINARY)
     @Column(name = "CMS_SEED_CONTENT")
     private byte[] content;
 

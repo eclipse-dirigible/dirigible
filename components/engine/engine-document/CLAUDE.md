@@ -79,9 +79,17 @@ formats in the form money pattern `### ### ### ##0.00`).
   `IOException` `getObjectByPath` throws (logged at DEBUG with the throwable). Writes go through the
   raw engine-cms interfaces (`CmisSessionFactory.getSession()`), which bypass CMS role checks —
   correct for a server-side seeder, same as `data-processes`' `BaseExportTask`.
-- `CmsSeed` stores the raw content in a `CMS_SEED_CONTENT` BLOB (bytes, so binary seeds work) plus
-  the target `CMS_SEED_PATH`, so the seeding phase does
-  not re-read the repository.
+- `CmsSeed` stores the raw content in a `CMS_SEED_CONTENT` binary column (bytes, so binary seeds
+  work) plus the target `CMS_SEED_PATH`, so the seeding phase does not re-read the repository.
+  **The column is `@JdbcTypeCode(SqlTypes.LONG32VARBINARY)`, never `@Lob`.** A `@Lob byte[]` is an
+  `oid` large object on PostgreSQL, and pgjdbc refuses the large-object API on an auto-commit
+  connection — which is exactly the connection `parseImpl` reads and saves the seed on — so every
+  seed save on a PostgreSQL SystemDB failed with "Large Objects may not be used in auto-commit
+  mode", silently: the failure is in `parseImpl`, before the artefact has a lifecycle, so nothing
+  ever shows up as an artefact in error (#7059). The mapping renders `bytea` on PostgreSQL and
+  leaves H2 (`blob`) and MSSQL (`varbinary(max)`) exactly as they were;
+  `CmsSeedContentMappingTest` pins all three, and the changelog's
+  `convert-DIRIGIBLE_CMS_SEEDS_CMS_SEED_CONTENT-to-bytea` converts an already-created `oid` column.
 
 ## Images in a template (`PrintImageResolver`)
 

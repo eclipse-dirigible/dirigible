@@ -9906,6 +9906,38 @@
           }
         ]
       }
+    },
+    {
+      "changeSet": {
+        "id": "convert-DIRIGIBLE_CMS_SEEDS_CMS_SEED_CONTENT-to-bytea",
+        "author": "dirigible",
+        "comment": "The seed content was a @Lob byte[], which PostgreSQL renders as an oid large object - and pgjdbc refuses the large-object API on the auto-commit connection the synchronization thread saves seeds on, so every seed save failed there. The column is inline bytea now; deployments that already created it as oid are converted here, the large objects are unlinked, and one whose large object is already gone converts to NULL (the next synchronization re-reads the file).",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "dbms": {
+              "type": "postgresql"
+            }
+          },
+          {
+            "sqlCheck": {
+              "expectedResult": "1",
+              "sql": "SELECT count(*) FROM information_schema.columns WHERE lower(table_name) = 'dirigible_cms_seeds' AND lower(column_name) = 'cms_seed_content' AND lower(data_type) = 'oid'"
+            }
+          }
+        ],
+        "changes": [
+          {
+            "sql": {
+              "dbms": "postgresql",
+              "splitStatements": true,
+              "sql": "CREATE TEMPORARY TABLE DIRIGIBLE_CMS_SEEDS_LOBS AS SELECT CMS_SEED_CONTENT AS LOB_OID FROM DIRIGIBLE_CMS_SEEDS WHERE CMS_SEED_CONTENT IS NOT NULL;\nUPDATE DIRIGIBLE_CMS_SEEDS SET CMS_SEED_CONTENT = NULL WHERE CMS_SEED_CONTENT IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_largeobject_metadata m WHERE m.oid = CMS_SEED_CONTENT);\nALTER TABLE DIRIGIBLE_CMS_SEEDS ALTER COLUMN CMS_SEED_CONTENT TYPE bytea USING (CASE WHEN CMS_SEED_CONTENT IS NULL THEN NULL ELSE lo_get(CMS_SEED_CONTENT) END);\nSELECT lo_unlink(m.oid) FROM pg_largeobject_metadata m JOIN DIRIGIBLE_CMS_SEEDS_LOBS l ON l.LOB_OID = m.oid;\nDROP TABLE DIRIGIBLE_CMS_SEEDS_LOBS;"
+            }
+          }
+        ]
+      }
     }
   ]
 }
