@@ -6818,9 +6818,66 @@ public final class IntentParser {
                 validateMapTarget(crossModel || items.getTo() == null ? null : byName.get(items.getTo()), items.getMap(),
                         "generates [" + name + "]", "items map", issues);
             }
+            validateGeneratesFromStatus(g, name, byName, crossModelSource, issues);
             validateGeneratesItemLines(g, name, source, byName, model.getEntities(), crossModel, issues);
             validateGeneratesPrompt(g, name, byName, crossModel, issues);
             validateGeneratesReopen(g, name, byName, crossModel, model, issues);
+        }
+    }
+
+    /**
+     * Validate the from-status guard of a create-from (issue #7068): the statuses the SOURCE may stand
+     * in for the action to run at all.
+     *
+     * <p>
+     * It is refused where it could not be evaluated or could not mean anything: a source with no
+     * {@code function: EntityStatus} relation has no column to read, a {@code page}-scoped action has
+     * no record to read it from, and an allow-list containing the {@code sourceStatus} the action
+     * itself writes re-opens exactly the duplicate the guard exists to refuse - the second click would
+     * find the source in an allowed status again and mint a second document.
+     */
+    private static void validateGeneratesFromStatus(GeneratesIntent g, String name, Map<String, EntityIntent> byName,
+            boolean crossModelSource, List<String> issues) {
+        if (!g.hasFromStatus()) {
+            return;
+        }
+        if (!"entity".equals(g.getScope())) {
+            issues.add("generates [" + name + "] declares fromStatus but its scope is [" + g.getScope()
+                    + "] - a status guard reads the status of the record the action runs on, and a page-scoped action has none");
+        }
+        if (!g.hasButton()) {
+            issues.add("generates [" + name + "] declares fromStatus but contributes no button (it is event-driven only)"
+                    + " - the guard is on the click; qualify the moment with the event's when: guard instead,"
+                    + " or add button: true to keep the click and its guard");
+        }
+        for (Integer status : g.getFromStatus()) {
+            if (status == null) {
+                issues.add("generates [" + name + "] fromStatus has an empty entry - list the status seed ids (or their seeded names)"
+                        + " the source may stand in");
+            }
+        }
+        if (g.getSourceStatus() != null && g.getFromStatus()
+                                            .contains(g.getSourceStatus())) {
+            issues.add("generates [" + name + "] lists its own sourceStatus [" + g.getSourceStatus()
+                    + "] among the allowed fromStatus values - the completion hook moves the source there once the target exists,"
+                    + " so allowing it back is a second document from the same source; drop it from fromStatus");
+        }
+        if (crossModelSource) {
+            return; // the source's relations live in the owner .model - resolved at generation time
+        }
+        EntityIntent from = g.getFrom() == null ? null : byName.get(g.getFrom());
+        if (from == null) {
+            return; // the bad reference is already reported
+        }
+        boolean hasStatus = false;
+        for (RelationIntent relation : from.getRelations()) {
+            if (relation.isEntityStatus()) {
+                hasStatus = true;
+            }
+        }
+        if (!hasStatus) {
+            issues.add("generates [" + name + "] fromStatus requires the from entity [" + g.getFrom()
+                    + "] to declare a function: EntityStatus relation");
         }
     }
 

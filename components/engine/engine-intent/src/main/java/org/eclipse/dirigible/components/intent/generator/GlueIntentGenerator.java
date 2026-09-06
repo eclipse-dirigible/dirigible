@@ -1017,6 +1017,18 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     }
                 }
             }
+            // The from-status guard (issue #7068): the click is refused with 409 unless the source
+            // stands in a status the action accepts. Its property is the source's status FK, which the
+            // completion hook resolved above when it declared one - otherwise resolve it here, because
+            // an authored `fromStatus:` needs it with no hook in sight.
+            String guardStatusProperty =
+                    sourceStatusProperty.isEmpty() ? GeneratesGuardSupport.statusProperty(g, model, context) : sourceStatusProperty;
+            GeneratesGuardSupport.Guard guard = GeneratesGuardSupport.of(g, guardStatusProperty);
+            e.put("hasStatusGuard", guard != null);
+            e.put("guardStatusProperty", guard == null ? "" : guard.statusProperty());
+            e.put("guardStatusExpr", guard == null ? "" : guard.expression());
+            e.put("guardStatusText", guard == null ? "" : guard.text(g.getFrom()));
+            e.put("guardStatuses", guard == null ? "" : guard.statuses());
             e.put("sourceStatusProperty", sourceStatusProperty);
             e.put("sourceStatusValue",
                     g.getSourceStatus() == null || sourceStatusProperty.isEmpty() ? "" : String.valueOf(g.getSourceStatus()));

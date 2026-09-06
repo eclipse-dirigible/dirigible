@@ -307,6 +307,68 @@ class GlueGeneratesTest {
         assertEquals("Status", g.get("sourceStatusProperty"));
         assertEquals("3", g.get("sourceStatusValue"));
         assertEquals("Proforma", g.get("fromPerspective"));
+
+        // ...and the completion hook IMPLIES the from-status guard (issue #7068): a proforma already
+        // standing at the status the hook writes has been invoiced, so the endpoint refuses the run.
+        assertEquals(true, g.get("hasStatusGuard"));
+        assertEquals("Status", g.get("guardStatusProperty"));
+        assertEquals("currentStatus != 3", g.get("guardStatusExpr"));
+        assertEquals("3", g.get("guardStatuses"));
+    }
+
+    @Test
+    void authoredFromStatusBecomesTheAllowList() {
+        IntentModel model = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: ProformaStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Proforma
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: ProformaStatus, function: EntityStatus, init: 1 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                generates:
+                  - name: invoice-from-proforma
+                    from: Proforma
+                    to: Invoice
+                    forEntity: Proforma
+                    fromStatus: [CONFIRMED]
+                    sourceStatus: INVOICED
+                seeds:
+                  - name: proforma-statuses
+                    entity: ProformaStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: CONFIRMED }
+                      - { id: 3, name: INVOICED }
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+
+        // The authored list wins over the implied deny-list, and the names are seed ids by now.
+        assertEquals(true, g.get("hasStatusGuard"));
+        assertEquals("currentStatus == 2", g.get("guardStatusExpr"));
+        assertEquals("2", g.get("guardStatuses"));
+        assertTrue(String.valueOf(g.get("guardStatusText"))
+                         .contains("allowed only from status [2]"));
+    }
+
+    @Test
+    void aCreateFromWithNoStatusAtAllKeepsNoGuard() {
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(YAML))
+                                                   .get(0);
+
+        assertEquals(false, g.get("hasStatusGuard"));
+        assertEquals("", g.get("guardStatusExpr"));
     }
 
     @SuppressWarnings("unchecked")

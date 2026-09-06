@@ -28,7 +28,8 @@
  *
  * It is a global Alpine store so every generated view reads it the same way:
  *   $store.customActions.getActions(perspective, view, 'page')    -> the view's toolbar actions
- *   $store.customActions.getActions(perspective, view, 'entity')  -> the view's per-record actions
+ *   $store.customActions.getActions(perspective, view, 'entity', record) -> the view's per-record actions,
+ *                                                                  minus those the record's status bars
  *   $store.customActions.trigger(action, id)                      -> open the action page in the
  *                                                                    app-wide dialog (an entity action
  *                                                                    passes the record id as ?id=)
@@ -133,11 +134,37 @@ document.addEventListener('alpine:init', () => {
     // is 'page' (a toolbar action on the whole view; matches page or an unset type) or 'entity' (a
     // per-record action). Contributors set `view`/`type` on the descriptor (a `perspective` field, if
     // present, stays informational). The list arrives already order-sorted from the endpoint.
-    getActions(view, type) {
+    // An entity action may carry a `guard` - the statuses of the record it is offered on (issue
+    // #7068). Pass the selected record as `record` and a guarded action disappears while the record
+    // stands in a status it would refuse: a proforma already INVOICED stops carrying a live "Generate
+    // Invoice" button. The record is optional, so a caller that has none (a page action, a shell that
+    // never loaded the row) sees exactly what it saw before - the generated controller's 409 is the
+    // contract, this only stops offering the click.
+    getActions(view, type, record) {
       return (this.actions || []).filter((a) =>
         a && a.view === view &&
         (type === 'entity' ? a.type === 'entity'
-                           : (a.type === 'page' || a.type === undefined || a.type === null)));
+                           : (a.type === 'page' || a.type === undefined || a.type === null)) &&
+        this.isAvailable(a, record));
+    },
+
+    // Whether a guarded action is offered on this record. An absent guard, an absent record or a
+    // record carrying no value for the guarded property all leave the action visible - hiding a
+    // button on a value we do not have is how an action vanishes for no reason the user can see.
+    isAvailable(action, record) {
+      const guard = action && action.guard;
+      if (!guard || !guard.property || !record) return true;
+      const raw = record[guard.property];
+      if (raw === null || raw === undefined || raw === '') return true;
+      const current = Number(raw);
+      if (Number.isNaN(current)) return true;
+      if (Array.isArray(guard.allowed) && guard.allowed.length) {
+        return guard.allowed.some((s) => Number(s) === current);
+      }
+      if (Array.isArray(guard.blocked) && guard.blocked.length) {
+        return !guard.blocked.some((s) => Number(s) === current);
+      }
+      return true;
     },
 
     // Trigger a contributed action. Two flavours, decided by the descriptor:

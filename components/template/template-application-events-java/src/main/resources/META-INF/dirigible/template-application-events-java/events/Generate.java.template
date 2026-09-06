@@ -11,7 +11,7 @@ import org.eclipse.dirigible.sdk.utils.Json;
 #if($hasItemLines)
 import org.eclipse.dirigible.sdk.utils.Calc;
 #end
-#if($hasPrompt)
+#if($hasPrompt || $hasStatusGuard)
 import org.eclipse.dirigible.sdk.http.Response;
 #end
 
@@ -52,6 +52,15 @@ import org.eclipse.dirigible.sdk.http.Response;
  * one source is a legitimate manual act.
 #end
 #end
+#if($hasStatusGuard)
+ *
+ * From-status guard (intent `fromStatus:`, or the one implied by `sourceStatus:` - issue #7068): the
+ * endpoint refuses the run with 409 unless the source stands in a status the action accepts
+ * [${guardStatuses}], and the contributed button stops offering itself in the others. A create-from
+ * with a completion hook flips its source and then went on offering the same button on the flipped
+ * record, so a second click minted a second document - another invoice for a proforma already invoiced.
+ * The guard is on the CLICK: an event-driven run carries its own at-most-once back-reference guard.
+#end
  */
 #if(!$eventOnly)
 @Controller
@@ -83,6 +92,21 @@ public class ${className}Generate {
             return "{\"error\": \"missing required input [${p.prop}]\"}";
         }
 #end
+#end
+#if($hasStatusGuard)
+        // The from-status guard, asked BEFORE anything is created and only on this path: the click.
+        // Calc reads the status FK with the calculated-field semantics (null -> 0, never a seed id).
+        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity guarded =
+                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(req.id);
+        if (guarded == null) {
+            Response.setStatus(404);
+            return "{\"error\": \"source ${fromEntity} not found\"}";
+        }
+        int currentStatus = org.eclipse.dirigible.sdk.utils.Calc.eval("${guardStatusProperty}", guarded, 0).intValue();
+        if (!(${guardStatusExpr})) {
+            Response.setStatus(409);
+            return "{\"error\": \"${name} ${guardStatusText} - current status is [" + currentStatus + "]\"}";
+        }
 #end
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved = create(req.id#if($hasPrompt), req.values#end);
         if (saved == null) {

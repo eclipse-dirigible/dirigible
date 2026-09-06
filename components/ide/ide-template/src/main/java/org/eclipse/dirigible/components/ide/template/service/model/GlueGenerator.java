@@ -648,7 +648,12 @@ class GlueGenerator {
                 "hasReopen", "reopenStatusValue", "reopenRetiredCondition", "toPerspective",
                 // The declared input form (issue #6685): the prompted target properties with their
                 // pre-rendered value conversions - the template renders one block per entry.
-                "hasPrompt", "promptFields");
+                "hasPrompt", "promptFields",
+                // The from-status guard (issue #7068): the pre-rendered boolean over an int
+                // currentStatus local, the status FK it reads and the human half of the 409. Gated on
+                // the boolean - a .glue written before these keys existed carries none and renders the
+                // unguarded run() it always had.
+                "hasStatusGuard", "guardStatusProperty", "guardStatusExpr", "guardStatusText", "guardStatuses");
         // The topic the listener binds is the glue's to state and the template's to emit verbatim - but
         // a .glue written before the step axis (issue #6800) carries no suffix at all, and a bare
         // reference renders as its own literal into a destination nothing ever publishes on. An absent

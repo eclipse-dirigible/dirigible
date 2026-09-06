@@ -3124,11 +3124,27 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(flip < save, "the source flip must precede the target save, got flip@" + flip + " save@" + save);
         assertTrue(save < publish, "the -transitioned publish must follow the target save, got save@" + save + " publish@" + publish);
 
+        // The completion hook also IMPLIES the from-status guard (#7068): a Proforma already standing
+        // at the status the hook writes has been invoiced, so a second click - or a second POST to the
+        // endpoint - is refused with 409 instead of minting a second invoice for the same customer.
+        assertTrue(generate.contains("Calc.eval(\"Status\", guarded, 0).intValue()"),
+                "the run endpoint must read the source's status before creating anything");
+        assertTrue(generate.contains("if (!(currentStatus != 3))"), "the implied guard is the completion hook's own status");
+        assertTrue(generate.contains("Response.setStatus(409)"), "a barred status must be refused with 409");
+        // BEFORE the create: a guard that runs after the document exists is not a guard.
+        assertTrue(generate.indexOf("Response.setStatus(409)") < generate.indexOf("= create(req.id"),
+                "the status guard must be asked before the create-from runs");
+
         // The custom-action BUTTON localizes like every other label: the descriptor carries the
         // model-catalog translation key (the renderer shows T(translation.key, label)), and the
         // label lands in the generated en catalog's actions section - hardcoded-English Void /
         // Save-as-Template buttons on an otherwise translated app were the reported defect.
         String descriptor = contentOf("invoice-from-proforma-generate-action.js");
+        // ...and carries the same guard, so the button stops offering itself on an invoiced Proforma
+        // instead of leading the user into the 409 (#7068).
+        assertTrue(
+                descriptor.contains("\"guard\"") && descriptor.contains("\"property\": \"Status\"") && descriptor.contains("\"blocked\""),
+                "the action descriptor must carry the from-status guard, got: " + descriptor);
         assertTrue(descriptor.contains("\"translation\"") && descriptor.contains(PROJECT + ":proforma-model.actions.invoice-from-proforma"),
                 "the action descriptor must carry the model-catalog translation key, got: " + descriptor);
         generateFromModel("template-application-ui-harmonia-java/template/template.js", "proforma.model");

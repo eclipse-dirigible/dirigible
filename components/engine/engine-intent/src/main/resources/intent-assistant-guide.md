@@ -1683,6 +1683,10 @@ generates:
       map:
         Description: Description
         Amount: Amount
+    fromStatus: [CONFIRMED]        # optional guard: the SOURCE statuses the action may run from
+                                   # (409 + the button hides elsewhere). A declared sourceStatus
+                                   # IMPLIES this guard against itself - no second invoice from an
+                                   # already-invoiced proforma.
     sourceStatus: 3                # optional completion hook: the SOURCE's EntityStatus seed id
                                    # after the target is created (e.g. proforma -> INVOICED)
     sourceStatusOnRetire: 2        # optional INVERSE of that hook: where the SOURCE returns when the

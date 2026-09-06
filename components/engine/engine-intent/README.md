@@ -493,6 +493,7 @@ generates:
     map: { Customer: Customer }
     defaults: { InvoiceDate: now }
     items: { from: ProjectTimesheetItem, to: SalesInvoiceItem, map: { Description: Description } }
+    fromStatus: [2]                   # optional guard: the SOURCE statuses the action may run from
     sourceStatus: 3                   # optional completion hook: the SOURCE's EntityStatus after creation
     sourceStatusOnRetire: 2           # optional INVERSE: where the SOURCE returns when the target is retired
 ```
@@ -516,6 +517,16 @@ Adds a button on the source view; the clone saves through the target's repositor
 status init and calculated fields fire. `sourceStatus:` flips the SOURCE to the given EntityStatus
 seed id once the target exists (proforma -> INVOICED) - a system write: no `-updated` re-fire, but
 the source's `-transitioned` topic is published.
+
+`fromStatus:` (#7068) guards the CLICK: the endpoint answers **409** and the button stops offering
+itself unless the source stands in one of the listed statuses (seeded names or ids) - the `from:` of a
+`transitions:` entry, spelled differently only because `from:` here already names the source ENTITY.
+Declaring `sourceStatus:` and no `fromStatus:` IMPLIES the guard against exactly that status: a source
+already standing where the completion hook put it has been generated from, and a second click used to
+mint a second document (another invoice for an already-invoiced proforma, in the customer's hands). It
+is refused where it cannot mean anything - a `page` scope, a source with no `function: EntityStatus`
+relation, an event-only create-from (guard the moment with `event.when:`), and an allow-list that
+contains the `sourceStatus` the action itself writes.
 
 `event: { onTransition: <Source>, when: "Status == <status>" }` (or `onCreate`, or a process step)
 mints the target with nobody clicking; the `map:` entry copying the source's key is then the

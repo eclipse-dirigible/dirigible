@@ -279,10 +279,10 @@ final class StatusSymbolResolver {
 
     /**
      * Every status a create-from names, all three on the SOURCE's nomenclature: the {@code event} guard
-     * it qualifies on (issue #6711, exactly as a posting's does), the {@code sourceStatus} completion
-     * hook it flips to once the target exists, and the {@code sourceStatusOnRetire} the retirement of
-     * that target returns it to (issue #6868). The source is {@code from:}, owned by {@code fromUses:}
-     * when it is not local.
+     * it qualifies on (issue #6711, exactly as a posting's does), the {@code fromStatus} guard the
+     * click has to satisfy (issue #7068), the {@code sourceStatus} completion hook it flips to once the
+     * target exists, and the {@code sourceStatusOnRetire} the retirement of that target returns it to
+     * (issue #6868). The source is {@code from:}, owned by {@code fromUses:} when it is not local.
      */
     private void rewriteGenerates(Map<?, ?> root) {
         for (Object node : asList(root.get("generates"))) {
@@ -297,6 +297,7 @@ final class StatusSymbolResolver {
             if (event != null && event.get("when") != null) {
                 rewriteWhen(event, statusRelationName(source), status, subject + " event when");
             }
+            putResolvedList(generate, "fromStatus", status, subject + " fromStatus");
             putResolved(generate, "sourceStatus", status, subject + " sourceStatus");
             putResolved(generate, "sourceStatusOnRetire", status, subject + " sourceStatusOnRetire");
         }

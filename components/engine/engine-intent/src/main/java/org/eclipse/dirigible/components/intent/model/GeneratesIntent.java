@@ -188,6 +188,27 @@ public class GeneratesIntent {
      */
     private Integer sourceStatusOnRetire;
 
+    /**
+     * Optional guard on the SOURCE's own status (issue #7068): the create-from is refused (409) when
+     * the source record does not currently stand in one of these {@code EntityStatus} seed ids - the
+     * {@code from:} of a {@link TransitionIntent}, spelled {@code fromStatus} here because
+     * {@link #from} already names the source ENTITY.
+     *
+     * <p>
+     * When it is absent but {@link #sourceStatus} is declared, the guard is IMPLIED and refuses the one
+     * state that is certainly wrong: a source already standing at its post-generation status has
+     * already been generated from, so a second click - or a second POST to the endpoint - would mint a
+     * duplicate document (a second invoice for the same proforma). The completion hook declares the
+     * "already done" status; nothing about it said the action was finished, which is why the button
+     * kept working and kept charging the customer twice.
+     *
+     * <p>
+     * It gates the CLICK, not the event trigger: an event-driven create-from carries its own
+     * at-most-once back-reference guard (or asks for a row per event with {@code mode: append}), and
+     * qualifies its moment with the {@code event.when} status guard.
+     */
+    private List<Integer> fromStatus;
+
     /** Target property -> source property (a field or to-one relation name of {@link #from}). */
     private Map<String, String> map = new LinkedHashMap<>();
 
@@ -365,6 +386,19 @@ public class GeneratesIntent {
 
     public void setSourceStatus(Integer sourceStatus) {
         this.sourceStatus = sourceStatus;
+    }
+
+    public List<Integer> getFromStatus() {
+        return fromStatus;
+    }
+
+    public void setFromStatus(List<Integer> fromStatus) {
+        this.fromStatus = fromStatus;
+    }
+
+    /** Whether an explicit list of allowed SOURCE statuses is declared (see {@link #fromStatus}). */
+    public boolean hasFromStatus() {
+        return fromStatus != null && !fromStatus.isEmpty();
     }
 
     public Integer getSourceStatusOnRetire() {

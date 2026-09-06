@@ -14,6 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
+
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.junit.jupiter.api.Test;
@@ -1078,6 +1080,67 @@ class GeneratesIntentTest {
         assertTrue(ex.getIssues()
                      .stream()
                      .anyMatch(i -> i.contains("prompt")),
+                "got: " + ex.getIssues());
+    }
+
+    /**
+     * The explicit half of the from-status guard (issue #7068): the statuses the source may stand in
+     * for the create-from to run, named rather than numbered.
+     */
+    @Test
+    void aDeclaredFromStatusParses() {
+        IntentModel model = IntentParser.parse(GENERATES_REOPEN_HEAD + """
+                    map: { Fine: id }
+                    fromStatus: [IDENTIFIED]
+                    sourceStatus: DECLARED
+                """);
+        GeneratesIntent g = model.getGenerates()
+                                 .get(0);
+        assertTrue(g.hasFromStatus());
+        assertEquals(List.of(2), g.getFromStatus());
+    }
+
+    /**
+     * Allowing the status the completion hook itself writes re-opens the duplicate the guard exists to
+     * refuse: the second click finds the source in an allowed status again.
+     */
+    @Test
+    void rejectsAFromStatusThatIncludesTheCompletionHooksOwnStatus() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_REOPEN_HEAD + """
+                    map: { Fine: id }
+                    fromStatus: [IDENTIFIED, DECLARED]
+                    sourceStatus: DECLARED
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("fromStatus") && i.contains("sourceStatus")),
+                "got: " + ex.getIssues());
+    }
+
+    /** A page-scoped action runs on the view, so there is no record whose status could be read. */
+    @Test
+    void rejectsAFromStatusOnAPageScopedAction() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_REOPEN_HEAD + """
+                    scope: page
+                    map: { Fine: id }
+                    fromStatus: [IDENTIFIED]
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("fromStatus") && i.contains("page")),
+                "got: " + ex.getIssues());
+    }
+
+    /** Nothing to read the guard from: the source declares no EntityStatus relation. */
+    @Test
+    void rejectsAFromStatusOnASourceWithNoStatusRelation() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_STEP_HEAD + """
+                    map: { Claim: id }
+                    fromStatus: [1]
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("fromStatus") && i.contains("EntityStatus")),
                 "got: " + ex.getIssues());
     }
 
