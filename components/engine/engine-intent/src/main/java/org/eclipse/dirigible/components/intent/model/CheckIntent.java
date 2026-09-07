@@ -13,10 +13,13 @@ import java.util.List;
 
 /**
  * A declarative validation on an {@link EntityIntent} - the cross-field / cross-line rules a plain
- * {@code required}/{@code unique} cannot express. Four kinds:
+ * {@code required}/{@code unique} cannot express. Five kinds:
  * <ul>
  * <li>{@code exactlyOne} (row-level): exactly one of {@link #fields} is non-null on the record (a
  * journal line is either debit or credit) - enforced on every user write;</li>
+ * <li>{@code compare} (row-level): {@link #field} compared to {@link #than} with {@link #op} - two
+ * values of the SAME row that must stand in a relation to each other (a due date not before the
+ * document date, a validity end not before its start) - enforced on every user write;</li>
  * <li>{@code requiredWhen}: {@link #field} - the record's own field, or a one-hop
  * {@code Relation.field} - must carry a value while {@link #when} holds (an e-mailed invoice needs
  * the customer's address). Enforced on every user write, or, with a {@link #status} gate, when the
@@ -33,16 +36,25 @@ public class CheckIntent {
     private String kind;
     /** {@code exactlyOne}: the record's own fields, exactly one of which must be non-null. */
     private List<String> fields;
+    /**
+     * The value the check is ABOUT - the two row-level kinds that name one share the key.
+     * {@code compare}: the record's own field on the left of the comparison. {@code requiredWhen}: the
+     * value that must be present - the record's own field, or a one-hop {@code Relation.field} over a
+     * to-one (whose target may be owned by another model, as everywhere else a path is walked).
+     */
+    private String field;
+    /**
+     * {@code compare}: the comparison - {@code ge}, {@code gt}, {@code le}, {@code lt}, {@code eq} or
+     * {@code ne}. Required: an omitted operator has no defensible default (a due date not BEFORE the
+     * document date and one strictly AFTER it are different rules).
+     */
+    private String op;
+    /** {@code compare}: the record's own field on the right of the comparison. */
+    private String than;
     /** {@code itemsSumEqual}: the two numeric item fields whose sums must be equal. */
     private List<String> over;
     /** {@code itemsMin}: the minimum number of items. */
     private Integer count;
-    /**
-     * {@code requiredWhen}: the value that must be present - the record's own field, or a one-hop
-     * {@code Relation.field} over a to-one (the target may be owned by another model, as everywhere
-     * else a path is walked).
-     */
-    private String field;
     /**
      * {@code requiredWhen}: the condition under which the value is required - a
      * {@code <Property> == <literal>} / {@code != } comparison over the record's own properties, or a
@@ -167,6 +179,22 @@ public class CheckIntent {
 
     public void setKind(String kind) {
         this.kind = kind;
+    }
+
+    public String getOp() {
+        return op;
+    }
+
+    public void setOp(String op) {
+        this.op = op;
+    }
+
+    public String getThan() {
+        return than;
+    }
+
+    public void setThan(String than) {
+        this.than = than;
     }
 
     public List<String> getFields() {

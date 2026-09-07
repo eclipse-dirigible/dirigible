@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -223,9 +224,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # rule only applies at the status the value is finally needed at.
                   - { kind: requiredWhen, field: Account.name, when: "note == 'audited'", status: 2,
                       message: "An audited entry must be booked against a named account" }
+                  # Two values of the SAME row, related (#7095) - one temporal pair and one numeric,
+                  # the two comparison families the generated code emits differently.
+                  - { kind: compare, field: due,  op: ge, than: date,  message: "Due cannot be before the entry date" }
+                  - { kind: compare, field: paid, op: le, than: debit, message: "Paid cannot exceed the debit total" }
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: date,   type: date, required: true }
+                  - { name: due,    type: date }
                   - { name: debit,  type: decimal, aggregate: true }
                   - { name: credit, type: decimal, aggregate: true }
                   - { name: paid,   type: decimal }
@@ -1753,6 +1759,20 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String entryController = contentOf("gen/emission/api/entry/EntryController.java");
         assertTrue(entryController.contains("requireMutable"),
                 "immutableWhen must emit the requireMutable gate in the entity's REST controller");
+        // checks: compare - a rule about two values of ONE row, which could not be declared at all
+        // before #7095, so a document was saved and issued with a due date behind its own date. The
+        // two families are emitted differently on purpose: temporals through their own compareTo (a
+        // LocalDate does not compare to an Instant, which is why the parser holds both fields to one
+        // family), numbers by value through BigDecimal so a decimal against a long stays exact. The
+        // null guard is part of the rule: a comparison is about two values that exist.
+        assertTrue(
+                entryController.contains("if (entity.Due != null && entity.Date != null")
+                        && entryController.contains("!(entity.Due.compareTo(entity.Date) >= 0)")
+                        && entryController.contains("Due cannot be before the entry date"),
+                "checks: compare over two dates must emit a compareTo comparison in the REST controller, got: " + entryController);
+        assertTrue(entryController.contains(
+                "!(new java.math.BigDecimal(entity.Paid.toString()).compareTo(new java.math.BigDecimal(entity.Debit.toString())) <= 0)"),
+                "checks: compare over two numbers must compare by value through BigDecimal, got: " + entryController);
         String snapshotController = contentOf("gen/emission/api/snapshot/SnapshotController.java");
         assertTrue(snapshotController.contains("requireMutable") && snapshotController.contains("append-only"),
                 "immutable: true must emit the unconditional append-only gate in the REST controller");
@@ -2793,6 +2813,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(testManifest.contains("\"layout\": \"document-chat\""),
                 "a personal chat document must be flagged so the runner drives the composer round-trip");
         assertTrue(testManifest.contains("\"route\": \"#/my/Leave\""), "the calendar root's personal block must carry its /my route");
+        // ...and a compare check rides in too: the sample values are per-type constants, so two dates
+        // come out EQUAL and a strict comparison would have every generated app test refused with 400
+        // by the very check the module just declared. The runner derives the left operand from the
+        // right, which it can only do if the manifest says which fields and which operator (#7095).
+        assertTrue(testManifest.contains("\"field\": \"Due\"") && testManifest.contains("\"than\": \"Date\""),
+                "the manifest must carry the entity's compare checks so the sample record satisfies them");
 
         // transitions: the server half is a controller that guards the source status + the when
         // guard (409) and flips ONLY the status column via the targeted updateProperty; the client
@@ -3676,6 +3702,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/entry/EntryController")
                                                  .then()
                                                  .statusCode(400));
+
+        // checks: compare, at runtime - the whole point of the keyword. A due date behind the entry
+        // date is refused with the authored message (400), the same date is fine (`ge` is inclusive),
+        // and the valid create below carries no Due at all: an absent operand is not a violation.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-15\",\"Due\":\"2026-01-01\",\"Account\":2}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", containsString("Due cannot be before the entry date")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-15\",\"Due\":\"2026-01-15\",\"Account\":2}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController")
+                                                 .then()
+                                                 .statusCode(200));
 
         // A valid DRAFT entry on the leaf account.
         AtomicInteger created = new AtomicInteger();

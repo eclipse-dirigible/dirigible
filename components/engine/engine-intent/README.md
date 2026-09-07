@@ -115,7 +115,7 @@ Values: `Document`, `DocumentItem`, `Master`, `Detail`, `List`, `Setting` (entit
 
 ## checks - declarative validations
 
-Row-level `exactlyOne` and `requiredWhen` on every user write; document-level `itemsMin` /
+Row-level `exactlyOne`, `compare` and `requiredWhen` on every user write; document-level `itemsMin` /
 `itemsSumEqual` gated on a status transition (drafting stays unconstrained; the failing transition aborts with the authored
 message). A document-level check counts the document's LINES: a child flagged
 `function: DocumentItem`, else the `*Item`-named child, else the sole composition child, else the
@@ -130,7 +130,14 @@ first declared. Flag the lines child explicitly on a document that owns several 
 - name: JournalEntryItem
   checks:
     - { kind: exactlyOne, fields: [debit, credit], message: "Exactly one of debit/credit" }
+- name: SalesInvoice
+  checks:
+    - { kind: compare, field: due, op: ge, than: date, message: "Due cannot be before the invoice date" }
 ```
+
+`compare` relates two values of the same row: `op:` is `ge` / `gt` / `le` / `lt` / `eq` / `ne`, both
+operands are the entity's own fields, and both must be dates, both timestamps or both numbers. An
+absent operand is not a violation - requiredness is its own declaration.
 
 `requiredWhen` is a value that is required only under a condition - the rule `required` cannot
 express, because the value is needed for one way of handling the record and meaningless for the

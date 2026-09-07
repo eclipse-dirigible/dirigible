@@ -2267,6 +2267,20 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                             .stream()
                                             .map(IntentNaming::pascalCase)
                                             .toList());
+            } else if ("compare".equals(check.getKind())) {
+                // Two values of the same row, compared (#7095). The template gets the two PascalCased
+                // properties, the Java comparison operator the compareTo result is tested with, and
+                // whether the two are numbers - two temporals compare through compareTo, two numbers
+                // by value through BigDecimal so a decimal and a long still compare exactly.
+                String comparison = compareOperator(check.getOp());
+                Boolean numeric = isNumericCompare(entity, check);
+                if (check.getField() == null || check.getThan() == null || comparison == null || numeric == null) {
+                    continue; // the parser already reported it
+                }
+                checkMap.put("field", IntentNaming.pascalCase(check.getField()));
+                checkMap.put("than", IntentNaming.pascalCase(check.getThan()));
+                checkMap.put("op", comparison);
+                checkMap.put("numeric", numeric ? "true" : "false");
             } else {
                 // The document's LINES - the shared resolution, so the guard counts the rows the
                 // document layout renders. Scanning for "some composition child" made a multi-child
@@ -2297,6 +2311,57 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             checkMaps.add(checkMap);
         }
         return checkMaps;
+    }
+
+    /** The Java comparison the {@code compareTo} result is tested with, or null for an unknown op. */
+    private static String compareOperator(String op) {
+        if (op == null) {
+            return null;
+        }
+        return switch (op.trim()
+                         .toLowerCase(java.util.Locale.ROOT)) {
+            case "ge" -> ">=";
+            case "gt" -> ">";
+            case "le" -> "<=";
+            case "lt" -> "<";
+            case "eq" -> "==";
+            case "ne" -> "!=";
+            default -> null;
+        };
+    }
+
+    /**
+     * Whether a {@code compare} check's two fields are numbers (rather than temporals), or null when
+     * either field or its type does not resolve - the parser has already reported that.
+     */
+    private static Boolean isNumericCompare(EntityIntent entity, org.eclipse.dirigible.components.intent.model.CheckIntent check) {
+        FieldIntent left = fieldOf(entity, check.getField());
+        FieldIntent right = fieldOf(entity, check.getThan());
+        if (left == null || right == null) {
+            return null;
+        }
+        boolean leftNumeric = isNumericType(left.getType());
+        if (leftNumeric != isNumericType(right.getType())) {
+            return null;
+        }
+        return leftNumeric;
+    }
+
+    private static boolean isNumericType(String type) {
+        return type != null && NUMERIC_FIELD_TYPES.contains(type.trim()
+                                                                .toLowerCase(java.util.Locale.ROOT));
+    }
+
+    private static FieldIntent fieldOf(EntityIntent entity, String name) {
+        if (name == null || entity.getFields() == null) {
+            return null;
+        }
+        for (FieldIntent field : entity.getFields()) {
+            if (name.equalsIgnoreCase(field.getName())) {
+                return field;
+            }
+        }
+        return null;
     }
 
     /**
@@ -2331,16 +2396,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     CheckSupport.comparison("entity." + IntentNaming.pascalCase(comparison.property()), comparison.equal(), literal));
         }
         return conditions.isEmpty() ? null : String.join(" && ", conditions);
-    }
-
-    /** The entity's field of that name, or {@code null}. */
-    private static FieldIntent fieldOf(EntityIntent entity, String name) {
-        for (FieldIntent field : entity.getFields()) {
-            if (name != null && name.equals(field.getName())) {
-                return field;
-            }
-        }
-        return null;
     }
 
     /** The entity's to-one relation of that name, or {@code null}. */
@@ -3378,6 +3433,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * The {@code .model} root keys that have their own ELEMENT in the {@code .edm} and so are not also
      * written as an attribute of {@code <model>}.
      */
+    /**
+     * The field types a {@code checks: compare} entry compares by numeric value rather than as a
+     * temporal.
+     */
+    private static final Set<String> NUMERIC_FIELD_TYPES = Set.of("integer", "int", "long", "decimal", "double");
+
     private static final Set<String> DOCUMENT_ELEMENT_KEYS = Set.of("entities", "perspectives", "navigations");
 
     /**

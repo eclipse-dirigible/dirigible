@@ -837,6 +837,19 @@ public class ${name}Controller {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.message}");
             }
         }
+#elseif($check.kind == "compare")
+## Two values of the SAME row, compared (intent `checks: compare`). A comparison is about two values
+## that exist, so an absent operand is not a violation - requiredness is its own declaration. Numbers
+## compare by value through BigDecimal (a decimal against a long still compares exactly); temporals
+## compare through their own compareTo, which is why the parser holds both fields to one family.
+        if (entity.${check.field} != null && entity.${check.than} != null
+#if($check.numeric == "true")
+                && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(new java.math.BigDecimal(entity.${check.than}.toString())) ${check.op} 0)) {
+#else
+                && !(entity.${check.field}.compareTo(entity.${check.than}) ${check.op} 0)) {
+#end
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.message}");
+        }
 #else
         // Row-level check (intent `checks: exactlyOne`).
         {

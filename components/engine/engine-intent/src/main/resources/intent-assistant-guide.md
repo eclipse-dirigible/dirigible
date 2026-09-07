@@ -512,6 +512,13 @@ field may declare:
 - `checks:` (entity-level) - **declarative cross-field / cross-line validations**:
   - `{ kind: exactlyOne, fields: [debit, credit], message: "..." }` (row-level): exactly one of the
     listed own fields is non-null - enforced on every user write (400).
+  - `{ kind: compare, field: due, op: ge, than: date, message: "..." }` (row-level): two values of
+    the SAME record must stand in a relation to each other - a due date not before the document
+    date, a validity `to` not before its `from`, a delivery date not before the order date.
+    `op:` is one of `ge`, `gt`, `le`, `lt`, `eq`, `ne`; both operands are the entity's own fields
+    (never relations) and must be both dates, both timestamps or both numbers. Enforced on every
+    user write (400 with the authored message); an absent operand is not a violation - a comparison
+    is about two values that exist, and requiredness is its own declaration.
   - `{ kind: itemsSumEqual, over: [debit, credit], status: 2, message: "..." }` (document-level):
     the sums of the two item fields must be equal - the double-entry invariant. Enforced in the
     repository whenever the document is persisted CARRYING the `status` gate seed id, i.e. at the

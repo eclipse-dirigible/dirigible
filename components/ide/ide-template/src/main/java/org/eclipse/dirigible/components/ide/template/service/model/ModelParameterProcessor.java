@@ -219,7 +219,7 @@ final class ModelParameterProcessor {
         for (Map<String, Object> check : checks) {
             String kind = str(check, "kind");
             resolveCheckPathLoads(check, parameters);
-            if ("exactlyOne".equals(kind)) {
+            if ("exactlyOne".equals(kind) || "compare".equals(kind)) {
                 rowChecks.add(check);
             } else if ("guard".equals(kind)) {
                 guardChecks.add(check);

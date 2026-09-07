@@ -124,6 +124,20 @@ public final class IntentParser {
      * (auto-increment), and a non-integer auto-increment column is invalid SQL on most databases.
      */
     private static final Set<String> INTEGER_PK_TYPES = Set.of("integer", "int", "long");
+
+    /** The comparisons a {@code checks: compare} entry may declare. */
+    private static final Set<String> COMPARE_OPS = Set.of("ge", "gt", "le", "lt", "eq", "ne");
+
+    /**
+     * A field type a {@code checks: compare} entry may compare, as the family the generated comparison
+     * belongs to. Two fields compare only within one family: the generated code compares two temporals
+     * through {@code compareTo}, which needs the SAME class (a {@code LocalDate} does not compare to an
+     * {@code Instant}), and two numbers by value through {@code BigDecimal}, which is exact across the
+     * numeric widths. Everything else - a string, a boolean, a {@code month}/{@code week} label - is
+     * out of scope rather than silently ordered lexicographically.
+     */
+    private static final Map<String, String> COMPARE_FAMILIES = Map.of("date", "date", "timestamp", "timestamp", "integer", "number", "int",
+            "number", "long", "number", "decimal", "number", "double", "number");
     /** Numeric field types a sum roll-up (its field / {@code of} / capacity / balance) may use. */
     private static final Set<String> NUMERIC_TYPES = Set.of("integer", "int", "long", "decimal", "double");
     private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany", "subset");
@@ -4402,11 +4416,12 @@ public final class IntentParser {
     }
 
     /**
-     * A {@code checks} entry is one of three kinds. {@code exactlyOne} is row-level: at least two own
-     * fields, no status gate (it must hold on every write). {@code itemsSumEqual}/{@code itemsMin} are
-     * document-level: the entity must own a composition child (the items), the {@code over} fields must
-     * be two numeric fields OF THE ITEMS entity, and a {@code status} gate (an EntityStatus seed id) is
-     * mandatory - without it the check would forbid drafting the document item by item.
+     * A {@code checks} entry is one of several kinds. {@code exactlyOne} is row-level: at least two own
+     * fields, no status gate (it must hold on every write); {@code compare} is row-level too - two own
+     * fields and an operator. {@code itemsSumEqual}/{@code itemsMin} are document-level: the entity
+     * must own a composition child (the items), the {@code over} fields must be two numeric fields OF
+     * THE ITEMS entity, and a {@code status} gate (an EntityStatus seed id) is mandatory - without it
+     * the check would forbid drafting the document item by item.
      */
     /**
      * A guard's {@code outcome} decides what a violation does, and each outcome needs its own companion
@@ -4642,6 +4657,10 @@ public final class IntentParser {
             }
             return;
         }
+        if ("compare".equals(kind)) {
+            validateCompareCheck(entity, check, subject, issues);
+            return;
+        }
         if ("itemsSumEqual".equals(kind) || "itemsMin".equals(kind)) {
             EntityIntent items = compositionChildOf(entity, entities);
             if (items == null) {
@@ -4681,7 +4700,69 @@ public final class IntentParser {
             }
             return;
         }
-        issues.add(subject + " has unknown kind - expected exactlyOne, requiredWhen, itemsSumEqual or itemsMin");
+        issues.add(subject + " has unknown kind - expected exactlyOne, compare, requiredWhen, guard, itemsSumEqual or itemsMin");
+    }
+
+    /**
+     * A {@code compare} check relates two values of the SAME row - the shape a plain
+     * {@code required}/{@code unique} cannot express and the reason a document could be saved with a
+     * due date behind its own date (dirigible #7095). Both operands must be the entity's own fields
+     * (never a relation - a comparison of two foreign keys means nothing), the operator is explicit,
+     * and the two types must land in the same comparison family so the generated comparison compiles
+     * and means what it says. It is row-level like {@code exactlyOne}, so it takes no {@code status}
+     * gate: a rule about two values of one row holds from the first save, not from a transition.
+     */
+    private static void validateCompareCheck(EntityIntent entity, CheckIntent check, String subject, List<String> issues) {
+        String field = check.getField();
+        String than = check.getThan();
+        if (field == null || field.isBlank() || than == null || than.isBlank()) {
+            issues.add(subject + " requires `field` and `than`: the two own fields to compare");
+            return;
+        }
+        if (check.getStatus() != null) {
+            issues.add(subject + " is row-level and cannot carry a `status` gate - it must hold on every write");
+        }
+        String op = check.getOp() == null ? null
+                : check.getOp()
+                       .trim()
+                       .toLowerCase(java.util.Locale.ROOT);
+        if (op == null || !COMPARE_OPS.contains(op)) {
+            issues.add(subject + " requires `op`: one of ge, gt, le, lt, eq, ne (got [" + check.getOp() + "])");
+        }
+        if (field.equalsIgnoreCase(than)) {
+            issues.add(subject + " compares [" + field + "] with itself - the outcome cannot depend on the record");
+        }
+        FieldIntent left = fieldByName(entity, field);
+        FieldIntent right = fieldByName(entity, than);
+        if (left == null) {
+            issues.add(subject + " field [" + field + "] is not a field of [" + entity.getName() + "]");
+        }
+        if (right == null) {
+            issues.add(subject + " than [" + than + "] is not a field of [" + entity.getName() + "]");
+        }
+        if (left == null || right == null) {
+            return;
+        }
+        String leftFamily = compareFamily(left);
+        String rightFamily = compareFamily(right);
+        if (leftFamily == null) {
+            issues.add(subject + " field [" + field + "] is a [" + left.getType() + "] - only dates, timestamps and numbers compare");
+        }
+        if (rightFamily == null) {
+            issues.add(subject + " than [" + than + "] is a [" + right.getType() + "] - only dates, timestamps and numbers compare");
+        }
+        if (leftFamily != null && rightFamily != null && !leftFamily.equals(rightFamily)) {
+            issues.add(subject + " compares a [" + left.getType() + "] with a [" + right.getType()
+                    + "] - both fields must be dates, both timestamps or both numbers");
+        }
+    }
+
+    /** The comparison family of a field, or null when its type does not compare. */
+    private static String compareFamily(FieldIntent field) {
+        return field.getType() == null ? null
+                : COMPARE_FAMILIES.get(field.getType()
+                                            .trim()
+                                            .toLowerCase(java.util.Locale.ROOT));
     }
 
     /** Whether the name matches (case-insensitively) a field or to-one relation of the entity. */

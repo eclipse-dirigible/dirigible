@@ -1252,6 +1252,43 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * A {@code compare} check reaches the REST templates as the two PascalCased properties plus the
+     * Java comparison operator and the family flag - the template must not re-derive either, and the
+     * flag is what decides between {@code compareTo} (temporals) and a {@code BigDecimal} comparison
+     * (numbers of any width), dirigible #7095.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void compareChecksEmitOperatorAndFamily() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: compare, field: due, op: ge, than: date, message: "Due cannot be before the date" }
+                      - { kind: compare, field: paid, op: le, than: total, message: "Paid cannot exceed the total" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                      - { name: due, type: date }
+                      - { name: total, type: decimal }
+                      - { name: paid, type: decimal }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "SalesInvoice").get("checks");
+        assertEquals(2, checks.size());
+        Map<String, Object> dates = checks.get(0);
+        assertEquals("Due", dates.get("field"));
+        assertEquals("Date", dates.get("than"));
+        assertEquals(">=", dates.get("op"));
+        assertEquals("false", dates.get("numeric"));
+        assertEquals("Due cannot be before the date", dates.get("message"));
+        Map<String, Object> numbers = checks.get(1);
+        assertEquals("<=", numbers.get("op"));
+        assertEquals("true", numbers.get("numeric"));
+    }
+
+    /**
      * A document check counts the document's LINES, even when the document owns several composition
      * children - a printed {@code function: Snapshot} copy, a payment allocation, a promotion. The
      * items child used to be whichever one a {@code HashMap} iteration yielded first, so an invoice's

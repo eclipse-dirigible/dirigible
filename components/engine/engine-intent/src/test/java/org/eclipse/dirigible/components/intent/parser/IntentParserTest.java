@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
+import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodIntent;
@@ -850,6 +851,53 @@ class IntentParserTest {
                      .stream()
                      .anyMatch(i -> i.contains("requires a `status` gate")),
                 "expected a gate issue, got: " + ex.getIssues());
+    }
+
+    /**
+     * A {@code compare} check relates two values of the SAME row - the rule that could not be declared
+     * at all, so a document was saved and issued with a due date behind its own date (dirigible #7095).
+     * Both operands must be own fields of ONE comparison family, the operator is explicit, and it is
+     * row-level, so a status gate is refused.
+     */
+    @Test
+    void compareChecksParseAndValidate() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: compare, field: due, op: ge, than: date, message: "Due cannot be before the date" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                      - { name: due, type: date }
+                      - { name: note, type: string }
+                      - { name: total, type: decimal }
+                """;
+        CheckIntent check = IntentParser.parse(yaml)
+                                        .getEntities()
+                                        .get(0)
+                                        .getChecks()
+                                        .get(0);
+        assertEquals("due", check.getField());
+        assertEquals("ge", check.getOp());
+        assertEquals("date", check.getThan());
+
+        assertCompareIssue(yaml.replace("op: ge", "op: after"), "requires `op`");
+        assertCompareIssue(yaml.replace("than: date", "than: total"), "must be dates, both timestamps or both numbers");
+        assertCompareIssue(yaml.replace("field: due", "field: note"), "only dates, timestamps and numbers compare");
+        assertCompareIssue(yaml.replace("than: date", "than: issuedOn"), "is not a field of [SalesInvoice]");
+        assertCompareIssue(yaml.replace("field: due", "field: date"), "compares [date] with itself");
+        assertCompareIssue(yaml.replace("op: ge,", "op: ge, status: 2,"), "cannot carry a `status` gate");
+        assertCompareIssue(yaml.replace("field: due, op: ge, than: date, ", ""), "requires `field` and `than`");
+    }
+
+    private static void assertCompareIssue(String yaml, String expected) {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(expected)),
+                "expected an issue containing [" + expected + "], got: " + ex.getIssues());
     }
 
     @Test

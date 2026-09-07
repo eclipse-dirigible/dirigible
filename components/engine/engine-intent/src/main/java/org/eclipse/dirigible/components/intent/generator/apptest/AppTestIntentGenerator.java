@@ -236,6 +236,10 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         // exactlyOne checks: exactly one of the named fields may be non-null - a sample record
         // filling all of them is rejected with 400, so the runner keeps only the first
         List<List<String>> exactlyOne = new ArrayList<>();
+        // compare checks: two of the record's own fields must stand in a relation - the sample values
+        // are per-type constants, so two dates come out EQUAL and a strict comparison (gt/lt/ne) would
+        // reject the sample record with 400. The runner derives the left operand from the right.
+        List<Map<String, Object>> compare = new ArrayList<>();
         for (CheckIntent check : entity.getChecks() == null ? List.<CheckIntent>of() : entity.getChecks()) {
             if ("exactlyOne".equals(check.getKind()) && check.getFields() != null && !check.getFields()
                                                                                            .isEmpty()) {
@@ -244,9 +248,21 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                                     .map(IntentNaming::pascalCase)
                                     .toList());
             }
+            if ("compare".equals(check.getKind()) && check.getField() != null && check.getThan() != null && check.getOp() != null) {
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("field", IntentNaming.pascalCase(check.getField()));
+                entry.put("op", check.getOp()
+                                     .trim()
+                                     .toLowerCase(java.util.Locale.ROOT));
+                entry.put("than", IntentNaming.pascalCase(check.getThan()));
+                compare.add(entry);
+            }
         }
         if (!exactlyOne.isEmpty()) {
             out.put("exactlyOne", exactlyOne);
+        }
+        if (!compare.isEmpty()) {
+            out.put("compare", compare);
         }
         out.put("fields", fields(entity));
         List<Map<String, Object>> relations = relations(entity, model, context, edmEntities);
