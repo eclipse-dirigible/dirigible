@@ -1598,8 +1598,9 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 
 	// Begin Dashboard Widget Section ------------------------------------------------------------------------------
 	// The `widget` block turns the report into a dashboard KPI tile: kind `count` shows the report's
-	// record count, `value` one aggregate cell (a measure column, optionally pinned by `at` equals
-	// conditions over grouping columns), `list` the first rows as a mini table. Consumed at runtime
+	// record count (its `countColumn` summed when the report aggregates), `value` one aggregate cell
+	// (a measure column, optionally pinned by `at` equals conditions over grouping columns), `list`
+	// the first rows as a mini table. Consumed at runtime
 	// by the Harmonia shell's reports store; the tile replaces the report's dashboard preview tile.
 
 	$scope.widgetKinds = [
@@ -1635,7 +1636,14 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 			delete widget.valueType;
 			delete widget.pattern;
 		}
+		if (widget.kind !== 'count') delete widget.countColumn;
 	};
+
+	// The COUNT column a `count` tile sums. An aggregating report yields one row per group, so its
+	// record count is a COUNT measure summed over the rows - the count endpoint would report the
+	// number of groups (dirigible #7102). Left empty for a report that is not aggregated: there one
+	// row is one record and the endpoint is right.
+	$scope.widgetCountColumns = () => ($scope.report.columns || []).filter(c => c.aggregate === 'COUNT');
 
 	// The measure the tile shows: an aggregate column of this report. Type and (money) pattern ride
 	// along so the dashboard can format the number without re-deriving the column.

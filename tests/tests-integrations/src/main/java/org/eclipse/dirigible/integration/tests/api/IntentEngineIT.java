@@ -268,6 +268,9 @@ class IntentEngineIT extends IntegrationTest {
                 dimensions: [customer]
                 measures: ["count(*)", "sum(total)"]
                 chart: doughnut
+                # kind: count over an AGGREGATING report: one row per customer, so the tile sums the
+                # count(*) column instead of counting rows, which would show the number of customers.
+                widget: { kind: count, label: Orders, icon: shopping-cart }
               # month(field) buckets a date dimension into a sortable YYYYMM integer. The widget
               # turns the report into a dashboard KPI: one aggregate cell, the month pinned to now.
               - name: OrdersByMonth
@@ -2836,6 +2839,14 @@ class IntentEngineIT extends IntegrationTest {
         String bigItems = contentOf("BigOrderItems.report");
         assertTrue(bigItems.contains("\"kind\": \"count\""), "the count widget should carry its kind");
         assertTrue(bigItems.contains("\"icon\": \"alert-triangle\""), "the widget icon should be carried");
+        // An un-aggregated report has no count column: one of its rows IS one record, so the tile
+        // keeps the count endpoint.
+        assertFalse(bigItems.contains("\"countColumn\""), "an un-aggregated count widget must not name a count column");
+        // An aggregating one names the count(*) measure's own column, which the dashboard SUMS - the
+        // row count there is the number of groups (#7102).
+        String byCustomer = contentOf("OrdersByCustomer.report");
+        assertTrue(byCustomer.contains("\"kind\": \"count\""), "the count widget should carry its kind");
+        assertTrue(byCustomer.contains("\"countColumn\": \"Count\""), "a count over an aggregating report should name the count(*) column");
 
         // The .model root carries the custom widgets. (The per-entity count tiles are now suppressed
         // by the shell template itself when widgets are declared - the old `dashboardKpis` flag was

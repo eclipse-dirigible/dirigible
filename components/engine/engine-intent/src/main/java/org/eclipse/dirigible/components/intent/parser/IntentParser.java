@@ -9064,8 +9064,9 @@ public final class IntentParser {
 
     /**
      * A report {@code widget:} block turns the report into a dashboard KPI tile. {@code kind: count}
-     * (default) shows the report's record count; {@code kind: value} shows one aggregate cell -
-     * {@code value} names a declared measure and {@code at} pins declared dimensions to a token
+     * (default) shows the report's record count - the {@code count(*)} measure summed over the rows
+     * when the report aggregates, which it must then declare; {@code kind: value} shows one aggregate
+     * cell - {@code value} names a declared measure and {@code at} pins declared dimensions to a token
      * ({@code now}) or a literal; {@code kind: list} shows the report's first {@code limit} rows.
      * Alias/type resolution happens in the report generator (same leniency as report filters).
      */
@@ -9090,6 +9091,15 @@ public final class IntentParser {
             }
         } else if (widget.getValue() != null) {
             issues.add(prefix + " of kind [" + kind + "] must not declare `value` - use kind [value]");
+        }
+        // An aggregating report yields one row per group, so its record count is the SUM of a
+        // `count(*)` measure over those rows - never the number of rows, which is the number of groups
+        // (dirigible #7102). Without such a measure the tile has nothing honest to show, so the report
+        // is refused here rather than silently displaying the group count. A ledger kind is exempt: its
+        // rows ARE its unit (one per account / statement line) and it declares no measures.
+        if ("count".equals(kind) && report.isAggregated() && !report.isLedgerKind() && report.getCountMeasure() == null) {
+            issues.add(prefix + " of kind [count] needs a `count(*)` measure to sum - the report aggregates, so counting its rows"
+                    + " would show the number of groups; declare `count(*)` in `measures:` or use kind [value]");
         }
         for (Map.Entry<String, Object> pin : widget.getAt()
                                                    .entrySet()) {

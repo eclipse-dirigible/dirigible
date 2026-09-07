@@ -1530,10 +1530,11 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     /**
      * The report's dashboard KPI, resolved from authored expressions to the report's own column aliases
      * so the runtime can query the generated report controller directly: {@code kind: count} uses the
-     * count endpoint, {@code kind: value} reads {@code valueColumn} off the row matching the {@code at}
-     * pins (typed EQ conditions), {@code kind: list} shows the first {@code limit} rows. The
-     * {@code now} token stays symbolic - the dashboard resolves it client-side, type-aware per the
-     * pinned column's {@code bucket}/{@code type}. No SQL and no URLs live in this block.
+     * count endpoint, or sums the {@code countColumn} rows of an aggregating report,
+     * {@code kind: value} reads {@code valueColumn} off the row matching the {@code at} pins (typed EQ
+     * conditions), {@code kind: list} shows the first {@code limit} rows. The {@code now} token stays
+     * symbolic - the dashboard resolves it client-side, type-aware per the pinned column's
+     * {@code bucket}/{@code type}. No SQL and no URLs live in this block.
      */
     static Map<String, Object> widget(ReportIntent report, Map<String, WidgetDimension> dimensionColumns,
             Map<String, Map<String, Object>> measureColumns) {
@@ -1560,6 +1561,21 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 if (measureColumn.containsKey("pattern")) {
                     widget.put("pattern", measureColumn.get("pattern"));
                 }
+            }
+        }
+        // An aggregating report's rows are groups, so its record count is the `count(*)` measure SUMMED
+        // over them (dirigible #7102) - `countColumn` names that column and the dashboard sums it
+        // instead of calling the count endpoint, which would report the number of groups. An
+        // un-aggregated report keeps the endpoint: there one row is one record. A ledger kind counts its
+        // own rows (one per account / statement line), so it carries no count column either.
+        if ("count".equals(kind) && report.isAggregated() && !report.isLedgerKind()) {
+            String countMeasure = report.getCountMeasure();
+            Map<String, Object> countColumn = countMeasure == null ? null : measureColumns.get(expressionKey(countMeasure));
+            if (countColumn == null) {
+                LOGGER.warn("Widget of report [{}] is of kind [count] over an aggregating report with no count(*) measure"
+                        + " - the KPI would show the number of groups", LoggedValue.of(report.getName()));
+            } else {
+                widget.put("countColumn", countColumn.get("alias"));
             }
         }
         if ("list".equals(kind)) {

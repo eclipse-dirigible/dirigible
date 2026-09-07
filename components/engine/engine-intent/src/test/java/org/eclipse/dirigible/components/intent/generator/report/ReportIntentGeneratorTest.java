@@ -142,6 +142,9 @@ class ReportIntentGeneratorTest {
     @Test
     void countWidgetDefaultsKindLabelAndIcon() {
         ReportIntent report = report();
+        // Un-aggregated: a count over an aggregating report resolves a count column of its own, which
+        // the two tests below cover - here only the defaults are under test.
+        report.setMeasures(null);
         report.getWidget()
               .setValue(null);
         report.getWidget()
@@ -191,6 +194,61 @@ class ReportIntentGeneratorTest {
                                   .get("value"));
         assertNull(pins.get(0)
                        .get("token"));
+    }
+
+    private static final String COUNT_INTENT = """
+            name: sales
+            entities:
+              - name: InvoiceStatus
+                kind: setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Invoice
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: total, type: decimal }
+                relations:
+                  - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+            reports:
+              - name: InvoicesByStatus
+                source: Invoice
+                dimensions: [Status]
+                measures: ["count(*)", "sum(total)"]
+                widget: { kind: count, label: Invoices, icon: file-text }
+              - name: OpenInvoices
+                source: Invoice
+                dimensions: [total]
+                widget: { kind: count }
+            """;
+
+    @Test
+    void countWidgetOverAnAggregatingReportSumsItsCountMeasure() {
+        // One row per status: the record count is the count(*) column summed over the rows, so the
+        // widget names that column instead of leaving the dashboard to count rows (dirigible #7102).
+        IntentModel model = IntentParser.parse(COUNT_INTENT);
+        Map<String, Map<String, Object>> measures = new LinkedHashMap<>();
+        measures.put("count(*)", column("Count", "INTEGER", null));
+        measures.put("sum(total)", column("Sum Total", "DECIMAL", "### ### ### ##0.00"));
+
+        Map<String, Object> widget = ReportIntentGenerator.widget(model.getReports()
+                                                                       .get(0),
+                new LinkedHashMap<>(), measures);
+
+        assertEquals("count", widget.get("kind"));
+        assertEquals("Count", widget.get("countColumn"));
+    }
+
+    @Test
+    void countWidgetOverAnUnaggregatedReportKeepsTheRowCount() {
+        IntentModel model = IntentParser.parse(COUNT_INTENT);
+
+        Map<String, Object> widget = ReportIntentGenerator.widget(model.getReports()
+                                                                       .get(1),
+                new LinkedHashMap<>(), new LinkedHashMap<>());
+
+        assertEquals("count", widget.get("kind"));
+        assertFalse(widget.containsKey("countColumn"));
     }
 
     private static final String STATUS_FILTER_INTENT = """

@@ -1516,6 +1516,39 @@ class IntentParserTest {
                 "expected a value-on-count issue, got: " + ex.getIssues());
     }
 
+    @Test
+    void countWidgetOnAnAggregatingReportNeedsACountMeasure() {
+        // The report yields one row per group, so counting rows shows the number of statuses, not the
+        // number of records (dirigible #7102) - the tile has nothing honest to show without count(*).
+        String yaml = WIDGET_HEAD.replace("value: \"sum(total)\"", "kind: count");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("of kind [count] needs a `count(*)` measure to sum")),
+                "expected a count-over-aggregate issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void countWidgetOnAnAggregatingReportAcceptsADeclaredCountMeasure() {
+        String yaml = WIDGET_HEAD.replace("measures: [\"sum(total)\"]", "measures: [\"count(*)\", \"sum(total)\"]")
+                                 .replace("value: \"sum(total)\"", "kind: count");
+        IntentModel model = IntentParser.parse(yaml);
+        assertEquals("count(*)", model.getReports()
+                                      .get(0)
+                                      .getCountMeasure());
+    }
+
+    @Test
+    void countWidgetOnAnUnaggregatedReportNeedsNoMeasure() {
+        // One row is one record there, so the count endpoint is right and nothing is required.
+        String yaml = WIDGET_HEAD.replace("measures: [\"sum(total)\"]", "")
+                                 .replace("value: \"sum(total)\"", "kind: count");
+        IntentModel model = IntentParser.parse(yaml);
+        assertFalse(model.getReports()
+                         .get(0)
+                         .isAggregated());
+    }
+
     private static final String CUSTOM_WIDGET_HEAD = """
             name: sales
             entities:

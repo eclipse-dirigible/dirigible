@@ -186,7 +186,8 @@ document.addEventListener('alpine:init', () => {
     },
 
     // Load a KPI widget's data from the report's generated controller. Returns
-    //   { value }               for kind count/value (missing data coalesces to 0),
+    //   { value }               for kind count/value (missing data coalesces to 0); a count over an
+    //                           aggregating report sums its countColumn over the rows,
     //   { rows }                for kind list,
     //   { forbidden: true }     when the report is role-guarded and the user lacks the role
     //                           (the tile should be hidden, not shown as an error),
@@ -209,7 +210,15 @@ document.addEventListener('alpine:init', () => {
           const rows = await this._fetchJson(it.apiBase + '/search', { conditions, $limit: w.limit || 5 });
           return { rows: rows || [] };
         }
-        // kind: count (the default) — the number of records the report yields.
+        // kind: count (the default) — the number of records the report yields. An aggregating report
+        // yields one row per group, so its record count is its count(*) measure SUMMED over the rows;
+        // the count endpoint would report the number of groups (dirigible #7102). `countColumn` is
+        // present exactly for such a report, so its absence means one row is one record.
+        if (w.countColumn) {
+          const rows = await this._fetchJson(it.apiBase + '/search', { conditions });
+          const total = (rows || []).reduce((sum, row) => sum + (Number(row[w.countColumn]) || 0), 0);
+          return { value: total };
+        }
         const r = conditions.length
           ? await this._fetchJson(it.apiBase + '/count', { conditions })
           : await this._fetchJson(it.apiBase + '/count');

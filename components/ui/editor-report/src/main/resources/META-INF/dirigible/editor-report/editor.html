@@ -442,6 +442,17 @@
                                             </bk-select>
                                         </div>
                                     </bk-form-item>
+                                    <bk-form-item ng-if="report.widget.kind === 'count'" class="fd-row fd-margin-top--tiny">
+                                        <div class="fd-col fd-col-md--2">
+                                            <bk-form-label for="widgetCount" colon="true">Count column</bk-form-label>
+                                        </div>
+                                        <div class="fd-col fd-col-md--4 fd-col-lg--3">
+                                            <bk-select id="widgetCount" ng-model="report.widget.countColumn" dropdown-fixed="true">
+                                                <bk-option text="Rows - the report is not aggregated" value="''"></bk-option>
+                                                <bk-option ng-repeat="c in widgetCountColumns()" text="{{c.alias}} (summed)" value="c.alias"></bk-option>
+                                            </bk-select>
+                                        </div>
+                                    </bk-form-item>
                                     <bk-form-item ng-if="report.widget.kind === 'list'" class="fd-row fd-margin-top--tiny">
                                         <div class="fd-col fd-col-md--2">
                                             <bk-form-label for="widgetLimit" colon="true">Rows</bk-form-label>

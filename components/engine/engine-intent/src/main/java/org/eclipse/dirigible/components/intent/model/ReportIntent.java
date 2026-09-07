@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.intent.model;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * Report / aggregation. {@link #source} names the entity to aggregate; {@link #dimensions} are the
@@ -19,6 +20,9 @@ import java.util.Locale;
  * {@code sum(total)}). {@link #filter} is an optional WHERE-style predicate.
  */
 public class ReportIntent {
+
+    /** {@code count(*)} - the row-counting measure, in the two spellings the generator treats alike. */
+    private static final Pattern COUNT_ALL = Pattern.compile("(?i)count\\s*\\(\\s*\\*?\\s*\\)");
 
     private String name;
     private String source;
@@ -214,6 +218,29 @@ public class ReportIntent {
 
     public List<String> getMeasures() {
         return measures;
+    }
+
+    /**
+     * Whether the report AGGREGATES - a ledger kind, or any declared measure. Its rows are then groups,
+     * not records, which is what a {@code kind: count} dashboard widget must not confuse (dirigible
+     * #7102).
+     */
+    public boolean isAggregated() {
+        return isLedgerKind() || measures.stream()
+                                         .anyMatch(measure -> measure != null && !measure.isBlank());
+    }
+
+    /**
+     * The declared {@code count(*)} measure, or {@code null}. It is the one measure whose per-group
+     * values SUM to the report's record count, so it - and not the number of result rows - is what a
+     * {@code kind: count} widget over an aggregating report shows.
+     */
+    public String getCountMeasure() {
+        return measures.stream()
+                       .filter(measure -> measure != null && COUNT_ALL.matcher(measure.trim())
+                                                                      .matches())
+                       .findFirst()
+                       .orElse(null);
     }
 
     public void setMeasures(List<String> measures) {
