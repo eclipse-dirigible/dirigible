@@ -883,7 +883,8 @@ class GlueGenerator {
     private static void bindNumbering(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         // The RAW perspective too, not only the sanitized Java one: the stamp publishes "-updated", and
         // an event topic is built from the raw perspective (the sanitized form is the Java package).
-        copy(context, item, "entity", "masterPk", "field", "series", "per", "perspective");
+        // perDefault: the partition a null FK falls back to (the relation's init:, #7101).
+        copy(context, item, "entity", "masterPk", "field", "series", "per", "perDefault", "perspective");
         context.put("javaPerspective", sanitize(item, "perspective"));
     }
 

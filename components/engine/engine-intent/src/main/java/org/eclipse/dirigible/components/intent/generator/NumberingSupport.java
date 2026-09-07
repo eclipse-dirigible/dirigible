@@ -18,6 +18,7 @@ import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
+import org.eclipse.dirigible.components.intent.model.RelationIntent;
 
 /**
  * Builds the {@code numbering} glue collection: one descriptor per {@code number: { stampOn: issue
@@ -29,7 +30,9 @@ import org.eclipse.dirigible.components.intent.model.NumberIntent;
  * <p>
  * The number is allocated + formatted via {@code sdk.numbering.DocumentNumbers} (the shared
  * per-tenant counter) and written with the targeted {@code updateProperty} (a workflow system
- * write).
+ * write). A partitioned series resolves its partition from the {@code per} FK, falling back to that
+ * relation's {@code init:} default when the FK is null (#7101) - the default company is a partition
+ * like any other.
  */
 final class NumberingSupport {
 
@@ -57,11 +60,34 @@ final class NumberingSupport {
                 descriptor.put("field", IntentNaming.pascalCase(field.getName()));
                 descriptor.put("series", number.getSeries() == null ? entity.getName() : number.getSeries());
                 // The partition FK property the stamp reads off the entity ("" = tenant-wide series).
-                descriptor.put("per", number.getPer() == null || number.getPer()
-                                                                       .isBlank() ? "" : IntentNaming.pascalCase(number.getPer()));
+                String per = number.getPer() == null || number.getPer()
+                                                              .isBlank() ? "" : IntentNaming.pascalCase(number.getPer());
+                descriptor.put("per", per);
+                // The partition the stamp falls back to when the FK is null on the loaded row: the
+                // relation's `init:` default (#7101) - the same value the create-time allocator uses,
+                // so both stamp paths resolve the default company to ITS partition, never the base row.
+                descriptor.put("perDefault", partitionDefault(entity, per));
                 numbering.add(descriptor);
             }
         }
         return numbering;
+    }
+
+    /**
+     * The {@code init:} of the entity's relation named {@code per} ("" when the relation carries none):
+     * the value the partition FK WILL hold on a row that left it unset.
+     */
+    private static String partitionDefault(EntityIntent entity, String per) {
+        if (per.isEmpty()) {
+            return "";
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.getName() != null && per.equals(IntentNaming.pascalCase(relation.getName()))) {
+                return relation.getInit() == null ? ""
+                        : relation.getInit()
+                                  .trim();
+            }
+        }
+        return "";
     }
 }

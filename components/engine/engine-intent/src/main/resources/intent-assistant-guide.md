@@ -657,6 +657,9 @@ gives the field a platform-allocated, gap-free document number. The intent decla
   UNIQUE (which would make the second company's first document collide with the first company's).
   A hand-declared entity-level `unique: [{ fields: [Company, number] }]` is honoured as-is, never
   doubled. Never an `EntityStatus` relation.
+  A `per:` relation carrying `init:` (the default company - `{ name: Company, to: Company, init: 1 }`)
+  is a partition like any other: a document that leaves the FK unset numbers in the default
+  company's own sequence, starting at 1 like every other company's, never on the series' base row.
 - `stampOn` - `create` (the generated repository allocates at insert) or `issue` (the document is
   created with a UUID placeholder and a generated delegate replaces it at the modeled issue step,
   idempotently - a re-issue after an amend keeps the number). Use `issue` for legal documents whose

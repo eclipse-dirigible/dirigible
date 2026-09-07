@@ -3964,6 +3964,52 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void numbering_partitions_the_default_company_by_the_relations_init() {
+        // A per: Company series where Company carries init: 1 (issue #7101). The init is a DATABASE
+        // default the insert applies - AFTER a stampOn: create number is drawn off the entity as the
+        // caller handed it in, so the default company's documents resolved to the series' base row ("")
+        // and the second company's partition, materialized from that base row, started where the default
+        // company left off (VAC0000009 for both). Both stamp paths must resolve a null FK to the init.
+        writeIntent("""
+                name: vacations
+                entities:
+                  - name: Company
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: VacationRequest
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 100, number: { series: Vacation Request, per: Company, stampOn: create } }
+                    relations:
+                      - { name: Company, kind: manyToOne, to: Company, init: 1 }
+                  - name: PurchaseInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 100, number: { series: Purchase Invoice, per: Company, stampOn: issue } }
+                    relations:
+                      - { name: Company, kind: manyToOne, to: Company, init: 1 }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-dao-java/template/template.js", "vacations.model");
+        generateFromModel("template-application-events-java/template/template.js", "vacations.glue");
+
+        String repository = codeOf("gen/vacations/data/vacationrequest/VacationRequestRepository.java");
+        assertTrue(
+                repository.contains(
+                        "DocumentNumbers.next(\"Vacation Request\", entity.Company == null ? \"1\" : String.valueOf(entity.Company))"),
+                "the create-time allocator must partition a null Company by its init default, never by the base row: " + repository);
+
+        String stamp = codeOf("gen/events/vacations/PurchaseInvoiceNumberStamp.java");
+        assertTrue(stamp.contains("DocumentNumbers.next(\"Purchase Invoice\","), "the stamp must allocate from the declared series");
+        assertTrue(stamp.contains("entity.Company == null ? \"1\" : String.valueOf(entity.Company)"),
+                "the issue-time stamp must resolve the partition exactly as the create-time allocator does: " + stamp);
+    }
+
+    @Test
     void an_editable_relation_renders_a_record_picker_and_writes_the_chosen_foreign_key() {
         // The "a person picks the related record" fallback, INSIDE the process: `editable` accepts a
         // to-one relation, so the officer chooses the driver on the task form instead of the flow

@@ -43,8 +43,15 @@ public class ${entity}NumberStamp implements JavaDelegate {
             return;
         }
 #if($per && $per != "")
+## A null partition FK resolves to the relation's init: default (the value the row carries by
+## construction), never to the series' base row - the default company is a partition like any other.
+#if($perDefault && $perDefault != "")
+        String number = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${series}",
+                entity.${per} == null ? "${perDefault}" : String.valueOf(entity.${per}));
+#else
         String number = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${series}",
                 entity.${per} == null ? null : String.valueOf(entity.${per}));
+#end
 #else
         String number = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${series}");
 #end
