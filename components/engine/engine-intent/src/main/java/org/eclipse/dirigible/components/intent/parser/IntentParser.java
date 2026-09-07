@@ -3705,9 +3705,13 @@ public final class IntentParser {
      * single field says it. Every name must resolve to an own field or an own <b>to-one</b> relation of
      * the entity: a to-one contributes its foreign-key column, which is what a pair like
      * {@code (tenant, application)} means, while a to-many has no column on this side to constrain. A
-     * cross-model relation is rejected outright - the consumer stores a projection of the target, so
-     * there is no local column either. And a single-name key is rejected naming the field attribute it
-     * duplicates, because two ways to say the same thing is how the two drift apart.
+     * cross-model to-one qualifies exactly like a same-model one (#7092): the consumer stores the
+     * target's id in its own {@code <ENTITY>_<RELATION>} column - the projection is only the read-side
+     * copy that feeds the dropdown - and that column is what the natural key of most transactional rows
+     * in a modular fleet spans ({@code (projectMonth, Employee)}, {@code (payrollRun, Employee)},
+     * {@code (Customer, period)}): the master data is owned elsewhere by design. And a single-name key
+     * is rejected naming the field attribute it duplicates, because two ways to say the same thing is
+     * how the two drift apart.
      *
      * @param entity the entity carrying the keys
      * @param issues the collecting issue list
@@ -3759,10 +3763,9 @@ public final class IntentParser {
                     } else if (!("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
                         issues.add(subject + " names [" + name + "], which is a " + relation.getKind()
                                 + " relation - only a field or a to-one relation has a column on this entity to constrain");
-                    } else if (relation.isCrossModel()) {
-                        issues.add(subject + " names the cross-model relation [" + name
-                                + "] - a cross-model target is stored as a projection, so this entity has no column for it");
                     }
+                    // A to-one passes whether or not its target is cross-model: both store the target id in
+                    // this entity's own FK column, which is the column the key constrains.
                     continue;
                 }
                 if (!fields.contains(name)) {

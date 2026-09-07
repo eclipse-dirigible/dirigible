@@ -509,6 +509,15 @@ field may declare:
   FK to a node with children (e.g. a journal line references an analytical account, never a
   synthetic one). The target entity must declare `hierarchy`. Canonical pair:
     `- { name: Account, kind: manyToOne, to: Account, model: accounts, required: true, leafOnly: true }`
+- `unique:` (entity-level) - **the composite business key**, what a row IS when no single field says
+  it: `unique: [{ fields: [ProjectTimesheet, Employee], message: "..." }]`. Each member is an own field
+  or an own **to-one** relation (which contributes its foreign-key column); the key is created in the
+  schema and a colliding write is answered 409 with the message. A cross-model to-one qualifies like a
+  same-model one - the consumer stores the target's id in its own FK column, the projection is only
+  the read-side copy - which is how (project-month, employee), (payroll run, employee) and
+  (customer, period) are declared when the master data is owned by another module. Refused: a
+  to-many or `subset` member (no column here), a single-name key (use `unique: true` on the field), a
+  repeated name, the same key twice.
 - `checks:` (entity-level) - **declarative cross-field / cross-line validations**:
   - `{ kind: exactlyOne, fields: [debit, credit], message: "..." }` (row-level): exactly one of the
     listed own fields is non-null - enforced on every user write (400).

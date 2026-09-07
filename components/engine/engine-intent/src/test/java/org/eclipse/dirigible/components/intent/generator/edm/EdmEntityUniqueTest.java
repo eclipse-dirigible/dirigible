@@ -68,6 +68,29 @@ class EdmEntityUniqueTest {
         assertEquals(List.of("TENANT_APPLICATION_TENANT", "TENANT_APPLICATION_PLAN"), columnNames(constraint));
     }
 
+    /**
+     * #7092: the FK column of a cross-model to-one has the same {@code <ENTITY>_<RELATION>} form as a
+     * same-model one (see {@code crossModelRelationProperty}), so the key over it is emitted with no
+     * other change - the schema template, the alter reconciliation and the controller's 409 mapping all
+     * key on these column names.
+     */
+    @Test
+    void aCrossModelToOneContributesItsForeignKeyColumnLikeASameModelOne() {
+        // The text block already stripped the common indentation: the document starts at column 0.
+        String yaml = PROVISIONING.replace("entities:\n", "uses:\n  - { model: catalog }\nentities:\n")
+                                  .replace("  - { name: application, kind: manyToOne, to: Application, required: true }",
+                                          "  - { name: application, kind: manyToOne, to: Application, model: catalog, required: true }");
+
+        Map<String, Object> constraint = onlyConstraint(yaml);
+
+        assertEquals("TenantApplication_Tenant_Application", constraint.get("name"));
+        assertEquals(List.of("TENANT_APPLICATION_TENANT", "TENANT_APPLICATION_APPLICATION"), columnNames(constraint),
+                "the cross-model FK column is local to this entity and carries the same name form as a same-model one");
+        assertEquals("Tenant,Application", constraint.get("properties"), "the .edm twin names the FK property the modeler resolves");
+        String xml = EdmIntentGenerator.buildEdmXmlForTest(IntentParser.parse(yaml), "provisioning");
+        assertTrue(xml.contains("<properties>Tenant,Application</properties>"), "the key reaches the .edm section: " + xml);
+    }
+
     @Test
     void anUnauthoredMessageStillReadsAsSomethingAUserCanActOn() {
         Map<String, Object> constraint =
