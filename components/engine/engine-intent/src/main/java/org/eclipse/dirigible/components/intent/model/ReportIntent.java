@@ -12,7 +12,6 @@ package org.eclipse.dirigible.components.intent.model;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.regex.Pattern;
 
 /**
  * Report / aggregation. {@link #source} names the entity to aggregate; {@link #dimensions} are the
@@ -20,9 +19,6 @@ import java.util.regex.Pattern;
  * {@code sum(total)}). {@link #filter} is an optional WHERE-style predicate.
  */
 public class ReportIntent {
-
-    /** {@code count(*)} - the row-counting measure, in the two spellings the generator treats alike. */
-    private static final Pattern COUNT_ALL = Pattern.compile("(?i)count\\s*\\(\\s*\\*?\\s*\\)");
 
     private String name;
     private String source;
@@ -237,10 +233,31 @@ public class ReportIntent {
      */
     public String getCountMeasure() {
         return measures.stream()
-                       .filter(measure -> measure != null && COUNT_ALL.matcher(measure.trim())
-                                                                      .matches())
+                       .filter(ReportIntent::isCountAll)
                        .findFirst()
                        .orElse(null);
+    }
+
+    /**
+     * Whether the measure is {@code count(*)} - or {@code count()}, the spelling the generator treats
+     * alike - however it is spaced. Compared as a whitespace-free key rather than matched by a pattern:
+     * the expression is authored text, and a regex of adjacent {@code \s*} runs over it is a
+     * polynomial-backtracking surface for no gain.
+     */
+    private static boolean isCountAll(String measure) {
+        if (measure == null) {
+            return false;
+        }
+        StringBuilder compact = new StringBuilder(measure.length());
+        for (int i = 0; i < measure.length(); i++) {
+            char character = measure.charAt(i);
+            if (!Character.isWhitespace(character)) {
+                compact.append(character);
+            }
+        }
+        String key = compact.toString()
+                            .toLowerCase(Locale.ROOT);
+        return "count(*)".equals(key) || "count()".equals(key);
     }
 
     public void setMeasures(List<String> measures) {
