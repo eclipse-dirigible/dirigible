@@ -864,8 +864,9 @@ class ReportIntentGeneratorTest {
                                                      .get("query");
 
         // One LEFT join to the language table, keyed on the base row and the request language - LEFT so
-        // an untranslated row (or a caller with no language) still shows, with its base value.
-        assertEquals(1, query.split("LEFT JOIN", -1).length - 1, query);
+        // an untranslated row (or a caller with no language) still shows, with its base value. (The
+        // optional Unit relation itself is left-joined too - dirigible #7105 - so count the _LANG one.)
+        assertEquals(1, query.split("LEFT JOIN \"SHOP_UNIT_LANG\"", -1).length - 1, query);
         assertTrue(query.contains(
                 "LEFT JOIN \"SHOP_UNIT_LANG\" as Unit_LANG ON Unit_LANG.\"Id\" = Unit.\"UNIT_ID\" AND Unit_LANG.\"Language\" = :language"),
                 query);
@@ -931,6 +932,118 @@ class ReportIntentGeneratorTest {
         // Nothing to overlay, nothing to bind: the generated repository keys its language binding off
         // the query itself, so an unchanged model must stay byte-identical to what it emitted before.
         assertFalse(query.contains(":language"), query);
-        assertFalse(query.contains("LEFT JOIN"), query);
+        assertFalse(query.contains("_LANG"), query);
+    }
+
+    /**
+     * A document with the three kinds of to-one relation a report can cross: optional, required and
+     * composition.
+     */
+    private static final String OPTIONAL_RELATION_INTENT = """
+            name: purchasing
+            entities:
+              - name: Supplier
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Store
+                kind: setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true }
+              - name: PurchaseOrder
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string }
+                  - { name: total, type: decimal }
+                relations:
+                  - { name: Supplier, kind: manyToOne, to: Supplier, required: true }
+                  - { name: Store, kind: manyToOne, to: Store }
+              - name: PurchaseOrderLine
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: quantity, type: decimal }
+                relations:
+                  - { name: PurchaseOrder, kind: manyToOne, to: PurchaseOrder, composition: true }
+                  - { name: Store, kind: manyToOne, to: Store }
+            reports:
+              - name: OpenPurchaseOrders
+                source: PurchaseOrder
+                dimensions: [number, Supplier, Store, total]
+                widget: { kind: count, label: Open Purchase Orders }
+              - name: LinesByStore
+                source: PurchaseOrderLine
+                dimensions: [PurchaseOrder.number, Store.name]
+                measures: ["sum(quantity)"]
+                filter: "Store.name <> 'X'"
+              - name: LinesForStore
+                source: PurchaseOrderLine
+                dimensions: [quantity]
+                parameters:
+                  - { name: store, target: Store.name, op: like }
+            """;
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void anOptionalRelationIsLeftJoinedSoRowsWithoutItStayInTheReport() {
+        IntentModel model = IntentParser.parse(OPTIONAL_RELATION_INTENT);
+        Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                            .get(0));
+        String query = (String) document.get("query");
+
+        // Two confirmed orders without a store made the "Open Purchase Orders" tile read 0: the optional
+        // Store dimension was INNER JOINed and dropped them (dirigible #7105). Optional -> LEFT.
+        assertTrue(query.contains("LEFT JOIN \"PURCHASING_STORE\" as Store ON PurchaseOrder.\"PURCHASE_ORDER_STORE\" = Store.\"STORE_ID\""),
+                query);
+        // A required relation is still an inner join - its FK column is NOT NULL, nothing to lose.
+        assertTrue(query.contains(
+                "INNER JOIN \"PURCHASING_SUPPLIER\" as Supplier ON PurchaseOrder.\"PURCHASE_ORDER_SUPPLIER\" = Supplier.\"SUPPLIER_ID\""),
+                query);
+        // The structured model the editor owns says the same as the query.
+        List<Map<String, Object>> joins = (List<Map<String, Object>>) document.get("joins");
+        Map<String, String> types = new java.util.HashMap<>();
+        for (Map<String, Object> join : joins) {
+            types.put((String) join.get("alias"), (String) join.get("type"));
+        }
+        assertEquals("INNER", types.get("Supplier"), joins.toString());
+        assertEquals("LEFT", types.get("Store"), joins.toString());
+    }
+
+    @Test
+    void aCompositionParentIsInnerJoinedAndTheFilterPathFollowsTheSameRule() {
+        IntentModel model = IntentParser.parse(OPTIONAL_RELATION_INTENT);
+        String query = (String) ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                     .get(1))
+                                                     .get("query");
+
+        // A composition child cannot exist without its parent (the EDM makes that FK NOT NULL), so the
+        // parent hop stays INNER even without `required: true`.
+        assertTrue(query.contains("INNER JOIN \"PURCHASING_PURCHASE_ORDER\" as PurchaseOrder ON "
+                + "PurchaseOrderLine.\"PURCHASE_ORDER_LINE_PURCHASE_ORDER\" = PurchaseOrder.\"PURCHASE_ORDER_ID\""), query);
+        // The relation reached from both a dimension and the filter is joined once, LEFT - the filter
+        // predicate itself decides what a store-less line does, as authored.
+        assertEquals(1, query.split("JOIN \"PURCHASING_STORE\"", -1).length - 1, query);
+        assertTrue(
+                query.contains(
+                        "LEFT JOIN \"PURCHASING_STORE\" as Store ON PurchaseOrderLine.\"PURCHASE_ORDER_LINE_STORE\" = Store.\"STORE_ID\""),
+                query);
+        assertTrue(query.contains("WHERE Store.\"STORE_NAME\" <> 'X'"), query);
+    }
+
+    @Test
+    void aParameterOverAnOptionalRelationCoalescesTheLeftJoinedColumn() {
+        IntentModel model = IntentParser.parse(OPTIONAL_RELATION_INTENT);
+        String query = (String) ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                     .get(2))
+                                                     .get("query");
+
+        // Store.name is `required` on Store, but the Store hop is optional: the left-joined column is
+        // empty for a store-less line, so the parameter predicate coalesces it like any nullable column
+        // and an unset parameter keeps those lines.
+        assertTrue(
+                query.contains(
+                        "LEFT JOIN \"PURCHASING_STORE\" as Store ON PurchaseOrderLine.\"PURCHASE_ORDER_LINE_STORE\" = Store.\"STORE_ID\""),
+                query);
+        assertTrue(query.contains("COALESCE(Store.\"STORE_NAME\", '') LIKE '%' || :store || '%'"), query);
     }
 }

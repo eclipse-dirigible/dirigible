@@ -123,10 +123,12 @@ class ReportParametersTest {
 
     @Test
     void aParameterOverARelationHopJoinsLikeADimension() {
-        // The Customer.name parameter reaches through the same INNER JOIN a dimension would add - and
-        // adds no second one when a dimension already reached that entity.
+        // The Customer.name parameter reaches through the same join a dimension would add (LEFT - the
+        // relation is optional, dirigible #7105) - and adds no second one when a dimension already
+        // reached that entity.
         String query = query(document(INTENT, 0));
-        assertEquals(1, query.split("INNER JOIN", -1).length - 1, query);
+        assertEquals(1, query.split("LEFT JOIN", -1).length - 1, query);
+        assertEquals(0, query.split("INNER JOIN", -1).length - 1, query);
     }
 
     @Test

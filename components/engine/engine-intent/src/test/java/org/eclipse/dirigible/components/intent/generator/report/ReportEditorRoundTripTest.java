@@ -112,10 +112,12 @@ class ReportEditorRoundTripTest {
         Map<String, Object> join = joins.get(0);
         assertEquals("Customer", join.get("alias"));
         assertEquals("SALES_CUSTOMER", join.get("name"));
-        assertEquals("INNER", join.get("type"));
+        // Customer is optional on Invoice, so it is left-joined (dirigible #7105) - and the type the
+        // model carries is the type the query says.
+        assertEquals("LEFT", join.get("type"));
         assertEquals("Invoice.\"INVOICE_CUSTOMER\" = Customer.\"CUSTOMER_ID\"", join.get("condition"));
         assertTrue(String.valueOf(document.get("query"))
-                         .contains("INNER JOIN \"SALES_CUSTOMER\" as Customer ON Invoice.\"INVOICE_CUSTOMER\" = Customer.\"CUSTOMER_ID\""),
+                         .contains("LEFT JOIN \"SALES_CUSTOMER\" as Customer ON Invoice.\"INVOICE_CUSTOMER\" = Customer.\"CUSTOMER_ID\""),
                 document.get("query")
                         .toString());
 

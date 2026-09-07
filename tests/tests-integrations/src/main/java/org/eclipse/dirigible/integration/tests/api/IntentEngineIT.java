@@ -4848,11 +4848,12 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("SUM(Order.\\\"ORDER_TOTAL\\\")"), "sum(total) should aggregate the quoted, qualified ORDER_TOTAL column");
         assertTrue(body.contains("\"roleRead\":"), "report should carry default-role read security");
         // A bare to-one relation dimension (customer) joins the related table and shows its name field,
-        // grouping by the name - not the raw FK id.
+        // grouping by the name - not the raw FK id. The relation is optional, so the join is LEFT: an
+        // order without a customer stays in the report with the dimension empty (dirigible #7105).
         assertTrue(
                 body.contains(
-                        "INNER JOIN \\\"ORDERS_CUSTOMER\\\" as Customer ON Order.\\\"ORDER_CUSTOMER\\\" = Customer.\\\"CUSTOMER_ID\\\""),
-                "a bare relation dimension (customer) should INNER JOIN the related entity with quoted identifiers");
+                        "LEFT JOIN \\\"ORDERS_CUSTOMER\\\" as Customer ON Order.\\\"ORDER_CUSTOMER\\\" = Customer.\\\"CUSTOMER_ID\\\""),
+                "a bare optional relation dimension (customer) should LEFT JOIN the related entity with quoted identifiers");
         assertTrue(body.contains("SELECT Customer.\\\"CUSTOMER_NAME\\\" as") && body.contains("GROUP BY Customer.\\\"CUSTOMER_NAME\\\""),
                 "the bare relation dimension should select + group by the related entity's name, not its FK id");
         // The query is not the only place the structure lives: the report editor's visual builder
@@ -4862,7 +4863,7 @@ class IntentEngineIT extends IntegrationTest {
         // WHERE. The builder-owned model has to say exactly what the query says.
         assertTrue(body.contains("\"joins\": ["), "the resolved joins should be part of the model the report editor edits");
         assertTrue(
-                body.contains("\"name\": \"ORDERS_CUSTOMER\"") && body.contains("\"type\": \"INNER\"")
+                body.contains("\"name\": \"ORDERS_CUSTOMER\"") && body.contains("\"type\": \"LEFT\"")
                         && body.contains("\"condition\": \"Order.\\\"ORDER_CUSTOMER\\\" = Customer.\\\"CUSTOMER_ID\\\"\""),
                 "a join row should carry the physical table, the join type and the ON condition");
         assertTrue(monthly.contains(
@@ -4871,11 +4872,12 @@ class IntentEngineIT extends IntegrationTest {
         assertFalse(body.contains("\"conditions\""),
                 "an unfiltered report should emit no conditions at all - an empty array makes the editor emit a bare WHERE");
 
-        // A relation.field dimension joins the related table; the filter becomes a qualified WHERE.
+        // A relation.field dimension joins the related table; the filter becomes a qualified WHERE. The
+        // order is the line's composition parent - never missing - so that join stays INNER.
         String joined = contentOf("BigOrderItems.report");
         assertTrue(
                 joined.contains("INNER JOIN \\\"ORDERS_ORDER\\\" as Order ON OrderItem.\\\"ORDER_ITEM_ORDER\\\" = Order.\\\"ORDER_ID\\\""),
-                "a relation.field dimension (order.orderDate) should INNER JOIN the related entity on its FK");
+                "a relation.field dimension over a composition parent (order.orderDate) should INNER JOIN it on its FK");
         assertTrue(joined.contains("WHERE OrderItem.\\\"ORDER_ITEM_QUANTITY\\\" > 1"),
                 "the intent filter should become a WHERE with the field rewritten to its quoted, qualified column");
         assertTrue(

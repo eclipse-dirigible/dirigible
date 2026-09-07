@@ -59,9 +59,12 @@ import org.springframework.stereotype.Component;
  * a physical column:
  * <ul>
  * <li>a plain field ({@code dueOn}) -&gt; a column on the source table;</li>
- * <li>a {@code relation.field} path ({@code member.name}) -&gt; an {@code INNER JOIN} to the
- * related entity plus a column on it - this is how a report shows columns from a parent/related
- * entity;</li>
+ * <li>a {@code relation.field} path ({@code member.name}) -&gt; a {@code JOIN} to the related
+ * entity plus a column on it - this is how a report shows columns from a parent/related entity. The
+ * join is {@code INNER} for a relation the row cannot lack ({@code required: true} or a
+ * composition) and {@code LEFT} for an optional one, so a row without the relation keeps its place
+ * in the report (and in the count tile fed by it) with the dimension empty - see
+ * {@link #joinType(RelationIntent)};</li>
  * <li>a bare to-one relation name ({@code book}) -&gt; the foreign-key column on the source;</li>
  * <li>a measure {@code count(*)} / {@code sum(total)} / {@code avg(price)} /
  * {@code min}/{@code max} -&gt; an aggregate column (and the dimensions become the
@@ -159,9 +162,18 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     private static final Pattern OR_OPERATOR = Pattern.compile("\\bOR\\b", Pattern.CASE_INSENSITIVE);
 
     /**
-     * Every entity join a report resolves is an inner one; the editor's builder offers the other kinds.
+     * The join to an entity the row cannot lack - a {@code required: true} relation or a composition
+     * parent. Its FK column is NOT NULL (the EDM generator's rule), so an inner join drops nothing.
      */
-    private static final String JOIN_TYPE = "INNER";
+    private static final String REQUIRED_JOIN_TYPE = "INNER";
+
+    /**
+     * The join to an entity the row may lack - an optional to-one relation. A report over
+     * {@code PurchaseOrder} with {@code Store} among its dimensions used to INNER JOIN the store, so
+     * every order without one vanished from the report and from its {@code count} widget (dirigible
+     * #7105). A left join keeps the row and renders the dimension empty.
+     */
+    private static final String OPTIONAL_JOIN_TYPE = "LEFT";
 
     /** A translation table is joined leniently - a row without a translation keeps its base value. */
     private static final String LANGUAGE_JOIN_TYPE = "LEFT";
@@ -1608,14 +1620,15 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      */
     private static ColumnRef resolve(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
             String reference) {
-        return resolve(context, model, source, baseAlias, reference, "", JOIN_TYPE);
+        return resolve(context, model, source, baseAlias, reference, "", null);
     }
 
     /**
      * Resolve a reference against {@code baseAlias}, aliasing every table it joins with
-     * {@code aliasSuffix} and joining it with {@code joinType}. Both are empty/INNER for an ordinary
-     * dimension; the correspondence axis resolves the same paths a second time against the counter-side
-     * line, where the suffix keeps the two sets of aliases apart and LEFT keeps a line whose document
+     * {@code aliasSuffix} and joining it with {@code joinType}. For an ordinary dimension the suffix is
+     * empty and the type null - derived per relation by {@link #joinType(RelationIntent)}; the
+     * correspondence axis resolves the same paths a second time against the counter-side line, where
+     * the suffix keeps the two sets of aliases apart and an explicit LEFT keeps a line whose document
      * has no counter side.
      */
     private static ColumnRef resolve(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
@@ -1635,7 +1648,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 FieldIntent targetField = fieldByName(target, fieldName);
                 // A cross-model target's fields are not in this model; string is the safe display type.
                 ref.reportType = targetField == null ? "CHARACTER VARYING" : reportType(targetField.getType());
-                ref.nullable = targetField == null || !targetField.isRequired();
+                // The column is empty when the target field is, AND when the (left-joined) relation is.
+                ref.nullable = targetField == null || !targetField.isRequired() || !mandatory(relation);
                 ref.displayAlias = humanize(reference.replace('.', ' '));
                 ref.join = join(context, model, source, relation, target, targetName, targetAlias, baseAlias, joinType);
                 translate(context, ref, target, crossModelInfo(context, model, relation), fieldName);
@@ -1784,10 +1798,14 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * the physical table and prefixes its columns; {@code targetAlias} is only the SQL alias, and the
      * two differ when the same entity is joined twice in one query (the correspondence axis joins the
      * dimension's account and the counter-side account of the same document - see
-     * {@link #CORRESPONDENT_SUFFIX}).
+     * {@link #CORRESPONDENT_SUFFIX}). A null {@code joinType} is derived from the relation - see
+     * {@link #joinType(RelationIntent)}.
      */
     private static Join join(IntentGenerationContext context, IntentModel model, EntityIntent source, RelationIntent relation,
             EntityIntent target, String targetName, String targetAlias, String baseAlias, String joinType) {
+        if (joinType == null) {
+            joinType = joinType(relation);
+        }
         String fkColumn = quote(column(source.getName(), relation.getName()));
         // A cross-model target's table and primary-key column come from the resolved owner model -
         // this model's intent-prefixed naming would point at a non-existent local table.
@@ -1800,6 +1818,27 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         String pkColumn = quote(column(targetName, targetPk == null ? "id" : targetPk.getName()));
         return new Join(IntentNaming.tableName(context, targetName), targetAlias,
                 baseAlias + "." + fkColumn + " = " + targetAlias + "." + pkColumn, joinType);
+    }
+
+    /**
+     * The join type a to-one relation is crossed with: {@code INNER} when every source row has the
+     * relation, {@code LEFT} otherwise. Mirrors the EDM generator's nullability rule for the FK column,
+     * so the join is exactly as strict as the schema - an optional relation left unset must not remove
+     * the row from a report that never asked to filter on it (dirigible #7105). A filter over the
+     * relation still behaves as authored: {@code Store.name = 'X'} is false for a row with no store
+     * under either join, and a left join additionally lets {@code Store.name IS NULL} be expressed.
+     */
+    static String joinType(RelationIntent relation) {
+        return mandatory(relation) ? REQUIRED_JOIN_TYPE : OPTIONAL_JOIN_TYPE;
+    }
+
+    /**
+     * Whether every row has the relation set - the same rule that makes the EDM generator emit the FK
+     * column NOT NULL: {@code required: true}, or a composition (a detail cannot exist without its
+     * parent).
+     */
+    private static boolean mandatory(RelationIntent relation) {
+        return relation.isRequired() || relation.isComposition();
     }
 
     /**
@@ -2090,7 +2129,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             }
             EntityIntent target = entityByName(model, relation.getTo());
             String targetAlias = relation.getTo();
-            joins.putIfAbsent(targetAlias, join(context, model, source, relation, target, targetAlias, targetAlias, baseAlias, JOIN_TYPE));
+            joins.putIfAbsent(targetAlias, join(context, model, source, relation, target, targetAlias, targetAlias, baseAlias, null));
             return targetAlias + "." + quote(column(targetAlias, fieldName));
         });
         for (FieldIntent field : source.getFields()) {
@@ -2550,8 +2589,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * A join to another table - INNER by default; LEFT for a language table, and for the correspondent
-     * line of a correspondence balance report.
+     * A join to another table - INNER for a relation every row has, LEFT for an optional one (see
+     * {@link #joinType(RelationIntent)}), for a language table, and for the correspondent line of a
+     * correspondence balance report.
      */
     private static final class Join {
         private final String table;
@@ -2564,10 +2604,6 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
          * parameter.
          */
         private final boolean language;
-
-        private Join(String table, String alias, String on) {
-            this(table, alias, on, JOIN_TYPE);
-        }
 
         private Join(String table, String alias, String on, String type) {
             this(table, alias, on, type, false);
