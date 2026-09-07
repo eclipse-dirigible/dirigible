@@ -44,6 +44,7 @@ import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
+import org.eclipse.dirigible.components.intent.model.UniqueKeyIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.slf4j.Logger;
@@ -3907,8 +3908,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 // payroll run - with duplicate children under it, and both would bill.
                 List<Map<String, Object>> genUnique = uniqueTerms(g, genFieldAssignments);
                 if (genUnique == null) {
-                    reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] generate unique names a property this generate does"
-                            + " not assign through map or defaults - the schedule was NOT generated");
+                    reportDroppedGlue(context,
+                            "Schedule [" + schedule.getName() + "] generate unique names a property this generate does not assign"
+                                    + " through map or defaults, or a run: period over a target date it does not assign from now"
+                                    + " (or assigns more than once, which of: answers) - the schedule was NOT generated");
                     continue;
                 }
                 entry.put("hasGenUnique", !genUnique.isEmpty());
@@ -4338,16 +4341,32 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The pre-rendered terms of a scheduled generation's natural key (issue #7070): one {@code {
-     * property, expr }} per {@code generate.unique:} entry, the expression being the very one the
-     * target property is about to be assigned from. The generated job queries the target by these
-     * before it builds anything, so a tick that already ran finds its own output and skips the row.
+     * The Java expression a {@code date} property assigned {@code now} renders as - the base every
+     * {@code run:} period bound is built from, and the marker that identifies which of a generate's
+     * assignments is the date the run writes.
+     */
+    private static final String TODAY = "java.time.LocalDate.now()";
+
+    /**
+     * The pre-rendered terms of a scheduled generation's natural key (issues #7070, #7106): one
+     * {@code { property, expr }} per {@code generate.unique:} entry, the expression being the very one
+     * the target property is about to be assigned from - or, for a {@code { run: <period> }} entry, one
+     * {@code { kind: range, property, lower, upper }} over the date the run writes. The generated job
+     * queries the target by these before it builds anything, so a tick that already ran finds its own
+     * output and skips the row.
      *
      * <p>
      * Reusing the assignment expression rather than re-deriving one is what keeps the guard honest: the
      * value looked up and the value written cannot drift, including the shapes {@code now} renders per
      * target field ({@code YearMonth.now().toString()} for a {@code month}, which is exactly what makes
-     * "the same month" comparable at all).
+     * "the same month" comparable at all). A period term extends the same discipline: its bounds are
+     * derived from the assignment's own {@code LocalDate.now()}, so the period the guard queries is by
+     * construction the period the generated row is dated into.
+     *
+     * <p>
+     * The {@code kind} key is deliberately absent from a property term: a {@code .glue} written before
+     * #7106 carries none, Velocity evaluates the template's {@code #if($u.kind == "range")} as false
+     * for a map without the key, and such a job therefore still renders byte-identically.
      *
      * @param g the create-from block
      * @param assignments the already-rendered map/defaults assignments against the loop row
@@ -4364,7 +4383,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             byProperty.put(String.valueOf(assignment.get("targetProp")), String.valueOf(assignment.get("expr")));
         }
         List<Map<String, Object>> terms = new ArrayList<>();
-        for (String property : g.getUnique()) {
+        for (UniqueKeyIntent entry : g.getUnique()) {
+            if (entry == null) {
+                return null;
+            }
+            if (entry.isRun()) {
+                Map<String, Object> term = runTerm(entry, byProperty);
+                if (term == null) {
+                    return null;
+                }
+                terms.add(term);
+                continue;
+            }
+            String property = entry.getProperty();
             if (property == null || property.isBlank()) {
                 return null;
             }
@@ -4376,6 +4407,68 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             terms.add(Map.of("property", targetProp, "expr", expression));
         }
         return terms;
+    }
+
+    /**
+     * One period-of-the-run key term (issue #7106), as a range over the target date this generate
+     * assigns from {@code now}. The recurring-template family has no period column to key on - a
+     * monthly rent bill is a plain document with a {@code date} - and needs none: the document's own
+     * date already carries the period, so the guard asks whether a target dated anywhere inside the
+     * current period exists. That is what makes a re-run on the 14th find what the 1st created, and it
+     * is why no hidden period column and no run ledger were introduced.
+     *
+     * @param entry the {@code { run: <period> }} entry, with an optional {@code of:} naming the date
+     * @param byProperty the rendered assignment expression per target property
+     * @return the term, or null when the date it would range over is absent or ambiguous (the parser
+     *         reports both; a generation reached by another route drops the schedule rather than
+     *         emitting a guard over the wrong column)
+     */
+    private static Map<String, Object> runTerm(UniqueKeyIntent entry, Map<String, String> byProperty) {
+        String property = null;
+        if (entry.getOf() != null && !entry.getOf()
+                                           .isBlank()) {
+            String named = IntentNaming.pascalCase(entry.getOf());
+            property = TODAY.equals(byProperty.get(named)) ? named : null;
+        } else {
+            // The date the run writes is the assignment that renders as today - a `month` / `week`
+            // field's `now` renders as its own string shape and is keyed on as an ordinary property.
+            for (Map.Entry<String, String> assignment : byProperty.entrySet()) {
+                if (TODAY.equals(assignment.getValue())) {
+                    if (property != null) {
+                        return null;
+                    }
+                    property = assignment.getKey();
+                }
+            }
+        }
+        if (property == null) {
+            return null;
+        }
+        String period = entry.getRun()
+                             .trim()
+                             .toLowerCase(java.util.Locale.ROOT);
+        if ("day".equals(period)) {
+            // A single day needs no range - and rendering it as one would make the generated guard say
+            // `between(today, today)` where the author wrote `run: day`.
+            return Map.of("property", property, "expr", TODAY);
+        }
+        String lower = switch (period) {
+            case "week" -> TODAY + ".with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))";
+            case "month" -> TODAY + ".withDayOfMonth(1)";
+            case "quarter" -> TODAY + ".with(java.time.temporal.IsoFields.DAY_OF_QUARTER, 1)";
+            case "year" -> TODAY + ".withDayOfYear(1)";
+            default -> null;
+        };
+        if (lower == null) {
+            return null;
+        }
+        String upper = lower + switch (period) {
+            case "week" -> ".plusDays(6)";
+            case "month" -> ".plusMonths(1).minusDays(1)";
+            case "quarter" -> ".plusMonths(3).minusDays(1)";
+            default -> ".plusYears(1).minusDays(1)";
+        };
+        return Map.of("kind", "range", "property", property, "lower", lower, "upper", upper);
     }
 
     /**

@@ -295,6 +295,98 @@ class GlueSchedulesTest {
 
     @SuppressWarnings("unchecked")
     @Test
+    void thePeriodOfTheRunRendersAsARangeOverTheDateTheRunWrites() {
+        // Issue #7106: a monthly bill generated from a standing template is a plain document with a
+        // date and no period column, so #7070's property-only key was not expressible at all. The
+        // period is not stored: the guard ranges over the very date this run writes, which is what
+        // makes a re-run on the 14th find what the 1st created.
+        String yaml = """
+                name: purchases
+                entities:
+                  - name: BillTemplate
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: active, type: boolean }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                  - name: Supplier
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: PurchaseInvoice
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: BillTemplate
+                    generate:
+                      to: PurchaseInvoice
+                      unique: [Supplier, { run: month }]
+                      map:
+                        Supplier: Supplier
+                      defaults:
+                        date: now
+                """;
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(IntentParser.parse(yaml))
+                                                   .get(0);
+
+        assertEquals(true, s.get("hasGenUnique"));
+        List<Map<String, Object>> unique = (List<Map<String, Object>>) s.get("genUnique");
+        assertEquals(Map.of("property", "Supplier", "expr", "entity.Supplier"), unique.get(0));
+        // The bounds are built from the assignment's own LocalDate.now(), so the period the guard
+        // queries is by construction the period the row is dated into.
+        assertEquals(Map.of("kind", "range", "property", "Date", "lower", "java.time.LocalDate.now().withDayOfMonth(1)", "upper",
+                "java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1).minusDays(1)"), unique.get(1));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void aQuarterlyRunPeriodRangesOverTheIsoQuarter() {
+        String yaml = """
+                name: purchases
+                entities:
+                  - name: BillTemplate
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                  - name: Supplier
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: PurchaseInvoice
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                schedules:
+                  - name: quarterly-recurring-bills
+                    cron: "0 0 5 1 1,4,7,10 ?"
+                    entity: BillTemplate
+                    generate:
+                      to: PurchaseInvoice
+                      unique: [Supplier, { run: quarter }]
+                      map:
+                        Supplier: Supplier
+                      defaults:
+                        date: now
+                """;
+        List<Map<String, Object>> unique = (List<Map<String, Object>>) GlueIntentGenerator.buildSchedulesForTest(IntentParser.parse(yaml))
+                                                                                          .get(0)
+                                                                                          .get("genUnique");
+
+        assertEquals("java.time.LocalDate.now().with(java.time.temporal.IsoFields.DAY_OF_QUARTER, 1)", unique.get(1)
+                                                                                                             .get("lower"));
+        assertEquals("java.time.LocalDate.now().with(java.time.temporal.IsoFields.DAY_OF_QUARTER, 1).plusMonths(3).minusDays(1)",
+                unique.get(1)
+                      .get("upper"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
     void aScheduleWithNoDeclaredKeyStillGeneratesAndCarriesNoGuard() {
         // Backward compatibility is the point: every intent authored before the key existed keeps
         // generating exactly what it did (the generation reports the advisory separately).

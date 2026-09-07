@@ -241,10 +241,17 @@ public class GeneratesIntent {
 
     /**
      * Scheduled generation only (issue #7070): the natural key that makes a SECOND run of the job a
-     * no-op instead of a duplicate. Each element names a property of {@link #to} that this same block
-     * already assigns through {@link #map} or {@link #defaults}; before the target is built, the target
-     * is looked up by those values and a matching row makes the source row - and every child under it -
+     * no-op instead of a duplicate. Each element either names a property of {@link #to} that this same
+     * block already assigns through {@link #map} or {@link #defaults}, or - {@code { run: month }},
+     * issue #7106 - the calendar period of the run itself; before the target is built, the target is
+     * looked up by those values and a matching row makes the source row - and every child under it -
      * skipped.
+     *
+     * <p>
+     * The {@code run:} term is what makes the key expressible for the recurring-template family: a
+     * monthly bill generated from a standing template is a plain document with a {@code date} and no
+     * period column to name, so it ranges over that date instead - the period needs no storage of its
+     * own. See {@link UniqueKeyIntent}.
      *
      * <p>
      * Why a schedule needs its own guard: the at-most-once cardinality of an EVENT-driven create-from
@@ -262,7 +269,7 @@ public class GeneratesIntent {
      * backstop. Absent, the generation reports an advisory rather than refusing: every intent authored
      * before this existed keeps generating exactly what it did.
      */
-    private List<String> unique;
+    private List<UniqueKeyIntent> unique;
 
     /**
      * Optional declared input form (issue #6685): a small set of the TARGET's properties the user
@@ -482,11 +489,11 @@ public class GeneratesIntent {
         this.children = children;
     }
 
-    public List<String> getUnique() {
+    public List<UniqueKeyIntent> getUnique() {
         return unique;
     }
 
-    public void setUnique(List<String> unique) {
+    public void setUnique(List<UniqueKeyIntent> unique) {
         this.unique = unique;
     }
 

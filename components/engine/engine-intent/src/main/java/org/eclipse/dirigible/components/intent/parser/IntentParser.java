@@ -88,6 +88,7 @@ import org.eclipse.dirigible.components.intent.model.SeedIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.eclipse.dirigible.components.intent.model.TransitionIntent;
 import org.eclipse.dirigible.components.intent.model.UniqueIntent;
+import org.eclipse.dirigible.components.intent.model.UniqueKeyIntent;
 import org.eclipse.dirigible.components.intent.model.WidgetIntent;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -225,6 +226,14 @@ public final class IntentParser {
     private static final Set<String> RESOLVE_DATE_TYPES = Set.of("date", "timestamp");
 
     /**
+     * The calendar periods a scheduled generation's natural key may be partitioned by (issue #7106), in
+     * coarsening order - the vocabulary of a {@code unique: [..., { run: <period> }]} term. A
+     * {@code LinkedHashSet} rather than {@code Set.of} so a rejection message lists them in that order
+     * instead of a hash order that changes between runs.
+     */
+    private static final Set<String> RUN_PERIODS = new LinkedHashSet<>(List.of("day", "week", "month", "quarter", "year"));
+
+    /**
      * The shortest {@code notify: { outcome: }} field that can carry a reason worth reading -
      * {@code "failed: "} plus something of the mail server's message. Shorter and the column would
      * truncate the diagnosis at the database, where nothing reports it (dirigible #7023).
@@ -285,6 +294,7 @@ public final class IntentParser {
         rejectEmptyVisibleTo(tree);
         rejectLifecycleOn(tree);
         moveGeneratesItemLines(tree);
+        expandUniqueShorthand(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
         // together with the structural issues below.
@@ -1068,17 +1078,28 @@ public final class IntentParser {
     }
 
     /**
-     * The natural key that makes a second run of a scheduled generation a no-op (issue #7070):
-     * {@code unique: [Project, period]} names the TARGET properties whose values identify the output of
-     * one tick, and the generated job skips a source row whose target already exists with those values.
+     * The natural key that makes a second run of a scheduled generation a no-op (issues #7070 and
+     * #7106): {@code unique: [Project, period]} names the TARGET properties whose values identify the
+     * output of one tick, and the generated job skips a source row whose target already exists with
+     * those values. An entry may instead be {@code { run: month }} - the calendar period of the run,
+     * for a target that has no period column to name.
      *
      * <p>
-     * Every entry must be a property this same block assigns through {@code map} or {@code defaults},
+     * Every PROPERTY entry must be one this same block assigns through {@code map} or {@code defaults},
      * because the guard queries the target by the values it is about to write - a key column nothing
      * writes is queried as null, which either matches every row the schedule ever created (nothing is
      * ever generated again) or none of them (the duplicate this feature exists to stop). Naming it here
      * and not assigning it is therefore never what the author meant, and the mistake is silent at
      * runtime in both directions.
+     *
+     * <p>
+     * A {@code run:} term stores nothing: it ranges over the target's own date property - the one this
+     * block assigns from {@code now} - so a re-run on any day of the same month finds the document the
+     * first tick wrote. That property is what makes the period comparable at all, so it must exist and
+     * be unambiguous: a block that assigns no date from {@code now} is refused, and a block that
+     * assigns more than one is refused until {@code of:} names which. A run term also never stands
+     * alone - a key that is only a period identifies one target per period for the WHOLE schedule, so
+     * the first matching row would generate and every other row be skipped as if it had already run.
      */
     private static void validateScheduleGenerateUnique(String name, GeneratesIntent g, boolean crossModel, Map<String, EntityIntent> byName,
             List<String> issues) {
@@ -1100,10 +1121,36 @@ public final class IntentParser {
                 assigned.add(key.toLowerCase(Locale.ROOT));
             }
         }
-        for (String property : g.getUnique()) {
-            if (property == null || property.isBlank()) {
-                issues.add("schedule [" + name + "] generate unique has a blank entry");
+        int properties = 0;
+        boolean run = false;
+        for (UniqueKeyIntent entry : g.getUnique()) {
+            String property = entry == null ? null : entry.getProperty();
+            boolean named = property != null && !property.isBlank();
+            if (entry == null || !named && !entry.isRun()) {
+                issues.add("schedule [" + name + "] generate unique has a blank entry - each entry is either a target property or"
+                        + " a period of the run (run: day | week | month | quarter | year)");
                 continue;
+            }
+            if (named && entry.isRun()) {
+                issues.add("schedule [" + name + "] generate unique entry names both the property [" + property + "] and the run period ["
+                        + entry.getRun() + "] - one term per entry");
+                continue;
+            }
+            if (entry.isRun()) {
+                if (run) {
+                    issues.add("schedule [" + name + "] generate unique declares run more than once - one tick fires in exactly one"
+                            + " period");
+                    continue;
+                }
+                run = true;
+                validateScheduleGenerateUniqueRun(name, g, entry, target, issues);
+                continue;
+            }
+            properties++;
+            if (entry.getOf() != null) {
+                issues.add("schedule [" + name + "] generate unique [" + property
+                        + "] declares of - of names the target date a run: period ranges over, and a property term is compared"
+                        + " to its own assigned value");
             }
             String key = property.toLowerCase(Locale.ROOT);
             if (!seen.add(key)) {
@@ -1122,6 +1169,86 @@ public final class IntentParser {
                         + target.getName() + "]");
             }
         }
+        if (run && properties == 0) {
+            issues.add("schedule [" + name + "] generate unique declares only the run period - that key identifies one [" + g.getTo()
+                    + "] per period for the WHOLE schedule, so the first matching row would generate and every other row be skipped as"
+                    + " if it had already run; name the target properties that identify the ROW as well");
+        }
+    }
+
+    /**
+     * The period-of-the-run term of a natural key (issue #7106). The recurring-template family - a
+     * monthly rent bill, a quarterly retainer invoice - generates a plain document with a {@code date}
+     * and no period column, so #7070's property-only key could not be declared there at all; on sta
+     * `base-purchase-invoices` {@code monthly-recurring-bills}, run twice on the same day, created
+     * three more DRAFT invoices with no key to name. The period needs no storage: the document's own
+     * date carries it, so the guard ranges over that date and a re-run anywhere in the same period
+     * finds what the first tick wrote.
+     *
+     * <p>
+     * Which date is therefore the whole contract. It must be one this block assigns from {@code now} -
+     * only then is the period the guard queries the period the row is written into - and there must be
+     * exactly one, or {@code of:} must say which.
+     */
+    private static void validateScheduleGenerateUniqueRun(String name, GeneratesIntent g, UniqueKeyIntent entry, EntityIntent target,
+            List<String> issues) {
+        String period = entry.getRun()
+                             .trim()
+                             .toLowerCase(Locale.ROOT);
+        if (!RUN_PERIODS.contains(period)) {
+            issues.add("schedule [" + name + "] generate unique run [" + entry.getRun() + "] is not a period - one of "
+                    + String.join(", ", RUN_PERIODS));
+        }
+        List<String> candidates = datesAssignedNow(g, target);
+        String of = entry.getOf();
+        if (of != null && !of.isBlank()) {
+            if (candidates.stream()
+                          .noneMatch(of::equalsIgnoreCase)) {
+                issues.add("schedule [" + name + "] generate unique run of [" + of + "] is not a date property this generate assigns from"
+                        + " now - the period the guard queries is the period the generated row is dated into, so the date it ranges"
+                        + " over has to be the one the run itself writes (defaults: { " + of + ": now })");
+            }
+            return;
+        }
+        if (candidates.isEmpty()) {
+            issues.add("schedule [" + name + "] generate unique declares run [" + period + "] but this generate assigns no date property"
+                    + " from now - a period-of-the-run key needs no period column, it ranges over the date the run writes on the target,"
+                    + " so add it (defaults: { date: now })");
+            return;
+        }
+        if (candidates.size() > 1) {
+            issues.add("schedule [" + name + "] generate unique declares run [" + period + "] and this generate assigns more than one date"
+                    + " from now (" + String.join(", ", candidates) + ") - name the one the period ranges over with of:");
+        }
+    }
+
+    /**
+     * The target date properties this create-from assigns from {@code now}, in declared order - the
+     * candidates a {@code run:} period may range over. A {@code month} / {@code week} field is not one:
+     * it already HOLDS the period as a string and is keyed on directly as an ordinary property entry.
+     * An unresolvable (cross-model) target keeps every {@code now} assignment, since only its owner
+     * knows the types - the ambiguity is then reported the same way and answered with {@code of:}.
+     */
+    private static List<String> datesAssignedNow(GeneratesIntent g, EntityIntent target) {
+        List<String> dates = new ArrayList<>();
+        for (Map.Entry<String, String> assignment : g.getDefaults()
+                                                     .entrySet()) {
+            String property = assignment.getKey();
+            if (property == null || assignment.getValue() == null || !"now".equals(assignment.getValue()
+                                                                                             .trim())) {
+                continue;
+            }
+            if (target == null) {
+                dates.add(property);
+                continue;
+            }
+            for (FieldIntent field : target.getFields()) {
+                if (property.equalsIgnoreCase(field.getName()) && "date".equals(field.getType())) {
+                    dates.add(property);
+                }
+            }
+        }
+        return dates;
     }
 
     /**
@@ -4721,6 +4848,49 @@ public final class IntentParser {
         Map<Object, Object> mutable = (Map<Object, Object>) generate;
         mutable.put("itemLines", itemLines);
         mutable.remove("items");
+    }
+
+    /**
+     * A {@code generate.unique:} entry is EITHER a plain target property ({@code unique: [Project,
+     * period]}, issue #7070) or the period of the run ({@code unique: [Supplier, { run: month }]},
+     * issue #7106). Both are one typed {@code UniqueKeyIntent}, so the shorthand string form is
+     * expanded to {@code { property: <string> }} on the raw tree here - BEFORE the unknown-key walk and
+     * the typed mapping, which is what lets the two shapes share one list without Gson failing on the
+     * string and without {@code run} reading as an invented key.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    private static void expandUniqueShorthand(Object tree) {
+        if (!(tree instanceof Map<?, ?> root)) {
+            return;
+        }
+        if (root.get("generates") instanceof List<?> generates) {
+            for (Object generateNode : generates) {
+                expandUniqueEntries(generateNode);
+            }
+        }
+        // An on-demand `generates` refuses unique: outright (its cardinality is its event mode), but the
+        // shorthand is expanded there too so that mistake surfaces as that clear message rather than a
+        // Gson type crash.
+        if (root.get("schedules") instanceof List<?> schedules) {
+            for (Object scheduleNode : schedules) {
+                if (scheduleNode instanceof Map<?, ?> schedule) {
+                    expandUniqueEntries(schedule.get("generate"));
+                }
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void expandUniqueEntries(Object generateNode) {
+        if (!(generateNode instanceof Map<?, ?> generate) || !(generate.get("unique") instanceof List<?> unique)) {
+            return;
+        }
+        List<Object> expanded = new ArrayList<>();
+        for (Object entry : unique) {
+            expanded.add(entry instanceof String property ? new LinkedHashMap<>(Map.of("property", property)) : entry);
+        }
+        ((Map<Object, Object>) generate).put("unique", expanded);
     }
 
     /**

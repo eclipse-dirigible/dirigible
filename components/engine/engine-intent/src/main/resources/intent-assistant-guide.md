@@ -2910,6 +2910,43 @@ Pick the pair that identifies the RUN, not the source: `[Project, period]`, not 
 alone. A schedule's source is a standing row - the same `Project` matches the query every month - so a
 back-reference-only key would generate the first project-month and never another.
 
+**`{ run: <period> }` - the period of the run, for a target with no period column.** The
+recurring-template family cannot name a period property, because there is none: a monthly rent bill or
+a quarterly retainer invoice generated from a standing template is a plain document with a `date`. Key
+on the run's own calendar period instead:
+
+```yaml
+schedules:
+  - name: monthly-recurring-bills
+    cron: "0 0 5 1 * ?"
+    entity: BillTemplate
+    generate:
+      to: PurchaseInvoice
+      unique: [Supplier, supplierNumber, { run: month }]   # one bill per template per calendar month
+      map:
+        Supplier: Supplier
+      defaults:
+        date: now
+        supplierNumber: "RECURRING - awaiting invoice"
+```
+
+This adds **no storage** - no hidden period column, no run ledger. The document's own date already
+carries the period, so the guard ranges over it (`between(first of the month, last of the month)`) and
+a re-run on the 14th finds the invoice the 1st created; that is what makes an admin pressing *Run now*
+safe on any day of the month, and it works when the target is owned by another model, where a column
+of ours could not be added at all.
+
+- Periods: `day`, `week`, `month`, `quarter`, `year`. `day` is a plain equality on today.
+- The date it ranges over is the one this block **assigns from `now`**. That is not a convenience:
+  only then is the period the guard queries the period the row is dated into. A block that assigns no
+  date from `now` is refused (nothing to compare), and one that assigns more than one is refused until
+  `of: <property>` names which - a due date a month out would key the bill into the next month.
+- A `month` / `week` typed field is NOT this shape: it already holds the period as a string, so name
+  it as an ordinary property entry (`unique: [Project, period]`).
+- Declare at least one property term alongside it. `unique: [{ run: month }]` is refused: that key
+  identifies one target per period for the WHOLE schedule, so the first matching row would generate and
+  every other row be skipped as if it had already run.
+
 **Per-matched-row child rows (`generate.children`).** A scheduled `generate` may also fan out into
 **child rows** via a `children:` list. Each entry names a `to` target and its `parent`, and a `forEach`
 that iterates either another entity (`forEach: { entity: <E>, match: { ... } }`) or the working days of
@@ -3007,7 +3044,7 @@ schedules:
 **Rules:** unique name, a `cron`, a declared `entity` (local, or a cross-model source via `model:`),
 `where` operators from the allowed list, and **exactly one** of `notify` (valid recipient) /
 `generate` (a declared/cross-model `to`, a `map` over the row's fields/to-one relations,
-a `unique:` natural key, optional `children`). Composition-item cloning via `items:` is **not** available on a schedule (it needs
+a `unique:` natural key - target properties and/or the run's period, optional `children`). Composition-item cloning via `items:` is **not** available on a schedule (it needs
 a selected document) - use an on-demand `generates` action for document-to-document cloning, or
 `generate.children` for the fan-out shape above.
 

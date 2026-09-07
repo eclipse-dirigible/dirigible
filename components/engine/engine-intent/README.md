@@ -764,6 +764,31 @@ a Quartz misfire recovery, an admin pressing Run) creates a duplicate document w
 Every entry must be assigned by this block's `map`/`defaults`; an on-demand `generates` action refuses
 it, its cardinality being its event `mode`.
 
+An entry may instead be **the period of the run** - `{ run: month }` - for a target that has no period
+column to name at all, which is the whole recurring-template family (a monthly rent bill, a quarterly
+retainer invoice: a plain document with a `date`):
+
+```yaml
+schedules:
+  - name: monthly-recurring-bills
+    cron: "0 0 5 1 * ?"
+    entity: BillTemplate
+    generate:
+      to: PurchaseInvoice
+      unique: [Supplier, supplierNumber, { run: month }]   # one bill per template per calendar month
+      map: { Supplier: Supplier }
+      defaults: { date: now, supplierNumber: "RECURRING - awaiting invoice" }
+```
+
+`run:` stores nothing: the document's own date already carries the period, so the guard **ranges over
+that date** (`between(first of the month, last of the month)`) and a re-run on any day of the month
+finds what the 1st created - which is what makes Monitoring's *Run now* safe on any day. Periods are
+`day`, `week`, `month`, `quarter`, `year`. The date it ranges over is the one this block assigns from
+`now`; `of: <property>` names it when the block assigns more than one, and a block that assigns none
+is refused (there would be nothing to compare). A run term never stands alone either - a key that is
+only a period identifies one target per period for the whole schedule, so the first matching row would
+generate and every other row be skipped as if it had already run.
+
 A `where` value is a literal or a **moment**: `CURRENT_DATE` / `CURRENT_TIMESTAMP` (`NOW`), optionally
 offset by a single signed ISO-8601 duration resolved against the clock of the run that fires - which is
 what makes a staleness sweep expressible:

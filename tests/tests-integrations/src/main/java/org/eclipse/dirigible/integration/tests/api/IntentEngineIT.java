@@ -2170,6 +2170,71 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void a_recurring_template_schedule_keys_on_the_period_of_the_run() {
+        // Issue #7106: the recurring-template family had no key to declare. A monthly bill generated
+        // from a standing BillTemplate is a plain document with a `date` - no period column to name -
+        // and the target carries no back-reference to the template either, so #7070's property-only
+        // key was not expressible: `monthly-recurring-bills` run twice on the same day created three
+        // more DRAFT invoices on sta. `run: month` keys on WHEN the tick fired, and stores nothing to
+        // do it: the guard ranges over the very date this run writes, so a re-run on any day of the
+        // month finds the invoice the 1st created.
+        String yaml = """
+                name: purchases
+                entities:
+                  - name: Supplier
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: BillTemplate
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: active, type: boolean }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                  - name: PurchaseInvoice
+                    fields:
+                      - { name: id,             type: integer, primaryKey: true, generated: true }
+                      - { name: date,           type: date }
+                      - { name: supplierNumber, type: string, length: 64 }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: BillTemplate
+                    where:
+                      - { field: active, op: eq, value: true }
+                    generate:
+                      to: PurchaseInvoice
+                      unique: [Supplier, supplierNumber, { run: month }]
+                      map:
+                        Supplier: Supplier
+                      defaults:
+                        date: now
+                        supplierNumber: "RECURRING - awaiting invoice"
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "purchases.glue");
+
+        String job = codeOf("gen/events/purchases/MonthlyRecurringBillsJob.java");
+        assertTrue(job.contains(".PurchaseInvoiceRepository().findAll(Criteria.create()"), "the guard should query the TARGET");
+        assertTrue(job.contains(".eq(\"Supplier\", entity.Supplier)"), "the row half of the key reuses the map assignment's expression");
+        // The period term: a RANGE over the date the run writes, built from that assignment's own
+        // LocalDate.now() - which is what makes the period queried the period the row is dated into.
+        assertTrue(
+                job.contains(".between(\"Date\", java.time.LocalDate.now().withDayOfMonth(1),"
+                        + " java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1).minusDays(1))"),
+                "the run's month renders as a range over the target's own date, needing no period column");
+        // No storage was invented for the period - neither a hidden column on the document nor a ledger.
+        assertFalse(job.contains("_period"), "a period-of-the-run key adds no column of its own");
+        assertTrue(job.indexOf(".PurchaseInvoiceRepository().findAll(Criteria.create()") < job.indexOf(".PurchaseInvoiceEntity target ="),
+                "the guard must run BEFORE the target is built");
+    }
+
+    @Test
     void process_trigger_on_update_with_a_guard_generates_a_suffixed_guarded_listener() {
         String yaml = """
                 name: shipping

@@ -16,15 +16,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.UniqueKeyIntent;
 import org.junit.jupiter.api.Test;
 
 /**
- * The parse-time half of a scheduled generation's natural key (issue #7070): {@code unique:} names
- * the target properties that identify ONE tick's output, so a second run of the job finds what the
- * first one created instead of duplicating it. Every way the key could be declared and still not
- * guard anything is an authoring error, because at runtime both directions of the mistake are
- * silent - a key column nothing assigns is queried as null, which matches either everything or
- * nothing.
+ * The parse-time half of a scheduled generation's natural key (issues #7070 and #7106):
+ * {@code unique:} names the target properties that identify ONE tick's output - or, for a target
+ * with no period column of its own, the calendar period of the run ({@code { run: month }}) - so a
+ * second run of the job finds what the first one created instead of duplicating it. Every way the
+ * key could be declared and still not guard anything is an authoring error, because at runtime both
+ * directions of the mistake are silent - a key column nothing assigns is queried as null, which
+ * matches either everything or nothing, and a period read off the wrong date keys the row into the
+ * wrong period.
  */
 class ScheduleGenerateUniqueIntentTest {
 
@@ -39,6 +42,13 @@ class ScheduleGenerateUniqueIntentTest {
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: period, type: month }
+                relations:
+                  - { name: Project, kind: manyToOne, to: Project }
+              - name: Bill
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: date,    type: date }
+                  - { name: dueDate, type: date }
                 relations:
                   - { name: Project, kind: manyToOne, to: Project }
             """;
@@ -62,7 +72,193 @@ class ScheduleGenerateUniqueIntentTest {
         assertEquals(List.of("Project", "period"), model.getSchedules()
                                                         .get(0)
                                                         .getGenerate()
-                                                        .getUnique());
+                                                        .getUnique()
+                                                        .stream()
+                                                        .map(UniqueKeyIntent::getProperty)
+                                                        .toList());
+    }
+
+    @Test
+    void thePeriodOfTheRunParses() {
+        // Issue #7106: the recurring-template family has no period column to name - a monthly bill is a
+        // plain document with a date - so the run's own calendar period is the key's second term, and
+        // it ranges over the date this generate writes rather than over storage of its own.
+        List<UniqueKeyIntent> key = IntentParser.parse(ENTITIES + """
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: Project
+                    generate:
+                      to: Bill
+                      unique: [Project, { run: month }]
+                      map:
+                        Project: id
+                      defaults:
+                        date: now
+                """)
+                                                .getSchedules()
+                                                .get(0)
+                                                .getGenerate()
+                                                .getUnique();
+
+        assertEquals("Project", key.get(0)
+                                   .getProperty());
+        assertTrue(key.get(1)
+                      .isRun());
+        assertEquals("month", key.get(1)
+                                 .getRun());
+    }
+
+    @Test
+    void aRunPeriodOverOneOfSeveralNowDatesNamesIt() {
+        List<UniqueKeyIntent> key = IntentParser.parse(ENTITIES + """
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: Project
+                    generate:
+                      to: Bill
+                      unique: [Project, { run: quarter, of: date }]
+                      map:
+                        Project: id
+                      defaults:
+                        date: now
+                        dueDate: now
+                """)
+                                                .getSchedules()
+                                                .get(0)
+                                                .getGenerate()
+                                                .getUnique();
+
+        assertEquals("quarter", key.get(1)
+                                   .getRun());
+        assertEquals("date", key.get(1)
+                                .getOf());
+    }
+
+    @Test
+    void aRunPeriodWithNoDateToRangeOverIsRefused() {
+        // The period is not stored anywhere: it is read off the date the run writes. Without such a
+        // date there is nothing to compare, and the guard would silently key on the properties alone.
+        assertRejected("""
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: Project
+                    generate:
+                      to: Bill
+                      unique: [Project, { run: month }]
+                      map:
+                        Project: id
+                """, "declares run [month] but this generate assigns no date property from now");
+    }
+
+    @Test
+    void anAmbiguousRunPeriodDateIsRefused() {
+        // Two dates written by the same run are two different periods to range over - the guard cannot
+        // pick, and picking wrong is silent (a due date a month out keys the bill into the next month).
+        assertRejected("""
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: Project
+                    generate:
+                      to: Bill
+                      unique: [Project, { run: month }]
+                      map:
+                        Project: id
+                      defaults:
+                        date: now
+                        dueDate: now
+                """, "assigns more than one date from now (date, dueDate) - name the one the period ranges over with of:");
+    }
+
+    @Test
+    void aRunPeriodOverADateTheRunDoesNotWriteIsRefused() {
+        assertRejected("""
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: Project
+                    generate:
+                      to: Bill
+                      unique: [Project, { run: month, of: dueDate }]
+                      map:
+                        Project: id
+                      defaults:
+                        date: now
+                """, "generate unique run of [dueDate] is not a date property this generate assigns from now");
+    }
+
+    @Test
+    void anUnknownRunPeriodIsRefused() {
+        assertRejected("""
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: Project
+                    generate:
+                      to: Bill
+                      unique: [Project, { run: fortnight }]
+                      map:
+                        Project: id
+                      defaults:
+                        date: now
+                """, "generate unique run [fortnight] is not a period - one of day, week, month, quarter, year");
+    }
+
+    @Test
+    void aKeyThatIsOnlyTheRunPeriodIsRefused() {
+        // One target per period for the WHOLE schedule: the first matching row generates and every
+        // other row is skipped as if it had already run - the silent half of the duplicate this
+        // feature removes.
+        assertRejected("""
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: Project
+                    generate:
+                      to: Bill
+                      unique: [{ run: month }]
+                      map:
+                        Project: id
+                      defaults:
+                        date: now
+                """, "generate unique declares only the run period");
+    }
+
+    @Test
+    void twoRunPeriodsAreRefused() {
+        assertRejected("""
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: Project
+                    generate:
+                      to: Bill
+                      unique: [Project, { run: month }, { run: year }]
+                      map:
+                        Project: id
+                      defaults:
+                        date: now
+                """, "generate unique declares run more than once");
+    }
+
+    @Test
+    void anEntryThatIsBothAPropertyAndARunPeriodIsRefused() {
+        assertRejected("""
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: Project
+                    generate:
+                      to: Bill
+                      unique: [{ property: Project, run: month }]
+                      map:
+                        Project: id
+                      defaults:
+                        date: now
+                """, "names both the property [Project] and the run period [month] - one term per entry");
     }
 
     @Test
