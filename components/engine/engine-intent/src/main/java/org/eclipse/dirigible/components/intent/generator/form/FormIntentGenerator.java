@@ -25,10 +25,12 @@ import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
+import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
@@ -227,21 +229,34 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                 metadata.put("entity", form.getForEntity());
             }
             metadata.put("editable", new ArrayList<>(form.getEditable()));
-            putStatusSteps(metadata, entity, model);
+            putStatusSteps(metadata, entity, model, form.getName());
         }
         return metadata;
     }
 
     /**
-     * The document status flow for the read-only step indicator. When the bound entity has a
-     * {@code function: EntityStatus} relation to a LOCAL status entity, emit that entity's non-terminal
-     * status names (its base seed rows, in seed order, dropping cancel/reject/void-style terminal
-     * statuses via {@link #TERMINAL_STATUS}) as {@code steps}, plus {@code statusVar} - the model
-     * variable holding the current status name (the relation name). The runtime renders these as a
-     * horizontal step indicator with the current status active. Skipped when the status entity is
-     * cross-model (its seeds are not on this model) or the flow has fewer than two steps.
+     * The status flow for the read-only step indicator. When the bound entity has a
+     * {@code function: EntityStatus} relation to a LOCAL status entity, emit as {@code steps} the
+     * statuses THE FLOW THIS FORM BELONGS TO walks - the ones its own process writes
+     * ({@link #walkedStatusNames}) plus the entry status - in seed order, dropping the
+     * cancel/reject/void-style terminals via {@link #TERMINAL_STATUS}; plus {@code statusVar}, the
+     * model variable holding the current status name (the relation name). The runtime renders these as
+     * a horizontal step indicator with the current status active.
+     *
+     * <p>
+     * A stepper states "this flow goes 1, 2, 3", so it must list what the flow actually walks. The
+     * nomenclature is a LIST and a list cannot express a branch: taken whole it turns every status of
+     * the document into a step of whatever flow the form belongs to, so an approval form claimed
+     * PARTIAL and PAID as its steps 6 and 7 - settlement states a document reaches from ISSUED on
+     * payment, which no one walking an approval ever steps through (issue #7085). A process whose steps
+     * write no status at all says nothing about the walk, and then the whole non-terminal nomenclature
+     * is still the best available reading.
+     *
+     * <p>
+     * Skipped when the status entity is cross-model (its seeds are not on this model) or the flow has
+     * fewer than two steps - one step is not a flow.
      */
-    private static void putStatusSteps(Map<String, Object> metadata, EntityIntent entity, IntentModel model) {
+    private static void putStatusSteps(Map<String, Object> metadata, EntityIntent entity, IntentModel model, String formName) {
         if (entity == null || entity.getRelations() == null || model == null) {
             return;
         }
@@ -259,6 +274,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                                                       .isBlank()) {
             return; // cross-model status entity: its seeds live in the owner module, not resolvable here
         }
+        Set<String> walked = walkedStatusNames(model, entity, statusRel, formName);
         List<Map<String, Object>> steps = new ArrayList<>();
         for (SeedIntent seed : model.getSeeds()) {
             if (seed.getLanguage() != null || !statusRel.getTo()
@@ -272,6 +288,9 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                     continue;
                 }
                 String label = name.toString();
+                if (!walked.isEmpty() && !walked.contains(label.trim())) {
+                    continue; // a status this flow never walks - not a step of it
+                }
                 if (TERMINAL_STATUS.matcher(label.toLowerCase(Locale.ROOT))
                                    .find()) {
                     continue; // terminal / off-path status - stays the pill, not a step
@@ -291,6 +310,97 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         if (steps.size() >= 2) {
             metadata.put("steps", steps);
             metadata.put("statusVar", statusRel.getName());
+        }
+    }
+
+    /**
+     * The statuses the flow this form belongs to WALKS, by their seeded names: the entry status
+     * ({@code init:} on the entity's status relation) plus every status a step of the owning process
+     * writes ({@code setRelationField: <status relation>} + {@code value:}). Empty when nothing is
+     * known - the form is not a step of any process that writes a status on this entity - which the
+     * caller reads as "no filter", keeping the whole non-terminal nomenclature.
+     *
+     * <p>
+     * The owning process is the one whose {@code userTask} references the form AND whose trigger entity
+     * is the entity the form is bound to (a write on another entity's status says nothing about this
+     * one). A form driven from several such processes contributes the union of their writes: each is a
+     * flow the form is genuinely part of, and every one of them is narrower than the nomenclature.
+     *
+     * @param model the whole intent - the processes are declared beside the entities
+     * @param entity the entity the form is bound to
+     * @param statusRel the entity's {@code function: EntityStatus} relation
+     * @param formName the form being emitted
+     * @return the walked statuses' seeded names, or empty when the flow writes none
+     */
+    private static Set<String> walkedStatusNames(IntentModel model, EntityIntent entity, RelationIntent statusRel, String formName) {
+        if (entity.getName() == null || formName == null) {
+            return Set.of();
+        }
+        Set<Integer> walked = new HashSet<>();
+        for (ProcessIntent process : model.getProcesses()) {
+            if (!referencesForm(process, formName) || !entity.getName()
+                                                             .equals(TriggerSupport.triggerEntity(process))) {
+                continue;
+            }
+            for (StepIntent step : process.getSteps()) {
+                Map<String, Object> args = step.getArgs();
+                Object relation = args == null ? null : args.get("setRelationField");
+                if (relation == null || !statusRel.getName()
+                                                  .equalsIgnoreCase(relation.toString())) {
+                    continue;
+                }
+                Integer target = statusId(args.get("value"));
+                if (target != null) {
+                    walked.add(target);
+                }
+            }
+        }
+        if (walked.isEmpty()) {
+            return Set.of(); // the flow writes no status - it says nothing about the walk
+        }
+        Integer init = statusId(statusRel.getInit());
+        if (init != null) {
+            walked.add(init); // the status the document stands at when the flow starts - its first step
+        }
+        Set<String> names = new HashSet<>();
+        for (Map.Entry<Integer, String> seeded : LifecycleStages.seededStatuses(model, statusRel.getTo())
+                                                                .entrySet()) {
+            if (walked.contains(seeded.getKey()) && seeded.getValue() != null) {
+                names.add(seeded.getValue());
+            }
+        }
+        return names;
+    }
+
+    /** Whether any {@code userTask} of the process opens this form. */
+    private static boolean referencesForm(ProcessIntent process, String formName) {
+        for (StepIntent step : process.getSteps()) {
+            if ("userTask".equals(step.getKind()) && step.getArgs() != null && formName.equals(String.valueOf(step.getArgs()
+                                                                                                                  .get("form")))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A status seed id as an int - a symbolic status name has already been resolved to its id by the
+     * parser, so a token that is not a number is not an id (and is reported there).
+     */
+    private static Integer statusId(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        String text = value == null ? null
+                : String.valueOf(value)
+                        .trim();
+        if (text == null || !text.matches("-?\\d+")) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(text);
+        } catch (NumberFormatException ex) {
+            return null; // more digits than an int holds - no seed id looks like that
         }
     }
 

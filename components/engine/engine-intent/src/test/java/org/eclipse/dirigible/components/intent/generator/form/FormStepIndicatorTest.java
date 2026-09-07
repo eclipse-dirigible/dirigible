@@ -21,11 +21,12 @@ import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.junit.jupiter.api.Test;
 
 /**
- * Verifies the document-status-flow step-indicator metadata the {@link FormIntentGenerator} emits
- * on a BPM task form: the ordered non-terminal status names ({@code steps}) taken from the bound
- * entity's {@code function: EntityStatus} relation seeds, plus the current-status variable
- * ({@code statusVar}). A terminal (cancel/void/…) status is excluded, translation seeds are
- * ignored, and a non-task form gets no steps.
+ * Verifies the status-flow step-indicator metadata the {@link FormIntentGenerator} emits on a BPM
+ * task form: the statuses THE FORM'S OWN FLOW walks ({@code steps}, in seed order) plus the
+ * current-status variable ({@code statusVar}). A status the flow never writes is not a step of it
+ * (issue #7085), a terminal (cancel/void/…) status is excluded, translation seeds are ignored, a
+ * flow that writes no status at all falls back to the whole non-terminal nomenclature, and a
+ * non-task form gets no steps.
  */
 class FormStepIndicatorTest {
 
@@ -68,9 +69,13 @@ class FormStepIndicatorTest {
                   - { id: 1, name: "Чернова" }
             """;
 
+    /**
+     * A process whose steps write no status says nothing about the walk, so the whole non-terminal
+     * nomenclature is still the best available reading.
+     */
     @SuppressWarnings("unchecked")
     @Test
-    void emitsTheStatusFlowStepsOnTheTaskForm() {
+    void aFlowThatWritesNoStatusKeepsTheWholeNomenclature() {
         IntentModel model = IntentParser.parse(YAML);
         Map<String, Map<String, Object>> forms = FormIntentGenerator.buildFormsForTest(model);
 
@@ -96,5 +101,96 @@ class FormStepIndicatorTest {
         assertFalse(meta.containsKey("taskForm"));
         assertFalse(meta.containsKey("steps"));
         assertTrue(meta.get("statusVar") == null);
+    }
+
+    /**
+     * The sta shape (issue #7085): an approval flow that walks DRAFT -> APPROVED -> ISSUED -> CONFIRMED
+     * next to the settlement statuses PARTIAL / PAID, which no process step writes - they are reached
+     * from ISSUED on payment, by the paid roll-up. A second flow on the same document walks exactly
+     * those two.
+     */
+    private static final String BILLING_YAML =
+            """
+                    name: billing
+                    entities:
+                      - name: InvoiceStatus
+                        function: Setting
+                        fields:
+                          - { name: id, type: integer, primaryKey: true, generated: true }
+                          - { name: name, type: string }
+                      - name: Invoice
+                        fields:
+                          - { name: id, type: integer, primaryKey: true, generated: true }
+                          - { name: total, type: decimal }
+                        relations:
+                          - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                    processes:
+                      - name: InvoiceApproval
+                        trigger: { onCreate: Invoice }
+                        steps:
+                          - { name: approve, kind: userTask, args: { assignee: approver, form: ApproveInvoice } }
+                          - { name: approveDecision, kind: decision, args: { if: "action == 'approve'", then: activate, else: cancel } }
+                          - { name: activate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: issue } }
+                          - { name: issue, kind: userTask, args: { assignee: issuer, form: IssueInvoice, setRelationField: Status, value: 3, next: confirm } }
+                          - { name: confirm, kind: userTask, args: { assignee: issuer, form: ConfirmInvoice } }
+                          - { name: confirmDecision, kind: decision, args: { if: "action == 'confirm'", then: confirmed, else: cancel } }
+                          - { name: confirmed, kind: serviceTask, args: { setRelationField: Status, value: 5, next: end } }
+                          - { name: cancel, kind: serviceTask, args: { setRelationField: Status, value: 8, next: end } }
+                          - { name: end, kind: end }
+                      - name: InvoiceSettlement
+                        trigger: { onUpdate: Invoice }
+                        steps:
+                          - { name: record, kind: userTask, args: { assignee: cashier, form: RecordPayment } }
+                          - { name: settledDecision, kind: decision, args: { if: "action == 'settle'", then: paid, else: partial } }
+                          - { name: paid, kind: serviceTask, args: { setRelationField: Status, value: 7, next: end } }
+                          - { name: partial, kind: serviceTask, args: { setRelationField: Status, value: 6, next: end } }
+                          - { name: end, kind: end }
+                    forms:
+                      - { name: ApproveInvoice, forEntity: Invoice, fields: [Status, total], actions: [approve, reject] }
+                      - { name: IssueInvoice, forEntity: Invoice, fields: [Status, total], actions: [issue] }
+                      - { name: ConfirmInvoice, forEntity: Invoice, fields: [Status, total], actions: [confirm, amend] }
+                      - { name: RecordPayment, forEntity: Invoice, fields: [Status, total], actions: [settle] }
+                    seeds:
+                      - name: invoice-statuses
+                        entity: InvoiceStatus
+                        rows:
+                          - { id: 1, name: DRAFT }
+                          - { id: 2, name: APPROVED }
+                          - { id: 3, name: ISSUED }
+                          - { id: 5, name: CONFIRMED }
+                          - { id: 6, name: PARTIAL }
+                          - { id: 7, name: PAID }
+                          - { id: 8, name: CANCELLED }
+                    """;
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void theStepsAreTheStatusesTheOwnFlowWalks() {
+        IntentModel model = IntentParser.parse(BILLING_YAML);
+        Map<String, Map<String, Object>> forms = FormIntentGenerator.buildFormsForTest(model);
+
+        // Every task form of the approval flow: the entry status (init) plus the statuses the flow's own
+        // steps write - APPROVED, ISSUED, CONFIRMED. PARTIAL/PAID are settlement states the paid roll-up
+        // writes from ISSUED, so they are steps of no approval; CANCELLED is terminal.
+        List<Map<String, Object>> approvalSteps =
+                List.of(Map.of("label", "DRAFT"), Map.of("label", "APPROVED"), Map.of("label", "ISSUED"), Map.of("label", "CONFIRMED"));
+        for (String form : List.of("ApproveInvoice", "IssueInvoice", "ConfirmInvoice")) {
+            Map<String, Object> meta = (Map<String, Object>) forms.get(form)
+                                                                  .get("metadata");
+            assertEquals(approvalSteps, meta.get("steps"), form + " should show the approval flow's own statuses");
+            assertEquals("Status", meta.get("statusVar"));
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void anotherFlowOnTheSameDocumentGetsItsOwnSteps() {
+        IntentModel model = IntentParser.parse(BILLING_YAML);
+        Map<String, Map<String, Object>> forms = FormIntentGenerator.buildFormsForTest(model);
+
+        // The settlement flow walks the two statuses IT writes - the approval's are not steps of it.
+        Map<String, Object> meta = (Map<String, Object>) forms.get("RecordPayment")
+                                                              .get("metadata");
+        assertEquals(List.of(Map.of("label", "DRAFT"), Map.of("label", "PARTIAL"), Map.of("label", "PAID")), meta.get("steps"));
     }
 }

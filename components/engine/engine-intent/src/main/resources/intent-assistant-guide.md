@@ -1615,6 +1615,15 @@ paths / relations.
         - { name: identify, kind: userTask, args: { assignee: officer, form: IdentifyDriver } }
         - { name: done, kind: end }
   ```
+- **The status stepper is the flow's own walk.** When `forEntity` carries a `function: EntityStatus`
+  relation, the form renders a read-only step indicator above the fields, and its steps are the
+  statuses THIS flow walks: the relation's `init:` status plus every status the owning process writes
+  with `setRelationField`, in seed order, minus the cancel/reject/void-style terminals. A status
+  nothing in the flow writes is NOT a step of it - a settlement state reached from ISSUED by a
+  `rollups:` status write (PARTIAL, PAID) belongs to the document's life, not to its approval. So to
+  see a stage on the stepper, have a step write it. A flow whose steps write no status at all falls
+  back to showing the whole non-terminal nomenclature, and a flow with fewer than two steps shows no
+  stepper (the title-bar status pill still says where the record stands).
 - **`actions` are the task's choices.** A **`close`** button (just closes the form, does not complete the
   task) is always added automatically - never list it yourself.
 - **Multiple completing actions REQUIRE a decision right after the task** (this is enforced at parse
