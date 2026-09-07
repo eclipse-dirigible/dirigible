@@ -430,6 +430,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
+                  # a boolean: a real checkbox on the power form AND on the personal one (#7103)
+                  - { name: urgent, type: boolean }
                   - { name: period, type: month }
                   - { name: rate, type: decimal, sensitive: true }
                   - { name: totalCost, type: decimal }
@@ -2584,6 +2586,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a month field must render the Harmonia month picker on the power form");
         assertTrue(contentOf("gen/emission/views/my/Claim-form.html").contains("x-h-month-picker"),
                 "a month field must render the Harmonia month picker on the personal form too");
+
+        // boolean widget: a CHECKBOX on both writable surfaces, and on both it is wrapped in a plain
+        // box. x-h-field's default (vertical) orientation stretches every direct child to full width,
+        // so an unwrapped checkbox renders as a full-width bordered rectangle - indistinguishable
+        // from an empty text input, which is exactly how the personal form shipped (#7103).
+        String claimPowerForm = contentOf("gen/emission/views/Claim/Claim-form.html");
+        assertTrue(claimPowerForm.contains("x-h-checkbox"), "a boolean must render a checkbox on the power form");
+        String claimPersonalForm = contentOf("gen/emission/views/my/Claim-form.html");
+        assertTrue(claimPersonalForm.contains("x-h-checkbox"), "a boolean must render a checkbox on the personal form, not a text input");
+        assertFalse(claimPersonalForm.contains("<input x-h-input type=\"text\" x-model=\"form.Urgent\""),
+                "the boolean must not fall through to the personal form's text-input branch");
+        for (String form : new String[] {claimPowerForm, claimPersonalForm}) {
+            assertTrue(form.matches("(?s).*<div class=\"hbox items-center gap-3\">\\s*<span x-h-checkbox>.*"),
+                    "the checkbox must sit in a plain box - x-h-field stretches a direct child to full width (#7103)");
+        }
 
         // documentItemsLayout: chat - the .model marker is resolved (body property from the child's
         // messageBody field), and the Harmonia document view + page render the items pane as an

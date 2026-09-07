@@ -48,9 +48,13 @@
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name" && $property.name != "$!{partnerProperty}" && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && !($property.widgetType == "DOCUMENT_NUMBER" && $property.numberSeries) && $property.aggregate != "true")
       <div x-h-field class="#if($property.widgetType == "MULTISELECT")col-span-full#elseif($property.widgetSize && $property.widgetSize != "")sm:col-span-${property.widgetSize}#{else}sm:col-span-6#end"#visibleGate($property)>
+## A CHECKBOX carries its label BESIDE it, inside the branch below - not above, as every
+## other control does.
+#if($property.widgetType != "CHECKBOX")
         <label x-h-label>
           <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end')"></span>#if($property.isRequiredProperty == "true") <span class="text-destructive">*</span>#end
         </label>
+#end
 #if($property.widgetType == "DROPDOWN")
         <div x-h-select data-filter="contains">
           <input x-h-select-input x-model="form.${property.name}" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select #if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end') })" />
@@ -80,7 +84,14 @@
 #elseif($property.widgetType == "NUMBER")
         <div x-h-input-number><input type="number" step="any" x-model.number="form.${property.name}" /></div>
 #elseif($property.widgetType == "CHECKBOX")
-        <span x-h-checkbox><input type="checkbox" x-model="form.${property.name}" /></span>
+        <!-- The checkbox goes beside its label, inside a plain box: x-h-field stretches every
+             direct child to full width, which turns the checkbox's own square into a full-width
+             bordered rectangle - indistinguishable from an empty text input (#7103). The wrapper
+             absorbs the stretch, and the layout is then the power form's. -->
+        <div class="hbox items-center gap-3">
+          <span x-h-checkbox><input type="checkbox" id="f_${property.name}" x-model="form.${property.name}" /></span>
+          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end')"></span>#if($property.isRequiredProperty == "true") <span class="text-destructive">*</span>#end</label>
+        </div>
 #elseif($property.widgetType == "DATE")
         <div x-h-date-picker>
           <input type="text" :placeholder="HarmoniaFormat.dateHint()" />
@@ -248,7 +259,7 @@
                 <div x-h-input-number><input type="number" step="any" x-model.number="draft[col.name]" /></div>
               </template>
               <template x-if="!col.readonly && !col.lookup && col.widget === 'CHECKBOX'">
-                <span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" /></span>
+                <div class="hbox items-center"><span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" /></span></div>
               </template>
               <template x-if="!col.readonly && !col.lookup && col.date">
                 <div x-h-date-picker><input type="text" :placeholder="HarmoniaFormat.dateHint()" /><button x-h-date-picker-trigger aria-label="Choose date"></button><div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="draft[col.name]"></div></div>

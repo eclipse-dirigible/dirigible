@@ -108,7 +108,7 @@
                             </div>
                         </template>
                         <template x-if="!p.lookup && p.type === 'boolean'">
-                            <span x-h-checkbox><input type="checkbox" :id="'a_' + p.name" x-model="draft[p.name]" :disabled="p.readonly || (p.pk && !isNew)" /></span>
+                            <div class="hbox items-center"><span x-h-checkbox><input type="checkbox" :id="'a_' + p.name" x-model="draft[p.name]" :disabled="p.readonly || (p.pk && !isNew)" /></span></div>
                         </template>
                         <template x-if="!p.lookup && p.type === 'number'">
                             <div x-h-input-number><input type="number" step="any" :id="'a_' + p.name" x-model.number="draft[p.name]" :disabled="p.readonly || (p.pk && !isNew)" /></div>
