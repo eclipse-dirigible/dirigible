@@ -285,12 +285,18 @@ composition is opt-in.
 **Field attributes (faithfulness):** besides `required`, `primaryKey`, `generated` and `length`, a
 field may declare:
 
-- `defaultValue: <value>` - the field's default, in three places at once: the column's **DB DEFAULT**
-  (a row inserted without the column gets it), the reason a `required` field's **presence check is
-  skipped** (the value is guaranteed), and the **seed for a new line in a document's item dialog** -
-  the dialog opens on the standard value instead of a blank one, which is what makes a one-click
-  affordance like **Fill Month** actually one click. An existing row is never re-defaulted, so a value
-  the user deliberately cleared stays cleared. The to-one relation analogue is `init:`.
+- `defaultValue: <value>` - the field's default, in four places at once: the **repository's create**
+  (a create that leaves the field empty gets the default assigned BEFORE the create-time calculations,
+  guards and checks run, so a `calculatedOnCreate` that reads the field sees the default and not a
+  null - #7104), the column's **DB DEFAULT** (the same value for a row that reaches the table by any
+  other route), the reason a `required` field's **presence check is skipped** (the value is
+  guaranteed), and the **seed for a new line in a document's item dialog** - the dialog opens on the
+  standard value instead of a blank one, which is what makes a one-click affordance like **Fill Month**
+  actually one click. Only a create is defaulted: an existing row is never re-defaulted, so a value the
+  user deliberately cleared stays cleared. A `date`/`time`/`timestamp` or binary field is the exception
+  to the repository leg - its default reaches the DDL verbatim and is typically a SQL expression
+  (`CURRENT_DATE`), which has no Java stand-in, so there it is the DB DEFAULT alone. The to-one
+  relation analogue is `init:`.
   `- { name: hours, type: decimal, defaultValue: 8 }` /
   `- { name: billable, type: boolean, defaultValue: true }`.
 - `unique: true` - a UNIQUE constraint (e.g. a `uuid` business key or a code).

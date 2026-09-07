@@ -3601,6 +3601,57 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void an_authored_default_is_applied_before_the_create_time_calculations() {
+        // #7104: `defaultValue:` was the column's DB DEFAULT and nothing else on the server, so the
+        // database supplied it at INSERT - after the create-time calculations had already run in Java
+        // and read a null. A purchase-order line posted without VatRate stored VatRate 20 from the
+        // default and Vat 0 from the calculation that reads it, and only a later no-op update (whose
+        // recalculation sees the stored default) put the two in agreement. The generated form hid it,
+        // because the item dialog seeds the same default and posts it explicitly - so it was every REST
+        // caller, import and server-side create that silently got a wrong total.
+        writeIntent(
+                """
+                        name: purchasing
+                        entities:
+                          - name: OrderItem
+                            fields:
+                              - { name: id,       type: integer, primaryKey: true, generated: true }
+                              - { name: quantity, type: decimal, precision: 18, scale: 3 }
+                              - { name: price,    type: decimal, precision: 18, scale: 2 }
+                              - { name: vatRate,  type: decimal, precision: 5,  scale: 2, defaultValue: 20 }
+                              - { name: net,      type: decimal, precision: 18, scale: 2, calculatedOnCreate: "Quantity * Price", calculatedOnUpdate: "Quantity * Price" }
+                              - { name: vat,      type: decimal, precision: 18, scale: 2, calculatedOnCreate: "Net * VatRate / 100", calculatedOnUpdate: "Net * VatRate / 100" }
+                              - { name: billable, type: boolean, defaultValue: true }
+                              - { name: stage,    type: string,  length: 20, defaultValue: DRAFT }
+                        """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-dao-java/template/template.js", "purchasing.model");
+        String repository = codeOf("gen/purchasing/data/orderitem/OrderItemRepository.java");
+
+        // Each authored default is assigned on create, only when the write left the column empty, in a
+        // literal of the property's own type.
+        assertTrue(repository.contains(
+                "if (entity.VatRate == null) {\n" + "            entity.VatRate = new java.math.BigDecimal(\"20\");\n" + "        }"),
+                "the decimal default must be assigned when the write left the column empty: " + repository);
+        assertTrue(repository.contains("entity.Billable = Boolean.TRUE;"), "a boolean default must be a boolean literal");
+        assertTrue(repository.contains("entity.Stage = \"DRAFT\";"), "a string default must be a quoted string literal");
+
+        // ...and BEFORE the calculation that reads it, which is the whole point.
+        assertTrue(
+                repository.indexOf("entity.VatRate = new java.math.BigDecimal(\"20\")") < repository.indexOf(
+                        "Calc.eval(\"Net * VatRate / 100\""),
+                "the default must be applied before the create-time calculation that reads it: " + repository);
+
+        // An existing row is never re-defaulted: the defaults belong to save() alone, so a value the
+        // user deliberately cleared stays cleared through update().
+        assertEquals(1, occurrencesOf(repository, "entity.VatRate = new java.math.BigDecimal(\"20\")"),
+                "the default must be applied on create only, never re-applied by update(): " + repository);
+    }
+
+    @Test
     void multilingual_entity_generates_the_translation_stack() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()

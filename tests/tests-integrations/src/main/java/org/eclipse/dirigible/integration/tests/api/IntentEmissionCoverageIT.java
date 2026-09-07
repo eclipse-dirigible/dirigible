@@ -3396,8 +3396,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the series must be gap-free: " + firstNumber.get() + " then " + secondNumber.get());
 
         // The dead-Create family at the outermost layer: creating the document WITHOUT the
-        // defaulted status must succeed, and the echo must carry the DB-applied default (the
-        // persisted row, not the request payload the caller sent).
+        // defaulted status must succeed, and the echo must carry the applied default (the persisted
+        // row, not the request payload the caller sent) - assigned by the repository before the
+        // create-time calculations, and by the column's DEFAULT for a row that arrives otherwise.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"RefNumber\":\"INV-77\",\"Date\":\"2026-01-15\"}")
                                                  .when()

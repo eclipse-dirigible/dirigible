@@ -116,6 +116,39 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #end
 #end
 #end
+## Authored field defaults (intent `defaultValue:`, a to-one relation's `init:`): apply the default to a
+## column the write left empty, BEFORE anything the repository computes from it. The default is also the
+## column's DB DEFAULT, but the database supplies it at INSERT - which is after the create-time
+## calculations have already run in Java and read a null (dirigible #7104): a purchase-order line posted
+## without VatRate stored VatRate 20 from the DB default and Vat 0 from the calculation, and only a
+## subsequent no-op update put the two in agreement. The generated form never showed it, because it
+## seeds the same default into a new line and posts it explicitly - so it was every REST caller, import
+## and server-side create that silently got a wrong total. Applying it here makes the guarantee the one
+## the intent guide states ("a row inserted without the column gets it") hold for the value the
+## calculations, guards and checks see, not just for the value that lands in the column.
+## Only create() defaults: an existing row is never re-defaulted, so a value the user deliberately
+## cleared stays cleared.
+## A date/time or binary column is excluded: its DEFAULT is emitted verbatim into the DDL and is
+## typically a SQL expression (CURRENT_DATE, now()), which has no Java literal to stand in for it.
+#macro(applyDefaults)
+#foreach($property in $properties)
+#if($property.dataDefaultValue && $property.dataDefaultValue != "" && !$property.dataPrimaryKey && !$property.dataAutoIncrement)
+#if($property.dataTypeJavaClass == "java.math.BigDecimal" || $property.dataTypeJavaClass == "Double" || $property.dataTypeJavaClass == "Float" || $property.dataTypeJavaClass == "Long" || $property.dataTypeJavaClass == "Integer" || $property.dataTypeJavaClass == "Short" || $property.dataTypeJavaClass == "Boolean" || $property.dataTypeJavaClass == "String")
+        if (entity.${property.name} == null) {
+            entity.${property.name} = #defaultLiteral($property);
+        }
+#end
+#end
+#end
+#end
+## The authored default as a Java literal of the property's own type. A numeric default is parsed from
+## its authored text rather than inlined as a numeric literal, so an author's "8.0" on an integer column
+## fails that one create instead of failing the whole generated build. A string default is accepted in
+## either authoring shape - bare (`DRAFT`, what the item dialog seeds) or SQL-quoted (`'DRAFT'`, what a
+## working DB DEFAULT needs, since the value reaches the DDL verbatim) - and both yield the string the
+## column would hold.
+#macro(defaultLiteral $property)
+#if($property.dataTypeJavaClass == "java.math.BigDecimal")new java.math.BigDecimal("${property.dataDefaultValue}")#elseif($property.dataTypeJavaClass == "Double")Double.valueOf("${property.dataDefaultValue}")#elseif($property.dataTypeJavaClass == "Float")Float.valueOf("${property.dataDefaultValue}")#elseif($property.dataTypeJavaClass == "Long")Long.valueOf("${property.dataDefaultValue}")#elseif($property.dataTypeJavaClass == "Integer")Integer.valueOf("${property.dataDefaultValue}")#elseif($property.dataTypeJavaClass == "Short")Short.valueOf("${property.dataDefaultValue}")#elseif($property.dataTypeJavaClass == "Boolean")#if($property.dataDefaultValue == "true" || $property.dataDefaultValue == "TRUE" || $property.dataDefaultValue == "1")Boolean.TRUE#{else}Boolean.FALSE#end#{else}#if($property.dataDefaultValue.length() > 1 && $property.dataDefaultValue.startsWith("'") && $property.dataDefaultValue.endsWith("'"))#set($unquotedEnd = $property.dataDefaultValue.length() - 1)"${property.dataDefaultValue.substring(1, $unquotedEnd)}"#{else}"${property.dataDefaultValue}"#end#end#end
 ## Required values: refuse a write that leaves a NOT NULL column empty, naming the property, instead of
 ## letting the statement reach the database and come back as a driver-specific constraint violation - an
 ## HTTP 500 carrying a message about a physical column nobody outside the schema has heard of, from which
@@ -279,6 +312,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
+#applyDefaults()
 #normalizeSubsets()
 #if($lifecycleInitialStatus)
         enforceLifecycleStart(entity.${lifecycleStatusProperty});
