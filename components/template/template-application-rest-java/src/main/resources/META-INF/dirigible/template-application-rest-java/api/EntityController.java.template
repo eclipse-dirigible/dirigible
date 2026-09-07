@@ -782,7 +782,10 @@ public class ${name}Controller {
 #end
 #end
 #foreach($property in $properties)
-#if($property.isRequiredProperty && !$property.dataDefaultValue)
+## A required value the PLATFORM supplies is not the caller's to send: the generated repository fills a
+## document number and a uuid on insert, so demanding them here would refuse every create of a numbered
+## document with a message about a field no form has (#7099).
+#if($property.isRequiredProperty && !$property.dataDefaultValue && !$property.numberStampOnCreate && !$property.generatedUuid)
         if (entity.${property.name} == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' property is required");
         }

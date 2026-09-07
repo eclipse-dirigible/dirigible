@@ -121,14 +121,16 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## HTTP 500 carrying a message about a physical column nobody outside the schema has heard of, from which
 ## the caller cannot tell what to fix (dirigible #7069). It is the same set the schema declares NOT NULL,
 ## so nothing that used to be written still is refused: an insert of null into such a column never had
-## another ending. Everything the repository computes itself - a document number, a uuid, a calculated
-## field, a document's totals - is assigned above this point, so what is still null here is genuinely
-## missing from the write. A column carrying a DEFAULT is excluded: the database supplies its value, so
+## another ending. Everything the repository computes itself - a uuid, a calculated field, a document's
+## totals - is assigned above this point, so what is still null here is genuinely missing from the
+## write. A `number: { stampOn: create }` column is the exception and is excluded: it is filled just
+## BELOW this check, deliberately, so a refusal cannot burn a number (#7099) - it is never the caller's
+## omission. A column carrying a DEFAULT is excluded: the database supplies its value, so
 ## an empty one is not missing - an intent relation with `init:` is exactly that, and refusing it would
 ## reject every create that leaves the opening status to the model.
 #macro(requiredCheck)
 #foreach($property in $properties)
-#if(!$property.dataPrimaryKey && $property.dataNotNull && !$property.dataDefaultValue)
+#if(!$property.dataPrimaryKey && $property.dataNotNull && !$property.dataDefaultValue && !$property.numberStampOnCreate)
         if (entity.${property.name} == null) {
             throw new ValidationException("${name}.${property.name} is required");
         }
@@ -302,6 +304,20 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         }
 #end
 #end
+#if($documentMaster)
+        recalculate(entity);
+#end
+#if($documentChecks && $documentChecks.size() > 0)
+        enforceChecks(entity);
+#end
+#requiredCheck()
+## Allocated LAST, once every guard that can refuse this create has passed: the counter is a SEQUENCE,
+## incremented in its own transaction so concurrent creates never serialize on it, which means an
+## allocation cannot be rolled back with the insert - whatever it hands out is spent. A number consumed
+## by a write that then failed leaves a permanent hole in a series a jurisdiction requires to be
+## gap-free, so the allocation must be the last thing that happens before the statement, not the first
+## (dirigible #7099). A failure of the INSERT itself can still spend one; nothing short of allocating
+## inside the insert's transaction closes that, and doing so would serialize every create in the tenant.
 ## First-class numbering, stampOn:create: allocate the real document number on insert (when empty)
 ## from the tenant's series. The number's SHAPE is not here - prefix and width live in the series
 ## configuration (the module's .numbers artefact, then per-tenant settings), so a deployment can change
@@ -318,13 +334,6 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         }
 #end
 #end
-#if($documentMaster)
-        recalculate(entity);
-#end
-#if($documentChecks && $documentChecks.size() > 0)
-        enforceChecks(entity);
-#end
-#requiredCheck()
         // The create event is handed to the write itself, which records it in the tenant's event outbox
         // INSIDE the insert's transaction: row and event commit together, so a broker outage can
         // neither swallow an event whose row exists nor fail a call whose row was written. Listeners

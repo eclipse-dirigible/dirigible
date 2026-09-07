@@ -186,6 +186,11 @@ public class ${name}MyController {
         }
 #end
 #end
+        // Validated LAST, on what will actually be written: the owner is forced above and the
+        // sensitive / role-scoped fields are cleared, so validating earlier would judge a payload the
+        // server has not finished deciding. Before the save, so a refused create never reaches the
+        // insert - and never allocates a document number.
+        validate(entity);
         return scrub(repository.save(entity));
     }
 
@@ -222,6 +227,7 @@ public class ${name}MyController {
         }
 #end
 #end
+        validate(entity);
         return scrub(repository.update(entity));
     }
 
@@ -524,6 +530,57 @@ public class ${name}MyController {
             }
         }
         return false;
+    }
+#end
+
+#if(!$personalReadOnly)
+    /**
+     * The same value validation the power surface applies (${name}Controller.validate) - required
+     * fields, declared lengths, format patterns and row-level checks. The personal surface is the one
+     * a person actually types into, so skipping it here meant a missing required field reached the
+     * insert and came back as a 500 with the raw NOT NULL violation instead of a 400 naming the field
+     * - and, for a numbered document, only after the insert had already burned a number from the
+     * series. Static and payload-only, so it costs no read.
+     */
+    private static void validate(${name}Entity entity) {
+#if($rowChecks && $rowChecks.size() > 0)
+#foreach($check in $rowChecks)
+        // Row-level check (intent `checks: exactlyOne`).
+        {
+            int assigned = 0;
+#foreach($field in $check.fields)
+            if (entity.${field} != null) {
+                assigned++;
+            }
+#end
+            if (assigned != 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.message}");
+            }
+        }
+#end
+#end
+#foreach($property in $properties)
+## A required value the PLATFORM supplies is not the caller's to send: the generated repository fills a
+## document number and a uuid on insert, so demanding them here would refuse every create of a numbered
+## document with a message about a field no form has (#7099).
+#if($property.isRequiredProperty && !$property.dataDefaultValue && !$property.numberStampOnCreate && !$property.generatedUuid)
+        if (entity.${property.name} == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' property is required");
+        }
+#end
+#if($property.dataTypeJavaClass == "String" && $property.dataLength && $property.dataTypeJava != "time")
+        if (entity.${property.name} != null && entity.${property.name}.length() > ${property.dataLength}) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' exceeds the maximum length of ${property.dataLength}");
+        }
+#end
+#if($property.widgetPattern && $property.widgetPattern != "")
+## A format constraint describes what a value must look like WHEN THERE IS ONE - on an OPTIONAL
+## property a blank string is "no value", exactly as on the power surface.
+        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.toString().isBlank()#end && !entity.${property.name}.toString().matches("${property.widgetPatternJava}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The value of '${property.name}' does not match the required pattern '${property.widgetPatternJava}'");
+        }
+#end
+#end
     }
 #end
 
