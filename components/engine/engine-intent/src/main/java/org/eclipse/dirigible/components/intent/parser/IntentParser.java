@@ -3469,6 +3469,7 @@ public final class IntentParser {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName()
                             + "] is marked composition but only a manyToOne/oneToOne relation can be a composition");
                 }
+                validateWhenMasterDeleted(entity, relation, issues);
                 boolean crossModel = relation.isCrossModel();
                 if (crossModel) {
                     // A cross-model relation references an entity owned by another intent model declared in
@@ -3681,6 +3682,9 @@ public final class IntentParser {
         }
         if (relation.isLeafOnly()) {
             unsupported.add("leafOnly");
+        }
+        if (!isBlank(relation.getWhenMasterDeleted())) {
+            unsupported.add("whenMasterDeleted");
         }
         if (!unsupported.isEmpty()) {
             issues.add(subject + " is a subset relation so it cannot declare " + unsupported
@@ -4325,6 +4329,48 @@ public final class IntentParser {
         if (relation.isEntityStatus()) {
             issues.add(subject + " is an EntityStatus (owned by the workflow transitions) so it cannot declare a calculated action"
                     + " - use init: for its starting value");
+        }
+    }
+
+    /**
+     * A composition's {@code whenMasterDeleted: cascade | refuse} says what a DELETE of the MASTER does
+     * to the children the relation owns (dirigible #7100). Omitted means {@code cascade}: the master's
+     * repository deletes them with it, in the same transaction and through their own repository, so the
+     * roll-ups over the child relinquish what they counted. {@code refuse} rejects the master's delete
+     * while any child exists. Anything else is an issue, as is the key on a relation that is not a
+     * composition - only an owning edge has children whose fate a delete could decide.
+     *
+     * @param entity the entity declaring the relation
+     * @param relation the relation
+     * @param issues the issue list to add to
+     */
+    private static void validateWhenMasterDeleted(EntityIntent entity, RelationIntent relation, List<String> issues) {
+        String whenMasterDeleted = relation.getWhenMasterDeleted();
+        if (whenMasterDeleted == null) {
+            return;
+        }
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        String value = whenMasterDeleted.trim();
+        if (!"cascade".equals(value) && !"refuse".equals(value)) {
+            issues.add(subject + " whenMasterDeleted [" + whenMasterDeleted
+                    + "] must be `cascade` (delete the children with the master - the default) or `refuse` (reject the master's delete while children exist)");
+            return;
+        }
+        if (!relation.isComposition()) {
+            issues.add(subject
+                    + " declares whenMasterDeleted but only a composition owns children whose fate a delete of the master decides - add composition: true, or drop the key");
+            return;
+        }
+        // Only the entity's FIRST composition carries the ownership edge into the model - every later one
+        // is emitted as a plain association, so the key would ask for a cascade nothing would run.
+        for (RelationIntent candidate : entity.getRelations()) {
+            if (candidate.isComposition()) {
+                if (candidate != relation) {
+                    issues.add(subject + " declares whenMasterDeleted but the entity's owning composition is [" + candidate.getName()
+                            + "] - only the first composition is the ownership edge, so declare it there");
+                }
+                return;
+            }
         }
     }
 

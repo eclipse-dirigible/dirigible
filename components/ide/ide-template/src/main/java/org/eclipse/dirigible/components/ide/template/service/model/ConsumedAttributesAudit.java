@@ -94,10 +94,10 @@ public class ConsumedAttributesAudit {
             "periodClosedValues", "periodEndProperty", "periodLockDateProperty", "periodLockEntity", "periodStartProperty",
             "periodStatusProperty", "perspectiveIcon", "perspectiveLabel", "projectionReferencedModel", "extensionReferencedEntity",
             "extensionReferencedModel", "relationshipCardinality", "relationshipIdentityLabel", "relationshipIdentityProperty",
-            "relationshipPartnerIdentityLabel", "relationshipPartnerIdentityProperty", "relationshipPartner", "relationshipPersonal",
-            "relationshipPersonalReadOnly", "widgetDependsOnHeaderEntity", "widgetDependsOnValueBy", "widgetDependsOnValueByHeaderEntity",
-            "widgetLength", "widgetOptionsEntityPerspectiveName", "widgetOptionsFilterBy", "widgetOptionsFilterValue",
-            "widgetOptionsFilterValueJs");
+            "relationshipMasterDeleteRefused", "relationshipPartnerIdentityLabel", "relationshipPartnerIdentityProperty",
+            "relationshipPartner", "relationshipPersonal", "relationshipPersonalReadOnly", "widgetDependsOnHeaderEntity",
+            "widgetDependsOnValueBy", "widgetDependsOnValueByHeaderEntity", "widgetLength", "widgetOptionsEntityPerspectiveName",
+            "widgetOptionsFilterBy", "widgetOptionsFilterValue", "widgetOptionsFilterValueJs");
 
     /**
      * Attributes the entity editor owns: it keeps them in the model for its own authoring surface

@@ -323,7 +323,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
                 relations:
-                  - { name: Entry, kind: manyToOne, to: Entry, composition: true, required: true }
+                  # #7100: the printed copies of an entry are NOT swept away with it - the master's
+                  # delete is refused while any exists, while its sibling EntryLine cascades.
+                  - { name: Entry, kind: manyToOne, to: Entry, composition: true, required: true, whenMasterDeleted: refuse }
 
               # A master-detail (MANAGE_MASTER) entity carrying an EntityStatus: the master
               # layout must resolve the status FK to a label lookup and render it as a badge in
@@ -1843,6 +1845,33 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a document check must count the document's line items, got: " + entryRepository);
         assertFalse(entryRepository.contains("new EntryCopyRepository().findAll("),
                 "a document check must not count a sibling composition child (the printed copy), got: " + entryRepository);
+        // Deleting the master deals with the children it OWNS (#7100). A deleted header used to leave
+        // its lines behind pointing at an id that no longer exists - invisible in the UI, since no
+        // parent page renders them, and still counted by every report and roll-up over the child. The
+        // cascade goes through the child's OWN repository, so its -deleted event (hence the roll-up
+        // relinquishing), its history trail and its own cascade all run.
+        assertTrue(
+                entryRepository.contains("private void deleteOwnedChildren(Object id)")
+                        && entryRepository.contains("EntryLineOwner.delete(EntryLineRow)"),
+                "a composition master must delete the children it owns through their own repository, got: " + entryRepository);
+        // ...and the record and its children leave together or not at all: a repository call is
+        // otherwise its own transaction, so a failure half-way through would commit some of the
+        // children and keep the record - the very orphan state the cascade exists to prevent.
+        assertTrue(
+                entryRepository.contains("UnitOfWork.run(() -> deleteWithOwnedChildren(entity))")
+                        && entryRepository.contains("UnitOfWork.run(() -> deleteByIdWithOwnedChildren(id))"),
+                "the cascade must run as one unit of work with the record's own delete, got: " + entryRepository);
+        // ...and the author's alternative is the refusal, on the child that declared it - naming both
+        // entities, in the repository, so it holds for a reaction and a cascade too, not only for REST.
+        assertTrue(
+                entryRepository.contains("if (!new gen.emission.data.entry.EntryCopyRepository()")
+                        && entryRepository.contains("still has Entry Copy records - delete those first"),
+                "whenMasterDeleted: refuse must reject the master's delete while children exist, got: " + entryRepository);
+        assertFalse(entryRepository.contains("EntryCopyOwner.delete("),
+                "a refusing child must not be cascaded into, got: " + entryRepository);
+        // The children's own repositories own nothing: neither may cascade into its master.
+        assertFalse(contentOf("gen/emission/data/entry/EntryLineRepository.java").contains("deleteOwnedChildren"),
+                "a childless composition child must emit no cascade at all");
         // A workflow setter/writer persists via the TARGETED updateProperty/updateProperties write - the
         // checks-bearing repository must OVERRIDE it to still run the posting gate, so converting the
         // setter from a full-row merge to a targeted write did not silently drop the check (the

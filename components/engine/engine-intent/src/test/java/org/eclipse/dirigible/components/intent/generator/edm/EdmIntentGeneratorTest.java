@@ -1492,6 +1492,35 @@ class EdmIntentGeneratorTest {
                 "properties should follow the explicit order, with unlisted ones appended");
     }
 
+    /**
+     * {@code whenMasterDeleted: refuse} rides the composition FK property; the default (cascade) emits
+     * no attribute at all, so a model that says nothing about it stays byte-identical.
+     */
+    @Test
+    void whenMasterDeletedRefuseMarksTheCompositionProperty() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: OrderItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: order, kind: manyToOne, to: Order, composition: true, required: true, whenMasterDeleted: refuse }
+                """;
+        Map<String, Object> refusing = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        Map<String, Object> fk = propertyByName(entityByName(entities(refusing), "OrderItem"), "Order");
+        assertEquals("COMPOSITION", fk.get("relationshipType"));
+        assertEquals("true", fk.get("relationshipMasterDeleteRefused"));
+
+        Map<String, Object> cascading =
+                EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml.replace(", whenMasterDeleted: refuse", "")), "sales");
+        assertNull(propertyByName(entityByName(entities(cascading), "OrderItem"), "Order").get("relationshipMasterDeleteRefused"),
+                "the default cascade must emit no attribute");
+    }
+
     private static Map<String, Object> buildFromResource(String resource, String intentName) {
         IntentModel parsed = IntentParser.parse(readResource(resource));
         return EdmIntentGenerator.buildModelJsonForTest(parsed, intentName);

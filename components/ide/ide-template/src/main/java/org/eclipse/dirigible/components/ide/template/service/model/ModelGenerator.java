@@ -133,6 +133,8 @@ class ModelGenerator {
         annotateDocumentModels(entities);
         annotateGuardedRollups(entities);
         applyDefaultEntityLabels(entities);
+        // After the labels: a refusal message names the child by the label the UI shows.
+        CompositionChildren.annotate(entities);
         attachReportFilters(entities);
         Map<String, List<Map<String, Object>>> collections = partition(entities);
 

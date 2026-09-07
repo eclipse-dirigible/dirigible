@@ -187,6 +187,16 @@ not as an apology.
 - **Relations:** a `composition: true` on a `manyToOne` / `oneToOne` makes the owning entity a
   *managed detail* of its parent (NOT NULL FK, edited under the parent). `required: true` *alone* is
   just a NOT NULL association (its own screen). Declare the inverse `oneToMany` on the master entity.
+- **`whenMasterDeleted: cascade | refuse` on that composition = what a DELETE of the MASTER does to
+  the children it owns.** `cascade` (the default, no key needed) deletes them with it, in the same
+  transaction and through their own repository, so each child's delete event fires and every roll-up
+  over the child relinquishes what it counted. `refuse` rejects the master's delete while any child
+  exists ("This Sales Order still has Sales Order Item records - delete those first"), for a document
+  whose lines must be removed deliberately. There is no third option: a header that leaves its lines
+  behind leaves rows pointing at an id that no longer exists - invisible in the UI, since no parent page
+  renders them, and still counted by every report and roll-up over the child. Declare it on the
+  entity's OWNING composition (its first one); a deeper chain cascades level by level, each child
+  dealing with its own children as it goes.
 - **`init: <seed id>` on a to-one relation = the FK's database-level default** (the relation analogue of
   a field's `defaultValue`). A new row gets this FK on insert when the column is left unset - e.g. a new
   invoice starts as DRAFT / Bank transfer / E-mail:
@@ -3578,6 +3588,7 @@ or a seeded name.
 | serviceTask `onError` | a declared step or `end` - `delegate:` steps only; `{error}` (a whole-value `setField` value) is readable on the route |
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
+| relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
 | process `whenDeleted` | `abort` (default - deleting the trigger row cancels the in-flight instance), `refuse` (the REST delete answers 409 while the instance runs); needs an entity trigger |
 | trigger `businessKeyStrategy` | `timestamp` |
 | entity event | `onCreate`, `onUpdate`, `onDelete`, `onTransition` (the STATUS channel - a workflow setter / `transitions:` button / `generates` completion hook publishes it, and `onUpdate` never sees those) |
@@ -3614,6 +3625,7 @@ or a seeded name.
 - "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)
 - "cancel the in-flight approval when the document is voided/cancelled (no orphaned Inbox task)" -> **processes** (`abortOn:`)
 - "deleting a document under approval must kill the approval / must be refused while it runs" -> **processes** (`whenDeleted: abort | refuse`; the cancelling `-deleted` listener is generated regardless)
+- "deleting a header must delete its lines / must be refused while it has lines" -> the child's **composition relation** (`whenMasterDeleted: cascade | refuse`; cascade is the default, so nothing is ever orphaned)
 - "retry the flaky external call, and record the failure on the record instead of an incident" -> **processes** (`delegate:` serviceTask with `retry:` + `onError:`, the failure message via `{error}`)
 - "a screen to enter / edit X" -> **forms**
 - "a button on X's view that opens a custom page / action" -> **actions**

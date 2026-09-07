@@ -233,6 +233,9 @@ import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 ## Aggregate guards recompute the keyed sum via Criteria; deduped against every importer above.
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
+#if($compositionChildren && $compositionChildren.size() > 0)
+import org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork;
+#end
 #if($documentItem)
 import gen.${javaGenFolderName}.data.${documentItem.javaParentPerspective}.${documentItem.parentEntity}Repository;
 #end
@@ -979,6 +982,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public void delete(${name}Entity entity) {
+#if($compositionChildren && $compositionChildren.size() > 0)
+        // The record and the children it owns leave together or not at all: a repository call is
+        // otherwise its own transaction, so a failure half-way through the cascade would commit some of
+        // the children and keep the record - the orphan state this cascade exists to prevent.
+        UnitOfWork.run(() -> deleteWithOwnedChildren(entity));
+    }
+
+    /** The delete of this ${name} itself, running inside the unit of work above. */
+    private void deleteWithOwnedChildren(${name}Entity entity) {
+        deleteOwnedChildren(entity.${pkPropertyName});
+#end
 #if($history == "true")
         // The caller's argument may be a partial snapshot; the trail must carry what was actually
         // stored, so read the row (untranslated) before it is gone.
@@ -998,6 +1012,15 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public void deleteById(Object id) {
+#if($compositionChildren && $compositionChildren.size() > 0)
+        // One transaction for the record and the children it owns - see delete(entity).
+        UnitOfWork.run(() -> deleteByIdWithOwnedChildren(id));
+    }
+
+    /** The delete of this ${name} itself, running inside the unit of work above. */
+    private void deleteByIdWithOwnedChildren(Object id) {
+        deleteOwnedChildren(id);
+#end
 #if($documentItem)
         ${name}Entity entity = findById(id);
 #end
@@ -1017,6 +1040,45 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         }
 #end
     }
+#if($compositionChildren && $compositionChildren.size() > 0)
+
+    /**
+     * Deletes the children this ${name} OWNS - the composition relations authored on those children,
+     * which is what makes them details of this record rather than independent rows - as the first step
+     * of deleting it.
+     *
+     * <p>
+     * They go in this same transaction and through their own repository, so each child's
+     * {@code -deleted} event is recorded in the outbox beside the delete, its own history and cascade
+     * run, and every roll-up over the child relinquishes what it counted. A child whose relation
+     * declares {@code whenMasterDeleted: refuse} is the author's alternative: it REFUSES this delete
+     * while any of its rows exist, rather than being swept away with the record. Either way nothing is
+     * left pointing at a ${name} that is gone - an orphan is invisible in the UI, since no parent page
+     * renders it, and still counted by every report and roll-up over the child.
+     */
+    private void deleteOwnedChildren(Object id) {
+        if (id == null) {
+            return;
+        }
+#foreach($owned in $compositionChildren)
+#if($owned.refuse == "true")
+        if (!new gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Repository()
+                .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${owned.fkProperty}", id))
+                .isEmpty()) {
+            throw new org.eclipse.dirigible.sdk.db.ValidationException(
+                    "This ${entityLabel} still has ${owned.childLabel} records - delete those first");
+        }
+#else
+        gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Repository ${owned.childEntity}Owner =
+                new gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Repository();
+        for (gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Entity ${owned.childEntity}Row : ${owned.childEntity}Owner
+                .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${owned.fkProperty}", id))) {
+            ${owned.childEntity}Owner.delete(${owned.childEntity}Row);
+        }
+#end
+#end
+    }
+#end
 #if($multilingual == "true")
 
     // ${name} is multilingual: every read overlays the translated property values from the

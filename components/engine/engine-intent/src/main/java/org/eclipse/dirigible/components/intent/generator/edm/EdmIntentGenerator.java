@@ -1548,6 +1548,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("relationshipEntityName", relation.getTo());
         p.put("relationshipEntityPerspectiveName", targetPerspective);
         p.put("relationshipEntityPerspectiveLabel", "Entities");
+        // whenMasterDeleted: refuse - the master's generated repository rejects its own delete while
+        // children exist instead of cascading into them (the default). Emitted only for the refusal:
+        // absent means cascade, which is what owning a detail means when nothing says otherwise.
+        if (composition && relation.isMasterDeleteRefused()) {
+            p.put("relationshipMasterDeleteRefused", "true");
+        }
         // Document role: a status FK renders as a read-only coloured pill in the document title bar; it
         // keeps the dropdown lookup metadata so the UI can resolve the status name to display.
         p.put("widgetType", relation.isEntityStatus() ? "DOCUMENT_STATUS" : "DROPDOWN");
