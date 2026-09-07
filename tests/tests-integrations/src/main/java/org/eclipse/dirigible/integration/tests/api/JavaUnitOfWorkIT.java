@@ -35,12 +35,21 @@ import org.springframework.beans.factory.annotation.Autowired;
  * counts as the period's billing, and is missing what it was for (issue #7069). The control case
  * here runs the same two writes without the block, so the assertion is about the block and not
  * about the database happening to refuse both.
+ *
+ * <p>
+ * The second test covers the read-your-own-writes half the block promises for the write-then-query-
+ * then-targeted-update pattern every generated document repository runs: a header and its lines are
+ * written, the lines are queried back by foreign key and the header re-summed through a targeted
+ * mutation, all inside one unit. The header reload had to see the row the block just created and
+ * the lines query the rows it just wrote, or the recompute wrote a total of zero over a document
+ * whose lines were right (issue #7096).
  */
 class JavaUnitOfWorkIT extends IntegrationTest {
 
     private static final String PROJECT = "JavaUnitOfWorkIT";
     private static final String CONTROLLER = "/services/java/" + PROJECT + "/ledger/EntryController";
-    private static final String TABLE_NAME = "UOW_LEDGER_ENTRY";
+    private static final String DOCUMENTS = "/services/java/" + PROJECT + "/ledger/DocumentController";
+    private static final String[] TABLE_NAMES = {"UOW_LEDGER_ENTRY", "UOW_LINE", "UOW_DOCUMENT"};
     private static final long TIMEOUT_SECONDS = 30;
 
     @Autowired
@@ -63,26 +72,62 @@ class JavaUnitOfWorkIT extends IntegrationTest {
         ClientJavaProjectDeployer.deploy(repository, projectUtil, synchronizationProcessor, PROJECT, PROJECT);
 
         // The first call, so it retries until the freshly compiled route is registered.
-        assertGet("/unit/pass/committed", 200, "written");
-        assertGet("/count/committed", 200, "2");
+        assertGet(CONTROLLER + "/unit/pass/committed", 200, "written");
+        assertGet(CONTROLLER + "/count/committed", 200, "2");
 
         // The refused second write rolls the first one back with it.
-        assertGet("/unit/fail/rolledback", 500);
-        assertGet("/count/rolledback", 200, "0");
+        assertGet(CONTROLLER + "/unit/fail/rolledback", 500);
+        assertGet(CONTROLLER + "/count/rolledback", 200, "0");
 
         // Without the block the same pair leaves the first write behind - which is the defect, and
         // what makes the assertion above about the unit of work rather than about the failure.
-        assertGet("/nounit/fail/leftbehind", 500);
-        assertGet("/count/leftbehind", 200, "1");
+        assertGet(CONTROLLER + "/nounit/fail/leftbehind", 500);
+        assertGet(CONTROLLER + "/count/leftbehind", 200, "1");
 
         // A read inside the block sees the block's own uncommitted writes, so a guard that re-reads
         // the row it just wrote behaves as it would after a commit.
-        assertGet("/unit/reads/visible", 200, "visible");
+        assertGet(CONTROLLER + "/unit/reads/visible", 200, "visible");
+    }
+
+    @Test
+    void a_document_summed_inside_the_unit_commits_with_the_sum_of_its_lines() {
+        ClientJavaProjectDeployer.deploy(repository, projectUtil, synchronizationProcessor, PROJECT, PROJECT);
+
+        // Header, two lines and a re-sum after each line, all in one block: the lines query inside the
+        // block must see both lines the block wrote, and the targeted update of the header must find
+        // the row the block inserted...
+        String[] observed = new String[1];
+        restAssuredExecutor.execute(() -> observed[0] = given().when()
+                                                               .get(DOCUMENTS + "/document/unit/summed")
+                                                               .then()
+                                                               .statusCode(200)
+                                                               .body(containsString("header=true lines=2 updated=1"))
+                                                               .extract()
+                                                               .asString(),
+                TIMEOUT_SECONDS);
+        String id = observed[0].substring("id=".length(), observed[0].indexOf(' '));
+
+        // ...and what commits is the sum, not the zero the header was inserted with (issue #7096: a
+        // create-from with items produced an invoice whose lines were right and whose total was 0).
+        assertGet(DOCUMENTS + "/document/" + id + "/total", 200, "12");
+
+        // The same chain in the shape a generated create-from has: a targeted flip on another entity
+        // first, then a header and lines that each record their create event in the outbox.
+        restAssuredExecutor.execute(() -> observed[0] = given().when()
+                                                               .get(DOCUMENTS + "/document/unit/events/summed")
+                                                               .then()
+                                                               .statusCode(200)
+                                                               .body(containsString("header=true lines=2 updated=1"))
+                                                               .extract()
+                                                               .asString(),
+                TIMEOUT_SECONDS);
+        String withEvents = observed[0].substring("id=".length(), observed[0].indexOf(' '));
+        assertGet(DOCUMENTS + "/document/" + withEvents + "/total", 200, "12");
     }
 
     private void assertGet(String path, int expectedStatus) {
         restAssuredExecutor.execute(() -> given().when()
-                                                 .get(CONTROLLER + path)
+                                                 .get(path)
                                                  .then()
                                                  .statusCode(expectedStatus),
                 TIMEOUT_SECONDS);
@@ -90,7 +135,7 @@ class JavaUnitOfWorkIT extends IntegrationTest {
 
     private void assertGet(String path, int expectedStatus, String expectedBody) {
         restAssuredExecutor.execute(() -> given().when()
-                                                 .get(CONTROLLER + path)
+                                                 .get(path)
                                                  .then()
                                                  .statusCode(expectedStatus)
                                                  .body(containsString(expectedBody)),
@@ -99,15 +144,17 @@ class JavaUnitOfWorkIT extends IntegrationTest {
 
     /**
      * The fixture files go away with the Dirigible folder the base class wipes per test class; the
-     * table itself would survive a local run against an unclean target and carry its rows into the next
-     * one.
+     * tables themselves would survive a local run against an unclean target and carry their rows into
+     * the next one.
      */
     @AfterEach
     void dropTable() throws Exception {
         try (Connection connection = dataSourcesManager.getDefaultDataSource()
                                                        .getConnection();
                 Statement statement = connection.createStatement()) {
-            statement.execute("DROP TABLE IF EXISTS \"" + TABLE_NAME + "\"");
+            for (String table : TABLE_NAMES) {
+                statement.execute("DROP TABLE IF EXISTS \"" + table + "\"");
+            }
         }
     }
 }

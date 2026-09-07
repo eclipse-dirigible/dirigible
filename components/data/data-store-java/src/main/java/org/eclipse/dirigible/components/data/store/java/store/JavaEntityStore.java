@@ -253,12 +253,14 @@ public class JavaEntityStore {
         RegisteredEntity meta = resolve(type);
         String idProperty = meta.idField()
                                 .getName();
-        return write((session,
-                events) -> session.createMutationQuery(
-                        "update " + meta.entityName() + " set " + property + " = :value where " + idProperty + " = :id")
-                                  .setParameter("value", value)
-                                  .setParameter("id", id)
-                                  .executeUpdate());
+        return write((session, events) -> {
+            flushBeforeMutation(session);
+            return session.createMutationQuery(
+                    "update " + meta.entityName() + " set " + property + " = :value where " + idProperty + " = :id")
+                          .setParameter("value", value)
+                          .setParameter("id", id)
+                          .executeUpdate();
+        });
     }
 
     /**
@@ -342,6 +344,7 @@ public class JavaEntityStore {
                                 .getName();
         prepareOutbox(eventTopic != null || !additionalEvents.isEmpty());
         return write((session, events) -> {
+            flushBeforeMutation(session);
             MutationQuery query =
                     session.createMutationQuery("update " + meta.entityName() + " set " + assignments + " where " + idProperty + " = :id");
             int parameter = 0;
@@ -384,14 +387,49 @@ public class JavaEntityStore {
     public <T> Optional<T> findOne(Class<T> type, Object id) {
         RegisteredEntity meta = resolve(type);
         return read(session -> {
-            // Hibernate 7: get(entityName, ...) is deprecated-for-removal in favour of find(...).
-            @SuppressWarnings("unchecked")
-            Map<String, Object> data = (Map<String, Object>) session.find(meta.entityName(), id);
+            Map<String, Object> data = mapById(session, meta, id);
             if (data == null) {
                 return Optional.empty();
             }
             return Optional.of(EntityBeanMapper.fromMap(type, data, meta));
         });
+    }
+
+    /**
+     * Loads one row as its dynamic-map by id, seeing the caller's own uncommitted writes.
+     *
+     * <p>
+     * Outside a unit of work each store call is its own session and the row is already committed, so a
+     * plain {@code session.find} serves it (Hibernate 7: {@code get(entityName, ...)} is
+     * deprecated-for-removal in favour of {@code find}). Inside a unit the row may have been persisted
+     * earlier in the SAME session, and there {@code find} by id does NOT return it: an
+     * {@code IDENTITY}-generated dynamic-map entity that has been flushed once (as it is the moment any
+     * later write in the block flushes the session) is not served back by a subsequent {@code find} on
+     * its id — it returns {@code null}. That is what made a generated document's synchronous total
+     * recompute reload its own just-created header as {@code null} and give up before summing a single
+     * line, so the header committed with the zeros it was inserted with while the identical line
+     * recomputed correctly when POSTed on its own connection (issue #7096). An HQL query by id, run
+     * after a flush, reads through to the row the block wrote — the read-your-own-writes guarantee the
+     * unit makes — so inside a unit that is the path taken.
+     */
+    private static Map<String, Object> mapById(Session session, RegisteredEntity meta, Object id) {
+        if (UNIT_OF_WORK.get() == null) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> found = (Map<String, Object>) session.find(meta.entityName(), id);
+            return found;
+        }
+        session.flush();
+        List<Map> rows = session.createQuery("from " + meta.entityName() + " where " + meta.idField()
+                                                                                           .getName()
+                + " = :id", Map.class)
+                                .setParameter("id", id)
+                                .getResultList();
+        if (rows.isEmpty()) {
+            return null;
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) rows.get(0);
+        return data;
     }
 
     /**
@@ -592,15 +630,29 @@ public class JavaEntityStore {
 
     /**
      * Reads a row on the given session — inside the caller's open transaction, so it sees that
-     * transaction's own uncommitted changes.
+     * transaction's own uncommitted changes (the just-written row a targeted update publishes on its
+     * topic). Goes through {@link #mapById} so a row written earlier in the same unit is seen here too.
      */
     private static <T> T readInTransaction(Session session, Class<T> type, RegisteredEntity meta, Object id) {
-        return toBean(type, meta, session.find(meta.entityName(), id));
+        return toBean(type, meta, mapById(session, meta, id));
     }
 
     @SuppressWarnings("unchecked")
     private static <T> T toBean(Class<T> type, RegisteredEntity meta, Object data) {
         return data == null ? null : EntityBeanMapper.fromMap(type, (Map<String, Object>) data, meta);
+    }
+
+    /**
+     * Flushes the session's pending writes before a bulk mutation query runs inside a unit of work. A
+     * targeted update is an {@code update … where id = :id} executed straight against the connection;
+     * Hibernate does not first flush the block's still-in-memory {@code persist}s, so without this the
+     * statement would run ahead of the very rows it depends on — the master a line was just attached
+     * to, a header just created. Outside a unit there is nothing pending on this session, so it no-ops.
+     */
+    private static void flushBeforeMutation(Session session) {
+        if (UNIT_OF_WORK.get() != null) {
+            session.flush();
+        }
     }
 
     /**

@@ -1,0 +1,41 @@
+{
+    "name": "UOW_LINE",
+    "type": "TABLE",
+    "columns": [
+        {
+            "type": "INTEGER",
+            "primaryKey": true,
+            "identity": true,
+            "nullable": false,
+            "name": "LINE_ID"
+        },
+        {
+            "type": "INTEGER",
+            "nullable": true,
+            "name": "LINE_DOCUMENT"
+        },
+        {
+            "type": "DECIMAL",
+            "precision": "16",
+            "scale": "2",
+            "nullable": true,
+            "name": "LINE_AMOUNT"
+        },
+        {
+            "type": "TIMESTAMP",
+            "nullable": true,
+            "name": "LINE_CREATED_AT"
+        },
+        {
+            "type": "VARCHAR",
+            "length": "128",
+            "nullable": true,
+            "name": "LINE_CREATED_BY"
+        },
+        {
+            "type": "TIMESTAMP",
+            "nullable": true,
+            "name": "LINE_UPDATED_AT"
+        }
+    ]
+}

@@ -3174,6 +3174,87 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void generates_with_items_copies_the_lines_and_the_target_document_resums_its_header() {
+        // A create-from with an `items:` block clones the source's lines into the target and saves each
+        // through the target item repository, so the target document's own line logic fires: every line
+        // save synchronously re-sums the master (reload the header, sum the lines, persist the totals
+        // through the targeted mutation). The header total therefore equals the sum of its lines - which
+        // it did NOT while that recompute ran inside the create-from's unit of work and read its own
+        // just-created header back as null, committing the zeros the header was inserted with (issue
+        // #7096). The runtime end-to-end assertion (published app, POSTs, header total == sum) is
+        // IntentGeneratesItemsIT; this pins the emitted mechanism it depends on.
+        String genYaml = """
+                name: billing
+                entities:
+                  - name: Proforma
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: net,    type: decimal, precision: 18, scale: 2, aggregate: true }
+                  - name: ProformaItem
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, precision: 18, scale: 2, required: true }
+                      - { name: price,    type: decimal, precision: 18, scale: 2, required: true }
+                      - { name: net,      type: decimal, precision: 18, scale: 2, calculatedOnCreate: "round(Quantity * Price, 2)" }
+                    relations:
+                      - { name: Proforma, kind: manyToOne, to: Proforma, composition: true, required: true }
+                  - name: Invoice
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: net,    type: decimal, precision: 18, scale: 2, aggregate: true }
+                  - name: InvoiceItem
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, precision: 18, scale: 2, required: true }
+                      - { name: price,    type: decimal, precision: 18, scale: 2, required: true }
+                      - { name: net,      type: decimal, precision: 18, scale: 2, calculatedOnCreate: "round(Quantity * Price, 2)" }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                generates:
+                  - name: invoice-from-proforma
+                    from: Proforma
+                    to: Invoice
+                    forEntity: Proforma
+                    map:
+                      number: number
+                    items:
+                      from: ProformaItem
+                      to: InvoiceItem
+                      map:
+                        quantity: quantity
+                        price: price
+                """;
+        writeIntent(genYaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // The create-from clones each source line and saves it through the target's item repository...
+        generateFromModel("template-application-events-java/template/template.js", "billing.glue");
+        String generate = codeOf("gen/events/billing/InvoiceFromProformaGenerate.java");
+        assertTrue(generate.contains("ProformaItemRepository()"), "the create-from must read the source lines from their repository");
+        assertTrue(generate.contains("InvoiceItemRepository().save(item)"),
+                "each cloned line must be saved through the target item repository so its line logic fires");
+
+        // ...and the target item repository re-sums the master on every line save, through the master's
+        // recalculate: reload the header by id and persist ONLY the total columns via the targeted
+        // mutation (super.updateProperties) - the write-then-query-then-targeted-update pattern #7096 is
+        // about.
+        generateFromModel("template-application-dao-java/template/template.js", "billing.model");
+        String itemRepository = codeOf("gen/billing/data/invoice/InvoiceItemRepository.java");
+        assertTrue(itemRepository.contains("new InvoiceRepository().recalculate(saved.Invoice)"),
+                "a line save must re-sum its master document synchronously");
+        String masterRepository = codeOf("gen/billing/data/invoice/InvoiceRepository.java");
+        assertTrue(masterRepository.contains("public InvoiceEntity recalculate(Object id)"),
+                "the master must expose the by-id recalculate the line save calls");
+        assertTrue(masterRepository.contains("findById(id)") && masterRepository.contains("super.updateProperties(id, totals)"),
+                "recalculate must reload the header by id and persist the totals through the targeted mutation");
+    }
+
+    @Test
     void generates_completion_hook_flips_the_source_via_targeted_update() {
         // A create-from with a sourceStatus completion hook: after the Invoice is created, the Proforma
         // flips to status 3 - via a TARGETED single-column write (updateProperty), never a full-row
