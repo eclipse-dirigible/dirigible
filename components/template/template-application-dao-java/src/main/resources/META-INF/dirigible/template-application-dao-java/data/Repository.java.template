@@ -213,6 +213,16 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #end
 #end
 #end
+## Whether any document check counts the document's ITEMS - the kinds that need a Criteria query. A
+## gated requiredWhen is a document check too but reads only the row, so the import stays out of a
+## model that declares nothing else.
+#if($documentChecks)
+#foreach($check in $documentChecks)
+#if($check.kind == "itemsSumEqual" || $check.kind == "itemsMin")
+#set($haveItemChecks = "true")
+#end
+#end
+#end
 import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.component.Repository;
@@ -260,11 +270,13 @@ import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import gen.${javaGenFolderName}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}Entity;
 import gen.${javaGenFolderName}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}Repository;
 #end
-#if($documentChecks && $documentChecks.size() > 0 && $multilingual != "true" && !$documentMaster && !$rollupGuard)
-## Document checks need Criteria to load the items; deduped against the other importers above.
+#if($haveItemChecks && $multilingual != "true" && !$documentMaster && !$rollupGuard)
+## The item-counting document checks need Criteria to load the items; deduped against the other
+## importers above. A gated requiredWhen reads the row (and at most a related row by id), so a model
+## whose only document check is one of those must not import it unused.
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
-#if($guardChecks && $guardChecks.size() > 0 && $multilingual != "true" && !$documentMaster && !$rollupGuard && !($documentChecks && $documentChecks.size() > 0))
+#if($guardChecks && $guardChecks.size() > 0 && $multilingual != "true" && !$documentMaster && !$rollupGuard && !$haveItemChecks)
 ## Aggregate guards recompute the keyed sum via Criteria; deduped against every importer above.
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
@@ -1003,7 +1015,19 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     private void enforceChecks(${name}Entity entity) {
 #foreach($check in $documentChecks)
         if (entity.${check.statusProperty} != null && entity.${check.statusProperty} == ${check.status}) {
-#if($check.kind == "itemsSumEqual")
+#if($check.kind == "requiredWhen")
+            // A value required only under a condition (intent `checks: requiredWhen`), gated on the
+            // status at which it is finally needed - the transition that sends the document, not the
+            // drafting before it. ${check.label} must carry a value while the condition holds.
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            Object requiredValue = ${check.valueExpression};
+            if ((${check.guard}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
+                throw new ValidationException("${check.message}");
+            }
+#elseif($check.kind == "itemsSumEqual")
             java.math.BigDecimal sum${check.overA} = java.math.BigDecimal.ZERO;
             java.math.BigDecimal sum${check.overB} = java.math.BigDecimal.ZERO;
             for (${check.itemsEntity}Entity checkItem : new ${check.itemsEntity}Repository().findAll(

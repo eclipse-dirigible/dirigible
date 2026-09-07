@@ -30,7 +30,10 @@ import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
+import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
+import org.eclipse.dirigible.components.intent.generator.NotificationSupport;
+import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.TransitionIntent;
 import org.eclipse.dirigible.components.intent.generator.IntentSettings;
@@ -700,7 +703,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 FieldIntent groupingPk = primaryKeyOf(entity);
                 entityMap.put("groupingSourcePk", groupingPk == null ? "Id" : IntentNaming.pascalCase(groupingPk.getName()));
             }
-            List<Map<String, Object>> checkMaps = buildChecks(entity, entities, model.getAggregates());
+            List<Map<String, Object>> checkMaps = buildChecks(entity, entities, model.getAggregates(), byName, compositionParents,
+                    crossModelLookup(context, usesByAlias));
             if (!checkMaps.isEmpty()) {
                 // Declarative validations. A List, so it lives only in the .model twin (the scalar-only
                 // .edm XML skips it via the Iterable guard), consumed by the DAO/REST templates.
@@ -2140,8 +2144,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * back-reference FK property, and the EntityStatus gate property - everything the DAO/REST
      * templates need without re-deriving model structure.
      */
-    private static List<Map<String, Object>> buildChecks(EntityIntent entity, List<EntityIntent> entities,
-            List<AggregateIntent> aggregates) {
+    private static List<Map<String, Object>> buildChecks(EntityIntent entity, List<EntityIntent> entities, List<AggregateIntent> aggregates,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
         List<Map<String, Object>> checkMaps = new ArrayList<>();
         if (entity.getChecks() == null) {
             return checkMaps;
@@ -2211,6 +2215,53 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 checkMaps.add(checkMap);
                 continue;
             }
+            if ("requiredWhen".equals(check.getKind())) {
+                // A conditionally required value (#7094): the condition compiled to a Java boolean over
+                // the record's own columns, and the value itself as a null-guarded expression - the
+                // record's own property, or a one-hop Relation.field, in which case the hops the reader
+                // must load ride along. Resolving the path HERE is what lets the check reach an entity
+                // owned by another model: the .model twin cannot re-derive the owner's generation
+                // folder, but the relation's `model:` alias travels with the hop.
+                ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
+                ResolvePathSupport.Path path = walker.resolve(check.getField());
+                if (!path.resolved()) {
+                    continue; // the parser already reported it
+                }
+                checkMap.put("valueExpression", path.expression());
+                checkMap.put("label", path.label());
+                String guard = requiredWhenGuard(entity, byName, check.getWhen());
+                if (guard == null) {
+                    continue; // the parser already reported it
+                }
+                checkMap.put("guard", guard);
+                List<Map<String, Object>> pathLoads = new ArrayList<>();
+                for (ResolvePathSupport.Hop hop : walker.hops()) {
+                    Map<String, Object> load = new LinkedHashMap<>();
+                    load.put("local", hop.local());
+                    load.put("sourceExpression", hop.sourceExpression());
+                    load.put("entity", hop.entity());
+                    load.put("perspective", hop.perspective());
+                    load.put("crossModel", hop.crossModel());
+                    load.put("targetModel", hop.targetModel());
+                    pathLoads.add(load);
+                }
+                if (!pathLoads.isEmpty()) {
+                    checkMap.put("pathLoads", pathLoads);
+                }
+                // The gate is optional here: without one the rule holds on every user write (the REST
+                // surfaces enforce it, like exactlyOne), with one it is enforced by the repository when
+                // the record is persisted carrying that status - the moment the value is finally needed.
+                if (check.getStatus() != null) {
+                    RelationIntent gate = entityStatusRelation(entity);
+                    if (gate == null) {
+                        continue; // the parser already reported it
+                    }
+                    checkMap.put("status", String.valueOf(check.getStatus()));
+                    checkMap.put("statusProperty", IntentNaming.pascalCase(gate.getName()));
+                }
+                checkMaps.add(checkMap);
+                continue;
+            }
             if ("exactlyOne".equals(check.getKind())) {
                 checkMap.put("fields", check.getFields()
                                             .stream()
@@ -2246,6 +2297,101 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             checkMaps.add(checkMap);
         }
         return checkMaps;
+    }
+
+    /**
+     * Compiles a {@code requiredWhen} condition into the Java boolean the generated reader tests -
+     * every comparison rendered against its property's DECLARED type, and ANDed.
+     *
+     * @param entity the entity carrying the check
+     * @param byName the local entities by name (a to-one's key type comes from its target)
+     * @param when the authored condition
+     * @return the Java expression, or {@code null} when a comparison does not compile (the parser has
+     *         already reported it, and a condition that silently degrades to {@code true} would make
+     *         the value unconditionally required)
+     */
+    private static String requiredWhenGuard(EntityIntent entity, Map<String, EntityIntent> byName, Object when) {
+        List<String> conditions = new ArrayList<>();
+        for (String term : CheckSupport.terms(when)) {
+            CheckSupport.Comparison comparison = CheckSupport.parse(term);
+            if (comparison == null) {
+                return null;
+            }
+            FieldIntent field = fieldOf(entity, comparison.property());
+            RelationIntent relation = field == null ? toOneOf(entity, comparison.property()) : null;
+            if (field == null && relation == null) {
+                return null;
+            }
+            String type = field != null ? field.getType() : relationKeyType(relation, byName);
+            String literal = CheckSupport.javaLiteral(type, comparison.literal());
+            if (literal == null) {
+                return null;
+            }
+            conditions.add(
+                    CheckSupport.comparison("entity." + IntentNaming.pascalCase(comparison.property()), comparison.equal(), literal));
+        }
+        return conditions.isEmpty() ? null : String.join(" && ", conditions);
+    }
+
+    /** The entity's field of that name, or {@code null}. */
+    private static FieldIntent fieldOf(EntityIntent entity, String name) {
+        for (FieldIntent field : entity.getFields()) {
+            if (name != null && name.equals(field.getName())) {
+                return field;
+            }
+        }
+        return null;
+    }
+
+    /** The entity's to-one relation of that name, or {@code null}. */
+    private static RelationIntent toOneOf(EntityIntent entity, String name) {
+        for (RelationIntent relation : entity.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && name != null && name.equals(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The declared type of a to-one relation's foreign key - the target's primary-key type, falling
+     * back to the integer intent keys always are when the target is owned by another model.
+     */
+    private static String relationKeyType(RelationIntent relation, Map<String, EntityIntent> byName) {
+        EntityIntent target = relation.getTo() == null ? null : byName.get(relation.getTo());
+        if (target != null) {
+            FieldIntent key = primaryKeyOf(target);
+            if (key != null && key.getType() != null) {
+                return key.getType();
+            }
+        }
+        return "integer";
+    }
+
+    /**
+     * Resolves a cross-model to-one relation's owner facts, so a path walked here can end on an entity
+     * another model owns - the same lookup the glue generator hands its walkers, reading the owner's
+     * {@code .model} through {@link CrossModelSupport}.
+     *
+     * @param context the generation context (null in a unit test, which then resolves nothing)
+     * @param usesByAlias the declared {@code uses:} entries, by alias
+     * @return the lookup
+     */
+    private static NotificationSupport.CrossModelLookup crossModelLookup(IntentGenerationContext context,
+            Map<String, UsesIntent> usesByAlias) {
+        if (context == null) {
+            return relation -> null;
+        }
+        return relation -> {
+            UsesIntent uses = usesByAlias.get(relation.getModel());
+            if (uses == null) {
+                return null;
+            }
+            CrossModelSupport.TargetInfo target = CrossModelSupport.resolve(context, uses, relation.getTo());
+            return new NotificationSupport.CrossModelTarget(target.perspectiveName(), uses.resolveProject(), uses.getModel(),
+                    target.propertyNames());
+        };
     }
 
     /**

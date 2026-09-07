@@ -1182,6 +1182,75 @@ class EdmIntentGeneratorTest {
                                                            .get("fields"));
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void conditionallyRequiredValuesEmitTheirConditionAndTheHopsTheirValueIsReadThrough() {
+        String yaml = """
+                name: sales
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 4, name: SENT }
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: email, type: string }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: requiredWhen, field: Customer.email, when: "sentMethod == 1", status: SENT,
+                          message: "Sent Method is E-mail but the customer has no e-mail address" }
+                      - { kind: requiredWhen, field: reference, when: ["sentMethod == 1", "kind == 'export'"],
+                          message: "An e-mailed export needs a reference" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: sentMethod, type: integer }
+                      - { name: kind, type: string }
+                      - { name: reference, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: DRAFT }
+                      - { name: Customer, kind: manyToOne, to: Customer, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "SalesInvoice").get("checks");
+        assertEquals(2, checks.size());
+
+        Map<String, Object> overHop = checks.get(0);
+        // The value is read through the relation, so the hop the reader must load rides along - the
+        // .model twin cannot re-derive it, and this is what lets the check reach a related record.
+        assertEquals("java.util.Objects.equals(entity.SentMethod, 1)", overHop.get("guard"));
+        assertEquals("(hop0 == null ? null : hop0.Email)", overHop.get("valueExpression"));
+        assertEquals("Customer.Email", overHop.get("label"));
+        List<Map<String, Object>> loads = (List<Map<String, Object>>) overHop.get("pathLoads");
+        assertEquals("hop0", loads.get(0)
+                                  .get("local"));
+        assertEquals("entity.Customer", loads.get(0)
+                                             .get("sourceExpression"));
+        assertEquals("Customer", loads.get(0)
+                                      .get("entity"));
+        // The gate: the seeded status name resolved to its id, plus the property it is read from.
+        assertEquals("4", overHop.get("status"));
+        assertEquals("Status", overHop.get("statusProperty"));
+
+        Map<String, Object> ownField = checks.get(1);
+        // A list condition is an implicit AND, and each comparison is rendered against its property's
+        // declared type - a string literal quoted, an integer bare.
+        assertEquals("java.util.Objects.equals(entity.SentMethod, 1) && java.util.Objects.equals(entity.Kind, \"export\")",
+                ownField.get("guard"));
+        assertEquals("entity.Reference", ownField.get("valueExpression"));
+        assertNull(ownField.get("pathLoads"));
+        // No gate declared, so the rule holds on every user write and carries no status at all.
+        assertNull(ownField.get("status"));
+    }
+
     /**
      * A document check counts the document's LINES, even when the document owns several composition
      * children - a printed {@code function: Snapshot} copy, a payment allocation, a promotion. The

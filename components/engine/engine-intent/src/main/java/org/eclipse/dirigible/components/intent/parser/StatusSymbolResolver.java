@@ -187,6 +187,9 @@ final class StatusSymbolResolver {
                 String subject = "entity [" + entityName + "] check [" + text(check, "kind") + "]";
                 putResolved(check, "status", status, subject + " status");
                 putResolved(check, "setStatus", status, subject + " setStatus");
+                // A requiredWhen condition may be about the status itself ("required once ISSUED"), so
+                // it resolves like every other guard - the terms about other properties pass through.
+                rewriteWhen(check, statusRelation, status, subject + " when");
             }
         }
     }

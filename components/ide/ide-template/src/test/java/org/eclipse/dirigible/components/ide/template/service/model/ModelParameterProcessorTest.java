@@ -232,18 +232,50 @@ class ModelParameterProcessorTest {
         Map<String, Object> guard = new LinkedHashMap<>();
         guard.put("kind", "guard");
         Map<String, Object> document = new LinkedHashMap<>();
-        document.put("kind", "requiredWhen");
+        document.put("kind", "itemsMin");
+        Map<String, Object> conditional = new LinkedHashMap<>();
+        conditional.put("kind", "requiredWhen");
+        Map<String, Object> gated = new LinkedHashMap<>();
+        gated.put("kind", "requiredWhen");
+        gated.put("status", "4");
         Map<String, Object> entity = entity("Invoice", "Invoices", property("Total", "DECIMAL"));
-        entity.put("checks", List.of(row, guard, document));
+        entity.put("checks", List.of(row, guard, document, conditional, gated));
 
         ModelParameterProcessor.process(model(entity), parameters());
 
-        assertEquals(1, ModelValues.asList(entity.get("rowChecks"))
+        // An ungated requiredWhen holds on every user write, so it joins the row checks the REST
+        // surfaces enforce; one naming a status is the repository's, like every other gated check.
+        assertEquals(2, ModelValues.asList(entity.get("rowChecks"))
                                    .size());
         assertEquals(1, ModelValues.asList(entity.get("guardChecks"))
                                    .size());
-        assertEquals(1, ModelValues.asList(entity.get("documentChecks"))
+        assertEquals(2, ModelValues.asList(entity.get("documentChecks"))
                                    .size());
+    }
+
+    @Test
+    void resolvesTheHopsAConditionalRequirementReadsItsValueThrough() {
+        Map<String, Object> hop = new LinkedHashMap<>();
+        hop.put("local", "hop0");
+        hop.put("sourceExpression", "entity.Customer");
+        hop.put("entity", "Customer");
+        hop.put("perspective", "Customers");
+        hop.put("crossModel", Boolean.TRUE);
+        hop.put("targetModel", "base-customers");
+        Map<String, Object> check = new LinkedHashMap<>();
+        check.put("kind", "requiredWhen");
+        check.put("pathLoads", List.of(hop));
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Total", "DECIMAL"));
+        entity.put("checks", List.of(check));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        Map<String, Object> resolved = ModelValues.asMaps(ModelValues.asMaps(entity.get("rowChecks"))
+                                                                     .get(0)
+                                                                     .get("pathLoads"))
+                                                  .get(0);
+        assertEquals("gen.base_customers.data.customers.CustomerEntity", resolved.get("entityClass"));
+        assertEquals("gen.base_customers.data.customers.CustomerRepository", resolved.get("repositoryClass"));
     }
 
     @Test

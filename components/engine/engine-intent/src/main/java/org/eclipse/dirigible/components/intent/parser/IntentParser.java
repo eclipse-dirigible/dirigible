@@ -33,6 +33,7 @@ import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
+import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
 import org.eclipse.dirigible.components.intent.generator.ScheduleSupport;
@@ -4459,6 +4460,129 @@ public final class IntentParser {
         }
     }
 
+    /**
+     * A {@code requiredWhen} check: a value that is required only under a condition - the rule a plain
+     * {@code required} cannot express, because the value is needed for one way of handling the record
+     * and meaningless for the others (an e-mailed invoice needs the customer's address; a printed one
+     * does not).
+     *
+     * <p>
+     * The value is the record's own field or a one-hop {@code Relation.field} over a to-one, walked
+     * with the same resolver every other path in the DSL uses - so a cross-model target reads too, and
+     * a path walking on past one is refused there. The condition is closed to the equality comparisons
+     * every other {@code when} guard takes, over the record's OWN properties: a condition the generator
+     * cannot compile would leave the value required unconditionally, which is a {@code required} nobody
+     * authored. The {@code status} gate is optional here, unlike on the document-level kinds - a rule
+     * about the row can hold from the first save, and a rule about the moment the value is finally
+     * needed (the transition that sends the document) names the status it is needed at.
+     */
+    private static void validateRequiredWhen(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
+            String subject, List<String> issues) {
+        if (check.getField() == null || check.getField()
+                                             .isBlank()) {
+            issues.add(subject + " requires `field`: the value that must be present - a field of [" + entity.getName()
+                    + "] or a one-hop `Relation.field`");
+        } else {
+            ResolvePathSupport.Path path = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null)
+                                                             .resolve(check.getField());
+            if (!path.resolved()) {
+                issues.add(subject + " field " + path.failure());
+            }
+        }
+        if (check.getWhen() == null) {
+            issues.add(
+                    subject + " requires `when`: the condition under which the value is required, e.g." + " `when: \"SentMethod == 1\"`");
+        } else {
+            List<String> terms = CheckSupport.terms(check.getWhen());
+            if (terms.isEmpty()) {
+                issues.add(subject + " when must not be an empty list");
+            }
+            for (String term : terms) {
+                validateRequiredWhenTerm(entity, byName, term, subject, issues);
+            }
+        }
+        if (check.getStatus() != null && entityStatusRelationOf(entity) == null) {
+            issues.add(subject + " carries a `status` gate but [" + entity.getName()
+                    + "] declares no `function: EntityStatus` relation to read it from");
+        }
+    }
+
+    /**
+     * One comparison of a {@code requiredWhen} condition: the property must be the record's own (the
+     * condition is read off the row, nothing is loaded to evaluate it) and the literal must be a value
+     * of that property's type. Both refusals are about a guard that would otherwise be silently
+     * always-false - a boxed comparison across types never holds - which switches the rule off while
+     * looking authored.
+     */
+    private static void validateRequiredWhenTerm(EntityIntent entity, java.util.Map<String, EntityIntent> byName, String term,
+            String subject, List<String> issues) {
+        CheckSupport.Comparison comparison = CheckSupport.parse(term);
+        if (comparison == null) {
+            issues.add(subject + " when [" + term + "] must be `<Property> ==|!= <literal>` - a number, a status name, a quoted"
+                    + " string or a bare word");
+            return;
+        }
+        FieldIntent field = fieldByName(entity, comparison.property());
+        RelationIntent relation = field == null ? toOneByName(entity, comparison.property()) : null;
+        if (field == null && relation == null) {
+            issues.add(subject + " when [" + term + "] guards [" + comparison.property() + "], which is not a field or to-one relation of ["
+                    + entity.getName() + "] - the condition is read off the record itself");
+            return;
+        }
+        String type = field != null ? field.getType() : relationKeyType(relation, byName);
+        if (field != null && !CheckSupport.GUARD_TYPES.contains(type)) {
+            issues.add(subject + " when [" + term + "] compares [" + comparison.property() + "], which is a [" + type
+                    + "] field - a condition compares a string, an integer or a boolean, the types an equality is exact on");
+            return;
+        }
+        if (CheckSupport.javaLiteral(type, comparison.literal()) == null) {
+            issues.add(subject + " when [" + term + "] compares [" + comparison.property() + "], a [" + type + "], with ["
+                    + comparison.literal() + "], which is not a value of that type");
+        }
+    }
+
+    /** The entity's to-one relation of that name, or {@code null}. */
+    private static RelationIntent toOneByName(EntityIntent entity, String name) {
+        if (entity.getRelations() != null) {
+            for (RelationIntent relation : entity.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && name != null && name.equals(relation.getName())) {
+                    return relation;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The declared type of a to-one relation's foreign key - the target's primary-key type. A
+     * cross-model target's model is not loaded here, and intent primary keys are integers, so that is
+     * what an unresolvable target falls back to.
+     */
+    private static String relationKeyType(RelationIntent relation, java.util.Map<String, EntityIntent> byName) {
+        EntityIntent target = relation.getTo() == null ? null : byName.get(relation.getTo());
+        if (target != null && target.getFields() != null) {
+            for (FieldIntent field : target.getFields()) {
+                if (field.isPrimaryKey() && field.getType() != null) {
+                    return field.getType();
+                }
+            }
+        }
+        return "integer";
+    }
+
+    /** The entity's {@code function: EntityStatus} relation, or {@code null}. */
+    private static RelationIntent entityStatusRelationOf(EntityIntent entity) {
+        if (entity.getRelations() != null) {
+            for (RelationIntent relation : entity.getRelations()) {
+                if (relation.isEntityStatus()) {
+                    return relation;
+                }
+            }
+        }
+        return null;
+    }
+
     private static void validateCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
             java.util.List<EntityIntent> entities, List<org.eclipse.dirigible.components.intent.model.AggregateIntent> aggregates,
             List<String> issues) {
@@ -4496,6 +4620,10 @@ public final class IntentParser {
                 issues.add(subject + " aggregate [" + check.getAggregate() + "] must be a `sum` aggregate to guard");
             }
             validateGuardOutcome(entity, check, subject, issues);
+            return;
+        }
+        if ("requiredWhen".equals(kind)) {
+            validateRequiredWhen(entity, check, byName, subject, issues);
             return;
         }
         if ("exactlyOne".equals(kind)) {
@@ -4553,7 +4681,7 @@ public final class IntentParser {
             }
             return;
         }
-        issues.add(subject + " has unknown kind - expected exactlyOne, itemsSumEqual or itemsMin");
+        issues.add(subject + " has unknown kind - expected exactlyOne, requiredWhen, itemsSumEqual or itemsMin");
     }
 
     /** Whether the name matches (case-insensitively) a field or to-one relation of the entity. */

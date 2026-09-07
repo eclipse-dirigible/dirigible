@@ -13,10 +13,14 @@ import java.util.List;
 
 /**
  * A declarative validation on an {@link EntityIntent} - the cross-field / cross-line rules a plain
- * {@code required}/{@code unique} cannot express. Three kinds:
+ * {@code required}/{@code unique} cannot express. Four kinds:
  * <ul>
  * <li>{@code exactlyOne} (row-level): exactly one of {@link #fields} is non-null on the record (a
  * journal line is either debit or credit) - enforced on every user write;</li>
+ * <li>{@code requiredWhen}: {@link #field} - the record's own field, or a one-hop
+ * {@code Relation.field} - must carry a value while {@link #when} holds (an e-mailed invoice needs
+ * the customer's address). Enforced on every user write, or, with a {@link #status} gate, when the
+ * document is persisted carrying that status - the moment the value is finally needed;</li>
  * <li>{@code itemsSumEqual} (document-level): the sums of the two {@link #over} fields across the
  * document's composition items are equal (the double-entry invariant) - enforced when the document
  * is persisted carrying the {@link #status} gate seed id, i.e. at the workflow transition;</li>
@@ -33,6 +37,18 @@ public class CheckIntent {
     private List<String> over;
     /** {@code itemsMin}: the minimum number of items. */
     private Integer count;
+    /**
+     * {@code requiredWhen}: the value that must be present - the record's own field, or a one-hop
+     * {@code Relation.field} over a to-one (the target may be owned by another model, as everywhere
+     * else a path is walked).
+     */
+    private String field;
+    /**
+     * {@code requiredWhen}: the condition under which the value is required - a
+     * {@code <Property> == <literal>} / {@code != } comparison over the record's own properties, or a
+     * list of them (an implicit AND). A status name resolves to its seed id, as in every other guard.
+     */
+    private Object when;
     /**
      * Document-level checks only: the EntityStatus seed id gating the check - it runs when the document
      * is persisted carrying this status (the workflow transition into e.g. POSTED), so drafting
@@ -83,6 +99,22 @@ public class CheckIntent {
 
     public String getKind() {
         return kind;
+    }
+
+    public String getField() {
+        return field;
+    }
+
+    public void setField(String field) {
+        this.field = field;
+    }
+
+    public Object getWhen() {
+        return when;
+    }
+
+    public void setWhen(Object when) {
+        this.when = when;
     }
 
     public String getOutcome() {

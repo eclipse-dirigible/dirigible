@@ -71,26 +71,28 @@ import ch.qos.logback.classic.Level;
  * declared {@code locksWithMaster: false} keeps its writes), {@code immutableInPeriod} (the same
  * 409 keyed on a period register's status instead - a record booked into an open period stops being
  * writable when the period around it closes, a create into or a move into a closed one is refused,
- * and a date no period covers stays writable), {@code checks} (exactlyOne / itemsMin /
- * itemsSumEqual - including that a document gate counts the document's LINES and not a sibling
- * composition child such as its printed copy), {@code hierarchy}/{@code leafOnly},
- * {@code multilingual} (the read-time overlay on an entity read, and its SQL counterpart on a
- * report grouping by that nomenclature - the two must agree on the same value in the same
- * language), seed rows carrying a RELATION column, aggregate totals, first-class {@code number:}
- * stamping from an authored {@code .numbers} series declaration, {@code transitions} (the guarded
- * on-demand status flip: allowed-status 200, wrong-status/guard 409), {@code lifecycle} (the
- * declarative state machine: the graph walked through its transitions, an unmodeled flip and a
- * create filed mid-lifecycle both refused through the plain REST surface no transition guard
- * covers), {@code postings} with {@code reverses} (post on a transition; red-storno reversal on
- * void - negated amounts, storno link, fail-soft), the {@code notify} block with
- * {@code attach: print} (send the document itself by e-mail - on a transition and on a process
- * step; the fail-soft contract), {@code calculatedActionOnCreate} on a to-one RELATION (the FK
- * resolved server-side by a hand-written {@code custom/} action: assigned in the repository, and at
- * runtime both defaulted when omitted and left alone when the caller supplied one), the
- * event-driven {@code generates} (posting the source mints the whole document with nobody clicking,
- * and a click afterwards returns that same document - the at-most-once back-reference guard), and
- * the personal (my) surface ({@code identity}/{@code personal}/{@code sensitive}: scoped reads,
- * forced owner, stripped fields).
+ * and a date no period covers stays writable), {@code checks} (exactlyOne / requiredWhen / itemsMin
+ * / itemsSumEqual - including that a document gate counts the document's LINES and not a sibling
+ * composition child such as its printed copy, and that a requiredWhen reaches its value through a
+ * relation and lands in the repository or in every controller depending on whether it names a gate
+ * status), {@code hierarchy}/{@code leafOnly}, {@code multilingual} (the read-time overlay on an
+ * entity read, and its SQL counterpart on a report grouping by that nomenclature - the two must
+ * agree on the same value in the same language), seed rows carrying a RELATION column, aggregate
+ * totals, first-class {@code number:} stamping from an authored {@code .numbers} series
+ * declaration, {@code transitions} (the guarded on-demand status flip: allowed-status 200,
+ * wrong-status/guard 409), {@code lifecycle} (the declarative state machine: the graph walked
+ * through its transitions, an unmodeled flip and a create filed mid-lifecycle both refused through
+ * the plain REST surface no transition guard covers), {@code postings} with {@code reverses} (post
+ * on a transition; red-storno reversal on void - negated amounts, storno link, fail-soft), the
+ * {@code notify} block with {@code attach: print} (send the document itself by e-mail - on a
+ * transition and on a process step; the fail-soft contract), {@code calculatedActionOnCreate} on a
+ * to-one RELATION (the FK resolved server-side by a hand-written {@code custom/} action: assigned
+ * in the repository, and at runtime both defaulted when omitted and left alone when the caller
+ * supplied one), the event-driven {@code generates} (posting the source mints the whole document
+ * with nobody clicking, and a click afterwards returns that same document - the at-most-once
+ * back-reference guard), and the personal (my) surface
+ * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
+ * fields).
  */
 @Tag("slow")
 class IntentEmissionCoverageIT extends IntegrationTest {
@@ -216,6 +218,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 checks:
                   - { kind: itemsMin, count: 1, status: 2, message: "Entry needs at least one line" }
                   - { kind: itemsSumEqual, over: [debit, credit], status: 2, message: "Debits must equal credits" }
+                  # requiredWhen (#7094), gated + over a relation hop: the value lives on the related
+                  # account, so the generated repository loads it by FK before it can read it, and the
+                  # rule only applies at the status the value is finally needed at.
+                  - { kind: requiredWhen, field: Account.name, when: "note == 'audited'", status: 2,
+                      message: "An audited entry must be booked against a named account" }
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: date,   type: date, required: true }
@@ -244,6 +251,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   edges:
                     - { from: DRAFT,  to: [POSTED] }
                     - { from: POSTED, to: [CANCELLED] }
+                checks:
+                  # requiredWhen (#7094), UNGATED: no status is named, so the rule holds on every user
+                  # write and every generated controller enforces it (the entity, personal and partner
+                  # surfaces). The condition names a seeded status by name, like every other guard.
+                  - { kind: requiredWhen, field: Party.name, when: "Status == POSTED",
+                      message: "A posted document must name its counterparty" }
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: date,   type: date, required: true }
@@ -1834,11 +1847,34 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(contentOf("emission.model").contains("\"calculatedActionOnCreate\": \"QuoteTariffAction\""),
                 "the relation's calculated action must reach the .model property every downstream template reads");
 
+        // An UNGATED requiredWhen is a row check: it holds on every user write, so it lands in each
+        // generated controller's validate() rather than in the repository's gated block - the same
+        // split exactlyOne has always had, and the reason `status:` is optional on this kind.
+        String docController = contentOf("gen/emission/api/doc/DocController.java");
+        assertTrue(
+                docController.contains("A posted document must name its counterparty")
+                        && docController.contains("PartyRepository().findById(hop0Fk)")
+                        && docController.contains("java.util.Objects.equals(entity.Status, 2)"),
+                "an ungated requiredWhen must be enforced on every REST write, with the status NAME resolved to its seed id, got: "
+                        + docController);
+        assertFalse(contentOf("gen/emission/data/doc/DocRepository.java").contains("A posted document must name its counterparty"),
+                "an ungated check is not the repository's - a gate it does not carry cannot be tested there");
+
         String entryRepository = contentOf("gen/emission/data/entry/EntryRepository.java");
         assertTrue(entryRepository.contains("Entry needs at least one line"),
                 "checks: itemsMin must emit its authored message into the repository gate");
         assertTrue(entryRepository.contains("Debits must equal credits"),
                 "checks: itemsSumEqual must emit its authored message into the repository gate");
+        // A value required only under a condition (#7094). The rule reaches the value THROUGH the
+        // relation, so the gate loads the related row by FK first - a check that could only ever read
+        // the record's own columns would not express the rule the module actually has ("an e-mailed
+        // invoice needs the customer's address"), and the condition is rendered against the guarded
+        // property's declared type, because a boxed comparison across types is silently always-false.
+        assertTrue(
+                entryRepository.contains("An audited entry must be booked against a named account")
+                        && entryRepository.contains("AccountRepository().findById(hop0Fk)")
+                        && entryRepository.contains("java.util.Objects.equals(entity.Note, \"audited\")"),
+                "checks: requiredWhen must load the hop, test the condition and refuse the empty value, got: " + entryRepository);
         // ...and both gates must query the document's LINES. The items child used to be whichever
         // composition child a HashMap iteration yielded first, so a document that also owns a printed
         // copy, a payment allocation or a promotion counted THOSE rows (#7027) - an invoice guard that

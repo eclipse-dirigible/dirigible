@@ -853,6 +853,85 @@ class IntentParserTest {
     }
 
     @Test
+    void conditionallyRequiredValuesParseAndValidate() {
+        String yaml = """
+                name: sales
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 4, name: SENT }
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: email, type: string }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: requiredWhen, field: Customer.email, when: "sentMethod == 1", status: SENT,
+                          message: "Sent Method is E-mail but the customer has no e-mail address" }
+                      - { kind: requiredWhen, field: reference, when: ["sentMethod == 1", "kind == 'export'"],
+                          message: "An e-mailed export needs a reference" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: sentMethod, type: integer }
+                      - { name: kind, type: string }
+                      - { name: reference, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: DRAFT }
+                      - { name: Customer, kind: manyToOne, to: Customer, required: true }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        org.eclipse.dirigible.components.intent.model.EntityIntent invoice = model.getEntities()
+                                                                                  .get(2);
+        assertEquals(2, invoice.getChecks()
+                               .size());
+        // The gate resolves the seeded status NAME to its id, like every other status site.
+        assertEquals(4, invoice.getChecks()
+                               .get(0)
+                               .getStatus());
+
+        // The value must resolve - a path walking on past the relation names nothing readable.
+        String unknown = yaml.replace("field: Customer.email", "field: Customer.mail");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(unknown));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("has no field or to-one relation [mail]")),
+                "expected an unresolved value issue, got: " + ex.getIssues());
+
+        // A condition the generator cannot compile would leave the value unconditionally required.
+        String malformed = yaml.replace("when: \"sentMethod == 1\"", "when: \"sentMethod is email\"");
+        IntentValidationException garbled = assertThrows(IntentValidationException.class, () -> IntentParser.parse(malformed));
+        assertTrue(garbled.getIssues()
+                          .stream()
+                          .anyMatch(i -> i.contains("must be `<Property> ==|!= <literal>`")),
+                "expected a condition-shape issue, got: " + garbled.getIssues());
+
+        // A comparison across types never holds, so it is refused rather than silently switched off.
+        String mistyped = yaml.replace("when: \"sentMethod == 1\"", "when: \"sentMethod == 'email'\"");
+        IntentValidationException wrongType = assertThrows(IntentValidationException.class, () -> IntentParser.parse(mistyped));
+        assertTrue(wrongType.getIssues()
+                            .stream()
+                            .anyMatch(i -> i.contains("which is not a value of that type")),
+                "expected a literal-type issue, got: " + wrongType.getIssues());
+
+        // The condition is read off the record itself - nothing is loaded to evaluate it.
+        String foreign = yaml.replace("when: \"sentMethod == 1\"", "when: \"postage == 1\"");
+        IntentValidationException unknownProperty = assertThrows(IntentValidationException.class, () -> IntentParser.parse(foreign));
+        assertTrue(unknownProperty.getIssues()
+                                  .stream()
+                                  .anyMatch(i -> i.contains("is not a field or to-one relation of [SalesInvoice]")),
+                "expected an unknown-property issue, got: " + unknownProperty.getIssues());
+    }
+
+    @Test
     void hierarchyAndLeafOnlyParse() {
         String yaml = """
                 name: ledger

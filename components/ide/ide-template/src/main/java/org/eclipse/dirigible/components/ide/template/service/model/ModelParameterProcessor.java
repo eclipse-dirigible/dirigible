@@ -122,7 +122,7 @@ final class ModelParameterProcessor {
                     StandardCharsets.UTF_8));
         }
         entity.put("referencedProjections", new ArrayList<>());
-        splitChecks(entity);
+        splitChecks(entity, parameters);
         resolveDataOrder(entity);
 
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
@@ -208,7 +208,7 @@ final class ModelParameterProcessor {
      *
      * @param entity the entity
      */
-    private static void splitChecks(Map<String, Object> entity) {
+    private static void splitChecks(Map<String, Object> entity, Map<String, Object> parameters) {
         List<Map<String, Object>> checks = asMaps(entity.get("checks"));
         if (checks.isEmpty()) {
             return;
@@ -218,10 +218,16 @@ final class ModelParameterProcessor {
         List<Object> documentChecks = new ArrayList<>();
         for (Map<String, Object> check : checks) {
             String kind = str(check, "kind");
+            resolveCheckPathLoads(check, parameters);
             if ("exactlyOne".equals(kind)) {
                 rowChecks.add(check);
             } else if ("guard".equals(kind)) {
                 guardChecks.add(check);
+            } else if ("requiredWhen".equals(kind)) {
+                // A conditionally required value is row-level unless it names the status it is needed
+                // at: without a gate it must hold on every user write, with one it is the repository's
+                // business, like every other gated check.
+                (str(check, "status") == null || str(check, "status").isEmpty() ? rowChecks : documentChecks).add(check);
             } else {
                 documentChecks.add(check);
             }
@@ -229,6 +235,39 @@ final class ModelParameterProcessor {
         entity.put("rowChecks", rowChecks);
         entity.put("guardChecks", guardChecks);
         entity.put("documentChecks", documentChecks);
+    }
+
+    /**
+     * Resolves a check's declared path hops to the generated classes that load them - the reader of a
+     * {@code Relation.field} value must fetch the related record before it can read the field.
+     *
+     * <p>
+     * A cross-model hop resolves against the owner model's generation folder, as every other
+     * cross-model reference does; this is the pass that knows the generation folder at all, which is
+     * why the intent generator emits the hop's coordinates and not a class name.
+     *
+     * @param check the check
+     * @param parameters the generation parameters
+     */
+    private static void resolveCheckPathLoads(Map<String, Object> check, Map<String, Object> parameters) {
+        List<Map<String, Object>> hops = asMaps(check.get("pathLoads"));
+        if (hops.isEmpty()) {
+            return;
+        }
+        List<Object> loads = new ArrayList<>();
+        for (Map<String, Object> hop : hops) {
+            String genFolder = truthy(hop, "crossModel") ? NamingHelper.sanitizeJavaIdentifier(str(hop, "targetModel"))
+                    : str(parameters, "javaGenFolderName");
+            String qualified =
+                    "gen." + genFolder + ".data." + NamingHelper.sanitizeJavaIdentifier(str(hop, "perspective")) + "." + str(hop, "entity");
+            Map<String, Object> load = new LinkedHashMap<>();
+            load.put("local", hop.get("local"));
+            load.put("sourceExpression", hop.get("sourceExpression"));
+            load.put("entityClass", qualified + "Entity");
+            load.put("repositoryClass", qualified + "Repository");
+            loads.add(load);
+        }
+        check.put("pathLoads", loads);
     }
 
     /**

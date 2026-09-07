@@ -823,6 +823,21 @@ public class ${name}Controller {
     private static void validate(${name}Entity entity) {
 #if($rowChecks && $rowChecks.size() > 0)
 #foreach($check in $rowChecks)
+#if($check.kind == "requiredWhen")
+        // Row-level check (intent `checks: requiredWhen`): ${check.label} must carry a value while the
+        // condition holds. Ungated, so the rule holds on every user write - the moment a value becomes
+        // mandatory only at a transition, the check names that status and the repository owns it.
+        {
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            Object requiredValue = ${check.valueExpression};
+            if ((${check.guard}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.message}");
+            }
+        }
+#else
         // Row-level check (intent `checks: exactlyOne`).
         {
             int assigned = 0;
@@ -835,6 +850,7 @@ public class ${name}Controller {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.message}");
             }
         }
+#end
 #end
 #end
 #foreach($property in $properties)

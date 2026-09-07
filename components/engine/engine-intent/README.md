@@ -115,8 +115,8 @@ Values: `Document`, `DocumentItem`, `Master`, `Detail`, `List`, `Setting` (entit
 
 ## checks - declarative validations
 
-Row-level `exactlyOne` on every user write; document-level `itemsMin` / `itemsSumEqual` gated on a
-status transition (drafting stays unconstrained; the failing transition aborts with the authored
+Row-level `exactlyOne` and `requiredWhen` on every user write; document-level `itemsMin` /
+`itemsSumEqual` gated on a status transition (drafting stays unconstrained; the failing transition aborts with the authored
 message). A document-level check counts the document's LINES: a child flagged
 `function: DocumentItem`, else the `*Item`-named child, else the sole composition child, else the
 first declared. Flag the lines child explicitly on a document that owns several composition children
@@ -131,6 +131,28 @@ first declared. Flag the lines child explicitly on a document that owns several 
   checks:
     - { kind: exactlyOne, fields: [debit, credit], message: "Exactly one of debit/credit" }
 ```
+
+`requiredWhen` is a value that is required only under a condition - the rule `required` cannot
+express, because the value is needed for one way of handling the record and meaningless for the
+others. The value may be the record's own field or a one-hop `Relation.field` (the target may be
+owned by another model), and the condition is one or more `<Property> ==|!= <literal>` comparisons
+over the record's own properties, ANDed:
+
+```yaml
+- name: SalesInvoice
+  checks:
+    # holds on every user write
+    - { kind: requiredWhen, field: reference, when: "kind == 'export'",
+        message: "An export needs a reference" }
+    # ...or only at the status the value is finally needed at, enforced by the repository, so the
+    # transition that sends the document refuses with this message
+    - { kind: requiredWhen, field: Customer.email, when: "sentMethod == 1", status: SENT,
+        message: "Sent Method is E-mail but the customer has no e-mail address" }
+```
+
+A condition compares a `string`, an `integer`, a `long`, a `boolean` or a to-one's key - the types
+an equality is exact on. A malformed condition, or a literal that is not a value of the property's
+type, is a validation error rather than a rule that silently never (or always) holds.
 
 ## immutableWhen / immutable - user-write immutability
 
