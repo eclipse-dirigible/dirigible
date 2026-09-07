@@ -10,10 +10,25 @@ package gen.${javaGenFolderName}.api.${javaPerspectiveName};
 #if($property.roleRead)
 #set($hasRestrictedReads = "true")
 #end
+## A single-column `unique: true` is a column-level UNIQUE the SCHEMA leaves for the database to name,
+## so - unlike a composite key - there is no authored constraint name to match on. The name every
+## dialect generates is built from the column, which is the handle the duplicate mapping keys on.
+#if($property.dataUnique)
+#set($hasUniqueColumns = "true")
+#end
 #end
 #set($needsRoles = false)
 #if($perspectiveRole || $roleRead || $roleWrite || $isEntityPropertySecurityEnabled)
 #set($needsRoles = true)
+#end
+## Either kind of business key turns a database violation into a 409 naming the field, so the write
+## paths and the mapping below are emitted for both.
+#set($hasDuplicateKeys = false)
+#if($uniqueConstraints && !$uniqueConstraints.isEmpty())
+#set($hasDuplicateKeys = true)
+#end
+#if($hasUniqueColumns)
+#set($hasDuplicateKeys = true)
 #end
 import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository;
@@ -213,7 +228,7 @@ public class ${name}Controller {
 #if($hasReferenceValidations)
         validateReferences(entity);
 #end
-#if($uniqueConstraints && !$uniqueConstraints.isEmpty())
+#if($hasDuplicateKeys)
         ${name}Entity saved;
         try {
             saved = repository.save(entity);
@@ -306,7 +321,7 @@ public class ${name}Controller {
 #if($hasReferenceValidations)
         validateReferences(existing);
 #end
-#if($uniqueConstraints && !$uniqueConstraints.isEmpty())
+#if($hasDuplicateKeys)
         try {
             return repository.update(existing);
         } catch (RuntimeException e) {
@@ -321,7 +336,7 @@ public class ${name}Controller {
 #if($hasReferenceValidations)
         validateReferences(entity);
 #end
-#if($uniqueConstraints && !$uniqueConstraints.isEmpty())
+#if($hasDuplicateKeys)
         try {
             return repository.update(entity);
         } catch (RuntimeException e) {
@@ -374,26 +389,42 @@ public class ${name}Controller {
         }
     }
 
-#if($uniqueConstraints && !$uniqueConstraints.isEmpty())
+#if($hasDuplicateKeys)
     /**
-     * The composite business keys of ${name}, keyed by the constraint name the database names in the
-     * violation it raises. The names are the ones the model emitted, so this map and the schema cannot
-     * drift.
+     * The business keys of ${name}, keyed by the name the database puts into the violation it raises -
+     * a composite key by the constraint name the model emitted (so this map and the schema cannot
+     * drift), a single-column {@code unique} by its column name, which is what every dialect builds
+     * its own generated constraint name out of ("VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_key").
+     * Iterated longest key first, so a column whose name is a prefix of a longer one still answers
+     * with its own message rather than the shorter key's.
      */
-    private static final Map<String, String> DUPLICATE_MESSAGES = Map.ofEntries(
+    private static final Map<String, String> DUPLICATE_MESSAGES = duplicateMessages();
+
+    private static Map<String, String> duplicateMessages() {
+        Map<String, String> messages = new java.util.TreeMap<>(java.util.Comparator.comparingInt(String::length)
+                                                                                   .reversed()
+                                                                                   .thenComparing(java.util.Comparator.naturalOrder()));
+#if($uniqueConstraints)
 #foreach($uniqueConstraint in $uniqueConstraints)
-            Map.entry("${uniqueConstraint.name}", "${uniqueConstraint.message}")#if($foreach.hasNext),#end
+        messages.put("${uniqueConstraint.name}".toUpperCase(Locale.ROOT), "${uniqueConstraint.message}");
 #end
-    );
+#end
+#foreach($property in $properties)
+#if($property.dataUnique)
+        messages.put("${property.dataName}".toUpperCase(Locale.ROOT), "A ${name} with this '${property.name}' already exists");
+#end
+#end
+        return java.util.Collections.unmodifiableMap(messages);
+    }
 
     /**
      * A write that collided with one of those keys is a conflict the caller can act on - answered with
-     * the authored message - and anything else is rethrown untouched. Matching is on the constraint
-     * name inside the driver's message, which is the only handle the database gives back; every
+     * the message that names the field - and anything else is rethrown untouched. Matching is on the
+     * key name inside the driver's message, which is the only handle the database gives back; every
      * dialect names the violated constraint there.
      */
     private static RuntimeException duplicateOrRethrow(RuntimeException e) {
-        if (isConstraintViolation(e)) {
+        if (isConstraintViolation(e) && isDuplicateViolation(e)) {
             for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
                 String message = cause.getMessage();
                 if (message == null) {
@@ -401,13 +432,38 @@ public class ${name}Controller {
                 }
                 String upper = message.toUpperCase(Locale.ROOT);
                 for (Map.Entry<String, String> constraint : DUPLICATE_MESSAGES.entrySet()) {
-                    if (upper.contains(constraint.getKey().toUpperCase(Locale.ROOT))) {
+                    if (upper.contains(constraint.getKey())) {
                         return new ResponseStatusException(HttpStatus.CONFLICT, constraint.getValue());
                     }
                 }
             }
         }
         return e;
+    }
+
+    /**
+     * Whether the violation is specifically about UNIQUENESS. A column name matches the text of a
+     * foreign-key violation too ("Key (COMPANY_ID)=(5) is not present in table ..."), which is a
+     * different conflict and must not be answered as a duplicate. Every supported dialect either
+     * reports SQLSTATE 23505 or says so in words - PostgreSQL "duplicate key value violates unique
+     * constraint", H2 "Unique index or primary key violation", MySQL "Duplicate entry", Oracle
+     * "unique constraint (...) violated".
+     */
+    private static boolean isDuplicateViolation(Throwable e) {
+        for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+            if (cause instanceof java.sql.SQLException sqlException && "23505".equals(sqlException.getSQLState())) {
+                return true;
+            }
+            String message = cause.getMessage();
+            if (message == null) {
+                continue;
+            }
+            String upper = message.toUpperCase(Locale.ROOT);
+            if (upper.contains("DUPLICATE") || upper.contains("UNIQUE")) {
+                return true;
+            }
+        }
+        return false;
     }
 
 #end
