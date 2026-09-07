@@ -8479,6 +8479,11 @@ public final class IntentParser {
      * A {@code relation.field} form field must be a one-hop to-one relation of the form's bound entity
      * with the field present on the target - so it can be resolved into a process variable at runtime
      * (the same one-hop scope as decision conditions). Multi-hop paths are not supported.
+     * <p>
+     * A CROSS-MODEL to-one is resolved at GENERATION, against the owner model's {@code .model}, like
+     * every other cross-model reference (a {@code notify} recipient, a {@code languageFrom}): the
+     * target's fields are unknown here, and refusing the path at parse time is what kept a billing
+     * document's form from showing a field of its counterparty (dirigible #7093).
      */
     private static void validateFormRelationFields(FormIntent form, EntityIntent bound, Map<String, EntityIntent> byName,
             List<String> issues) {
@@ -8504,6 +8509,9 @@ public final class IntentParser {
                 issues.add("form [" + form.getName() + "] field [" + field + "] is not a to-one relation.field of [" + form.getForEntity()
                         + "]");
                 continue;
+            }
+            if (relation.isCrossModel()) {
+                continue; // like every cross-model reference, resolved at generation against the owner model
             }
             EntityIntent target = byName.get(relation.getTo());
             if (target == null || fieldByName(target, fieldName) == null) {

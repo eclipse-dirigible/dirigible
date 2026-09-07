@@ -103,7 +103,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
         IntentSettings settings = context.getSettings();
         List<Map<String, Object>> triggers = buildTriggers(model, byName, compositionParents, settings, context);
-        List<Map<String, Object>> resolvers = buildResolvers(model, settings);
+        List<Map<String, Object>> resolvers = buildResolvers(model, settings, context);
         List<Map<String, Object>> fieldLoaders = buildFieldLoaders(model, settings);
         List<Map<String, Object>> assignees = buildAssignees(model, settings, context);
         List<Map<String, Object>> timerLoaders = buildTimerLoaders(model, settings);
@@ -1698,6 +1698,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     static List<Map<String, Object>> buildRollupsForTest(IntentModel model, IntentGenerationContext context) {
         return buildRollups(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
                 context);
+    }
+
+    /**
+     * Test hook: build the {@code resolvers} glue collection, optionally against a context so a
+     * cross-model {@code relation.field} resolves against a REAL owner model rather than the
+     * naming-convention fallback.
+     *
+     * @param model the parsed model
+     * @param context the generation context (may be null)
+     * @return the glue entries
+     */
+    static List<Map<String, Object>> buildResolversForTest(IntentModel model, IntentGenerationContext context) {
+        return buildResolvers(model, IntentSettings.parse("{}"), context);
     }
 
     /** Test hook: build the {@code settlementListeners} glue collection without a repository. */
@@ -4658,9 +4671,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return waits;
     }
 
-    private static List<Map<String, Object>> buildResolvers(IntentModel model, IntentSettings settings) {
+    private static List<Map<String, Object>> buildResolvers(IntentModel model, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> resolvers = new ArrayList<>();
-        for (Resolver resolver : ProcessResolverSupport.resolvers(model)) {
+        for (Resolver resolver : ProcessResolverSupport.resolvers(model, resolverCrossModelLookup(model, context))) {
             if (!settings.shouldGenerate("resolvers", resolver.handler())) {
                 LOGGER.info("Settings opt-out: keeping existing handler for resolver [{}] (not generated)",
                         LoggedValue.of(resolver.handler()));
@@ -4681,9 +4694,33 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("ownerPerspective", resolver.ownerPerspective());
             entry.put("ownerKeyProperty", resolver.ownerKeyProperty());
             entry.put("ownerKeyAccessor", resolver.ownerKeyAccessor());
+            // A cross-model target's Entity/Repository live in the OWNER model's generation folder - the
+            // same registry-wide-compile mechanism a notify recipient's relation load uses.
+            entry.put("crossModel", resolver.crossModel());
+            entry.put("targetModel", resolver.targetModel());
+            entry.put("targetProject", resolver.targetProject());
             resolvers.add(entry);
         }
         return resolvers;
+    }
+
+    /**
+     * The owner facts of a cross-model {@code relation.field} referenced by a task form or a decision
+     * (dirigible #7093), read off the owner model's {@code .model}.
+     */
+    private static ProcessResolverSupport.CrossModelLookup resolverCrossModelLookup(IntentModel model, IntentGenerationContext context) {
+        if (context == null) {
+            return relation -> null;
+        }
+        return relation -> {
+            UsesIntent uses = findUses(model, relation.getModel());
+            if (uses == null) {
+                return null;
+            }
+            CrossModelSupport.TargetInfo target = CrossModelSupport.resolve(context, uses, relation.getTo());
+            return new ProcessResolverSupport.CrossModelTarget(target.perspectiveName(), uses.resolveProject(), uses.getModel(),
+                    target.propertyNames(), target.fkType());
+        };
     }
 
     private static List<Map<String, Object>> buildWriters(IntentModel model, IntentSettings settings) {

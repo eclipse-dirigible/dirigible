@@ -232,6 +232,11 @@ class GlueGenerator {
                 "variable", "ownerEntity", "ownerPerspective", "ownerKeyProperty", "ownerKeyAccessor");
         context.put("javaTargetPerspective", sanitize(item, "targetPerspective"));
         context.put("javaOwnerPerspective", sanitize(item, "ownerPerspective"));
+        // A cross-model target's Entity/Repository live in the OWNER model's generation folder. Defaulted
+        // rather than copied: a .glue written before this key existed carries none, and an absent key
+        // renders as its own literal in Velocity - here, a package that does not compile.
+        context.put("javaTargetGenFolder",
+                truthy(item, "crossModel") ? sanitize(item, "targetModel") : str(parameters, "javaGenFolderName"));
     }
 
     /**

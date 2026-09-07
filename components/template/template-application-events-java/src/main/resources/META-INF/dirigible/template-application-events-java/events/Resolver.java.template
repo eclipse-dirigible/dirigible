@@ -5,8 +5,8 @@ import org.flowable.engine.delegate.JavaDelegate;
 
 import gen.${javaGenFolderName}.data.${javaOwnerPerspective}.${ownerEntity}Entity;
 import gen.${javaGenFolderName}.data.${javaOwnerPerspective}.${ownerEntity}Repository;
-import gen.${javaGenFolderName}.data.${javaTargetPerspective}.${targetEntity}Entity;
-import gen.${javaGenFolderName}.data.${javaTargetPerspective}.${targetEntity}Repository;
+import gen.${javaTargetGenFolder}.data.${javaTargetPerspective}.${targetEntity}Entity;
+import gen.${javaTargetGenFolder}.data.${javaTargetPerspective}.${targetEntity}Repository;
 
 /**
  * Resolves ${targetEntity}.${targetField} into the process variable '${variable}' for the ${process}
@@ -14,6 +14,10 @@ import gen.${javaGenFolderName}.data.${javaTargetPerspective}.${targetEntity}Rep
  * ${targetEntity} by its relation) - do not edit; it is re-generated with the application. Runs as a
  * BPMN service task (flowable:delegateExpression="\${JavaTask}") right before the step that needs it,
  * so the value is read at the latest moment rather than baked in at process start.
+ * <p>
+ * The related record may be owned by ANOTHER model: its generated Entity/Repository are then imported
+ * from that owner's generation folder, which is what lets a document's task form show a field of its
+ * counterparty (dirigible #7093).
  * <p>
  * Clear-D context: the process context holds only the trigger entity's id, so this loads the OWNER
  * (${ownerEntity}) by that id to read the foreign key, then loads the related ${targetEntity} and
