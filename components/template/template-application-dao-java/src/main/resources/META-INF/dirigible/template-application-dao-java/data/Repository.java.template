@@ -141,25 +141,19 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## cleared stays cleared.
 ## A date/time or binary column is excluded: its DEFAULT is emitted verbatim into the DDL and is
 ## typically a SQL expression (CURRENT_DATE, now()), which has no Java literal to stand in for it.
+## The literal itself is resolved in Java (ModelParameterProcessor / JavaLiterals) and is present only
+## on a property that has one, so the type list lives in one place - and an authored value carrying a
+## quote or a backslash is escaped rather than ending the literal it is written into and failing the
+## compile of the whole generated module (dirigible #7154).
 #macro(applyDefaults)
 #foreach($property in $properties)
-#if($property.dataDefaultValue && $property.dataDefaultValue != "" && !$property.dataPrimaryKey && !$property.dataAutoIncrement)
-#if($property.dataTypeJavaClass == "java.math.BigDecimal" || $property.dataTypeJavaClass == "Double" || $property.dataTypeJavaClass == "Float" || $property.dataTypeJavaClass == "Long" || $property.dataTypeJavaClass == "Integer" || $property.dataTypeJavaClass == "Short" || $property.dataTypeJavaClass == "Boolean" || $property.dataTypeJavaClass == "String")
+#if($property.dataDefaultValueJavaLiteral)
         if (entity.${property.name} == null) {
-            entity.${property.name} = #defaultLiteral($property);
+            entity.${property.name} = ${property.dataDefaultValueJavaLiteral};
         }
 #end
 #end
 #end
-#end
-## The authored default as a Java literal of the property's own type. A numeric default is parsed from
-## its authored text rather than inlined as a numeric literal, so an author's "8.0" on an integer column
-## fails that one create instead of failing the whole generated build. A string default is accepted in
-## either authoring shape - bare (`DRAFT`, what the item dialog seeds) or SQL-quoted (`'DRAFT'`, what a
-## working DB DEFAULT needs, since the value reaches the DDL verbatim) - and both yield the string the
-## column would hold.
-#macro(defaultLiteral $property)
-#if($property.dataTypeJavaClass == "java.math.BigDecimal")new java.math.BigDecimal("${property.dataDefaultValue}")#elseif($property.dataTypeJavaClass == "Double")Double.valueOf("${property.dataDefaultValue}")#elseif($property.dataTypeJavaClass == "Float")Float.valueOf("${property.dataDefaultValue}")#elseif($property.dataTypeJavaClass == "Long")Long.valueOf("${property.dataDefaultValue}")#elseif($property.dataTypeJavaClass == "Integer")Integer.valueOf("${property.dataDefaultValue}")#elseif($property.dataTypeJavaClass == "Short")Short.valueOf("${property.dataDefaultValue}")#elseif($property.dataTypeJavaClass == "Boolean")#if($property.dataDefaultValue == "true" || $property.dataDefaultValue == "TRUE" || $property.dataDefaultValue == "1")Boolean.TRUE#{else}Boolean.FALSE#end#{else}#if($property.dataDefaultValue.length() > 1 && $property.dataDefaultValue.startsWith("'") && $property.dataDefaultValue.endsWith("'"))#set($unquotedEnd = $property.dataDefaultValue.length() - 1)"${property.dataDefaultValue.substring(1, $unquotedEnd)}"#{else}"${property.dataDefaultValue}"#end#end#end
 ## Required values: refuse a write that leaves a NOT NULL column empty, naming the property, instead of
 ## letting the statement reach the database and come back as a driver-specific constraint violation - an
 ## HTTP 500 carrying a message about a physical column nobody outside the schema has heard of, from which

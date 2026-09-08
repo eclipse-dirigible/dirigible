@@ -72,6 +72,47 @@ class ModelParameterProcessorTest {
         assertEquals(Boolean.FALSE, plain.get("isHiddenProperty"));
     }
 
+    /**
+     * The generated repository applies the authored default itself, before the create-time calculations
+     * read the column (#7104), so the parameter graph carries it as a Java expression - resolved here
+     * rather than assembled in the template, which used to interpolate the value unescaped and fail the
+     * compile of the whole generated module on an authored quote (#7154).
+     */
+    @Test
+    void carriesTheAuthoredDefaultAsAnEscapedJavaExpression() {
+        Map<String, Object> quoted = property("Size", "VARCHAR");
+        quoted.put("dataDefaultValue", "6\"");
+        Map<String, Object> status = property("Status", "VARCHAR");
+        status.put("dataDefaultValue", "'DRAFT'");
+        Map<String, Object> rate = property("VatRate", "DECIMAL");
+        rate.put("dataDefaultValue", "20");
+        ModelParameterProcessor.process(model(entity("Line", "Lines", quoted, status, rate)), parameters());
+
+        assertEquals("\"6\\\"\"", quoted.get("dataDefaultValueJavaLiteral"));
+        assertEquals("\"DRAFT\"", status.get("dataDefaultValueJavaLiteral"));
+        assertEquals("new java.math.BigDecimal(\"20\")", rate.get("dataDefaultValueJavaLiteral"));
+    }
+
+    /**
+     * The key's presence is what the template reads as "this property has a default to apply", so a
+     * property with none must leave it absent rather than null.
+     */
+    @Test
+    void leavesTheDefaultExpressionAbsentWhereThereIsNothingToApply() {
+        Map<String, Object> none = property("Name", "VARCHAR");
+        Map<String, Object> sqlExpression = property("Issued", "DATE");
+        sqlExpression.put("dataDefaultValue", "CURRENT_DATE");
+        Map<String, Object> generatedKey = property("Id", "INTEGER");
+        generatedKey.put("dataPrimaryKey", "true");
+        generatedKey.put("dataAutoIncrement", "true");
+        generatedKey.put("dataDefaultValue", "1");
+        ModelParameterProcessor.process(model(entity("Invoice", "Invoices", none, sqlExpression, generatedKey)), parameters());
+
+        assertFalse(none.containsKey("dataDefaultValueJavaLiteral"));
+        assertFalse(sqlExpression.containsKey("dataDefaultValueJavaLiteral"));
+        assertFalse(generatedKey.containsKey("dataDefaultValueJavaLiteral"));
+    }
+
     @Test
     void defaultsTheWidgetLabelFromThePropertyName() {
         Map<String, Object> property = property("TaxEventDate", "DATE");

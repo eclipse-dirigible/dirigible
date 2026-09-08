@@ -352,12 +352,41 @@ final class ModelParameterProcessor {
             property.put("widgetIsMajor", Boolean.FALSE);
         }
 
+        resolveDefaultValueLiteral(property);
+
         resolveWidgetLengths(property, entity, dataType);
         property.put("inputRule", strOr(property, "widgetPattern", ""));
         collectMasterProperties(property, entity);
         collectReferencedProjections(property, entity, entities);
         resolveDropdown(property, entity, parameters);
         resolveMultiselect(property, entity, entities, parameters);
+    }
+
+    /**
+     * Derives the authored default as a Java expression, for the properties whose default the generated
+     * repository can apply itself.
+     *
+     * <p>
+     * The default is also the column's DB DEFAULT, but the database supplies it at INSERT - which is
+     * after the create-time calculations have already run in Java and read a null (#7104), so the
+     * repository assigns it first. The expression is resolved here rather than assembled in the
+     * template, so an authored value carrying a quote or a backslash is escaped instead of ending the
+     * literal it is written into and failing the compile of the whole generated module (#7154).
+     *
+     * <p>
+     * A key with no expression is left absent rather than null: a template reads the key's presence as
+     * "this property has a default to apply".
+     *
+     * @param property the property
+     */
+    private static void resolveDefaultValueLiteral(Map<String, Object> property) {
+        if (Boolean.TRUE.equals(property.get("dataPrimaryKey")) || Boolean.TRUE.equals(property.get("dataAutoIncrement"))) {
+            return;
+        }
+        String expression = JavaLiterals.defaultValueExpression(str(property, "dataTypeJavaClass"), str(property, "dataDefaultValue"));
+        if (expression != null) {
+            property.put("dataDefaultValueJavaLiteral", expression);
+        }
     }
 
     /**

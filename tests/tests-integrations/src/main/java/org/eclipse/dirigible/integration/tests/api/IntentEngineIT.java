@@ -3887,6 +3887,7 @@ class IntentEngineIT extends IntegrationTest {
                               - { name: vat,      type: decimal, precision: 18, scale: 2, calculatedOnCreate: "Net * VatRate / 100", calculatedOnUpdate: "Net * VatRate / 100" }
                               - { name: billable, type: boolean, defaultValue: true }
                               - { name: stage,    type: string,  length: 20, defaultValue: DRAFT }
+                              - { name: size,     type: string,  length: 20, defaultValue: '6" \\ wide' }
                         """);
         restAssuredExecutor.execute(() -> given().when()
                                                  .post(GENERATE_URL)
@@ -3902,6 +3903,11 @@ class IntentEngineIT extends IntegrationTest {
                 "the decimal default must be assigned when the write left the column empty: " + repository);
         assertTrue(repository.contains("entity.Billable = Boolean.TRUE;"), "a boolean default must be a boolean literal");
         assertTrue(repository.contains("entity.Stage = \"DRAFT\";"), "a string default must be a quoted string literal");
+        // #7154: the literal used to be interpolated unescaped, so an authored inch mark ended it and
+        // failed javac on the whole generated module - the exact blast radius the numeric branch parses
+        // its text to avoid. A malformed default can at worst mis-value this one field.
+        assertTrue(repository.contains("entity.Size = \"6\\\" \\\\ wide\";"),
+                "a string default carrying a quote or a backslash must be escaped into the literal: " + repository);
 
         // ...and BEFORE the calculation that reads it, which is the whole point.
         assertTrue(
