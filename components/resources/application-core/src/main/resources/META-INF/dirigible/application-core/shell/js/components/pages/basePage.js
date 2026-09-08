@@ -106,6 +106,26 @@ function basePage() {
     },
 
     /**
+     * Whether a date picker's `change` event carries a value the picker actually PARSED.
+     *
+     * The picker listens on its own input, so its handler has already run by the time the event
+     * bubbles to a consumer's handler on the wrapper. When the typed text is not a date the picker
+     * logs it, marks the input with a custom validity message and returns WITHOUT touching the
+     * model - but the trusted `change` event still arrives here. A handler that acts unconditionally
+     * therefore acts on the PREVIOUS model value: a half-typed date silently re-applied the filter
+     * that was already in force, which reads as if the half-typed one had matched.
+     *
+     * A successful parse, a pick from the popup and an emptied input all clear that message, so the
+     * input's own validity is the discriminator - `false` here means "the picker did not take this,
+     * do nothing". The user is not left guessing: Harmonia paints a `user-invalid` picker input with
+     * the negative border, so the rejected text is visibly marked where it was typed.
+     */
+    datePickerAccepted(event) {
+      const input = event && event.target;
+      return !input || !input.validity || input.validity.valid;
+    },
+
+    /**
      * Format a floating-point value for display: decimals from the field's DecimalFormat pattern, the
      * grouping/decimal separators from the instance-wide Number setting (services/format.js).
      */

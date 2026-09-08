@@ -212,9 +212,11 @@
                          it print. A native <input type="date"> renders in the BROWSER's locale instead, which is
                          how one screen could offer dd.mm.yyyy while the form beside it read the same digits as
                          m/d/yyyy. The model stays the ISO the search expects; the picker's change event bubbles
-                         to the cell, covering both a typed value and a picked one. -->
+                         to the cell, covering both a typed value and a picked one - but only a value the picker
+                         PARSED is applied (datePickerAccepted): text it refused leaves the model on its previous
+                         date, and applying then would silently re-run the filter already in force. -->
                     <template x-if="col.type === 'date'">
-                      <div x-h-date-picker.table @change="applyServerFilter()">
+                      <div x-h-date-picker.table @change="if (datePickerAccepted($event)) applyServerFilter()">
                         <input type="text" :placeholder="HarmoniaFormat.dateHint()" />
                         <button x-h-date-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.filter', 'Filter…')"></button>
                         <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="columnFilters[col.name]"></div>
