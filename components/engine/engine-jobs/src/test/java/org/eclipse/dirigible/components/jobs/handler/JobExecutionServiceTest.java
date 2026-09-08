@@ -83,7 +83,44 @@ class JobExecutionServiceTest {
         jobExecutionService.executeJob(JOB_NAME, HANDLER, null);
 
         verify(jobHandlerRunner).run(HANDLER, null);
-        verify(jobLogService, never()).jobFinished(any(), any(), anyLong(), any());
+    }
+
+    /**
+     * A run whose TRIGGRED entry could not be written and which then fails must still be recorded
+     * (#7148): without a FAILED entry there is no stamp on the job and no failure email, and the Jobs
+     * view keeps showing the previous outcome - a failed run indistinguishable from one that never
+     * happened.
+     */
+    @Test
+    void aFailedRunIsRecordedEvenWithoutItsTriggeredEntry() throws Exception {
+        when(jobLogService.jobTriggered(JOB_NAME, HANDLER)).thenThrow(new IllegalStateException("the log is unavailable"));
+        doThrow(new IllegalStateException("boom")).when(jobHandlerRunner)
+                                                  .run(HANDLER, null);
+
+        assertThrows(JobExecutionException.class, () -> jobExecutionService.executeJob(JOB_NAME, HANDLER, null));
+
+        verify(jobLogService).jobFailed(eq(JOB_NAME), eq(HANDLER), eq(JobExecutionService.NO_TRIGGERED_ID), any(Date.class), eq("boom"));
+    }
+
+    /** The successful branch is unanchored the same way - the recovery email fires too. */
+    @Test
+    void aSuccessfulRunIsRecordedEvenWithoutItsTriggeredEntry() throws Exception {
+        when(jobLogService.jobTriggered(JOB_NAME, HANDLER)).thenThrow(new IllegalStateException("the log is unavailable"));
+
+        jobExecutionService.executeJob(JOB_NAME, HANDLER, null);
+
+        verify(jobLogService).jobFinished(eq(JOB_NAME), eq(HANDLER), eq(JobExecutionService.NO_TRIGGERED_ID), any(Date.class));
+    }
+
+    /** An outcome that cannot be written either must not break the run any further. */
+    @Test
+    void anUnwritableOutcomeIsSwallowed() throws Exception {
+        when(jobLogService.jobTriggered(JOB_NAME, HANDLER)).thenThrow(new IllegalStateException("the log is unavailable"));
+        when(jobLogService.jobFinished(any(), any(), anyLong(), any())).thenThrow(new IllegalStateException("still unavailable"));
+
+        jobExecutionService.executeJob(JOB_NAME, HANDLER, null);
+
+        verify(jobHandlerRunner).run(HANDLER, null);
     }
 
     private JobLog triggeredLog() {

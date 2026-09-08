@@ -27,6 +27,13 @@ import java.util.Date;
 public class JobExecutionService {
 
     public static final String JOB_PARAMETER_HANDLER = "dirigible-job-handler";
+
+    /**
+     * The triggered id a FINISHED/FAILED entry carries when its run has no TRIGGRED anchor to point at
+     * - the log was briefly unwritable when the run started (#7148).
+     */
+    static final long NO_TRIGGERED_ID = 0L;
+
     private static final Logger LOGGER = LoggerFactory.getLogger(JobExecutionService.class);
     public static String JOB_PARAMETER_ENGINE = "dirigible-engine-type";
 
@@ -85,6 +92,7 @@ public class JobExecutionService {
         Span.current()
             .setAttribute("handler", handler);
 
+        Date startedAt = new Date();
         JobLog triggered = registerTriggered(name, handler);
         try {
             // A client-Java job dispatches to the Java engine's executor, a JS one to the code
@@ -92,9 +100,9 @@ public class JobExecutionService {
             // visible/monitored in the Jobs perspective.
             jobHandlerRunner.run(handler, engine);
 
-            registeredFinished(name, handler, triggered);
+            registeredFinished(name, handler, triggered, startedAt);
         } catch (Exception ex) {
-            registeredFailed(name, handler, triggered, ex);
+            registeredFailed(name, handler, triggered, startedAt, ex);
 
             String msg = "Failed to execute " + (java ? "Java" : "JS") + " job. Job name [" + name + "], handler [" + handler + "]";
             throw new JobExecutionException(msg, ex);
@@ -119,42 +127,72 @@ public class JobExecutionService {
     }
 
     /**
-     * Registered finished.
+     * Records the run's outcome as FINISHED.
+     *
+     * <p>
+     * A missing TRIGGRED entry costs the outcome its anchor, not its record: the entry is still
+     * written, with {@link #NO_TRIGGERED_ID} in place of the id it cannot point at, so the job's
+     * last-run stamp and its notification email still fire (#7148).
      *
      * @param name the name
      * @param module the module
      * @param triggered the TRIGGRED entry this run opened, or null when it could not be written
+     * @param startedAt when the run started - the triggered-at of an unanchored outcome
      */
-    private void registeredFinished(String name, String module, JobLog triggered) {
-        if (triggered == null) {
-            return;
-        }
+    private void registeredFinished(String name, String module, JobLog triggered, Date startedAt) {
         try {
-            jobLogService.jobFinished(name, module, triggered.getId(), new Date(triggered.getTriggeredAt()
-                                                                                         .getTime()));
+            jobLogService.jobFinished(name, module, triggeredId(name, triggered), triggeredAt(triggered, startedAt));
         } catch (Exception e) {
             LOGGER.error("Failed to register job [{}] as FINISHED.", name, e);
         }
     }
 
     /**
-     * Registered failed.
+     * Records the run's outcome as FAILED, with the cause as its message. Unanchored exactly as
+     * {@link #registeredFinished} is - a failed run that leaves no trace is the symptom #7075 set out
+     * to remove, and the failure branch is where it hurts most (#7148).
      *
      * @param name the name
      * @param module the module
      * @param triggered the TRIGGRED entry this run opened, or null when it could not be written
+     * @param startedAt when the run started - the triggered-at of an unanchored outcome
      * @param ex the ex
      */
-    private void registeredFailed(String name, String module, JobLog triggered, Exception ex) {
-        if (triggered == null) {
-            return;
-        }
+    private void registeredFailed(String name, String module, JobLog triggered, Date startedAt, Exception ex) {
         try {
-            jobLogService.jobFailed(name, module, triggered.getId(), new Date(triggered.getTriggeredAt()
-                                                                                       .getTime()),
-                    ex.getMessage());
+            jobLogService.jobFailed(name, module, triggeredId(name, triggered), triggeredAt(triggered, startedAt), ex.getMessage());
         } catch (Exception se) {
             LOGGER.error("Failed to register job [{}] as FAILED. The job failed with [{}]", name, ex, se);
         }
+    }
+
+    /**
+     * The id of the TRIGGRED entry the outcome belongs to, or {@link #NO_TRIGGERED_ID} when the run has
+     * none.
+     *
+     * @param name the name
+     * @param triggered the TRIGGRED entry, or null
+     * @return the triggered id to record
+     */
+    private long triggeredId(String name, JobLog triggered) {
+        if (triggered == null) {
+            LOGGER.warn("Job [{}] has no TRIGGRED entry - recording its outcome unanchored.", name);
+            return NO_TRIGGERED_ID;
+        }
+        return triggered.getId();
+    }
+
+    /**
+     * When the run started, taken off its TRIGGRED entry when it has one and off the fire itself when
+     * it does not.
+     *
+     * @param triggered the TRIGGRED entry, or null
+     * @param startedAt when the run started
+     * @return the triggered-at to record
+     */
+    private Date triggeredAt(JobLog triggered, Date startedAt) {
+        return triggered == null ? startedAt
+                : new Date(triggered.getTriggeredAt()
+                                    .getTime());
     }
 }
