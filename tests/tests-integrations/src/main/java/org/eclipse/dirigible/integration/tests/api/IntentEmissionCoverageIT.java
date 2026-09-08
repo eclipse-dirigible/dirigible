@@ -2875,6 +2875,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(rosterPage.contains("applyDraftError") && rosterPage.contains("namedProperty"),
                 "a rejected line must be mapped onto the property the server named, not onto a generic banner");
 
+        // #7152: the same mapping on the PERSONAL line dialog. It got the required marker with #7062
+        // but kept printing the raw developer-facing message and marked no field, so the one surface
+        // where the owner actually enters lines was the one that named nothing. (The partner document
+        // is the mechanical mirror of this page; PartnerTicket carries no items child to emit one.)
+        assertTrue(myRosterDoc.contains(":aria-invalid=\"itemFieldError === col.name\""),
+                "the personal line dialog's refused column must carry aria-invalid too");
+        assertTrue(myRosterDoc.contains("x-text=\"itemError\""),
+                "the personal line dialog must show its error INSIDE the dialog - the items-pane banner sits behind it");
+        assertTrue(myRosterPage.contains("applyItemError") && myRosterPage.contains("namedProperty"),
+                "a refused personal line must be mapped onto the property the server named, not printed raw");
+
         // The app-test manifest carries the personal UI-parity metadata the runner's my flow
         // drives (wave 2): the /my route, the layout family the personal page belongs to, and
         // the relation columns that must resolve to labels on the personal list.

@@ -56,6 +56,12 @@ document.addEventListener('alpine:init', () => {
     itemsEnabled: false,   // items only after the header exists
     itemsError: null,
     itemDialog: false,
+    // The line dialog's own error surface. A rejected save that NAMES a column marks that column
+    // (itemFieldError -> aria-invalid) and repeats the server's reason in the field's own label;
+    // anything else keeps the generic banner. It is separate from itemsError because that one
+    // renders in the items pane, BEHIND the open dialog, where nobody reads it.
+    itemError: null,
+    itemFieldError: null,
     itemMode: 'create',
     draft: {},
     itemOptions: {},
@@ -358,7 +364,28 @@ document.addEventListener('alpine:init', () => {
         Object.keys(preset)
               .forEach((key) => { this.draft[key] = preset[key]; });
       }
+      this.itemError = null;
+      this.itemFieldError = null;
       this.itemDialog = true;
+    },
+
+    // A line the server refuses is refused for ONE reason it states in prose, naming the property:
+    // "The 'TaxRate' property is required". Read that name out of the message and the dialog can do
+    // what the raw developer-facing text never could - point at the field that is wrong and repeat
+    // the reason in the dialog's own labels. A message naming no editable column keeps the generic
+    // banner. The same mapping the power document dialog runs (#7062).
+    applyItemError(e, fallback) {
+      const columns = this.itemColumns();
+      const named = App.services.apiErrors.namedProperty(e, columns.map((c) => c.name));
+      if (named) {
+        const labels = {};
+        for (const col of columns) labels[col.name] = window.T ? window.T(col.tkey, col.label) : col.label;
+        this.itemFieldError = named;
+        this.itemError = App.services.apiErrors.messageWithLabels(e, labels);
+        return;
+      }
+      this.itemFieldError = null;
+      this.itemError = App.services.apiErrors.messageFor(e, fallback);
     },
 
     async ensureItemOptions() {
@@ -399,7 +426,7 @@ document.addEventListener('alpine:init', () => {
         await this.loadItems();
         await this.reloadHeaderTotals();
       } catch (e) {
-        this.itemsError = (e && e.message) || 'Could not save the line item.';
+        this.applyItemError(e, 'Could not save the line item.');
       }
     },
 

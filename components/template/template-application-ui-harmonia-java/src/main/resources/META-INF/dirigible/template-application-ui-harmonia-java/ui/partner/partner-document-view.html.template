@@ -235,16 +235,20 @@
         <button type="button" x-h-dialog-close @click="itemDialog = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-content>
+        <div x-show="itemError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemError"></div></div>
         <div class="grid grid-cols-2 gap-4">
           <template x-for="col in itemColumns()" :key="col.name">
-            <div x-h-field :class="col.kind === 'text' ? 'col-span-2' : ''">
+            <!-- A rejected save names ONE column (itemFieldError): its control carries aria-invalid,
+                 which is what Harmonia colours the label and the border from - the same marking the
+                 header form's fields use. -->
+            <div x-h-field :class="col.kind === 'text' ? 'col-span-2' : ''" :data-invalid="itemFieldError === col.name">
               <!-- A required line column carries the same marker as the header form: the dialog is
                    where the value is entered, so hiding which ones are mandatory only defers the
                    rejection to the server. -->
               <label x-h-label><span x-text="T(col.tkey, col.label)"></span><span x-show="col.required &amp;&amp; !col.readonly" class="text-negative"> *</span></label>
               <template x-if="!col.readonly && col.lookup">
                 <div x-h-select data-filter="contains">
-                  <input x-h-select-input x-model="draft[col.name]" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select {{name}}...', { name: T(col.tkey, col.label) })" />
+                  <input x-h-select-input x-model="draft[col.name]" :aria-invalid="itemFieldError === col.name" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select {{name}}...', { name: T(col.tkey, col.label) })" />
                   <div x-h-select-content>
                     <div x-h-select-search></div>
                     <div x-h-select-list>
@@ -256,16 +260,16 @@
                 </div>
               </template>
               <template x-if="!col.readonly && !col.lookup && col.number">
-                <div x-h-input-number><input type="number" step="any" x-model.number="draft[col.name]" /></div>
+                <div x-h-input-number><input type="number" step="any" x-model.number="draft[col.name]" :aria-invalid="itemFieldError === col.name" /></div>
               </template>
               <template x-if="!col.readonly && !col.lookup && col.widget === 'CHECKBOX'">
-                <div class="hbox items-center"><span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" /></span></div>
+                <div class="hbox items-center"><span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" :aria-invalid="itemFieldError === col.name" /></span></div>
               </template>
               <template x-if="!col.readonly && !col.lookup && col.date">
-                <div x-h-date-picker><input type="text" :placeholder="HarmoniaFormat.dateHint()" /><button x-h-date-picker-trigger aria-label="Choose date"></button><div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="draft[col.name]"></div></div>
+                <div x-h-date-picker><input type="text" :placeholder="HarmoniaFormat.dateHint()" :aria-invalid="itemFieldError === col.name" /><button x-h-date-picker-trigger aria-label="Choose date"></button><div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="draft[col.name]"></div></div>
               </template>
               <template x-if="!col.readonly && !col.lookup && !col.date && !col.number && col.widget !== 'CHECKBOX'">
-                <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" />
+                <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" :aria-invalid="itemFieldError === col.name" />
               </template>
               <!-- A read-only column (calculated / intent readOnly) is a VALUE, not a control: the
                    server recomputes it on save, so rendering an input only faked editability. -->
