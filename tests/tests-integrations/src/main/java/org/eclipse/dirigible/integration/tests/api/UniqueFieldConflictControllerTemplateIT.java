@@ -59,7 +59,12 @@ import org.junit.jupiter.api.Test;
  */
 class UniqueFieldConflictControllerTemplateIT {
 
-    private static final String TEMPLATE = "/META-INF/dirigible/template-application-rest-java/api/EntityController.java.template";
+    private static final String BASE = "/META-INF/dirigible/template-application-rest-java/api/";
+    private static final String TEMPLATE = BASE + "EntityController.java.template";
+
+    /** The two doors a person actually types into - #7137. */
+    private static final List<String> SELF_SERVICE_SURFACES =
+            List.of("EntityMyController.java.template", "EntityPartnerController.java.template");
 
     /** The message observed on BusinessIntents STA (PostgreSQL) in the report - #7098. */
     private static final String POSTGRES_DUPLICATE = "could not execute statement [ERROR: duplicate key value violates unique constraint "
@@ -245,12 +250,16 @@ class UniqueFieldConflictControllerTemplateIT {
     }
 
     private String render(Map<String, Object> parameters) throws Exception {
+        return render(TEMPLATE, parameters);
+    }
+
+    private String render(String location, Map<String, Object> parameters) throws Exception {
         String template;
-        try (InputStream in = getClass().getResourceAsStream(TEMPLATE)) {
-            assertNotNull(in, "template resource not found on classpath: " + TEMPLATE);
+        try (InputStream in = getClass().getResourceAsStream(location)) {
+            assertNotNull(in, "template resource not found on classpath: " + location);
             template = new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
-        byte[] out = velocityGenerationEngine.generate(parameters, TEMPLATE, template.getBytes(StandardCharsets.UTF_8));
+        byte[] out = velocityGenerationEngine.generate(parameters, location, template.getBytes(StandardCharsets.UTF_8));
         return new String(out, StandardCharsets.UTF_8);
     }
 
@@ -312,5 +321,112 @@ class UniqueFieldConflictControllerTemplateIT {
         property.put("dataTypeJavaClass", "String");
         property.put("dataPrimaryKey", Boolean.FALSE);
         return property;
+    }
+
+    /**
+     * The same collision through a self-service door. #7108 taught the power controller to answer a
+     * duplicate with a 409 naming the field and #7110 copied the value validators onto the personal and
+     * partner surfaces - but not this mapping, so the surface a person actually types into still handed
+     * back the #7098 500 with the raw JDBC text. One refusal, whichever door the caller used.
+     */
+    @Test
+    void aSelfServiceSurfaceAnswersADuplicateExactlyAsThePowerSurfaceDoes() throws Exception {
+        for (String template : SELF_SERVICE_SURFACES) {
+            String rendered = render(BASE + template, selfServiceContext());
+
+            assertEquals("A PublicHoliday with this 'Day' already exists", answerFor(rendered, POSTGRES_DUPLICATE),
+                    template + " must map the PostgreSQL duplicate to the message naming the field: " + rendered);
+            assertEquals("A PublicHoliday with this 'Day' already exists", answerFor(rendered, H2_DUPLICATE),
+                    template + " must map the H2 one too: " + rendered);
+        }
+    }
+
+    /** The 500 came from the write not being wrapped at all - on either verb, on either surface. */
+    @Test
+    void bothSelfServiceWritePathsRouteThroughTheMapping() throws Exception {
+        for (String template : SELF_SERVICE_SURFACES) {
+            String rendered = render(BASE + template, selfServiceContext());
+
+            assertEquals(2, occurrences(rendered, "throw duplicateOrRethrow(e);"),
+                    template + " must hand both the create and the update to the mapping: " + rendered);
+            assertTrue(rendered.contains("return scrub(repository.save(entity));"), template + " must save inside the try");
+            assertTrue(rendered.contains("return scrub(repository.update(entity));"), template + " must update inside the try");
+            assertTrue(rendered.contains("if (isConstraintViolation(e) && isDuplicateViolation(e)) {"),
+                    template + " must answer only for a UNIQUENESS violation: " + rendered);
+            assertNoUnresolvedReferences(rendered);
+        }
+    }
+
+    /** Same key, same words: a message that differed by surface would be a second refusal to learn. */
+    @Test
+    void everySurfaceCarriesTheSameMessagesForTheSameKeys() throws Exception {
+        Map<String, Object> context = selfServiceContext();
+        context.put("uniqueConstraints", List.of(compositeKey()));
+
+        Map<String, String> power = emittedMessages(render(TEMPLATE, context));
+        for (String template : SELF_SERVICE_SURFACES) {
+            assertEquals(power, emittedMessages(render(BASE + template, context)),
+                    template + " must carry the power surface's mapping verbatim");
+        }
+    }
+
+    /** A see-only personal surface refuses every write with 403, so there is no collision to map. */
+    @Test
+    void aReadOnlyPersonalSurfaceGetsNoneOfIt() throws Exception {
+        Map<String, Object> context = selfServiceContext();
+        context.put("personalReadOnly", "true");
+
+        String rendered = render(BASE + "EntityMyController.java.template", context);
+
+        assertFalse(rendered.contains("duplicateOrRethrow"), "no write reaches a statement here: " + rendered);
+        assertFalse(rendered.contains("DUPLICATE_MESSAGES"), "and no map to carry: " + rendered);
+    }
+
+    /** An entity with no business key must come out of the self-service templates exactly as it did. */
+    @Test
+    void aSelfServiceSurfaceWithoutAnyBusinessKeyGetsNoneOfItEither() throws Exception {
+        Map<String, Object> context = selfServiceContext();
+        context.put("properties", List.of(primaryKey(), column("Name", "PUBLIC_HOLIDAY_NAME")));
+
+        for (String template : SELF_SERVICE_SURFACES) {
+            String rendered = render(BASE + template, context);
+
+            assertFalse(rendered.contains("duplicateOrRethrow"), template + " has nothing to map: " + rendered);
+            assertTrue(rendered.contains("return scrub(repository.save(entity));"),
+                    template + " must keep the unwrapped save: " + rendered);
+        }
+    }
+
+    /** The mapping is hand-written Java in a Velocity template on these surfaces too. */
+    @Test
+    void everyRenderedSelfServiceShapeIsSyntacticallyValidJava() throws Exception {
+        Map<String, Object> composite = selfServiceContext();
+        composite.put("uniqueConstraints", List.of(compositeKey()));
+        Map<String, Object> noKey = selfServiceContext();
+        noKey.put("properties", List.of(primaryKey(), column("Name", "PUBLIC_HOLIDAY_NAME")));
+        Map<String, Object> readOnly = selfServiceContext();
+        readOnly.put("personalReadOnly", "true");
+
+        for (Map<String, Object> context : List.of(selfServiceContext(), composite, noKey, readOnly)) {
+            for (String template : SELF_SERVICE_SURFACES) {
+                assertEquals(List.of(), syntaxErrors(render(BASE + template, context)), template + " must parse as Java");
+            }
+        }
+    }
+
+    /** The reported entity, owned by an identity - what the personal and partner templates ask for. */
+    private static Map<String, Object> selfServiceContext() {
+        Map<String, Object> parameters = context();
+        parameters.put("personalProperty", "Employee");
+        parameters.put("personalFkJavaClass", "Integer");
+        parameters.put("personalIdentityProperty", "Email");
+        parameters.put("personalIdentityLabel", "Name");
+        parameters.put("personalIdentityRepositoryClass", "gen.vacations.data.vacations.EmployeeRepository");
+        parameters.put("partnerProperty", "Employee");
+        parameters.put("partnerFkJavaClass", "Integer");
+        parameters.put("partnerIdentityProperty", "Email");
+        parameters.put("partnerIdentityLabel", "Name");
+        parameters.put("partnerIdentityRepositoryClass", "gen.vacations.data.vacations.EmployeeRepository");
+        return parameters;
     }
 }
