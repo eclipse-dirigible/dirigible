@@ -82,16 +82,48 @@ public class DocumentController {
         });
     }
 
+    /**
+     * The same document, re-summed through the TOPIC-bearing targeted write - and the before/after
+     * pair a generated repository's {@code history} block records around it. The header is loaded
+     * earlier in the unit (the reload every recalculate does), so the session is holding an instance
+     * for its id when the mutation runs; the read that follows must be the row as the statement left
+     * it, not that instance (issue #7135). Reports what the block itself saw on both sides of the
+     * write, and the payload the topic carried is asserted from the queue the listener echoes to.
+     */
+    @Get("/document/unit/topic/{tag}")
+    public String documentSummedOnTopic(@PathParam("tag") String tag) {
+        return UnitOfWork.call(() -> {
+            Document header = new Document();
+            header.name = tag;
+            header.total = BigDecimal.ZERO;
+            Document saved = documents.save(header);
+            lines.save(line(saved.id, new BigDecimal("5.00")));
+            lines.save(line(saved.id, new BigDecimal("7.00")));
+            BigDecimal sum = BigDecimal.ZERO;
+            for (Line line : lines.findAll(Criteria.create()
+                                                   .eq("document", saved.id))) {
+                sum = sum.add(line.amount);
+            }
+            // The history block's shape: read, write, read - and the two reads must differ.
+            Document before = documents.findById(saved.id);
+            int updated = documents.updateProperties(saved.id, Map.of("total", sum), DocumentUpdatedListener.UPDATED_TOPIC);
+            Document after = documents.findById(saved.id);
+            return "id=" + saved.id + " updated=" + updated + " before=" + plain(before) + " after=" + plain(after);
+        });
+    }
+
     /** The committed total, read outside any unit - what the browser sees after the create-from. */
     @Get("/document/{id}/total")
     public String committedTotal(@PathParam("id") Integer id) {
-        Document document = documents.findById(id);
-        if (document == null) {
+        return plain(documents.findById(id));
+    }
+
+    private static String plain(Document document) {
+        if (document == null || document.total == null) {
             return "missing";
         }
-        return document.total == null ? "null"
-                : document.total.stripTrailingZeros()
-                                .toPlainString();
+        return document.total.stripTrailingZeros()
+                             .toPlainString();
     }
 
     private Recalculated recalculate(Integer documentId) {
