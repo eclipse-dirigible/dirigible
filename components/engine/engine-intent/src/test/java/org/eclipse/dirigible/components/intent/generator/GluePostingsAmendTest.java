@@ -132,6 +132,15 @@ class GluePostingsAmendTest {
         return (List<Map<String, Object>>) posting.get("headerAssignments");
     }
 
+    private static Map<String, Object> headerAssignment(Map<String, Object> posting, String property) {
+        for (Map<String, Object> assignment : headerAssignments(posting)) {
+            if (property.equals(assignment.get("targetProp"))) {
+                return assignment;
+            }
+        }
+        throw new AssertionError(property + " is not assigned");
+    }
+
     @Test
     void comparedPropertiesAreTheUnionOfEveryAssignedItemCell() {
         // What a stored row is compared on: every cell any row writes, and nothing else - a property
@@ -150,7 +159,7 @@ class GluePostingsAmendTest {
         Map<String, Object> posting = posting(WITH_STATUS);
         assertEquals("new java.math.BigDecimal(\"0\")", comparedProperty(posting, "Debit").get("derivedDefault"));
         assertEquals("new java.math.BigDecimal(\"0\")", comparedProperty(posting, "Credit").get("derivedDefault"));
-        assertEquals(Boolean.FALSE, comparedProperty(posting, "Debit").get("expressionDefault"));
+        assertEquals(Boolean.FALSE, comparedProperty(posting, "Debit").get("compareOnlyWhenDerived"));
     }
 
     @Test
@@ -158,7 +167,7 @@ class GluePostingsAmendTest {
         // Nothing to apply: a null on the derived side genuinely means the column is left empty.
         Map<String, Object> posting = posting(WITH_STATUS);
         assertEquals("", comparedProperty(posting, "Account").get("derivedDefault"));
-        assertEquals(Boolean.FALSE, comparedProperty(posting, "Account").get("expressionDefault"));
+        assertEquals(Boolean.FALSE, comparedProperty(posting, "Account").get("compareOnlyWhenDerived"));
     }
 
     @Test
@@ -174,7 +183,7 @@ class GluePostingsAmendTest {
                                                            + "      - { name: valueDate, type: date, defaultValue: CURRENT_DATE }")
                                            .replace("- { Account: rule(revenueAccount), credit: \"Net\" }",
                                                    "- { Account: rule(revenueAccount), credit: \"Net\", valueDate: \"IssueDate\" }"));
-        assertEquals(Boolean.TRUE, comparedProperty(posting, "ValueDate").get("expressionDefault"));
+        assertEquals(Boolean.TRUE, comparedProperty(posting, "ValueDate").get("compareOnlyWhenDerived"));
         assertEquals("", comparedProperty(posting, "ValueDate").get("derivedDefault"));
     }
 
@@ -200,6 +209,64 @@ class GluePostingsAmendTest {
                 "      - { name: reason, type: string, length: 400, defaultValue: 'automatic' }"));
         assertEquals("\"automatic\"", headerAssignments(posting).get(0)
                                                                 .get("derivedDefault"));
+    }
+
+    @Test
+    void aComparedColumnTheWriteComputesItselfIsNotComparedAtAll() {
+        // #7177: save() fills more than the defaults, and it does so AFTER them - a calculated column
+        // is overwritten unconditionally, so the derived row's raw value never reaches the column. Left
+        // in the comparison it is a difference no redelivery can ever clear, which is #7131's symptom
+        // reached by another route: every redelivery rewrites the whole post.
+        Map<String, Object> posting = postingOf(yaml(WITH_STATUS).replace(
+                "      - { name: credit, type: decimal, precision: 18, scale: 2, defaultValue: 0 }",
+                "      - { name: credit, type: decimal, precision: 18, scale: 2, defaultValue: 0 }\n"
+                        + "      - { name: signed, type: decimal, precision: 18, scale: 2, calculatedOnCreate: \"Debit - Credit\" }")
+                                                                 .replace("- { Account: rule(revenueAccount), credit: \"Net\" }",
+                                                                         "- { Account: rule(revenueAccount), credit: \"Net\","
+                                                                                 + " signed: \"-Net\" }"));
+        assertEquals(Boolean.TRUE, comparedProperty(posting, "Signed").get("overwrittenOnSave"));
+        assertEquals(Boolean.FALSE, comparedProperty(posting, "Debit").get("overwrittenOnSave"));
+    }
+
+    @Test
+    void aColumnTheWriteFillsOnlyWhenEmptyIsComparedOnlyForTheRowsThatDeriveIt() {
+        // The conditional half of the same class: a uuid (and a `number:` field, the same auto-fill) is
+        // assigned by the write only when the row leaves it empty. A value the rule does derive is
+        // stored verbatim and still says what it said; an empty one is answered by a value no handler
+        // can derive, so it asserts nothing - the treatment a database-only default already gets.
+        Map<String, Object> posting =
+                postingOf(yaml(WITH_STATUS)
+                                           .replace("      - { name: credit, type: decimal, precision: 18, scale: 2, defaultValue: 0 }",
+                                                   "      - { name: credit, type: decimal, precision: 18, scale: 2, defaultValue: 0 }\n"
+                                                           + "      - { name: reference, type: uuid }")
+                                           .replace("- { Account: rule(revenueAccount), credit: \"Net\" }",
+                                                   "- { Account: rule(revenueAccount), credit: \"Net\", reference: \"Reference\" }"));
+        assertEquals(Boolean.TRUE, comparedProperty(posting, "Reference").get("compareOnlyWhenDerived"));
+        assertEquals(Boolean.FALSE, comparedProperty(posting, "Reference").get("overwrittenOnSave"));
+    }
+
+    @Test
+    void aMappedHeaderColumnTheWriteComputesItselfIsNotCompared() {
+        // The header half of the same exclusion: a map: entry onto a calculated column is discarded by
+        // the write, so comparing it would classify every redelivery as an amendment. The assignment is
+        // still emitted - what the model asks for - it simply says nothing about whether the post is
+        // stale.
+        Map<String, Object> posting = postingOf(yaml(WITH_STATUS).replace("      - { name: reason, type: string, length: 400 }",
+                "      - { name: reason, type: string, length: 400, calculatedOnCreate: \"''\" }"));
+        assertEquals(Boolean.TRUE, headerAssignment(posting, "Reason").get("overwrittenOnSave"));
+    }
+
+    @Test
+    void aColumnTheWriteComputesAsksForNeitherComparisonHelper() {
+        // The helpers are emitted only where the comparison calls them, and a property the comparison
+        // skips calls neither - an excluded column's own default must not drag one in.
+        Map<String, Object> posting =
+                postingOf(yaml(WITH_STATUS).replace("      - { name: debit, type: decimal, precision: 18, scale: 2, defaultValue: 0 }",
+                        "      - { name: debit, type: decimal, precision: 18, scale: 2, defaultValue: 0, calculatedOnCreate: \"Credit\" }")
+                                           .replace("      - { name: credit, type: decimal, precision: 18, scale: 2, defaultValue: 0 }",
+                                                   "      - { name: credit, type: decimal, precision: 18, scale: 2 }"));
+        assertEquals(Boolean.FALSE, posting.get("comparesAgainstDefaults"));
+        assertEquals(Boolean.FALSE, posting.get("comparesUnlessDerivedIsEmpty"));
     }
 
     @Test

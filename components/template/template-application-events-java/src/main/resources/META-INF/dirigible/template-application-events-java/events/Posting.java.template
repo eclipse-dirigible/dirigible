@@ -126,14 +126,6 @@ public class ${className}Posting implements MessageHandler {
         }
 #end
 #end
-#if($headerAssignments.size() > 0)
-        // The header values, evaluated ONCE. The comparison below and the assignment further down must
-        // see the SAME value: an expression read twice - anything reading the clock - would differ
-        // between the two reads and make every redelivery look like an amendment (#7131).
-#end
-#foreach($a in $headerAssignments)
-        var ${a.local} = ${a.expr};
-#end
         java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> relatedTargets =
                 targetRepository.findAll(Criteria.create().eq("${backRefProperty}", source.${sourceKeyField}));
 #if($stornoProperty != "")
@@ -168,6 +160,17 @@ public class ${className}Posting implements MessageHandler {
         java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> existingTargets =
                 relatedTargets;
 #end
+#if($headerAssignments.size() > 0)
+        // The header values, evaluated ONCE. The comparison below and the assignment further down must
+        // see the SAME value: an expression read twice - anything reading the clock - would differ
+        // between the two reads and make every redelivery look like an amendment (#7131). Evaluated
+        // HERE, once a write is actually possible: every return above this point - a source the guard
+        // rejects, a missing rule row, a reversal with nothing to reverse - leaves without writing, and
+        // an expression with a cost or a side effect must not run for those (#7177).
+#end
+#foreach($a in $headerAssignments)
+        var ${a.local} = ${a.expr};
+#end
         gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity target;
         boolean refresh = !existingTargets.isEmpty();
         // The rows the post carries today: the ones a rewrite replaces, empty for a fresh post. Both
@@ -178,7 +181,9 @@ public class ${className}Posting implements MessageHandler {
             currentItems = itemsRepository.findAll(Criteria.create().eq("${itemsFk}", target.${targetPk}));
             boolean unchanged = currentItems.size() == derivedItems.size();
 #foreach($a in $headerAssignments)
-#if($a.expressionDefault)
+#if($a.overwrittenOnSave)
+            // ${a.targetProp} is not compared: the write computes it itself (#7177).
+#elseif($a.compareOnlyWhenDerived)
             unchanged = unchanged && sameUnlessDerivedIsEmpty(target.${a.targetProp}, ${a.local});
 #elseif($a.derivedDefault != "")
             unchanged = unchanged && same(target.${a.targetProp}, ${a.local}, ${a.derivedDefault});
@@ -259,7 +264,9 @@ public class ${className}Posting implements MessageHandler {
             gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity derived) {
         return
 #foreach($p in $itemComparedProps)
-#if($p.expressionDefault)
+#if($p.overwrittenOnSave)
+                // ${p.name} is not compared: the write computes it itself (#7177).
+#elseif($p.compareOnlyWhenDerived)
                 sameUnlessDerivedIsEmpty(stored.${p.name}, derived.${p.name}) &&
 #elseif($p.derivedDefault != "")
                 same(stored.${p.name}, derived.${p.name}, ${p.derivedDefault}) &&
@@ -285,14 +292,19 @@ public class ${className}Posting implements MessageHandler {
 #if($comparesUnlessDerivedIsEmpty)
 
     /**
-     * Value equality a not-yet-derived value simply does not assert: the column carries a default only
-     * the DATABASE can apply (its {@code DEFAULT} is a SQL expression such as {@code CURRENT_DATE},
-     * which has no Java stand-in, so the generated repository leaves it alone). What the stored row
-     * holds therefore cannot be derived, and an empty derived value says nothing about it - only a
-     * value the source does derive can disagree with the post (#7131).
+     * Value equality an EMPTY derived value simply does not assert, because something other than this
+     * handler fills the column: a default only the DATABASE can apply (its {@code DEFAULT} is a SQL
+     * expression such as {@code CURRENT_DATE}, which has no Java stand-in, so the generated repository
+     * leaves it alone - #7131), or a value the write itself supplies for an empty column - a uuid, the
+     * next number in a series (#7177). What the stored row holds therefore cannot be derived, and only
+     * a value the source does derive can disagree with the post. Blank counts as empty: that is the
+     * test the repository's own fill makes.
      */
     private static boolean sameUnlessDerivedIsEmpty(Object stored, Object derived) {
-        return derived == null || same(stored, derived);
+        if (derived == null || (derived instanceof CharSequence && derived.toString().isBlank())) {
+            return true;
+        }
+        return same(stored, derived);
     }
 #end
 

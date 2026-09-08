@@ -810,6 +810,13 @@ class GlueGenerator {
         // lifecycle guard around the rewrite.
         context.put("amendableGuard", strOr(item, "amendableGuard", ""));
         context.put("itemComparedProps", item.get("itemComparedProps") == null ? new ArrayList<>() : item.get("itemComparedProps"));
+        // Which of the default-aware comparison helpers the handler's own comparison calls, and so
+        // which of them the template must emit alongside it. Unbound, they read as undefined and every
+        // call to one of the two helpers was emitted without its method - a generated handler that does
+        // not compile the moment a compared posting column carries a default (#7177). A .glue written
+        // before the amendment half carries neither key and needs neither helper.
+        context.put("comparesAgainstDefaults", truthy(item, "comparesAgainstDefaults"));
+        context.put("comparesUnlessDerivedIsEmpty", truthy(item, "comparesUnlessDerivedIsEmpty"));
     }
 
     /**

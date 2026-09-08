@@ -2523,8 +2523,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     // expression (#7131). Numbered, so no authored name can collide with it.
                     assignment.put("local", "header" + (headerAssignments.size() + 1));
                     // ... and what a null one will still end up carrying once stored - the target
-                    // column's own default (see derivedDefault).
+                    // column's own default (see derivedDefault), plus whatever save() itself fills
+                    // into the column afterwards (see putSaveTimeFill).
                     putDerivedDefault(assignment, creates, byName, entry.getKey());
+                    putSaveTimeFill(assignment, creates, entry.getKey(), posting.getName(), context);
                     headerAssignments.add(assignment);
                 }
             }
@@ -2598,17 +2600,24 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // does not store that null: the repository applies the column's authored default first
             // (#7104/#7115), so each compared property carries the default its own derived side will
             // end up with (#7131) - without it a defaulted column read back off the stored row is a
-            // difference no redelivery can ever clear.
+            // difference no redelivery can ever clear. The defaults are not the only thing save() puts
+            // there either: a calculated, uuid or numbered column is filled by the write itself, and a
+            // row assigning one of those is compared accordingly (#7177).
             Map<String, Map<String, Object>> comparedProperties = new LinkedHashMap<>();
             for (Map<String, Object> row : itemRows) {
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> assigns = (List<Map<String, Object>>) row.get("assigns");
                 for (Map<String, Object> assign : assigns) {
                     String property = String.valueOf(assign.get("targetProp"));
+                    if (comparedProperties.containsKey(property)) {
+                        continue; // a column two rows assign is one comparison, and one report of it
+                    }
+                    String authoredCell = String.valueOf(assign.get("sourceCell"));
                     Map<String, Object> compared = new LinkedHashMap<>();
                     compared.put("name", property);
-                    putDerivedDefault(compared, itemsEntity, byName, String.valueOf(assign.get("sourceCell")));
-                    comparedProperties.putIfAbsent(property, compared);
+                    putDerivedDefault(compared, itemsEntity, byName, authoredCell);
+                    putSaveTimeFill(compared, itemsEntity, authoredCell, posting.getName(), context);
+                    comparedProperties.put(property, compared);
                 }
             }
             e.put("itemComparedProps", new ArrayList<>(comparedProperties.values()));
@@ -2619,8 +2628,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             List<Map<String, Object>> defaulted = new ArrayList<>(comparedProperties.values());
             defaulted.addAll(headerAssignments);
             for (Map<String, Object> compared : defaulted) {
+                if (Boolean.TRUE.equals(compared.get("overwrittenOnSave"))) {
+                    continue; // not compared at all, so it asks for neither helper
+                }
                 comparesAgainstDefaults = comparesAgainstDefaults || !"".equals(compared.get("derivedDefault"));
-                comparesUnlessDerivedIsEmpty = comparesUnlessDerivedIsEmpty || Boolean.TRUE.equals(compared.get("expressionDefault"));
+                comparesUnlessDerivedIsEmpty = comparesUnlessDerivedIsEmpty || Boolean.TRUE.equals(compared.get("compareOnlyWhenDerived"));
             }
             e.put("comparesAgainstDefaults", comparesAgainstDefaults);
             e.put("comparesUnlessDerivedIsEmpty", comparesUnlessDerivedIsEmpty);
@@ -2689,8 +2701,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * numbers by VALUE: a numeric default therefore needs no knowledge of the column's own Java type
      * ({@code BigDecimal} stands in for all of them, exactly as the stored side is read back at
      * whatever scale the database chose). Empty when the column carries no default.</li>
-     * <li>{@code expressionDefault} - {@code true} for a default with no Java literal to stand in for
-     * it: a date/time or binary column, whose {@code DEFAULT} reaches the DDL verbatim as a SQL
+     * <li>{@code compareOnlyWhenDerived} - {@code true} for a default with no Java literal to stand in
+     * for it: a date/time or binary column, whose {@code DEFAULT} reaches the DDL verbatim as a SQL
      * expression such as {@code CURRENT_DATE}, which is why the DAO template's {@code #applyDefaults()}
      * excludes it as well. The DATABASE fills it, so what the stored row holds cannot be derived at all
      * and the property says nothing for a row that does not assign it.</li>
@@ -2705,7 +2717,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     private static void putDerivedDefault(Map<String, Object> target, EntityIntent entity, Map<String, EntityIntent> byName,
             String authoredKey) {
         target.put("derivedDefault", "");
-        target.put("expressionDefault", false);
+        target.put("compareOnlyWhenDerived", false);
         String type = null;
         String defaultValue = null;
         FieldIntent field = fieldOf(entity, authoredKey);
@@ -2735,7 +2747,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         switch (IntentEntities.sqlType(type)) {
             case "DATE":
             case "TIMESTAMP":
-                target.put("expressionDefault", true);
+                target.put("compareOnlyWhenDerived", true);
                 return;
             case "DECIMAL":
             case "INTEGER":
@@ -2770,6 +2782,66 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                         + '"');
                 return;
         }
+    }
+
+    /**
+     * What the generated {@code save()} fills into one column ITSELF, after the defaults #7131 already
+     * accounts for. A rule cell (or a {@code map:} entry) writing such a column derives one value while
+     * the stored row carries another, permanently - the exact #7131 symptom, reached by a different
+     * route: every redelivery reads as an amendment and rewrites the whole post (#7177).
+     *
+     * <p>
+     * Two shapes, and they are not the same defect:
+     * <ul>
+     * <li>{@code overwrittenOnSave} - the column is filled UNCONDITIONALLY: a field's
+     * {@code calculatedOnCreate} / {@code calculatedActionOnCreate}. The derived value never reaches
+     * the column at all, so the property is dropped from the comparison entirely and the discarded
+     * assignment is reported - what the row really carries is derived from the entity's OTHER columns,
+     * which are compared. (The other unconditional fill, an entity {@code label:} recomputing its
+     * {@code Name}, cannot be reached: that property is synthesized rather than authored, and the
+     * parser refuses a cell or a {@code map:} key naming anything but an authored field or
+     * to-one.)</li>
+     * <li>{@code compareOnlyWhenDerived} - the column is filled only when the write leaves it empty: a
+     * {@code uuid} field, or a {@code number:} field (a {@code stampOn: create} allocation, or the UUID
+     * placeholder a {@code stampOn: issue} carries until the issue step). A value the rule does derive
+     * is stored verbatim and still says what it always said; an empty one is answered by a value no
+     * handler can derive - a fresh UUID, the next number in the series - so it asserts nothing. The
+     * same treatment, and the same generated helper, as a default only the database can apply.</li>
+     * </ul>
+     *
+     * @param target the map to write the keys onto - {@code compareOnlyWhenDerived} is raised on top of
+     *        what {@link #putDerivedDefault} left there, so call this after it
+     * @param entity the entity the property belongs to
+     * @param authoredKey the cell/map key as authored
+     * @param postingName the posting whose rule writes the column, for the report
+     * @param context the generation context collecting the issue, may be {@code null}
+     */
+    private static void putSaveTimeFill(Map<String, Object> target, EntityIntent entity, String authoredKey, String postingName,
+            IntentGenerationContext context) {
+        target.put("overwrittenOnSave", false);
+        FieldIntent field = fieldOf(entity, authoredKey);
+        if (field == null) {
+            return; // a to-one relation: its FK carries only the init: default putDerivedDefault read
+        }
+        if (isSet(field.getCalculatedOnCreate()) || isSet(field.getCalculatedActionOnCreate())) {
+            target.put("overwrittenOnSave", true);
+            String issue = "Posting [" + postingName + "] assigns [" + entity.getName() + "." + authoredKey
+                    + "], which the repository computes itself on create - the assigned value is discarded by the write, so the column"
+                    + " is left out of the amend comparison";
+            LOGGER.warn(LoggedValue.of(issue));
+            if (context != null) {
+                context.addIssue(issue);
+            }
+            return;
+        }
+        if ("uuid".equalsIgnoreCase(field.getType()) || field.getNumber() != null) {
+            target.put("compareOnlyWhenDerived", true);
+        }
+    }
+
+    /** Whether an authored string carries a value. */
+    private static boolean isSet(String value) {
+        return value != null && !value.isBlank();
     }
 
     /**

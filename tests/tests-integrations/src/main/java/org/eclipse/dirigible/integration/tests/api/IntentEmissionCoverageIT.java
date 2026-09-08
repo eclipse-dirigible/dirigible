@@ -316,6 +316,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: debit,  type: decimal }
                   - { name: credit, type: decimal }
+                  # A DEFAULTED column a posting row assigns (#7131): the stored row reads the default
+                  # back where a row assigned nothing, so the amend comparison must apply it too - which
+                  # is what makes the generated handler call the default-aware comparison helper, and so
+                  # what makes it emit that helper's method at all (#7177).
+                  - { name: weight, type: decimal, defaultValue: 0 }
                   # #6336 on a document ITEM: the pattern must reach the item-dialog column metadata.
                   - { name: reference, type: string, length: 20, pattern: '^[A-Z]{3}-[0-9]{4}$' }
                   # conditional dependsOn (#6358): the copied Unit property is picked by the open
@@ -1311,7 +1316,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 map: { date: date }
                 items:
                   # Party: source-FK copy (#6533) - the debit line carries Doc.Party as its dimension.
-                  - { debit: "Amount", Party: Party }
+                  - { debit: "Amount", Party: Party, weight: "Amount" }
                   - { credit: "Amount" }
               - name: docStorno
                 event: { onTransition: Doc, when: "Status == 3" }
@@ -3075,6 +3080,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // cell the rows assign, the FK dimension included.
         assertTrue(basePosting.contains("same(stored.Party, derived.Party)"),
                 "an existing post must be compared cell by cell against what the source derives now");
+        // #7131: a compared column carrying a default is compared over the value as it will be STORED -
+        // the credit row assigns no Weight, and the insert fills it with the authored 0, so comparing
+        // the stored 0 against the derived null would read every redelivery as an amendment.
+        assertTrue(basePosting.contains("same(stored.Weight, derived.Weight, new java.math.BigDecimal(\"0\"))"),
+                "a defaulted column must be compared against the default the insert would fill it with");
+        // ...and the helper that comparison calls must be EMITTED with it. It is emitted only where it
+        // is used, and the flag saying so was never bound onto the template context, so every model
+        // that reached this branch generated a handler calling a method nobody wrote (#7177).
+        assertTrue(basePosting.contains("private static boolean same(Object stored, Object derived, Object derivedDefault)"),
+                "the default-aware comparison helper must be emitted wherever the comparison calls it");
         assertTrue(basePosting.contains("targetRepository.update(target) : targetRepository.save(target)"),
                 "a diverging post must be rewritten in place, never doubled");
         // #7132: and every write of that rewrite is ONE transaction. A refused line (a validation, a
@@ -3090,6 +3105,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the header write must run inside the unit of work");
         assertTrue(basePosting.indexOf("itemsRepository.save(item)") > unitOfWork,
                 "the derived lines must be written inside the unit of work");
+        // #7177: the header expressions are hoisted into locals so the comparison and the assignment
+        // read one evaluation - but they must be evaluated only once a write is actually possible. Every
+        // return above the lookup (the status guard, a missing rule row, a reversal with nothing to
+        // reverse) leaves without writing, and a map: expression with a cost or a side effect must not
+        // run for those. Asserted by POSITION, the only thing that distinguishes the two orders.
+        int relatedTargets = basePosting.indexOf("relatedTargets =\n");
+        assertTrue(relatedTargets > 0, "the posting must look its existing post up by the back-reference");
+        assertTrue(basePosting.indexOf("var header1 =") > relatedTargets,
+                "the hoisted header locals must be evaluated after the lookup, not before every early return");
         assertTrue(basePosting.contains("-Doc-transitioned"), "a status-triggered posting must bind the -transitioned topic");
         // source-FK copy (#6533): a to-one relation item cell copies the source FK verbatim onto the
         // line - no Calc, no negation, and it must carry through UNCHANGED onto the reversal line.
