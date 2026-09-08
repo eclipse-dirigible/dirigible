@@ -74,16 +74,27 @@
      * where a developer-facing errorMessage never reaches the screen.
      */
     refusalMessageFor(err, fallback) {
+      return this.refusalText(err) || this.messageFor(err, fallback);
+    },
+
+    /**
+     * The server's own text when - and only when - the response is a refusal we may quote, else ''.
+     *
+     * The gate is the whole safety of every caller that shows or reads the server's message: with
+     * `spring.web.error.include-message=always` a 500 carries the raw exception text, so a Hibernate
+     * failure quoting a column name that happens to be a form field would otherwise reach the screen
+     * (dirigible #7151). 400 and 409 are the two statuses that mean "your request was refused", where
+     * the text is a sentence authored for the person who pressed the button.
+     *
+     * A refusal is one such sentence. A markup blob or an essay is a proxy/container error page that
+     * happens to carry the same status - those keep the catalog line rather than pasting an HTML
+     * document into a toast.
+     */
+    refusalText(err) {
       const status = err && err.httpStatus;
+      if (status !== 400 && status !== 409) return '';
       const message = typeof (err && err.errorMessage) === 'string' ? err.errorMessage.trim() : '';
-      // A refusal is one authored sentence. A markup blob or an essay is a proxy/container error page
-      // that happens to carry the same status - show the catalog line for those rather than pasting
-      // an HTML document into a toast.
-      const readable = message && message.length <= 300 && message.indexOf('<') === -1;
-      if ((status === 400 || status === 409) && readable) {
-        return message;
-      }
-      return this.messageFor(err, fallback);
+      return (message && message.length <= 300 && message.indexOf('<') === -1) ? message : '';
     },
 
     /** Per-field message for a single 422 errorCauses[] entry. */
@@ -100,12 +111,15 @@
      * than a structured 422 with errorCauses. Read that way it is a per-field rejection, and
      * answering it with the generic banner tells the user nothing about which field to fix.
      *
-     * `knownNames` is the gate that keeps the developer-facing rule intact: only a quoted token
-     * that IS a field of the form in hand is recognised, so an arbitrary 400 (a stack-trace
-     * reason, an internal identifier) still falls back to the catalog message.
+     * `knownNames` is one half of the gate that keeps the developer-facing rule intact: only a
+     * quoted token that IS a field of the form in hand is recognised, so an arbitrary refusal (a
+     * stack-trace reason, an internal identifier) still falls back to the catalog message. The
+     * other half is `refusalText` - a 500 carries the raw exception text, and a JDBC failure
+     * quoting a column name doubling as a form field would name that field on the strength of a
+     * fault (dirigible #7151).
      */
     namedProperty(err, knownNames) {
-      const text = (err && err.errorMessage) || '';
+      const text = this.refusalText(err);
       const known = new Set(knownNames || []);
       const pattern = /'([A-Za-z_][A-Za-z0-9_]*)'/g;
       let match;
@@ -119,9 +133,13 @@
      * The server's message rewritten for a person: every quoted property name it carries is
      * replaced by that property's display label ("The 'Tax Rate' property is required").
      * `labels` maps a property name to its label; an unmapped name is left as it stands.
+     *
+     * Quoted through `refusalText`, so a response that is not a refusal yields '' rather than
+     * developer-facing text - the callers reach here only after `namedProperty` said yes, which
+     * is the same gate.
      */
     messageWithLabels(err, labels) {
-      const text = (err && err.errorMessage) || '';
+      const text = this.refusalText(err);
       const map = labels || {};
       return text.replace(/'([A-Za-z_][A-Za-z0-9_]*)'/g,
         (whole, name) => (Object.prototype.hasOwnProperty.call(map, name) ? `'${map[name]}'` : whole));
