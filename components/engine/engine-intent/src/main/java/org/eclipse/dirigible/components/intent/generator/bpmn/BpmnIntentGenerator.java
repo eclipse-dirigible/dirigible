@@ -488,58 +488,92 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             // delegates inserted BEFORE it ran when the execution arrived, in the previous transaction.
             List<String> ownNodes = nodesByStep.getOrDefault(step.getName(), List.of(step.getName()));
             List<String> afterTheWait = ownNodes.subList(Math.min(ownNodes.indexOf(step.getName()) + 1, ownNodes.size()), ownNodes.size());
-            for (List<String> path : gatedPaths(step, byName, process.getSteps(), gatedSteps)) {
-                synchronous.addAll(afterTheWait);
-                for (String node : path) {
-                    synchronous.addAll(nodesByStep.getOrDefault(node, List.of(node)));
-                }
+            Set<String> onGateRoutes = gateReachingSteps(step, byName, process.getSteps(), gatedSteps);
+            if (onGateRoutes.isEmpty()) {
+                continue;
+            }
+            synchronous.addAll(afterTheWait);
+            for (String node : onGateRoutes) {
+                synchronous.addAll(nodesByStep.getOrDefault(node, List.of(node)));
             }
         }
         return synchronous;
     }
 
     /**
-     * The routes from a user task to a gated step, as the authored step names strictly between the task
-     * and the gate plus the gate itself. Empty when no gate is reachable through {@code decision} steps
-     * alone.
+     * The union of the authored steps lying on <b>every</b> route from a user task to a gated step -
+     * the steps strictly between the two, plus the gates themselves. Empty when no gate is reachable
+     * through {@code decision} steps alone.
+     *
+     * <p>
+     * A gate is regularly reachable through more than one decision route (an amount threshold that
+     * short-circuits a rating check, say), and the completing user rides exactly one of them. Each
+     * route carries its own decisions and the resolver / field-loader delegates inserted in front of
+     * them, so the nodes of all of them lose their boundary - not only the ones on the first route
+     * walked, which is what a single visited set across the routes leaves behind (issue #7139). Hence
+     * the two passes: a forward walk collects the decision sub-graph reachable from the task, and a
+     * backward walk from the gates inside it keeps the steps a gate is really reachable from. A
+     * decision route that reaches no gate keeps its async boundary.
+     *
+     * @param userTask the completing user task
+     * @param byName the authored steps by name
+     * @param authored the authored steps, in declaration order
+     * @param gatedSteps the authored step names carrying a check-gated status write
+     * @return the authored step names on the gate-reaching routes
      */
-    private static List<List<String>> gatedPaths(StepIntent userTask, Map<String, StepIntent> byName, List<StepIntent> authored,
+    private static Set<String> gateReachingSteps(StepIntent userTask, Map<String, StepIntent> byName, List<StepIntent> authored,
             Set<String> gatedSteps) {
-        List<List<String>> paths = new ArrayList<>();
-        Deque<List<String>> pending = new ArrayDeque<>();
-        for (String target : successors(userTask, authored)) {
-            pending.add(List.of(target));
-        }
-        Set<String> walked = new HashSet<>();
-        while (!pending.isEmpty()) {
-            List<String> path = pending.poll();
-            String name = path.get(path.size() - 1);
-            if (!walked.add(name)) {
-                continue; // a loop back into a step already on some route - its nodes are already taken
+        Map<String, List<String>> continuationsByStep = new LinkedHashMap<>();
+        Set<String> reachable = new LinkedHashSet<>();
+        Deque<String> forward = new ArrayDeque<>(continuations(userTask, authored));
+        while (!forward.isEmpty()) {
+            String name = forward.poll();
+            if (!reachable.add(name)) {
+                continue; // already collected, through this route or another one
             }
             if (gatedSteps.contains(name)) {
-                paths.add(path);
-                continue;
+                continue; // the gate is where the completing transaction ends
             }
             StepIntent step = byName.get(name);
             if (step == null || !"decision".equals(step.getKind())) {
                 continue; // a wait state, real asynchronous work, or `end` - the transaction ends here
             }
-            for (String target : successors(step, authored)) {
-                List<String> next = new ArrayList<>(path);
-                next.add(target);
-                pending.add(next);
+            List<String> targets = continuations(step, authored);
+            continuationsByStep.put(name, targets);
+            forward.addAll(targets);
+        }
+        Map<String, List<String>> predecessors = new LinkedHashMap<>();
+        for (Map.Entry<String, List<String>> continuation : continuationsByStep.entrySet()) {
+            for (String target : continuation.getValue()) {
+                predecessors.computeIfAbsent(target, name -> new ArrayList<>())
+                            .add(continuation.getKey());
             }
         }
-        return paths;
+        Deque<String> backward = new ArrayDeque<>();
+        for (String name : reachable) {
+            if (gatedSteps.contains(name)) {
+                backward.add(name);
+            }
+        }
+        Set<String> onGateRoutes = new LinkedHashSet<>();
+        while (!backward.isEmpty()) {
+            String name = backward.poll();
+            if (onGateRoutes.add(name)) {
+                backward.addAll(predecessors.getOrDefault(name, List.of()));
+            }
+        }
+        return onGateRoutes;
     }
 
     /**
-     * The authored steps a step routes on to: its declared routing, or - when it declares none - the
-     * step that follows it in declaration order, which is what the linear chain falls through to.
+     * The authored steps a step continues into: its declared {@code then} / {@code else} / {@code next}
+     * routing, or - when it declares none - the step that follows it in declaration order, which is
+     * what the linear chain falls through to. A boundary timer's branch and a delegate's
+     * {@code onError} route are deliberately not continuations: they are taken when a wait expires or a
+     * step fails, and nobody's completing action is waiting on the gate behind them.
      */
-    private static List<String> successors(StepIntent step, List<StepIntent> authored) {
-        List<String> targets = ProcessParallelSupport.routingTargets(step);
+    private static List<String> continuations(StepIntent step, List<StepIntent> authored) {
+        List<String> targets = ProcessParallelSupport.continuationTargets(step);
         if (!targets.isEmpty()) {
             return targets;
         }

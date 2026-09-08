@@ -91,6 +91,22 @@ class CheckGateBpmnTest {
                           - { name: activate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: done } }
                           - { name: reject,   kind: serviceTask, args: { setRelationField: Status, value: 8, next: done } }
                           - { name: done,     kind: end }
+                      - name: InvoiceConverge
+                        trigger: { onCreate: Invoice }
+                        steps:
+                          - { name: review,   kind: userTask, args: { assignee: clerk, form: DecideInvoice } }
+                          - { name: decide,   kind: decision, args: { if: "action == 'approve'", then: activate, else: rated } }
+                          - { name: rated,    kind: decision, args: { if: "Customer.rating > 0", then: activate, else: reject } }
+                          - { name: activate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: done } }
+                          - { name: reject,   kind: serviceTask, args: { setRelationField: Status, value: 8, next: done } }
+                          - { name: done,     kind: end }
+                      - name: InvoiceTimeout
+                        trigger: { onCreate: Invoice }
+                        steps:
+                          - { name: review,   kind: userTask, args: { assignee: clerk, form: ApproveInvoice, next: done, timeout: { after: PT24H, then: escalate } } }
+                          - { name: escalate, kind: decision, args: { if: "Customer.rating > 0", then: activate, else: done } }
+                          - { name: activate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: done } }
+                          - { name: done,     kind: end }
                     forms:
                       - { name: ApproveInvoice, forEntity: Invoice, fields: [note], editable: [note], actions: [approve] }
                       - { name: DecideInvoice, forEntity: Invoice, fields: [note], editable: [note], actions: [approve, reject] }
@@ -169,6 +185,32 @@ class CheckGateBpmnTest {
         // The resolver the second decision needs sits between the task and the gate too - and it is a
         // service task like any other, so its boundary would commit the completion just the same.
         assertSynchronous(bpmn, "resolveCustomerRating");
+        assertSynchronous(bpmn, "activate");
+    }
+
+    @Test
+    void aGateReachedThroughTwoDecisionRoutesTakesBothOutOfAsync() {
+        String bpmn = bpmn("InvoiceConverge");
+
+        // The gate is one hop away on the first route (decide -> activate) and two on the second
+        // (decide -> rated -> activate). The approver who takes the second one is waiting on the gate
+        // just as much, so the resolver the second decision needs may not commit the completion first
+        // (issue #7139).
+        assertSynchronous(bpmn, "invoiceConvergeReviewWrite");
+        assertSynchronous(bpmn, "resolveCustomerRating");
+        assertSynchronous(bpmn, "activate");
+    }
+
+    @Test
+    void aGateBehindATimerBranchKeepsTheAsyncBoundary() {
+        String bpmn = bpmn("InvoiceTimeout");
+
+        // The gate is reachable only through the task's `timeout:` boundary branch - taken when the
+        // wait expires, with nobody's action to refuse - so neither the branch nor the writer the task
+        // leaves behind loses its boundary. The gated set itself stays synchronous either way (#7014):
+        // it is the write the gate stands in front of.
+        assertAsynchronous(bpmn, "invoiceTimeoutReviewWrite");
+        assertAsynchronous(bpmn, "resolveCustomerRating");
         assertSynchronous(bpmn, "activate");
     }
 
