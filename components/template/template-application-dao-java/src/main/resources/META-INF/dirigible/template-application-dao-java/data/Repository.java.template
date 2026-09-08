@@ -48,6 +48,17 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
         #end
     #end
 #end
+## Does any owned child REFUSE the master's delete (whenMasterDeleted: refuse)? Those checks are
+## emitted as a block before the first cascade, so the refusal cannot arrive after a sibling's rows
+## are already deleted - see deleteOwnedChildren.
+#set($haveRefusingChild = false)
+#if($compositionChildren)
+#foreach($owned in $compositionChildren)
+#if($owned.refuse == "true")
+#set($haveRefusingChild = true)
+#end
+#end
+#end
 ## Decimal places of a calculated property: its own scale, else 2 for floating-point types, else 0.
 #macro(calcScale $property)#if($property.dataScale)${property.dataScale}#elseif($property.dataTypeJavaClass == "Double" || $property.dataTypeJavaClass == "Float")2#{else}0#end#end
 ## Assign a calculated property. Numeric properties evaluate the neutral arithmetic expression via the
@@ -1064,7 +1075,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     /** The delete of this ${name} itself, running inside the unit of work above. */
     private void deleteWithOwnedChildren(${name}Entity entity) {
+#if($documentMaster)
+        String deletingMaster = String.valueOf(entity.${pkPropertyName});
+        DELETING_IDS.get().add(deletingMaster);
+        try {
+            deleteOwnedChildren(entity.${pkPropertyName});
+        } finally {
+            DELETING_IDS.get().remove(deletingMaster);
+        }
+#else
         deleteOwnedChildren(entity.${pkPropertyName});
+#end
 #end
 #if($history == "true")
         // The caller's argument may be a partial snapshot; the trail must carry what was actually
@@ -1092,7 +1113,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     /** The delete of this ${name} itself, running inside the unit of work above. */
     private void deleteByIdWithOwnedChildren(Object id) {
+#if($documentMaster)
+        String deletingMaster = String.valueOf(id);
+        DELETING_IDS.get().add(deletingMaster);
+        try {
+            deleteOwnedChildren(id);
+        } finally {
+            DELETING_IDS.get().remove(deletingMaster);
+        }
+#else
         deleteOwnedChildren(id);
+#end
 #end
 #if($documentItem)
         ${name}Entity entity = findById(id);
@@ -1133,6 +1164,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         if (id == null) {
             return;
         }
+#if($haveRefusingChild)
+        // EVERY refusal is decided before the FIRST cascade. Checked per child in model order instead,
+        // a refusing child declared after a cascading one only spoke up once the earlier child's rows
+        // were already deleted: the unit of work rolls those rows back, but the change history is
+        // written on its own connection by design - so the trail permanently recorded deletes of lines
+        // that still exist (#7143).
 #foreach($owned in $compositionChildren)
 #if($owned.refuse == "true")
         if (!new gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Repository()
@@ -1141,7 +1178,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             throw new org.eclipse.dirigible.sdk.db.ValidationException(
                     "This ${entityLabel} still has ${owned.childLabel} records - delete those first");
         }
-#else
+#end
+#end
+#end
+#foreach($owned in $compositionChildren)
+#if($owned.refuse != "true")
         gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Repository ${owned.childEntity}Owner =
                 new gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Repository();
         for (gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Entity ${owned.childEntity}Row : ${owned.childEntity}Owner
@@ -1194,6 +1235,15 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($documentMaster)
 
     /**
+     * The ${name} rows whose own delete is in progress on this thread. Their lines are being cascaded
+     * away with them, so the totals write-back each line delete would trigger has nothing left to keep
+     * consistent - see recalculate(Object) and deleteOwnedChildren (#7143). Keyed by the id's string
+     * form: the master reads it off its own row and the line off its foreign key, which need not be
+     * the same box type.
+     */
+    private static final ThreadLocal<java.util.Set<String>> DELETING_IDS = ThreadLocal.withInitial(java.util.HashSet::new);
+
+    /**
      * Document totals: each aggregate field is the sum of the line items' same-named field. Recomputed
      * synchronously (in the same request) so the document stays consistent - NOT via async roll-up
      * listeners. Called on the master's own save/update, and by ${documentMaster.childEntity}Repository
@@ -1231,6 +1281,13 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * still being assembled line by line, and a half-built document must not fail its posting gate.
      */
     public ${name}Entity recalculate(Object id) {
+        if (DELETING_IDS.get().contains(String.valueOf(id))) {
+            // This master is itself being deleted and the call is one of its own lines reporting its
+            // removal on the way out. There is nothing left to keep consistent, and doing it anyway
+            // cost a read, a targeted update and a SYSTEM "totals changed" history row PER LINE against
+            // a row that is gone microseconds later (#7143).
+            return null;
+        }
         ${name}Entity entity = findById(id);
         if (entity == null) {
             return null;

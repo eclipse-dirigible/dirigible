@@ -192,7 +192,8 @@ not as an apology.
   transaction and through their own repository, so each child's delete event fires and every roll-up
   over the child relinquishes what it counted. `refuse` rejects the master's delete while any child
   exists ("This Sales Order still has Sales Order Item records - delete those first"), for a document
-  whose lines must be removed deliberately. There is no third option: a header that leaves its lines
+  whose lines must be removed deliberately. Every `refuse` is checked BEFORE the first cascade runs, so
+  a refusal never arrives after a cascading sibling's rows are already deleted. There is no third option: a header that leaves its lines
   behind leaves rows pointing at an id that no longer exists - invisible in the UI, since no parent page
   renders them, and still counted by every report and roll-up over the child. Declare it on the
   entity's OWNING composition (its first one); a deeper chain cascades level by level, each child

@@ -1980,6 +1980,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "whenMasterDeleted: refuse must reject the master's delete while children exist, got: " + entryRepository);
         assertFalse(entryRepository.contains("EntryCopyOwner.delete("),
                 "a refusing child must not be cascaded into, got: " + entryRepository);
+        // ...and EVERY refusal is decided before the FIRST cascade. Checked per child in model order
+        // instead - EntryLine is declared before the refusing EntryCopy - a delete of the entry removed
+        // every line and only THEN refused. The unit of work brings the rows back, but History writes on
+        // its own raw-JDBC connection by design, so the trail permanently recorded deletes of lines that
+        // still exist (#7143).
+        assertTrue(entryRepository.indexOf("still has Entry Copy records") < entryRepository.indexOf("EntryLineOwner.delete(EntryLineRow)"),
+                "a whenMasterDeleted refusal must be checked before the first cascade runs, got: " + entryRepository);
+        // Secondary, same cascade: a document line's delete calls the master's recalculate(fk), so
+        // sweeping N lines away with their master issued N reads, N targeted updates and N SYSTEM
+        // "totals changed" history rows against a row that is gone microseconds later. The master marks
+        // its own id for the duration of the cascade, and recalculate honours the mark (#7143).
+        assertTrue(
+                entryRepository.contains("DELETING_IDS.get().add(deletingMaster)")
+                        && entryRepository.contains("if (DELETING_IDS.get().contains(String.valueOf(id)))"),
+                "a master being deleted must suspend the per-line totals write-back, got: " + entryRepository);
         // The children's own repositories own nothing: neither may cascade into its master.
         assertFalse(contentOf("gen/emission/data/entry/EntryLineRepository.java").contains("deleteOwnedChildren"),
                 "a childless composition child must emit no cascade at all");
