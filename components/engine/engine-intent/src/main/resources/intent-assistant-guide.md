@@ -1751,6 +1751,11 @@ generates:
     items:                         # optional MIRROR form (an OBJECT): clone each source item row
       from: ProjectTimesheetItem   #   1:1 into a target item row (map = copy, defaults = now/literal)
       to: SalesInvoiceItem
+      where:                       # optional SOURCE-ROW RULE: only the rows that satisfy every
+        - { field: Status, op: eq, value: APPROVED }    # condition become lines (default: skip
+        - { field: totalHours, op: gt, value: 0 }       # the rest). Same shape as schedules.where.
+      refuse: "Member timesheet is not approved"        # optional: an unqualified row REFUSES the
+                                                        # whole run (400) instead of being left out
       map:
         Description: Description
         Amount: Amount
@@ -1763,6 +1768,46 @@ generates:
     sourceStatusOnRetire: 2        # optional INVERSE of that hook: where the SOURCE returns when the
                                    # target is retired (cancelled/void) - see "void and reissue"
 ```
+
+**Which source rows become lines (`items: where:` / `refuse:`).** The mirror form clones every row
+of the source document by default, which is only ever right when the whole document qualifies. It
+usually does not: an unapproved member timesheet must not reach the customer's invoice, and an empty
+one (no hours) is a line the target refuses outright - so ONE bad row used to stop the whole month
+from being invoiced, with nothing the intent could say about it.
+
+```yaml
+    items:
+      from: EmployeeTimesheet
+      to: SalesInvoiceItem
+      where:
+        - { field: Status,     op: eq, value: APPROVED }   # only approved member timesheets
+        - { field: totalHours, op: gt, value: 0 }          # an empty one is not a line
+      map: { Name: employeeName, Quantity: totalHours, Price: rate }
+```
+
+`where:` takes the same `{ field, op, value }` triples a `schedules[].where` does - `op` is
+`eq`/`ne`/`gt`/`ge`/`lt`/`le`/`like`, and the value may be a moment (`CURRENT_DATE`,
+`CURRENT_TIMESTAMP-PT30M`), resolved against the clock of the run rather than of the generation. The
+`field` is a field or a to-one relation of the items `from:` entity, and a condition naming its
+`function: EntityStatus` relation may use the **seeded status name** as above (an id is positional -
+inserting a status mid-nomenclature would otherwise silently retarget the rule).
+
+**Skipping is the default; `refuse:` is the other reading.** An unqualified row left quietly out of
+an invoice and an unqualified row quietly billed are both wrong, for different months, so the
+document says which it means:
+
+```yaml
+      refuse: "Member timesheet is not approved"
+```
+
+With it, an unqualified row stops the whole create-from with a 400 carrying that message and the
+keys of the offending rows - which of a hundred lines to go and fix is the caller's whole question.
+`refuse:` requires `where:`; without conditions no row is ever unqualified.
+
+**A rule that qualifies no row refuses either way.** An invoice with no lines is not the invoice
+that was asked for, and it is the harder failure to notice - it exists and counts as the period's
+billing - so the run answers 400 rather than committing the header. An items block with no `where:`
+keeps exactly the behaviour it had.
 
 **A `map:` source may hop one relation - and that is how you SNAPSHOT a value.** A value is `map`ped
 rather than reached through a relation when the target must keep what was true at the moment it was

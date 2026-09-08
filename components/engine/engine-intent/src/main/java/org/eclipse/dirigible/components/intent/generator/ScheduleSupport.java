@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.intent.generator;
 import java.time.Duration;
 import java.time.Period;
 import java.time.format.DateTimeParseException;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -175,8 +176,24 @@ public final class ScheduleSupport {
      *         {@code Criteria.create().lt("DueOn", java.time.LocalDate.now()).eq("Status", "ACTIVE")}
      */
     public static String criteriaExpression(ScheduleIntent schedule) {
-        StringBuilder expr = new StringBuilder("Criteria.create()");
-        for (ScheduleConditionIntent condition : schedule.getWhere()) {
+        return "Criteria.create()" + conditionChain(schedule.getWhere());
+    }
+
+    /**
+     * The same conditions as a chain of {@code Criteria} calls with no {@code Criteria.create()} in
+     * front, so a caller that has already opened a criteria can append them - a create-from's
+     * source-row rule ({@code items: where:}, issue #7091), which narrows the very query that selects
+     * the source document's item rows by their master foreign key.
+     *
+     * @param conditions the authored conditions, may be {@code null}
+     * @return e.g. {@code .eq("Status", 3).gt("TotalHours", 0)}, or the empty string for no conditions
+     */
+    public static String conditionChain(List<ScheduleConditionIntent> conditions) {
+        if (conditions == null) {
+            return "";
+        }
+        StringBuilder expr = new StringBuilder();
+        for (ScheduleConditionIntent condition : conditions) {
             String method = OPERATORS.get(condition.getOp());
             if (method == null) {
                 continue; // validated at parse time; defensively skip an unknown operator

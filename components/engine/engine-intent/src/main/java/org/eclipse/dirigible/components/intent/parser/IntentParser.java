@@ -7330,6 +7330,7 @@ public final class IntentParser {
                 // implies a cross-model item - resolved in the owner's .model, not here.
                 validateMapTarget(crossModel || items.getTo() == null ? null : byName.get(items.getTo()), items.getMap(),
                         "generates [" + name + "]", "items map", issues);
+                validateGeneratesItemsWhere(items, "generates [" + name + "]", itemSource, issues);
             }
             if (g.hasUnique()) {
                 // The natural key is a SCHEDULE's idempotency guard (issue #7070). An on-demand
@@ -7344,6 +7345,50 @@ public final class IntentParser {
             validateGeneratesItemLines(g, name, source, byName, model.getEntities(), crossModel, issues);
             validateGeneratesPrompt(g, name, byName, crossModel, issues);
             validateGeneratesReopen(g, name, byName, crossModel, model, issues);
+        }
+    }
+
+    /**
+     * Validate the source-row rule of a create-from's mirror items block (issue #7091): which rows of
+     * the source document become lines of the target, and what an unqualified one costs.
+     *
+     * <p>
+     * The conditions are the field/op/value triples a {@code schedules[].where} carries, checked the
+     * same way - a supported operator, and a moment value ({@code CURRENT_DATE} and friends) whose
+     * shape the compared field can carry. What is checked additionally is the {@code field} itself:
+     * unlike a schedule's query, whose source may be a cross-model row or an {@code audit:} column this
+     * model cannot see, an items rule reads a LOCAL row being cloned, so a name it does not declare
+     * could only ever be a condition the database rejects on the first click.
+     *
+     * <p>
+     * {@code refuse:} requires the rule: without conditions no row is ever unqualified, so the message
+     * is a promise nothing can keep - the class of authored-but-unconsumed key this module refuses
+     * everywhere else.
+     */
+    private static void validateGeneratesItemsWhere(GeneratesItemsIntent items, String subject, EntityIntent itemSource,
+            List<String> issues) {
+        if (items.hasRefuse() && !items.hasWhere()) {
+            issues.add(subject + " items declares refuse with no where - nothing can be unqualified without a source-row rule;"
+                    + " add the where conditions the refused rows fail");
+        }
+        if (!items.hasWhere()) {
+            return;
+        }
+        for (ScheduleConditionIntent condition : items.getWhere()) {
+            if (condition.getField() == null || condition.getField()
+                                                         .isBlank()) {
+                issues.add(subject + " items has a where-condition with no field");
+                continue;
+            }
+            if (!SCHEDULE_OPERATORS.contains(condition.getOp())) {
+                issues.add(subject + " items where-condition uses unsupported operator [" + condition.getOp()
+                        + "] (supported: eq/ne/gt/ge/lt/le/like)");
+            }
+            if (itemSource != null && !hasPropertyIgnoreCase(itemSource, condition.getField())) {
+                issues.add(subject + " items where-condition reads [" + condition.getField()
+                        + "], which is not a field or to-one relation of [" + itemSource.getName() + "]");
+            }
+            validateScheduleMoment(condition, itemSource, subject + " items", issues);
         }
     }
 

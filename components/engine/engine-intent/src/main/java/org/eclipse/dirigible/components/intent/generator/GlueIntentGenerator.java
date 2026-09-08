@@ -1096,6 +1096,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                 temporalKinds(crossModel ? null : byName.get(items.getTo()), itemTarget),
                                 relationProperties(crossModel ? null : byName.get(items.getTo()), itemTarget)));
                 e.put("itemLines", new ArrayList<>());
+                // The source-row rule (issue #7091), pre-rendered as the tail of the Criteria that
+                // already selects the source's item rows by their master foreign key - so the rows the
+                // rule excludes are never loaded, and a rule of no conditions renders the empty string
+                // and therefore the query this always ran.
+                e.put("itemWhere", ScheduleSupport.conditionChain(items.getWhere()));
+                e.put("itemRefuse", items.hasWhere() && items.hasRefuse() ? items.getRefuse() : "");
             } else if (hasItemLines) {
                 // The synthetic lines write into the TARGET document's composition line-items child,
                 // resolved automatically (never named in the intent): same-model from this model,
@@ -1132,6 +1138,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("srcFkProperty", "");
                 e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
                 e.put("itemFieldAssignments", new ArrayList<>());
+                e.put("itemWhere", "");
+                e.put("itemRefuse", "");
                 // Cell expressions are written over the SOURCE record, so the known-property set comes
                 // from wherever the source is defined - locally, or the owner .model for a cross-model
                 // source (an unresolved owner yields an empty set, i.e. no local name check).
@@ -1148,6 +1156,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("toFkProperty", "");
                 e.put("itemFieldAssignments", new ArrayList<>());
                 e.put("itemLines", new ArrayList<>());
+                e.put("itemWhere", "");
+                e.put("itemRefuse", "");
             }
             e.put("hasPrompt", g.hasPrompt());
             e.put("promptFields", promptFields(g, crossModel ? null : byName.get(g.getTo())));

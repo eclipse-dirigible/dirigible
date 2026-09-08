@@ -1398,6 +1398,44 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   Patrol: id
                 defaults:
                   note: "AUTO"
+              # The MIRROR items form with a source-row rule (#7091): the stay's nights become the
+              # bill's lines, but only the ones the rule qualifies. Before this, `items:` cloned every
+              # row - an unapproved or empty one was billed at the same footing as a good one, and since
+              # the target refuses a line missing a required value, ONE bad row could stop the whole
+              # document from being generated at all with nothing the intent could say about it.
+              #
+              # Skipping is the default. The rule reads a moment (CURRENT_DATE), so what qualifies moves
+              # with the clock of the run - the point of reusing the `where` a schedule's query carries.
+              - name: bill-from-stay
+                from: Stay
+                to: Bill
+                label: Bill the nights so far
+                items:
+                  from: StayNight
+                  to: BillLine
+                  where:
+                    - { field: day, op: le, value: CURRENT_DATE }
+                  map:
+                    Amount: amount
+                defaults:
+                  note: "from stay"
+              # The other reading of the same rule (`refuse:`): an unqualified row stops the whole
+              # create-from, naming the rows. Dropping a rejected line silently and billing it silently
+              # are both wrong, for different months - which one a document means is the author's call.
+              - name: checked-bill-from-stay
+                from: Stay
+                to: Bill
+                label: Bill the whole stay
+                items:
+                  from: StayNight
+                  to: BillLine
+                  where:
+                    - { field: amount, op: gt, value: 0 }
+                  refuse: "Stay night carries no amount"
+                  map:
+                    Amount: amount
+                defaults:
+                  note: "from stay, checked"
 
             # resolves: (#6712) fill Patrol.Inspector from the Duty row whose validity period covers
             # the patrol's date, stamp the outcome, and route the record by status. The status write is
@@ -3164,6 +3202,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(generate.contains("if (candidate.Status == null || !(candidate.Status == 3)) {"),
                 "the guard must step over a target whose status stage is cancelled/void, and only over those");
 
+        // The MIRROR items form's source-row rule (#7091): the rule is pushed into the very Criteria
+        // that already selects the source's item rows by their master foreign key, so an unqualified
+        // row is never loaded - and the empty result is refused rather than committed as a header with
+        // no lines. The moment is evaluated at each run, not baked at generation.
+        String billFromStay = contentOf("gen/events/emission/BillFromStayGenerate.java");
+        assertTrue(billFromStay.contains(".le(\"Day\", java.time.LocalDate.now())"),
+                "the source-row rule must narrow the item query itself, with the moment evaluated per run");
+        assertTrue(billFromStay.contains("StayNightEntity srcItem : qualifying"),
+                "the clone loop must read the narrowed result, not the whole child set");
+        assertTrue(billFromStay.contains("would have no lines"),
+                "a rule that qualifies no row must refuse rather than commit a header with no lines");
+        assertFalse(billFromStay.contains("java.util.List<Object> unqualified"),
+                "without refuse: an unqualified row is simply left out, so no second query collects them");
+        // The other reading: the refusal names the rows, so the caller knows which of a hundred lines
+        // to go and fix - the whole question they have.
+        String checkedBillFromStay = contentOf("gen/events/emission/CheckedBillFromStayGenerate.java");
+        assertTrue(checkedBillFromStay.contains("\"Stay night carries no amount (StayNight \" + unqualified + \")\""),
+                "refuse: must throw the authored message carrying the keys of the offending rows");
+
         // generates on the step axis + mode: append (#6800): the listener binds the step-scoped topic
         // the generated emitter publishes the trigger entity on (NOT a lifecycle topic), and the
         // appending create-from renders WITHOUT the existing-target lookup - while its at-most-once
@@ -4659,6 +4716,90 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertBpmEventsRuntime();
         assertResolveTransitionRuntime();
         assertGeneratesStepAxisRuntime();
+        assertGeneratesItemsRuleRuntime();
+    }
+
+    /**
+     * The source-row rule of a create-from's mirror items block, end to end (#7091): which of the
+     * source document's rows become lines, and what an unqualified one costs.
+     *
+     * <p>
+     * Only this layer shows the three things the rule is for. A rule that qualifies SOME rows must
+     * produce a document of exactly those (the skip reading); a rule that qualifies NONE must refuse
+     * rather than commit a header with no lines at all - the harder of the two failures to notice,
+     * since the document exists and counts as the period's billing; and a {@code refuse:} rule must
+     * stop the run naming the offending rows, which is the reading a document whose rejected lines must
+     * not be silently dropped needs. Asserting the emitted source cannot show any of it: the
+     * unqualified rows have to really not be there, and the refusals have to really be 4xx.
+     *
+     * <p>
+     * The nights are the {@code nights} expansion's own rows, spread from the stay's total - so the
+     * fixture is the model's, not a hand-built child set, and the day rule is read against the clock of
+     * the run exactly as a schedule's query is.
+     */
+    private void assertGeneratesItemsRuleRuntime() {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        // Four nights, three of them already past: the day rule qualifies exactly three.
+        int mixed = createStay(today.minusDays(2), today.plusDays(1), 400);
+        // Three nights, all in the future and all spread from a zero total: neither rule qualifies a
+        // single one of them.
+        int unqualified = createStay(today.plusDays(1), today.plusDays(3), 0);
+        restAssuredExecutor.execute(() -> assertEquals(4, stayNights(mixed).size(), "the mixed stay must expand into four nights"), 60);
+        restAssuredExecutor.execute(
+                () -> assertEquals(3, stayNights(unqualified).size(), "the unqualified stay must expand into three nights"), 60);
+
+        // The skip reading: the bill carries the three past nights and not the future one.
+        AtomicInteger bill = new AtomicInteger();
+        restAssuredExecutor.execute(() -> bill.set(io.restassured.path.json.JsonPath.from(given().contentType("application/json")
+                                                                                                 .body("{\"id\":" + mixed + "}")
+                                                                                                 .when()
+                                                                                                 .post("/services/java/" + PROJECT
+                                                                                                         + "/gen/events/emission/BillFromStayGenerate/run")
+                                                                                                 .then()
+                                                                                                 .statusCode(200)
+                                                                                                 .extract()
+                                                                                                 .asString())
+                                                                                    .getInt("Id")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/bill/BillLineController?Bill=" + bill.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(3)),
+                30);
+
+        // The refusal reading: every night fails the amount rule, so the run stops with the authored
+        // message rather than leaving them out - and it names the rows to go and fix.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + unqualified + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/CheckedBillFromStayGenerate/run")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString("Stay night carries no amount")));
+
+        // No rule qualifies a row, so the document would have no lines at all - refused, not committed.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + unqualified + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/BillFromStayGenerate/run")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString("would have no lines")));
+    }
+
+    /** A stay whose nights the {@code nights} expansion spreads the given total across. */
+    private int createStay(java.time.LocalDate from, java.time.LocalDate to, int total) {
+        AtomicInteger id = new AtomicInteger();
+        restAssuredExecutor.execute(() -> id.set(given().contentType("application/json")
+                                                        .body("{\"FromDate\":\"" + from + "\",\"ToDate\":\"" + to + "\",\"Total\":" + total
+                                                                + "}")
+                                                        .when()
+                                                        .post(API + "/stay/StayController")
+                                                        .then()
+                                                        .statusCode(200)
+                                                        .extract()
+                                                        .path("Id")));
+        return id.get();
     }
 
     /**

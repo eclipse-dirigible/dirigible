@@ -698,6 +698,12 @@ class GlueGenerator {
         // the key existed defaults to the intent convention rather than rendering its own literal into
         // Java that would not compile.
         context.put("fromItemPk", strOr(item, "fromItemPk", "Id"));
+        // The source-row rule (issue #7091): the Criteria tail that narrows the item query, and the
+        // authored message an unqualified row refuses the whole create-from with. Both default to the
+        // empty string, so a .glue written before the keys existed renders the unfiltered clone loop it
+        // always had rather than its own literal into Java that would not compile.
+        context.put("itemWhere", strOr(item, "itemWhere", ""));
+        context.put("itemRefuse", strOr(item, "itemRefuse", ""));
         // The one-hop `relation.field` map sources: one load per distinct relation, which the template
         // emits before the mapping reads a field off it. A .glue written before this key existed carries
         // none, and the loop renders nothing - the direct-property mapping it always had.

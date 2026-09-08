@@ -10,10 +10,12 @@
 package org.eclipse.dirigible.components.intent.model;
 
 /**
- * One condition of a {@link ScheduleIntent}'s {@code where} filter: a field, a comparison operator
+ * One condition of a {@code where} filter - a {@link ScheduleIntent}'s row query, or the source-row
+ * rule of a {@link GeneratesItemsIntent} (issue #7091): a field, a comparison operator
  * ({@code eq}/{@code ne}/{@code gt}/{@code ge}/{@code lt}/{@code le}/{@code like}) and a value. The
- * value is a literal, or the token {@code CURRENT_DATE} / {@code CURRENT_TIMESTAMP} which the
- * generated job evaluates to "now". Maps to a typed {@code Criteria} condition.
+ * value is a literal, or the token {@code CURRENT_DATE} / {@code CURRENT_TIMESTAMP}, which the
+ * generated code evaluates against the clock of the run that fires. Maps to a typed
+ * {@code Criteria} condition.
  */
 public class ScheduleConditionIntent {
 

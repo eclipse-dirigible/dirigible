@@ -303,6 +303,36 @@ final class StatusSymbolResolver {
             putResolvedList(generate, "fromStatus", status, subject + " fromStatus");
             putResolved(generate, "sourceStatus", status, subject + " sourceStatus");
             putResolved(generate, "sourceStatusOnRetire", status, subject + " sourceStatusOnRetire");
+            rewriteGeneratesItemsWhere(generate, subject);
+        }
+    }
+
+    /**
+     * The source-row rule of a create-from's items block (issue #7091), whose status condition alone is
+     * symbolic - and on the ITEM row's own nomenclature, not the header's: the rule selects the rows of
+     * the source document, so resolving a name against the document's lifecycle would take an id out of
+     * the wrong nomenclature and quietly filter on it.
+     *
+     * <p>
+     * Only the condition whose {@code field} names that {@code function: EntityStatus} relation is a
+     * candidate at all, exactly as a register lookup's static filter is: every other condition compares
+     * an ordinary column, whose string value ({@code op: like} on a name) is just a value and would be
+     * reported as an unknown status.
+     */
+    private void rewriteGeneratesItemsWhere(Map<?, ?> generate, String subject) {
+        Map<?, ?> items = asMap(generate.get("items"));
+        String itemEntity = items == null ? null : text(items, "from");
+        String statusRelation = statusRelationName(itemEntity);
+        if (statusRelation == null) {
+            return;
+        }
+        Target itemStatus = statusOf(itemEntity);
+        for (Object node : asList(items.get("where"))) {
+            Map<?, ?> condition = asMap(node);
+            String field = condition == null ? null : text(condition, "field");
+            if (field != null && lower(field).equals(lower(statusRelation))) {
+                putResolved(condition, "value", itemStatus, subject + " items where [" + field + "]");
+            }
         }
     }
 
