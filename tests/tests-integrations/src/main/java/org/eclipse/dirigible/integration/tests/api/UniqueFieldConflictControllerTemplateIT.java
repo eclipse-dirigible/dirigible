@@ -12,26 +12,30 @@ package org.eclipse.dirigible.integration.tests.api;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.lang.reflect.Method;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.TreeMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import javax.tools.DiagnosticCollector;
+import javax.tools.FileObject;
+import javax.tools.ForwardingJavaFileManager;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
+import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 
 import com.sun.source.util.JavacTask;
@@ -42,52 +46,118 @@ import org.junit.jupiter.api.Test;
 /**
  * A single-column {@code unique: true} must answer a duplicate with the same kind of 4xx a
  * {@code required:} miss already answers with - not the HTTP 500 carrying the raw JDBC text that
- * the generated controller used to hand back (#7098).
+ * the generated controller used to hand back (#7098) - and it must name the field the caller
+ * actually collided on (#7138).
  *
  * <p>
  * A composite key is easy to map because the model NAMES the constraint. A single-column unique is
  * left on the column for the database to name, so the only handle is the column name the dialect
  * builds that generated name out of. That premise is what makes the mapping work, so it is asserted
- * against the driver text actually observed on PostgreSQL and H2 rather than assumed: the entries
- * the template emits are read back out of the rendered source and applied to those real messages by
- * the same rule the rendered {@code duplicateOrRethrow} applies.
+ * against the driver text actually observed on PostgreSQL and H2 rather than assumed - including
+ * the statement both of them append to their message, which lists every column of the table and so
+ * matches every business key the entity has.
  *
  * <p>
- * Rendering needs nothing from a running instance, so this boots no application context and uses
- * its own engine instance, exactly like {@code RoleScopedFieldControllerTemplateIT}, whose fixture
- * shape this mirrors.
+ * The mapping is hand-written Java inside a Velocity template, so a test that restates its rule
+ * cannot catch the rule being wrong. The JDK-only part of the rendered source - the map, the
+ * discriminator and the matching - is therefore extracted, compiled and RUN here against real
+ * exception chains. Rendering and compiling need nothing from a running instance, so this boots no
+ * application context and uses its own engine instance, exactly like
+ * {@code RoleScopedFieldControllerTemplateIT}, whose fixture shape this mirrors.
  */
 class UniqueFieldConflictControllerTemplateIT {
 
     private static final String TEMPLATE = "/META-INF/dirigible/template-application-rest-java/api/EntityController.java.template";
 
+    /** SQLSTATE 23505 - a uniqueness violation, which a primary-key collision also reports. */
+    private static final String UNIQUE_VIOLATION = "23505";
+
+    /** SQLSTATE 23503 - a foreign-key violation, a different conflict on the same column. */
+    private static final String FOREIGN_KEY_VIOLATION = "23503";
+
+    /** Hibernate re-reports every failure with the executed statement attached. */
+    private static final String HIBERNATE_INSERT =
+            " [insert into VACATIONS_PUBLIC_HOLIDAY (PUBLIC_HOLIDAY_DAY,PUBLIC_HOLIDAY_DAY_OF_NOTICE,PUBLIC_HOLIDAY_NAME,PUBLIC_HOLIDAY_ID) values (?,?,?,?)]";
+
     /** The message observed on BusinessIntents STA (PostgreSQL) in the report - #7098. */
-    private static final String POSTGRES_DUPLICATE = "could not execute statement [ERROR: duplicate key value violates unique constraint "
-            + "\"VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_key\" Detail: Key (\"PUBLIC_HOLIDAY_DAY\")=(2026-09-07) "
-            + "already exists.] [insert into VACATIONS_PUBLIC_HOLIDAY ...]";
+    private static final String POSTGRES_DUPLICATE =
+            "ERROR: duplicate key value violates unique constraint \"VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_key\"\n"
+                    + "  Detail: Key (\"PUBLIC_HOLIDAY_DAY\")=(2026-09-07) already exists.";
 
     /** The same collision on the default H2 datasource, which names the index, not the column. */
     private static final String H2_DUPLICATE = "Unique index or primary key violation: "
-            + "\"CONSTRAINT_INDEX_7 ON PUBLIC.VACATIONS_PUBLIC_HOLIDAY(PUBLIC_HOLIDAY_DAY NULLS FIRST) VALUES ( /* 1 */ DATE '2026-09-07' )\"";
+            + "\"CONSTRAINT_INDEX_7 ON PUBLIC.VACATIONS_PUBLIC_HOLIDAY(PUBLIC_HOLIDAY_DAY NULLS FIRST) VALUES ( /* 1 */ DATE '2026-09-07' )\"; SQL statement:\n"
+            + "insert into VACATIONS_PUBLIC_HOLIDAY (PUBLIC_HOLIDAY_DAY,PUBLIC_HOLIDAY_NAME,PUBLIC_HOLIDAY_ID) values (?,?,?) [23505-232]";
 
-    /** A different conflict on the same column: referencing rows, not a duplicate. */
-    private static final String POSTGRES_FOREIGN_KEY = "insert or update on table \"vacations_vacation\" violates foreign key constraint "
-            + "\"VACATION_PUBLIC_HOLIDAY_DAY_FK\" Detail: Key (PUBLIC_HOLIDAY_DAY)=(2026-09-07) is not present in table ...";
+    /** A different conflict on the same column: a missing reference, not a duplicate. */
+    private static final String POSTGRES_FOREIGN_KEY =
+            "ERROR: insert or update on table \"vacations_vacation\" violates foreign key constraint "
+                    + "\"VACATION_PUBLIC_HOLIDAY_DAY_FK\"\n  Detail: Key (PUBLIC_HOLIDAY_DAY)=(2026-09-07) is not present in table \"vacations_public_holiday\".";
 
-    /** {@code messages.put("KEY".toUpperCase(Locale.ROOT), "message");} in the rendered source. */
-    private static final Pattern EMITTED_ENTRY =
-            Pattern.compile("messages\\.put\\(\"([^\"]+)\"\\.toUpperCase\\(Locale\\.ROOT\\), \"([^\"]+)\"\\);");
+    /** A primary-key collision, which PostgreSQL reports with the very same SQLSTATE. */
+    private static final String POSTGRES_PRIMARY_KEY =
+            "ERROR: duplicate key value violates unique constraint \"vacations_public_holiday_pkey\"\n"
+                    + "  Detail: Key (PUBLIC_HOLIDAY_ID)=(5) already exists.";
 
     private final VelocityGenerationEngine velocityGenerationEngine = new VelocityGenerationEngine();
 
     @Test
     void aUniqueFieldsCollisionIsAnsweredWithAConflictThatNamesTheField() throws Exception {
-        String rendered = render(context());
+        Mapping mapping = mapping(context());
 
-        assertEquals("A PublicHoliday with this 'Day' already exists", answerFor(rendered, POSTGRES_DUPLICATE),
+        assertEquals("A PublicHoliday with this 'Day' already exists", mapping.answerFor(POSTGRES_DUPLICATE, UNIQUE_VIOLATION),
                 "the PostgreSQL duplicate must map to the message naming the field");
-        assertEquals("A PublicHoliday with this 'Day' already exists", answerFor(rendered, H2_DUPLICATE),
+        assertEquals("A PublicHoliday with this 'Day' already exists", mapping.answerFor(H2_DUPLICATE, UNIQUE_VIOLATION),
                 "and so must the H2 one, which names the index instead of the constraint");
+    }
+
+    /**
+     * The statement the drivers append lists EVERY column of the table, so a message read whole matches
+     * every business key the entity has - and with two of them the answer named whichever key the map
+     * happened to iterate first, which on equal-length column names is alphabetical order (#7138).
+     */
+    @Test
+    void theCollidedFieldIsTheOneNamedEvenWhenTheStatementListsTheOthers() throws Exception {
+        Map<String, Object> context = context();
+        context.put("properties", List.of(primaryKey(), uniqueDay(), unique("DayOfNotice", "PUBLIC_HOLIDAY_DAY_OF_NOTICE")));
+        Mapping mapping = mapping(context);
+
+        assertEquals("A PublicHoliday with this 'Day' already exists",
+                mapping.answerFor(POSTGRES_DUPLICATE + HIBERNATE_INSERT, POSTGRES_DUPLICATE, UNIQUE_VIOLATION),
+                "the statement's column list must not decide which field the collision is reported on");
+        assertEquals("A PublicHoliday with this 'DayOfNotice' already exists", mapping.answerFor(
+                "ERROR: duplicate key value violates unique constraint \"VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_OF_NOTICE_key\""
+                        + HIBERNATE_INSERT,
+                "ERROR: duplicate key value violates unique constraint \"VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_OF_NOTICE_key\"",
+                UNIQUE_VIOLATION), "and the other field must be answered on its own collision");
+    }
+
+    /**
+     * A primary-key collision reports SQLSTATE 23505 too, and its statement tail carries every
+     * business-key column - so it used to come back as a duplicate of a field the caller never wrote.
+     * It names no business key, so it is not this mapping's conflict to answer.
+     */
+    @Test
+    void aPrimaryKeyCollisionIsNotAnsweredAsABusinessKeyDuplicate() throws Exception {
+        Mapping mapping = mapping(context());
+
+        assertNull(mapping.answerFor(POSTGRES_PRIMARY_KEY + HIBERNATE_INSERT, POSTGRES_PRIMARY_KEY, UNIQUE_VIOLATION),
+                "a primary-key violation must be rethrown, not renamed after a business key");
+    }
+
+    /**
+     * Not every dialect says "duplicate" or "unique" in words - SQLSTATE 23505 is the portable half of
+     * the discriminator, and a violation that says neither is not one of these conflicts at all.
+     */
+    @Test
+    void theSqlStateIsHonouredOnItsOwnAndIsTheOnlyOtherHandle() throws Exception {
+        Mapping mapping = mapping(context());
+        String wordless = "constraint violation on VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_key";
+
+        assertEquals("A PublicHoliday with this 'Day' already exists", mapping.answerFor(wordless, UNIQUE_VIOLATION),
+                "SQLSTATE 23505 alone must be enough to recognise the duplicate");
+        assertNull(mapping.answerFor(wordless, "23000"),
+                "and a violation that neither reports 23505 nor says so in words is not a duplicate");
     }
 
     /** The 500 in the report came from the write not being wrapped at all on either verb. */
@@ -111,11 +181,10 @@ class UniqueFieldConflictControllerTemplateIT {
      */
     @Test
     void aForeignKeyViolationOnTheSameColumnIsNotADuplicate() throws Exception {
-        String rendered = render(context());
+        Mapping mapping = mapping(context());
 
-        assertTrue(rendered.contains("upper.contains(\"DUPLICATE\") || upper.contains(\"UNIQUE\")"),
-                "the discriminator must be the violation's own class, not the column: " + rendered);
-        assertTrue(rendered.contains("\"23505\".equals(sqlException.getSQLState())"), "SQLSTATE 23505 must be honoured too");
+        assertNull(mapping.answerFor(POSTGRES_FOREIGN_KEY + HIBERNATE_INSERT, POSTGRES_FOREIGN_KEY, FOREIGN_KEY_VIOLATION),
+                "a missing reference must not be answered as a duplicate");
         assertFalse(POSTGRES_FOREIGN_KEY.toUpperCase(Locale.ROOT)
                                         .contains("DUPLICATE"),
                 "the fixture must not be a duplicate by text either - otherwise it proves nothing");
@@ -129,14 +198,14 @@ class UniqueFieldConflictControllerTemplateIT {
     void theMoreSpecificColumnWins() throws Exception {
         Map<String, Object> context = context();
         context.put("properties", List.of(primaryKey(), uniqueDay(), unique("DayOfNotice", "PUBLIC_HOLIDAY_DAY_OF_NOTICE")));
-
-        String rendered = render(context);
+        Mapping mapping = mapping(context);
 
         assertEquals("A PublicHoliday with this 'DayOfNotice' already exists",
-                answerFor(rendered,
-                        "duplicate key value violates unique constraint \"VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_OF_NOTICE_key\""),
+                mapping.answerFor(
+                        "duplicate key value violates unique constraint \"VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_OF_NOTICE_key\"",
+                        UNIQUE_VIOLATION),
                 "the longer column must not be answered with the shorter one's message");
-        assertTrue(rendered.contains("Comparator.comparingInt(String::length)"), "the ordering must be part of the emitted map");
+        assertTrue(render(context).contains("Comparator.comparingInt(String::length)"), "the ordering must be part of the emitted map");
     }
 
     /** The composite-key mapping the single-column case joins must keep behaving as it did. */
@@ -146,12 +215,11 @@ class UniqueFieldConflictControllerTemplateIT {
         context.put("properties", List.of(primaryKey(), column("Company", "PUBLIC_HOLIDAY_COMPANY"), column("Day", "PUBLIC_HOLIDAY_DAY")));
         context.put("uniqueConstraints", List.of(compositeKey()));
 
-        String rendered = render(context);
-
         assertEquals("This day is already a holiday of the company",
-                answerFor(rendered, "duplicate key value violates unique constraint \"PublicHoliday_Company_Day\""),
+                mapping(context).answerFor("duplicate key value violates unique constraint \"PublicHoliday_Company_Day\"",
+                        UNIQUE_VIOLATION),
                 "the authored message must still be the answer for the constraint the model named");
-        assertNoUnresolvedReferences(rendered);
+        assertNoUnresolvedReferences(render(context));
     }
 
     /**
@@ -187,33 +255,139 @@ class UniqueFieldConflictControllerTemplateIT {
     }
 
     /**
-     * Applies the rendered mapping to a driver message exactly as the rendered
-     * {@code duplicateOrRethrow} does - the entries come out of the generated source, so the fixture
-     * cannot drift from what the template emits.
+     * The rendered mapping, compiled and loaded so a test runs it instead of restating its rule.
+     * Everything it needs beyond the JDK is the pair of Spring types {@code duplicateOrRethrow} answers
+     * with, which are stood in for locally.
      */
-    private static String answerFor(String rendered, String driverMessage) {
-        String upper = driverMessage.toUpperCase(Locale.ROOT);
-        for (Map.Entry<String, String> entry : emittedMessages(rendered).entrySet()) {
-            if (upper.contains(entry.getKey())) {
-                return entry.getValue();
-            }
+    private static final class Mapping {
+
+        private static final String HARNESS = """
+                import java.util.List;
+                import java.util.Locale;
+                import java.util.Map;
+
+                public class DuplicateMapping {
+
+                    enum HttpStatus { CONFLICT }
+
+                    static final class ResponseStatusException extends RuntimeException {
+                        ResponseStatusException(HttpStatus status, String reason) {
+                            super(reason);
+                        }
+                    }
+
+                    /** A Hibernate ConstraintViolationException stands in by the only thing the mapping reads: its name. */
+                    static final class StubConstraintViolationException extends RuntimeException {
+                        StubConstraintViolationException(String message, Throwable cause) {
+                            super(message, cause);
+                        }
+                    }
+
+                    /** The message the mapping answers with, or null when it rethrew the violation untouched. */
+                    public static String answer(String hibernateMessage, String driverMessage, String sqlState) {
+                        Throwable driver = driverMessage == null ? null : new java.sql.SQLException(driverMessage, sqlState);
+                        RuntimeException violation = new StubConstraintViolationException(hibernateMessage, driver);
+                        RuntimeException answered = duplicateOrRethrow(violation);
+                        return answered == violation ? null : answered.getMessage();
+                    }
+
+                %s
+                }
+                """;
+
+        private final Method answer;
+
+        private Mapping(String rendered) throws Exception {
+            String source = HARNESS.formatted(mappingSource(rendered));
+            this.answer = compile(source).getMethod("answer", String.class, String.class, String.class);
         }
-        return null;
+
+        /** The answer for a violation whose driver message is also the one Hibernate re-reported. */
+        private String answerFor(String driverMessage, String sqlState) throws Exception {
+            return answerFor(driverMessage, driverMessage, sqlState);
+        }
+
+        private String answerFor(String hibernateMessage, String driverMessage, String sqlState) throws Exception {
+            return (String) answer.invoke(null, hibernateMessage, driverMessage, sqlState);
+        }
+
+        /**
+         * The rendered members from the duplicate map down to the end of {@code isConstraintViolation} -
+         * the whole mapping, and all of it JDK-only.
+         */
+        private static String mappingSource(String rendered) {
+            int from = rendered.indexOf("    private static final Map<String, String> DUPLICATE_MESSAGES");
+            assertTrue(from > 0, "the rendered controller carries no duplicate map: " + rendered);
+            int last = rendered.indexOf("private static boolean isConstraintViolation(Throwable e) {", from);
+            assertTrue(last > 0, "the rendered controller carries no constraint discriminator: " + rendered);
+            return rendered.substring(from, endOfBlock(rendered, rendered.indexOf('{', last)) + 1);
+        }
+
+        private static int endOfBlock(String source, int open) {
+            int depth = 0;
+            for (int at = open; at < source.length(); at++) {
+                char character = source.charAt(at);
+                if (character == '{') {
+                    depth++;
+                } else if (character == '}' && --depth == 0) {
+                    return at;
+                }
+            }
+            return fail("the rendered method is not closed: " + source.substring(open));
+        }
+
+        private static Class<?> compile(String source) throws Exception {
+            JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+            assertNotNull(compiler, "the tests must run on a JDK - there is no system Java compiler");
+            DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+            Map<String, ByteArrayOutputStream> compiled = new HashMap<>();
+            JavaFileObject unit = sourceFile("DuplicateMapping", source);
+            try (StandardJavaFileManager standard = compiler.getStandardFileManager(diagnostics, null, null);
+                    ForwardingJavaFileManager<StandardJavaFileManager> files = collectingInto(standard, compiled)) {
+                boolean compiledCleanly = compiler.getTask(null, files, diagnostics, List.of("-proc:none"), null, List.of(unit))
+                                                  .call();
+                assertTrue(compiledCleanly, "the extracted mapping must compile: " + diagnostics.getDiagnostics() + "\n" + source);
+            }
+            ClassLoader loader = new ClassLoader(Mapping.class.getClassLoader()) {
+                @Override
+                protected Class<?> findClass(String name) throws ClassNotFoundException {
+                    ByteArrayOutputStream bytes = compiled.get(name);
+                    if (bytes == null) {
+                        throw new ClassNotFoundException(name);
+                    }
+                    byte[] bytecode = bytes.toByteArray();
+                    return defineClass(name, bytecode, 0, bytecode.length);
+                }
+            };
+            return loader.loadClass("DuplicateMapping");
+        }
+
+        private static ForwardingJavaFileManager<StandardJavaFileManager> collectingInto(StandardJavaFileManager standard,
+                Map<String, ByteArrayOutputStream> compiled) {
+            return new ForwardingJavaFileManager<>(standard) {
+                @Override
+                public JavaFileObject getJavaFileForOutput(Location location, String className, JavaFileObject.Kind kind,
+                        FileObject sibling) {
+                    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+                    compiled.put(className, bytes);
+                    return new SimpleJavaFileObject(URI.create("bytes:///" + className.replace('.', '/') + kind.extension), kind) {
+                        @Override
+                        public OutputStream openOutputStream() {
+                            return bytes;
+                        }
+                    };
+                }
+            };
+        }
     }
 
-    /** The emitted keys, in the longest-first order the rendered map iterates them in. */
-    private static Map<String, String> emittedMessages(String rendered) {
-        Map<String, String> messages = new TreeMap<>(Comparator.comparingInt(String::length)
-                                                               .reversed()
-                                                               .thenComparing(Comparator.naturalOrder()));
-        Matcher matcher = EMITTED_ENTRY.matcher(rendered);
-        while (matcher.find()) {
-            messages.put(matcher.group(1)
-                                .toUpperCase(Locale.ROOT),
-                    matcher.group(2));
-        }
-        assertFalse(messages.isEmpty(), "the template emitted no duplicate messages at all: " + rendered);
-        return messages;
+    private static JavaFileObject sourceFile(String name, String content) {
+        return new SimpleJavaFileObject(URI.create("string:///" + name + ".java"), JavaFileObject.Kind.SOURCE) {
+            @Override
+            public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+                return content;
+            }
+        };
     }
 
     /** The syntax diagnostics of the rendered source - the parse phase reports nothing else. */
@@ -221,13 +395,8 @@ class UniqueFieldConflictControllerTemplateIT {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         assertNotNull(compiler, "the tests must run on a JDK - there is no system Java compiler");
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
-        JavaFileObject source = new SimpleJavaFileObject(URI.create("string:///PublicHolidayController.java"), JavaFileObject.Kind.SOURCE) {
-            @Override
-            public CharSequence getCharContent(boolean ignoreEncodingErrors) {
-                return rendered;
-            }
-        };
-        JavaCompiler.CompilationTask task = compiler.getTask(null, null, diagnostics, List.of("-proc:none"), null, List.of(source));
+        JavaCompiler.CompilationTask task = compiler.getTask(null, null, diagnostics, List.of("-proc:none"), null,
+                List.of(sourceFile("PublicHolidayController", rendered)));
         ((JavacTask) task).parse();
         return diagnostics.getDiagnostics()
                           .stream()
@@ -242,6 +411,10 @@ class UniqueFieldConflictControllerTemplateIT {
             count++;
         }
         return count;
+    }
+
+    private Mapping mapping(Map<String, Object> parameters) throws Exception {
+        return new Mapping(render(parameters));
     }
 
     private String render(Map<String, Object> parameters) throws Exception {
