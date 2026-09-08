@@ -2494,7 +2494,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (effective.getMap() != null) {
                 for (Map.Entry<String, String> entry : effective.getMap()
                                                                 .entrySet()) {
-                    headerAssignments.add(postingAssignment(entry.getKey(), entry.getValue()));
+                    Map<String, Object> assignment = postingAssignment(entry.getKey(), entry.getValue());
+                    // The local the handler evaluates the expression INTO, so the amend comparison and
+                    // the assignment further down see one value rather than two evaluations of the same
+                    // expression (#7131). Numbered, so no authored name can collide with it.
+                    assignment.put("local", "header" + (headerAssignments.size() + 1));
+                    // ... and what a null one will still end up carrying once stored - the target
+                    // column's own default (see derivedDefault).
+                    putDerivedDefault(assignment, creates, byName, entry.getKey());
+                    headerAssignments.add(assignment);
                 }
             }
             e.put("headerAssignments", headerAssignments);
@@ -2521,6 +2529,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     }
                     Map<String, Object> assign = new LinkedHashMap<>();
                     assign.put("targetProp", IntentNaming.pascalCase(cell.getKey()));
+                    // The cell's authored key, kept alongside: it is what locates the field (or the
+                    // to-one relation) whose `default:`/`init:` the comparison must apply (#7131).
+                    assign.put("sourceCell", cell.getKey());
                     java.util.Optional<PostingRuleSelector> ruleSelector = PostingRuleSelector.parse(value);
                     java.util.regex.Matcher ruleRef = java.util.regex.Pattern.compile("rule\\((\\w+)\\)")
                                                                              .matcher(value);
@@ -2560,16 +2571,36 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("itemRows", itemRows);
             // The union of every property the rows assign - what a stored row is compared on to tell
             // a plain redelivery (nothing changed) from an amendment. A property no row assigns is
-            // null on both sides and says nothing.
-            Set<String> comparedProperties = new LinkedHashSet<>();
+            // null on the derived side and says nothing about it, EXCEPT that saving the derived row
+            // does not store that null: the repository applies the column's authored default first
+            // (#7104/#7115), so each compared property carries the default its own derived side will
+            // end up with (#7131) - without it a defaulted column read back off the stored row is a
+            // difference no redelivery can ever clear.
+            Map<String, Map<String, Object>> comparedProperties = new LinkedHashMap<>();
             for (Map<String, Object> row : itemRows) {
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> assigns = (List<Map<String, Object>>) row.get("assigns");
                 for (Map<String, Object> assign : assigns) {
-                    comparedProperties.add(String.valueOf(assign.get("targetProp")));
+                    String property = String.valueOf(assign.get("targetProp"));
+                    Map<String, Object> compared = new LinkedHashMap<>();
+                    compared.put("name", property);
+                    putDerivedDefault(compared, itemsEntity, byName, String.valueOf(assign.get("sourceCell")));
+                    comparedProperties.putIfAbsent(property, compared);
                 }
             }
-            e.put("itemComparedProps", new ArrayList<>(comparedProperties));
+            e.put("itemComparedProps", new ArrayList<>(comparedProperties.values()));
+            // Which of the two default-aware comparison helpers the handler needs at all - neither is
+            // emitted into a generated file that has no use for it.
+            boolean comparesAgainstDefaults = false;
+            boolean comparesUnlessDerivedIsEmpty = false;
+            List<Map<String, Object>> defaulted = new ArrayList<>(comparedProperties.values());
+            defaulted.addAll(headerAssignments);
+            for (Map<String, Object> compared : defaulted) {
+                comparesAgainstDefaults = comparesAgainstDefaults || !"".equals(compared.get("derivedDefault"));
+                comparesUnlessDerivedIsEmpty = comparesUnlessDerivedIsEmpty || Boolean.TRUE.equals(compared.get("expressionDefault"));
+            }
+            e.put("comparesAgainstDefaults", comparesAgainstDefaults);
+            e.put("comparesUnlessDerivedIsEmpty", comparesUnlessDerivedIsEmpty);
             e.put("usedRuleColumns", new ArrayList<>(usedRuleColumns));
             e.put("conditionalRuleGuards", conditionalRuleGuards);
             out.add(e);
@@ -2585,7 +2616,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * The posting created the document, so the state it created it in is the one nobody has acted on
      * yet: its {@code function: EntityStatus} relation still holding the declared {@code init:} value,
      * or still empty when none is declared. An entity with no status lifecycle has nothing to act on
-     * and is always rewritable - the empty guard.
+     * and is always rewritable - the empty guard, and so (reported) is one whose {@code init:} is not a
+     * seed id, which no guard can compare against.
      *
      * @param creates the created (target) entity
      * @return the guard expression, or the empty string when the target is always rewritable
@@ -2598,8 +2630,143 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         }
         String property = IntentNaming.pascalCase(status.getName());
         String init = status.getInit();
-        return init != null && init.matches("-?\\d+") ? "target." + property + " != null && target." + property + " == " + init
-                : "target." + property + " == null";
+        if (init == null || init.isBlank()) {
+            return "target." + property + " == null"; // created with no status: an empty one is untouched
+        }
+        if (!init.trim()
+                 .matches("-?\\d+")) {
+            // Unreachable through the parser - StatusSymbolResolver rewrites a status named by its
+            // seeded name to that seed id on the raw tree, and refuses one that resolves to no seeded
+            // status - so this is the belt on that braces. It used to fall back to "the status is still
+            // empty", which is false for every document this posting creates (the create wrote the
+            // init), so every legitimate amendment was refused with a log saying someone had acted on a
+            // document nobody had touched. Refuse the GUARD instead - the target stays rewritable, as
+            // one with no lifecycle is - and say so where the model can still be corrected.
+            LOGGER.warn(
+                    "Posting target [{}]: the EntityStatus relation's init [{}] is not a seed id of [{}] - it cannot tell a document"
+                            + " this posting created from one someone acted on, so an amended source rewrites the post unguarded",
+                    LoggedValue.of(creates.getName()), LoggedValue.of(init), LoggedValue.of(status.getTo()));
+            return "";
+        }
+        return "target." + property + " != null && target." + property + " == " + init.trim();
+    }
+
+    /**
+     * What a DERIVED (not yet saved) posting row will end up carrying for one property when the rule
+     * that builds it assigns nothing there: the column's authored default, which the generated
+     * repository's {@code save()} applies BEFORE the insert (#7104/#7115). The stored row reads that
+     * default back while the derived one still holds {@code null}, so the amend comparison has to apply
+     * it too or a redelivery is misread as an amendment and the post is rewritten on every single event
+     * (#7131).
+     *
+     * <p>
+     * Two keys are written onto the assignment/comparison map:
+     * <ul>
+     * <li>{@code derivedDefault} - the default as a Java literal for {@code same()}, which compares
+     * numbers by VALUE: a numeric default therefore needs no knowledge of the column's own Java type
+     * ({@code BigDecimal} stands in for all of them, exactly as the stored side is read back at
+     * whatever scale the database chose). Empty when the column carries no default.</li>
+     * <li>{@code expressionDefault} - {@code true} for a default with no Java literal to stand in for
+     * it: a date/time or binary column, whose {@code DEFAULT} reaches the DDL verbatim as a SQL
+     * expression such as {@code CURRENT_DATE}, which is why the DAO template's {@code #applyDefaults()}
+     * excludes it as well. The DATABASE fills it, so what the stored row holds cannot be derived at all
+     * and the property says nothing for a row that does not assign it.</li>
+     * </ul>
+     *
+     * @param target the map to write the two keys onto
+     * @param entity the entity the property belongs to (the items entity, or the created document for a
+     *        header assignment)
+     * @param byName the model's entities by name, for the key type a relation's FK column carries
+     * @param authoredKey the cell/map key as authored - a field name or a to-one relation name
+     */
+    private static void putDerivedDefault(Map<String, Object> target, EntityIntent entity, Map<String, EntityIntent> byName,
+            String authoredKey) {
+        target.put("derivedDefault", "");
+        target.put("expressionDefault", false);
+        String type = null;
+        String defaultValue = null;
+        FieldIntent field = fieldOf(entity, authoredKey);
+        if (field != null) {
+            type = field.getType();
+            defaultValue = field.getDefaultValue();
+        } else {
+            RelationIntent relation = relationNamed(entity, authoredKey);
+            if (relation != null) {
+                // A relation's `init:` IS its FK column's default (that is how the EDM emits it), and
+                // the column carries the REFERENCED key - so it is that key's type, not the relation's,
+                // that says how the default compares. A target this model does not hold (a cross-model
+                // relation) leaves only the init's own shape to go on.
+                defaultValue = relation.getInit();
+                EntityIntent referenced = byName.get(relation.getTo());
+                FieldIntent key = referenced == null ? null : IntentEntities.primaryKeyOf(referenced);
+                type = key != null ? key.getType()
+                        : defaultValue != null && defaultValue.trim()
+                                                              .matches("-?\\d+") ? "long" : "string";
+            }
+        }
+        if (defaultValue == null || defaultValue.isBlank()) {
+            return;
+        }
+        // Branched on the SQL type the field's `type:` becomes, which is what decides the column's Java
+        // class - the same test the DAO template's #applyDefaults() makes on dataTypeJavaClass.
+        switch (IntentEntities.sqlType(type)) {
+            case "DATE":
+            case "TIMESTAMP":
+                target.put("expressionDefault", true);
+                return;
+            case "DECIMAL":
+            case "INTEGER":
+            case "BIGINT":
+                try {
+                    target.put("derivedDefault", "new java.math.BigDecimal(\"" + new java.math.BigDecimal(defaultValue.trim()) + "\")");
+                } catch (NumberFormatException ex) {
+                    // Not a number on a numeric column: the model is wrong and the repository's own
+                    // default assignment is what will say so, at the create. The comparison keeps out
+                    // of it rather than emitting a literal that throws inside the handler.
+                    LOGGER.warn("Entity [{}] property [{}]: default [{}] is not a number - the posting amend comparison ignores it",
+                            LoggedValue.of(entity.getName()), LoggedValue.of(authoredKey), LoggedValue.of(defaultValue));
+                }
+                return;
+            case "BOOLEAN":
+                String flag = defaultValue.trim();
+                target.put("derivedDefault", "true".equalsIgnoreCase(flag) || "1".equals(flag) ? "Boolean.TRUE" : "Boolean.FALSE");
+                return;
+            default:
+                // A string default is authored either bare (what the item dialog seeds) or SQL-quoted
+                // (what a working DB DEFAULT needs, since the value reaches the DDL verbatim); both
+                // stand for the same stored string - the DAO template's #defaultLiteral reads it the
+                // same way.
+                String text = defaultValue.trim();
+                if (text.length() > 1 && text.startsWith("'") && text.endsWith("'")) {
+                    text = text.substring(1, text.length() - 1);
+                }
+                // Always a QUOTED literal, even for a default that reads as a number: the column holds
+                // a string, and `same()` would compare a bare 0 against the stored "0" as unequal.
+                target.put("derivedDefault", '"' + text.replace("\\", "\\\\")
+                                                       .replace("\"", "\\\"")
+                        + '"');
+                return;
+        }
+    }
+
+    /**
+     * The entity's relation of that name, whatever its kind - a posting cell/map key naming a relation
+     * writes its FK column, and it is that column's default the comparison needs.
+     *
+     * @param entity the owning entity
+     * @param name the authored relation name
+     * @return the relation, or {@code null}
+     */
+    private static RelationIntent relationNamed(EntityIntent entity, String name) {
+        if (entity.getRelations() == null || name == null) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (name.equalsIgnoreCase(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     /**

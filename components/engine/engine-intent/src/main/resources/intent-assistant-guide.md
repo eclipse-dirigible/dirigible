@@ -609,10 +609,19 @@ field may declare:
   **An amended source rewrites its post.** The handler derives the whole content first and compares it
   with the post the source already carries: identical is a redelivery (no-op), different is either a
   half-post to complete or a source that was rejected, edited and re-issued - and then the existing
-  post is REWRITTEN in place (never a second one). The rewrite stops at the created document's own
-  lifecycle: once it has left the status the posting created it in (its `init:`), someone has acted on
-  it, so the divergence is logged and left to a reversing entry. A created document with no
-  `function: EntityStatus` relation is always rewritable.
+  post is REWRITTEN in place (never a second one). The comparison is over the values as they will be
+  STORED, not as the derived rows stand: a column left unassigned by one row but carrying a
+  `defaultValue` (a journal's `debit`/`credit`, both `default: 0`) is compared against that default,
+  because the repository applies it before the insert - comparing it against the raw null would make
+  every redelivery look like an amendment and rewrite the post on every event. A `date`/`timestamp`
+  default is the exception: the database applies it, so the column is compared only for the rows that
+  do assign it. Each `map:` expression is evaluated once, so an expression reading the clock cannot
+  differ between the comparison and the write.
+  The rewrite stops at the created document's own
+  lifecycle: once it has left the status the posting created it in (its `init:`, written either as the
+  seed id or as the seeded status name), someone has acted on it, so the divergence is logged and left
+  to a reversing entry. A created document with no `function: EntityStatus` relation is always
+  rewritable - and so is one whose `init:` names no seeded status at all, which Generate reports.
   **Reversal mode (red storno):** a posting with `reverses: <sibling posting name>` undoes the
   sibling's document when the source is voided/cancelled - pair it with a `transitions:` void:
   ```yaml

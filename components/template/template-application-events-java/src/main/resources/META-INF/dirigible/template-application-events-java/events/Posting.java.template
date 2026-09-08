@@ -124,6 +124,14 @@ public class ${className}Posting implements MessageHandler {
         }
 #end
 #end
+#if($headerAssignments.size() > 0)
+        // The header values, evaluated ONCE. The comparison below and the assignment further down must
+        // see the SAME value: an expression read twice - anything reading the clock - would differ
+        // between the two reads and make every redelivery look like an amendment (#7131).
+#end
+#foreach($a in $headerAssignments)
+        var ${a.local} = ${a.expr};
+#end
         java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> relatedTargets =
                 targetRepository.findAll(Criteria.create().eq("${backRefProperty}", source.${sourceKeyField}));
 #if($stornoProperty != "")
@@ -166,7 +174,13 @@ public class ${className}Posting implements MessageHandler {
                     itemsRepository.findAll(Criteria.create().eq("${itemsFk}", target.${targetPk}));
             boolean unchanged = currentItems.size() == derivedItems.size();
 #foreach($a in $headerAssignments)
-            unchanged = unchanged && same(target.${a.targetProp}, ${a.expr});
+#if($a.expressionDefault)
+            unchanged = unchanged && sameUnlessDerivedIsEmpty(target.${a.targetProp}, ${a.local});
+#elseif($a.derivedDefault != "")
+            unchanged = unchanged && same(target.${a.targetProp}, ${a.local}, ${a.derivedDefault});
+#else
+            unchanged = unchanged && same(target.${a.targetProp}, ${a.local});
+#end
 #end
             // Row order is not guaranteed by the query, so each derived row is matched against an
             // unclaimed stored one rather than by position.
@@ -211,7 +225,7 @@ public class ${className}Posting implements MessageHandler {
 #end
         }
 #foreach($a in $headerAssignments)
-        target.${a.targetProp} = ${a.expr};
+        target.${a.targetProp} = ${a.local};
 #end
         gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity saved =
                 refresh ? targetRepository.update(target) : targetRepository.save(target);
@@ -222,16 +236,50 @@ public class ${className}Posting implements MessageHandler {
     }
 
     /**
-     * Whether a stored item row still carries what the source derives for it now.
+     * Whether a stored item row still carries what the source derives for it now - compared over the
+     * values as they will be STORED, so a column the row's own rule leaves unassigned is compared
+     * against the default the insert would fill it with rather than against the raw null (#7131).
      */
     private static boolean sameItem(gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity stored,
             gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity derived) {
         return
 #foreach($p in $itemComparedProps)
-                same(stored.${p}, derived.${p}) &&
+#if($p.expressionDefault)
+                sameUnlessDerivedIsEmpty(stored.${p.name}, derived.${p.name}) &&
+#elseif($p.derivedDefault != "")
+                same(stored.${p.name}, derived.${p.name}, ${p.derivedDefault}) &&
+#else
+                same(stored.${p.name}, derived.${p.name}) &&
+#end
 #end
                 true;
     }
+#if($comparesAgainstDefaults)
+
+    /**
+     * Value equality against a DERIVED value that is not yet saved: a null one does not stay null in
+     * the column - the generated repository applies the authored default before the insert (#7104,
+     * #7115), so the stored row reads that default back and comparing it against the raw null would
+     * read every redelivery as an amendment (#7131). One row of a journal posting assigning Debit and
+     * the other Credit, both columns `default: 0`, is exactly that shape.
+     */
+    private static boolean same(Object stored, Object derived, Object derivedDefault) {
+        return same(stored, derived == null ? derivedDefault : derived);
+    }
+#end
+#if($comparesUnlessDerivedIsEmpty)
+
+    /**
+     * Value equality a not-yet-derived value simply does not assert: the column carries a default only
+     * the DATABASE can apply (its {@code DEFAULT} is a SQL expression such as {@code CURRENT_DATE},
+     * which has no Java stand-in, so the generated repository leaves it alone). What the stored row
+     * holds therefore cannot be derived, and an empty derived value says nothing about it - only a
+     * value the source does derive can disagree with the post (#7131).
+     */
+    private static boolean sameUnlessDerivedIsEmpty(Object stored, Object derived) {
+        return derived == null || same(stored, derived);
+    }
+#end
 
     /**
      * Null-safe value equality. Numbers compare by VALUE, so a stored amount the database handed back
