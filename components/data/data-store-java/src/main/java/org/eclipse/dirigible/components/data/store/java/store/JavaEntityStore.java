@@ -483,11 +483,16 @@ public class JavaEntityStore {
 
     /**
      * Delete an entity instance and publish it on the given topic, atomically — see
-     * {@link #save(Object, String)} for what that buys.
+     * {@link #save(Object, String)} for what that buys. The payload is the row as it was read inside
+     * the deleting transaction, not the caller's instance: a caller legitimately holds a partial
+     * snapshot — an id and the couple of fields their code cares about — and publishing that hands
+     * every delete reaction a payload whose unset columns are null. The abort listener that stops a
+     * record's running process reads {@code ProcessIds} off it and would silently no-op, leaving the
+     * process alive after its record. Before the removal the row is still there to be read, so it is.
      *
      * @param <T> the entity type
      * @param entity the entity to delete
-     * @param eventTopic the topic to publish the deleted entity on; {@code null} publishes nothing
+     * @param eventTopic the topic to publish the deleted row on; {@code null} publishes nothing
      */
     public <T> void delete(T entity, String eventTopic) {
         RegisteredEntity meta = resolve(entity.getClass());
@@ -497,9 +502,7 @@ public class JavaEntityStore {
         if (id == null) {
             return;
         }
-        // The payload is the caller's instance: it is what they asked to delete, and after the delete
-        // there is no row left to read it from.
-        removeById(entity.getClass(), meta, id, eventTopic, entity);
+        removeById(entity.getClass(), meta, id, eventTopic);
     }
 
     /**
@@ -524,7 +527,7 @@ public class JavaEntityStore {
      * @param eventTopic the topic to publish the deleted row on; {@code null} publishes nothing
      */
     public <T> void deleteById(Class<T> type, Object id, String eventTopic) {
-        removeById(type, resolve(type), id, eventTopic, null);
+        removeById(type, resolve(type), id, eventTopic);
     }
 
     /**
@@ -532,14 +535,15 @@ public class JavaEntityStore {
      * managed instance first and then call {@link Session#remove(Object)} on it — Hibernate routes to
      * the correct entity type via the persistence-context state of the loaded {@link Map}.
      *
-     * @param payload the event payload when the caller already holds the row; {@code null} reads it
-     *        from the transaction before removing it
+     * <p>
+     * The instance loaded here is also the event payload, so a delete describes exactly what was
+     * removed however the caller addressed it.
      */
-    private void removeById(Class<?> type, RegisteredEntity meta, Object id, String eventTopic, Object payload) {
+    private void removeById(Class<?> type, RegisteredEntity meta, Object id, String eventTopic) {
         prepareOutbox(eventTopic != null);
         write((session, events) -> {
             Object managed = session.find(meta.entityName(), id);
-            Object deleted = payload != null ? payload : toBean(type, meta, managed);
+            Object deleted = eventTopic == null ? null : toBean(type, meta, managed);
             if (managed != null) {
                 session.remove(managed);
             }

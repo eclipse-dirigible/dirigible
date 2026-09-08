@@ -272,10 +272,11 @@ public abstract class JavaRepository<T> {
 
     /**
      * Delete an entity instance and publish it on the given topic — atomically, see
-     * {@link #save(Object, String)}.
+     * {@link #save(Object, String)}. The payload is the row as it was read inside the deleting
+     * transaction, so a caller holding a partial snapshot still announces the whole row.
      *
      * @param entity the entity to delete
-     * @param eventTopic the topic to publish the deleted entity on
+     * @param eventTopic the topic to publish the deleted row on
      */
     public void delete(T entity, String eventTopic) {
         store().delete(entity, eventTopic);
