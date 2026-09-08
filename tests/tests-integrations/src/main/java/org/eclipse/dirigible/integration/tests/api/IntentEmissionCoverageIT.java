@@ -687,6 +687,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: title,          type: string, length: 200 }
                   - { name: generatedKey,   type: string, length: 100 }
                   - { name: failureMessage, type: string, length: 500 }
+                  - { name: sendFailure,    type: string, length: 500 }
 
               # The non-HTTP inbound arrivals (#6537) ingest into an entity of their own: an ingested
               # record must not start a process, or the queue/file scenarios would seed extra Inbox
@@ -1101,7 +1102,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                       next: storeKey
                   - name: storeKey
                     kind: serviceTask
-                    args: { delegate: custom.ProvisionKeyWriter, uses: [apiKey], next: hold }
+                    args: { delegate: custom.ProvisionKeyWriter, uses: [apiKey], next: notifyOwner }
+                  # a SEND declaring its own resilience (#7056): this instance has no SMTP, so the
+                  # delivery cannot succeed - which is the case being asserted. The exhausted retry
+                  # routes the FINAL attempt's message onto the record and the flow CARRIES ON to the
+                  # hold, instead of the send dead-lettering and stopping the process where it stands.
+                  - name: notifyOwner
+                    kind: serviceTask
+                    args:
+                      notify: { to: owner@example.com, subject: "Provisioned {title}", body: "Ready." }
+                      retry: { count: 1, every: PT1S }
+                      onError: recordSendFailure
+                      next: hold
+                  - name: recordSendFailure
+                    kind: serviceTask
+                    args: { setField: sendFailure, value: "{error}", next: hold }
                   - name: hold
                     kind: userTask
                     args: { assignee: operator, next: doomedCall }
@@ -3245,6 +3260,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String failureSetter = contentOf("gen/events/emission/ProvisionFlowRecordFailure.java");
         assertTrue(failureSetter.contains("execution.getVariable(\"__errorMessage\")"),
                 "the {error} setter must read the failure message the conversion published");
+
+        // #7056: the send is the second shape step resilience applies to, and it is emitted on the
+        // ${JavaTask} delegate-expression path - so its cycle has to share the extensionElements block
+        // with the handler field, and the boundary machinery has to treat it like any other step.
+        int send = provisionBpmn.indexOf("<serviceTask id=\"notifyOwner\"");
+        int sendHandler = provisionBpmn.indexOf("ProvisionFlowNotifyOwnerSend");
+        int sendCycle = provisionBpmn.indexOf("R2/PT1S");
+        assertTrue(send >= 0 && send < sendHandler && sendHandler < sendCycle && sendCycle < provisionBpmn.indexOf("<userTask id=\"hold\""),
+                "the send's retry cycle must ride its own element, after the handler field the dispatcher reads");
+        assertTrue(provisionBpmn.contains("<serviceTask id=\"notifyOwner\" name=\"Notify Owner\" flowable:async=\"true\""),
+                "the send must keep its async boundary - a retry cycle only re-runs an async job");
+        assertTrue(
+                provisionBpmn.contains("<boundaryEvent id=\"notifyOwnerError\" attachedToRef=\"notifyOwner\" cancelActivity=\"true\">")
+                        && provisionBpmn.contains("sourceRef=\"notifyOwnerError\" targetRef=\"recordSendFailure\""),
+                "the send must carry its own cancelling boundary, routed like a delegate's");
+        String sendCode = contentOf("gen/events/emission/ProvisionFlowNotifyOwnerSend.java");
+        assertTrue(sendCode.contains("process: \" + ex.getMessage()"),
+                "the send's failure must name its cause - that message is what the error route records via {error}");
     }
 
     /**
@@ -5310,6 +5343,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
      * single retry, the runtime conversion turns the SECOND attempt's failure into the caught BPMN
      * error, and the {@code onError} route records that exact message on the record via {@code {error}}
      * - instead of the dead-letter incident it would be without the declaration.
+     *
+     * <p>
+     * The send between the writer and the hold is the #7056 half, and it is the case the issue is
+     * about: this instance has no SMTP, so the delivery cannot succeed, and without the declaration the
+     * step would dead-letter and the process would stop there with nothing on the record to say so.
+     * With it, the exhausted retry routes the failure onto the record and the flow carries on to the
+     * hold - which the hold assertions below then prove it reached.
      */
     private void assertStepResilienceRuntime() {
         String provisionApi = API + "/provision/ProvisionController";
@@ -5330,6 +5370,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("GeneratedKey", equalTo("KEY-3")),
+                180);
+
+        // #7056: the send's exhausted retry converted instead of dead-lettering, so its error route
+        // recorded the FINAL attempt's message - which names the cause, not just "the mail failed".
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(provisionApi + "/" + provision.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("SendFailure", containsString(
+                                                         "Failed to send the notifyOwner mail of the" + " ProvisionFlow process: ")),
                 180);
 
         // clearAfter: the instance parks at the hold task with the secret already removed from its

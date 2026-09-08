@@ -31,12 +31,12 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /**
- * The {@code sample-intent-resilience} fixture project (dirigible #6762), configured exactly as a
- * developer would in the browser IDE - copy into the workspace, open {@code app.intent} in the
- * Intent Editor and click its Generate, then Publish all from the Workbench - and verified over
- * REST. The fixture doubles as the manual-testing sample (see its README), so this project is what
- * keeps the sample from silently rotting - it asserts both outcomes the sample was built to
- * demonstrate:
+ * The {@code sample-intent-resilience} fixture project (dirigible #6762 and #7056), configured
+ * exactly as a developer would in the browser IDE - copy into the workspace, open
+ * {@code app.intent} in the Intent Editor and click its Generate, then Publish all from the
+ * Workbench - and verified over REST. The fixture doubles as the manual-testing sample (see its
+ * README), so this project is what keeps the sample from silently rotting - it asserts every
+ * outcome the sample was built to demonstrate, one tenant title per outcome:
  *
  * <ul>
  * <li>a tenant titled normally recovers by RETRY: the schema delegate fails its first two attempts,
@@ -45,7 +45,10 @@ import org.springframework.stereotype.Component;
  * removes the credential so it does not survive in the process history;
  * <li>a tenant titled with "fail" EXHAUSTS its retry: the app delegate refuses every attempt, its
  * {@code retry: { count: 2 }} allows exactly three, and the {@code onError} route records the FINAL
- * attempt's message on the record via {@code {error}} - instead of a dead-letter incident.
+ * attempt's message on the record via {@code {error}} - instead of a dead-letter incident;
+ * <li>a tenant titled "notify" reaches the SEND step, which has no SMTP to reach: its exhausted
+ * retry routes the delivery failure onto the record the same way, which is the whole point of #7056
+ * - the send is mid-process, not last, and a dead-lettered send no longer strands the flow.
  * </ul>
  */
 @Lazy
@@ -70,9 +73,10 @@ class SampleIntentResilienceTestProject extends BaseIntentTestProject {
 
     @Override
     public void verify() {
-        // Both tenants up front, so their retry cycles run concurrently.
+        // Every tenant up front, so their retry cycles run concurrently.
         AtomicInteger recovering = new AtomicInteger();
         AtomicInteger doomed = new AtomicInteger();
+        AtomicInteger sending = new AtomicInteger();
         restAssuredExecutor.execute(() -> recovering.set(given().contentType("application/json")
                                                                 .body("{\"Title\":\"acme\"}")
                                                                 .when()
@@ -89,6 +93,14 @@ class SampleIntentResilienceTestProject extends BaseIntentTestProject {
                                                             .statusCode(200)
                                                             .extract()
                                                             .path("Id")));
+        restAssuredExecutor.execute(() -> sending.set(given().contentType("application/json")
+                                                             .body("{\"Title\":\"notify\"}")
+                                                             .when()
+                                                             .post(TENANT_API)
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .path("Id")));
 
         // Happy path: the schema delegate failed twice on purpose; the declared PT10S cycle re-ran
         // it to success, and the produced dbPassword reached the app delegate through `uses:` - an
@@ -132,6 +144,21 @@ class SampleIntentResilienceTestProject extends BaseIntentTestProject {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("FailureMessage", equalTo("no capacity for 'please fail' (attempt 3)"))
+                                                 .body("Status", equalTo(STATUS_FAILED)),
+                180);
+
+        // The send path (#7056): this sample has no SMTP, so the delivery cannot succeed. Its
+        // declared cycle allowed exactly two attempts and the conversion then routed the failure to
+        // the SAME onError step the delegates use - so the record carries the reason and the status
+        // moved. Without the declaration this step would dead-letter and the tenant would sit in
+        // Requested with an empty FailureMessage, the invisible stall the issue is about.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(TENANT_API + "/" + sending.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("FailureMessage",
+                                                         startsWith("Failed to send the notifyOwner mail of the TenantProvisioning"
+                                                                 + " process: "))
                                                  .body("Status", equalTo(STATUS_FAILED)),
                 180);
     }

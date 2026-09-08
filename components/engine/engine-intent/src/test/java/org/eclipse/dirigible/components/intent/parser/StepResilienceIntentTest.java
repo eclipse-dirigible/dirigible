@@ -17,11 +17,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 /**
- * Declarative step resilience - dirigible #6762: {@code retry: { count, every }} and
- * {@code onError: <step | end>} on a delegate service task, and the {@code {error}} placeholder a
- * {@code setField} on the error route reads. The parser must reject a malformed retry cycle, a
- * dangling error route, resilience without a delegate (v1 - the runtime conversion lives on the
- * {@code flowable:class} path), and an {@code {error}} nothing would ever populate.
+ * Declarative step resilience - dirigible #6762 and #7056: {@code retry: { count, every }} and
+ * {@code onError: <step | end>} on a {@code delegate:} or a {@code notify:} service task, and the
+ * {@code {error}} placeholder a {@code setField} on the error route reads. The parser must reject a
+ * malformed retry cycle, a dangling error route, resilience on a service-task shape it does not
+ * apply to, resilience on a fan-out send (which never fails, so neither key could fire), and an
+ * {@code {error}} nothing would ever populate.
  */
 class StepResilienceIntentTest {
 
@@ -110,12 +111,82 @@ class StepResilienceIntentTest {
                                                         .replace("onError: recordFailure,", "onError: end,")));
     }
 
+    /**
+     * A bare service task (its work a hand-written {@code custom.<Step>} handler) is not one of the two
+     * shapes the keys apply to; the message names both, since that is what the author's next move is.
+     */
     @Test
-    void retryWithoutADelegateIsRejected() {
+    void resilienceOnNeitherADelegateNorANotifyIsRejected() {
         String yaml = YAML.replace("delegate: custom.SchemaProvisioner, produces: [dbPassword], ", "");
-        String issue = assertIssue(yaml, "declares retry but no delegate");
-        assertTrue(issue.contains("delegate service tasks only"), "the message must state the v1 rule: " + issue);
-        assertIssue(yaml, "declares onError but no delegate");
+        String issue = assertIssue(yaml, "declares retry but is neither a `delegate:` nor a `notify:` service task");
+        assertTrue(issue.contains("applies to those two shapes"), "the message must name the two supported shapes: " + issue);
+        assertIssue(yaml, "declares onError but is neither a `delegate:` nor a `notify:` service task");
+    }
+
+    /**
+     * The #7056 widening: a send's generated handler fails the task on a delivery error, so the send
+     * may now say what happens next instead of leaving that failure to a dead-letter incident.
+     */
+    @Test
+    void aSendMayDeclareItsOwnResilience() {
+        assertDoesNotThrow(() -> IntentParser.parse(withSendStep("retry: { count: 1, every: PT5S }, onError: recordFailure, ")));
+    }
+
+    /**
+     * A setter step is refused, and the message says why rather than only that it is: a check-gated
+     * status write is emitted without the async boundary on purpose (#7014 / #7063) so its refusal
+     * reaches the person who acted - routing it away would take that 400 out of the Inbox.
+     */
+    @Test
+    void resilienceOnASetterStepIsRejected() {
+        String issue = assertIssue(
+                YAML.replace("setField: failureMessage, value: \"{error}\", next: markFailed",
+                        "setField: failureMessage, value: failed, next: markFailed, retry: { count: 1, every: PT5S }"),
+                "declares retry but is neither a `delegate:` nor a `notify:` service task");
+        assertTrue(issue.contains("refused synchronously to the person who acted"),
+                "the message must state why a status write is not routed away: " + issue);
+    }
+
+    /**
+     * A fan-out send is per-row fail-soft by construction - it never fails the task - so a declared
+     * cycle could not fire and a boundary could not be reached. Refused rather than authored and
+     * silently inert, with the observable alternative named.
+     */
+    @Test
+    void resilienceOnAFanOutSendIsRejected() {
+        String issue = assertIssue(fanOutSend("retry: { count: 1, every: PT5S }, "), "declares retry on a fan-out notify (forEach)");
+        assertTrue(issue.contains("`outcome:`") && issue.contains("onNotifyFailed"),
+                "the message must name the observable alternative: " + issue);
+        assertIssue(fanOutSend("onError: recordFailure, "), "declares onError on a fan-out notify (forEach)");
+    }
+
+    /** The fan-out send itself stays authorable - only its resilience keys are refused. */
+    @Test
+    void aFanOutSendWithoutResilienceKeysParses() {
+        assertDoesNotThrow(() -> IntentParser.parse(fanOutSend("")));
+    }
+
+    /** The showcase plus a non-fan-out send step carrying the given resilience keys. */
+    private static String withSendStep(String resilienceKeys) {
+        return YAML.replace("      - { name: recordFailure,",
+                "      - { name: notifyOwner, kind: serviceTask, args: { notify: { to: owner@example.com, subject: \"Tenant provisioned\","
+                        + " body: \"Ready.\" }, " + resilienceKeys + "next: done } }\n      - { name: recordFailure,");
+    }
+
+    /** The showcase plus a contacts child and a send that fans out over it, carrying the given keys. */
+    private static String fanOutSend(String resilienceKeys) {
+        return YAML.replace("processes:", """
+                  - name: TenantContact
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: email, type: string }
+                    relations:
+                      - { name: tenant, kind: manyToOne, to: TenantApplication }
+                processes:""")
+                   .replace("      - { name: recordFailure,",
+                           "      - { name: notifyContacts, kind: serviceTask, args: { notify: { forEach: TenantContact, to: email,"
+                                   + " subject: \"Provisioned\", body: \"Ready.\" }, " + resilienceKeys + "next: done } }\n"
+                                   + "      - { name: recordFailure,");
     }
 
     /** A misplaced retry keeps the by-kind vocabulary message and gets no second, blunter line. */

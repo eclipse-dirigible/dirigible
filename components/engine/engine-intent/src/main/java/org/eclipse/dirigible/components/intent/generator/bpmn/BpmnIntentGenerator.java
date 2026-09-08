@@ -1304,7 +1304,14 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append(java ? "${JavaTask}" : "${JSTask}")
           .append("\">\n");
         boolean hasHandler = handlerValue != null && !handlerValue.isBlank();
-        if (hasHandler || !clears.isEmpty()) {
+        // retry: { count, every } -> the Flowable failed-job retry cycle, exactly as on the
+        // flowable:class path (appendDelegateServiceTask): the cycle is read off the flow element, so it
+        // is implementation-agnostic. It re-runs the failed job only because the task keeps its async
+        // boundary - which it does: the only nodes synchronousNodes / completingTransactionNodes strip
+        // it from are the check-gated setters and the decisions on the way to them, and the DSL refuses
+        // these keys on a setter step for that very reason (dirigible #7056).
+        String retryCycle = ProcessResilienceSupport.retryCycle(step);
+        if (hasHandler || retryCycle != null || !clears.isEmpty()) {
             sb.append("      <extensionElements>\n");
             if (hasHandler) {
                 sb.append("        <flowable:field name=\"handler\">\n");
@@ -1312,6 +1319,11 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                   .append(handlerValue)
                   .append("]]></flowable:string>\n");
                 sb.append("        </flowable:field>\n");
+            }
+            if (retryCycle != null) {
+                sb.append("        <flowable:failedJobRetryTimeCycle>")
+                  .append(escapeXmlAttribute(retryCycle))
+                  .append("</flowable:failedJobRetryTimeCycle>\n");
             }
             appendClearVariableListeners(sb, clears);
             sb.append("      </extensionElements>\n");

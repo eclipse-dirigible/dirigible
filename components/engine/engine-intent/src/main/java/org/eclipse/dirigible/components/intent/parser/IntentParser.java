@@ -193,6 +193,26 @@ public final class IntentParser {
     private static final Set<String> EVENT_KINDS =
             Set.of("onCreate", "onUpdate", "onDelete", "onTransition", EventBinding.ON_NOTIFY_FAILED);
 
+    /**
+     * What a step that declares {@code retry:} / {@code onError:} on an unsupported service-task shape
+     * is told. Naming the two supported shapes matters more than naming the one that was used: the
+     * author's next move is either to bind the work with {@code delegate:} or to accept that a status
+     * write is refused synchronously on purpose - see {@link #validateStepResilience}.
+     */
+    private static final String STEP_RESILIENCE_SHAPE_ISSUE =
+            " declares %s but is neither a `delegate:` nor a `notify:` service task - step resilience applies to those two"
+                    + " shapes (a check-gated status write is refused synchronously to the person who acted, so its failure must"
+                    + " not be routed away)";
+    /**
+     * What a fan-out send that declares {@code retry:} / {@code onError:} is told. The fan-out is
+     * per-row fail-soft by construction, so neither key could ever fire - the delivery outcome is
+     * observed instead.
+     */
+    private static final String STEP_RESILIENCE_FAN_OUT_ISSUE =
+            " declares %s on a fan-out notify (forEach) - a fan-out sends per row and is fail-soft per row, so the step never"
+                    + " fails and nothing would retry or route; observe the delivery with `outcome:` and an"
+                    + " `event: { onNotifyFailed: <Entity> }` consumer";
+
     /** Topic suffixes the platform itself publishes - an entity phase may not shadow one (#6929). */
     private static final Set<String> RESERVED_PHASES = Set.of("updated", "deleted", "transitioned", "rekeyed");
     /**
@@ -6387,13 +6407,30 @@ public final class IntentParser {
     }
 
     /**
-     * Declarative step resilience on a {@code delegate} service task: {@code retry: { count: <n>,
-     * every: <ISO-8601 duration> }} re-attempts a failed step n further times, and {@code onError:
-     * <step | end>} routes the exhausted (or non-retried) failure like a decision branch. Both apply to
-     * {@code delegate} service tasks only (v1) - the runtime conversion that turns the final failed
-     * attempt into the caught BPMN error lives on the {@code flowable:class} delegate path. A
-     * {@code setField} value of {@code {error}} (the whole value, nothing else) reads the failure
-     * message and is therefore only resolvable on a step reachable from some {@code onError} route.
+     * Declarative step resilience: {@code retry: { count: <n>, every: <ISO-8601 duration> }}
+     * re-attempts a failed step n further times, and {@code onError: <step | end>} routes the exhausted
+     * (or non-retried) failure like a decision branch. A {@code setField} value of {@code {error}} (the
+     * whole value, nothing else) reads the failure message and is therefore only resolvable on a step
+     * reachable from some {@code onError} route.
+     *
+     * <p>
+     * Both keys apply to a {@code delegate:} or a {@code notify:} service task - the two shapes whose
+     * work is a call that can fail transiently and whose failure nobody is synchronously waiting on.
+     * The send was added in dirigible #7056: its generated handler already failed the task on a
+     * delivery error, so before the runtime conversion reached the {@code delegateExpression} path it
+     * was the one step in a process whose failure had nowhere to go but a dead-letter incident.
+     *
+     * <p>
+     * The other service-task shapes are refused, each for its own reason. A {@code setField} /
+     * {@code setRelationField} step writes through the model's own gates, and a check-gated status
+     * write is deliberately emitted <em>without</em> the async boundary (#7014 / #7063) so its refusal
+     * reaches the person who acted - converting it into a routed BPMN error would take that 400 away
+     * from the Inbox, and re-attempting a deterministic refusal recovers nothing. A {@code call:} step
+     * and the bare {@code custom.<Step>} fallback are simply not covered yet; a hand-written handler
+     * that wants resilience is bound with {@code delegate:}. And a <em>fan-out</em> send
+     * ({@code notify.forEach}) is per-row fail-soft by construction - it never fails the task - so a
+     * declared cycle could not fire and a boundary could not be reached; its outcome is observed with
+     * {@code outcome:} and an {@code event: { onNotifyFailed: <Entity> }} consumer instead (#7023).
      */
     private static void validateStepResilience(ProcessIntent process, List<String> issues) {
         Set<String> stepNames = new HashSet<>();
@@ -6410,6 +6447,10 @@ public final class IntentParser {
             String subject = "process [" + process.getName() + "] step [" + step.getName() + "]";
             String delegate = stepArg(step, "delegate");
             boolean hasDelegate = delegate != null && !delegate.isBlank();
+            NotificationIntent notify = NotifySupport.stepNotify(step);
+            boolean hasFanOutNotify = notify != null && notify.getForEach() != null && !notify.getForEach()
+                                                                                              .isBlank();
+            boolean resilienceApplies = hasDelegate || notify != null;
             Object retryRaw = step.getArgs()
                                   .get("retry");
             // A misplaced retry/onError (a non-serviceTask kind) is already reported by the by-kind
@@ -6418,9 +6459,10 @@ public final class IntentParser {
                 if (!(retryRaw instanceof Map<?, ?> retry)) {
                     issues.add(subject + " retry must be a map (e.g. `retry: { count: 3, every: PT30S }`)");
                 } else {
-                    if (!hasDelegate) {
-                        issues.add(subject + " declares retry but no delegate - step resilience applies to delegate service tasks"
-                                + " only (v1)");
+                    if (!resilienceApplies) {
+                        issues.add(subject + STEP_RESILIENCE_SHAPE_ISSUE.formatted("retry"));
+                    } else if (hasFanOutNotify) {
+                        issues.add(subject + STEP_RESILIENCE_FAN_OUT_ISSUE.formatted("retry"));
                     }
                     Object count = retry.get("count");
                     if (count == null) {
@@ -6443,8 +6485,10 @@ public final class IntentParser {
             }
             String onError = ProcessResilienceSupport.onError(step);
             if (onError != null && "serviceTask".equals(step.getKind())) {
-                if (!hasDelegate) {
-                    issues.add(subject + " declares onError but no delegate - step resilience applies to delegate service tasks only (v1)");
+                if (!resilienceApplies) {
+                    issues.add(subject + STEP_RESILIENCE_SHAPE_ISSUE.formatted("onError"));
+                } else if (hasFanOutNotify) {
+                    issues.add(subject + STEP_RESILIENCE_FAN_OUT_ISSUE.formatted("onError"));
                 }
                 if (!isRoutingLiteral(onError) && !stepNames.contains(onError)) {
                     issues.add(subject + " `onError` references unknown step [" + onError + "]");

@@ -14,12 +14,12 @@ import javax.sql.DataSource;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.engine.bpm.BpmProvider;
+import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.ResilientActivityBehaviorFactory;
 import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.ResilientClassDelegateFactory;
 import org.eclipse.dirigible.components.engine.bpm.flowable.diagram.DirigibleProcessDiagramGenerator;
 import org.eclipse.dirigible.engine.java.runtime.ClientClassLoaderHolder;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.ProcessEngineConfiguration;
-import org.flowable.engine.impl.bpmn.parser.factory.DefaultActivityBehaviorFactory;
 import org.flowable.spring.SpringProcessEngineConfiguration;
 import org.flowable.spring.boot.actuate.endpoint.ProcessEngineEndpoint;
 import org.flowable.spring.boot.actuate.info.FlowableInfoContributor;
@@ -120,11 +120,14 @@ public class BpmFlowableConfig {
         // (FlowableClientClassLoaderRefresher additionally evicts the parsed-process cache on rebuild).
         config.setUseClassForNameClassLoading(false);
 
-        // Run every flowable:class task through the resilient ClassDelegate: a task carrying an intent
-        // onError error boundary has its FINAL failed attempt converted to the caught BPMN error
-        // (message published for {error}) instead of dead-lettering; everything else is untouched. The
-        // engine's initBehaviorFactory injects the expression manager into this factory later.
-        config.setActivityBehaviorFactory(new DefaultActivityBehaviorFactory(new ResilientClassDelegateFactory()));
+        // Run every service task through the resilient behaviours - the flowable:class ones through the
+        // resilient ClassDelegate, the flowable:delegateExpression ones (${JavaTask} / ${JSTask}, i.e.
+        // every generated handler) through the resilient delegate-expression behaviour: a task carrying
+        // an intent onError error boundary has its FINAL failed attempt converted to the caught BPMN
+        // error (message published for {error}) instead of dead-lettering; everything else is
+        // untouched. The engine's initBehaviorFactory injects the expression manager into this factory
+        // later.
+        config.setActivityBehaviorFactory(new ResilientActivityBehaviorFactory(new ResilientClassDelegateFactory()));
 
         return config;
     }

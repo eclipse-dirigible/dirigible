@@ -1,5 +1,6 @@
 name: provisioning
-description: Step resilience demo - retry, onError, {error} and cleared step data (dirigible #6762)
+description: Step resilience demo - retry, onError, {error} and cleared step data on a delegate
+  and on a send (dirigible #6762, #7056)
 
 entities:
   - name: ProvisioningStatus
@@ -43,6 +44,24 @@ processes:
           delegate: custom.AppProvisioner
           uses: [dbPassword]
           retry: { count: 2, every: PT10S }
+          onError: recordFailure
+          next: announce
+      # Only here so the sample can show both endings side by side: a tenant titled "notify" takes
+      # the send, every other one goes straight to Provisioned.
+      - name: announce
+        kind: decision
+        args: { if: "title == 'notify'", then: notifyOwner, else: markDone }
+      # A SENDING step declaring its own resilience (#7056). Its whole work is the message, so a
+      # delivery failure fails the task - and this sample has no SMTP, so it always does. The
+      # declared cycle re-attempts it once and the onError route then records the FINAL attempt's
+      # message; without the two keys this step would dead-letter and the flow would stop here,
+      # with the record left in Requested and nothing anywhere to say why. Note it is NOT the last
+      # step: that workaround is exactly what the declaration makes unnecessary.
+      - name: notifyOwner
+        kind: serviceTask
+        args:
+          notify: { to: owner@example.com, subject: "Tenant {title} provisioned", body: "The application is ready." }
+          retry: { count: 1, every: PT5S }
           onError: recordFailure
           next: markDone
       - name: markDone

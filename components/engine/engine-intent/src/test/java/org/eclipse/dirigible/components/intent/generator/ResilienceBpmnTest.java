@@ -29,12 +29,15 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 /**
- * Declarative step resilience in the emitted BPMN - dirigible #6762: {@code retry:} becomes a
- * Flowable failed-job retry cycle on the delegate service task, {@code onError:} an error boundary
+ * Declarative step resilience in the emitted BPMN - dirigible #6762 and #7056: {@code retry:}
+ * becomes a Flowable failed-job retry cycle on the service task, {@code onError:} an error boundary
  * event routed like a decision branch (catching the {@code INTENT_STEP_FAILED} error the runtime
  * conversion raises for the final failed attempt), and a var's {@code clearAfter} an
- * {@code event="end"} execution listener removing the value once its step completes. An intent
- * without the keys must emit none of it.
+ * {@code event="end"} execution listener removing the value once its step completes. Both emission
+ * paths are covered: the {@code delegate:} task's {@code flowable:class} element and the
+ * {@code notify:} task's {@code ${JavaTask}} delegate-expression element, whose cycle has to ride
+ * the same extensionElements block its {@code handler} field does. An intent without the keys must
+ * emit none of it.
  */
 class ResilienceBpmnTest {
 
@@ -65,6 +68,17 @@ class ResilienceBpmnTest {
                           - { name: markFailed, kind: serviceTask, args: { setRelationField: Status, value: 3, next: end } }
                           - { name: done, kind: end }
                     """;
+
+    /**
+     * The #7056 fixture: the same process with a non-fan-out {@code notify:} step declaring the keys.
+     * Its work is the message, so a delivery failure fails the task - which is why the send is one of
+     * the two shapes step resilience applies to.
+     */
+    private static final String SEND_YAML = YAML.replace("      - { name: recordFailure,",
+            "      - { name: notifyOwner, kind: serviceTask, args: { notify: { to: owner@example.com, subject: \"Tenant provisioned\","
+                    + " body: \"Ready.\" }, retry: { count: 1, every: PT5S }, onError: recordFailure, next: done } }\n"
+                    + "      - { name: recordFailure,")
+                                                .replace("onError: recordFailure, next: done", "onError: recordFailure, next: notifyOwner");
 
     private static String bpmn(String yaml) {
         IntentModel model = IntentParser.parse(yaml);
@@ -199,8 +213,62 @@ class ResilienceBpmnTest {
         assertFlow(bpmn, "createSchemaError", "end");
     }
 
+    /**
+     * A send step is emitted on the {@code ${JavaTask}} delegate-expression path, so its cycle has to
+     * be written into the extensionElements block the {@code handler} field already opens - next to it,
+     * and inside the send's own element rather than the next task's.
+     */
+    @Test
+    void aSendStepCarriesItsRetryCycleNextToItsHandlerField() {
+        String bpmn = bpmn(SEND_YAML);
+
+        int task = bpmn.indexOf("<serviceTask id=\"notifyOwner\"");
+        int handler = bpmn.indexOf("TenantProvisioningNotifyOwnerSend");
+        int cycle = bpmn.indexOf("R2/PT5S");
+        int nextTask = bpmn.indexOf("<serviceTask id=\"recordFailure\"");
+        assertTrue(task >= 0, "the send step must be emitted in:\n" + bpmn);
+        assertTrue(bpmn.contains("<flowable:failedJobRetryTimeCycle>R2/PT5S</flowable:failedJobRetryTimeCycle>"),
+                "count: 1 must emit an R2 cycle on the send in:\n" + bpmn);
+        assertTrue(task < handler && handler < cycle && cycle < nextTask,
+                "the cycle must ride the send's own element, after its handler field, in:\n" + bpmn);
+        assertTrue(bpmn.contains("<serviceTask id=\"notifyOwner\" name=\"Notify Owner\" flowable:async=\"true\""),
+                "the send keeps its async boundary - a retry cycle only re-runs an async job - in:\n" + bpmn);
+        assertTrue(bpmn.contains("flowable:delegateExpression=\"${JavaTask}\""),
+                "the send stays on the delegate-expression path in:\n" + bpmn);
+    }
+
+    /**
+     * The boundary machinery is shape-agnostic: a send's onError routes exactly as a delegate's does.
+     */
+    @Test
+    void aSendStepGetsItsOwnErrorBoundaryAndRoute() {
+        String bpmn = bpmn(SEND_YAML);
+
+        assertTrue(bpmn.contains("<boundaryEvent id=\"notifyOwnerError\" attachedToRef=\"notifyOwner\" cancelActivity=\"true\">"),
+                "the send needs its own cancelling boundary in:\n" + bpmn);
+        assertFlow(bpmn, "notifyOwnerError", "recordFailure");
+        assertTrue(bpmn.contains("BPMNShape_notifyOwnerError"), "the boundary needs a shape or the modeler opens broken:\n" + bpmn);
+        assertTrue(bpmn.contains("BPMNEdge_flow_notifyOwnerError_then"), "the error route needs its edge:\n" + bpmn);
+    }
+
+    /** A send that declares nothing emits no cycle - the send path stays byte-identical too. */
+    @Test
+    void aSendWithoutResilienceKeysEmitsNoCycle() {
+        String bpmn = bpmn(SEND_YAML.replace("retry: { count: 1, every: PT5S }, onError: notifyOwner, ", "")
+                                    .replace("retry: { count: 1, every: PT5S }, onError: recordFailure, ", ""));
+
+        int task = bpmn.indexOf("<serviceTask id=\"notifyOwner\"");
+        int nextTask = bpmn.indexOf("<serviceTask id=\"recordFailure\"");
+        assertTrue(task >= 0 && nextTask > task, "both steps must still be emitted in:\n" + bpmn);
+        assertFalse(bpmn.substring(task, nextTask)
+                        .contains("failedJobRetryTimeCycle"),
+                "no cycle on a send that declares none in:\n" + bpmn);
+        assertFalse(bpmn.contains("<boundaryEvent id=\"notifyOwnerError\""), "no boundary on a send that declares none in:\n" + bpmn);
+    }
+
     @Test
     void theWholeMechanismIsIdempotent() {
         assertEquals(bpmn(YAML), bpmn(YAML), "identical input must produce byte-identical output");
+        assertEquals(bpmn(SEND_YAML), bpmn(SEND_YAML), "identical input must produce byte-identical output");
     }
 }

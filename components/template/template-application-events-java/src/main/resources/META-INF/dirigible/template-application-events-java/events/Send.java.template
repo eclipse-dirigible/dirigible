@@ -75,9 +75,14 @@ import gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspec
  * A delivery failure is logged per row and the step still completes - deliberately. Failing the task
  * would have the engine retry the WHOLE fan-out and mail every recipient that already received their
  * message a second time; a partial send is not idempotent, so the summary in the log is the report.
+ * That is also why a fan-out send may declare neither `retry:` nor `onError:` - the step never fails,
+ * so neither could ever fire; its outcome is observed with `outcome:` and an `onNotifyFailed` consumer.
 #else
- * A real delivery failure DOES fail the task, so the process engine's retry applies - unlike a
- * transition's notify, a send step's whole purpose is the message.
+ * A real delivery failure DOES fail the task - unlike a transition's notify, a send step's whole
+ * purpose is the message. So the step's declared resilience applies: a `retry:` cycle re-attempts the
+ * send with the declared spacing, and an `onError:` route takes the exhausted failure (with this
+ * message readable as `{error}`) instead of a dead-letter incident. Declaring neither leaves the
+ * failure to the engine default, which ends as an incident on the job rather than on the record.
 #end
  */
 public class ${className} implements JavaDelegate {
@@ -288,7 +293,9 @@ public class ${className} implements JavaDelegate {
             // a retry that finally succeeds overwrites it with `sent`.
             stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, ex);
 #end
-            throw new RuntimeException("Failed to send the ${step} mail of the ${process} process", ex);
+            // The message is what an `onError:` route records through {error}, so it names the cause: a
+            // fixed sentence would put "the mail failed" on the record and nothing an operator can act on.
+            throw new RuntimeException("Failed to send the ${step} mail of the ${process} process: " + ex.getMessage(), ex);
         }
 #end
     }

@@ -1667,7 +1667,8 @@ class IntentEngineIT extends IntegrationTest {
                               - { name: dbPassword, clearAfter: provisionApp }
                             steps:
                               - { name: createSchema, kind: serviceTask, args: { delegate: custom.SchemaProvisioner, produces: [dbPassword], retry: { count: 3, every: PT30S }, onError: recordFailure } }
-                              - { name: provisionApp, kind: serviceTask, args: { delegate: custom.AppProvisioner, uses: [dbPassword], retry: { count: 5, every: PT1M }, onError: recordFailure, next: done } }
+                              - { name: provisionApp, kind: serviceTask, args: { delegate: custom.AppProvisioner, uses: [dbPassword], retry: { count: 5, every: PT1M }, onError: recordFailure, next: notifyOwner } }
+                              - { name: notifyOwner, kind: serviceTask, args: { notify: { to: owner@example.com, subject: "Tenant provisioned", body: "Ready." }, retry: { count: 1, every: PT5S }, onError: recordFailure, next: done } }
                               - { name: recordFailure, kind: serviceTask, args: { setField: failureMessage, value: "{error}", next: markFailed } }
                               - { name: markFailed, kind: serviceTask, args: { setRelationField: Status, value: 3, next: end } }
                               - { name: done, kind: end }
@@ -1702,6 +1703,24 @@ class IntentEngineIT extends IntegrationTest {
                 "the main flow must route around the error steps");
         assertTrue(bpmn.contains("BPMNShape_createSchemaError") && bpmn.contains("BPMNEdge_flow_createSchemaError_then"),
                 "the error boundary needs its DI shape and edge or the modeler opens it detached");
+
+        // #7056: a `notify:` step is the second shape step resilience applies to. Its element is the
+        // ${JavaTask} delegate-expression one, so the cycle has to share the extensionElements block
+        // with the handler field the dispatcher reads - and the boundary machinery is shape-agnostic.
+        int send = bpmn.indexOf("<serviceTask id=\"notifyOwner\"");
+        int sendHandler = bpmn.indexOf("TenantProvisioningNotifyOwnerSend");
+        int sendCycle = bpmn.indexOf("R2/PT5S");
+        int afterSend = bpmn.indexOf("<serviceTask id=\"recordFailure\"");
+        assertTrue(send >= 0 && send < sendHandler && sendHandler < sendCycle && sendCycle < afterSend,
+                "the send's retry cycle should ride its own element, after its handler field");
+        assertTrue(bpmn.contains("<flowable:failedJobRetryTimeCycle>R2/PT5S</flowable:failedJobRetryTimeCycle>"),
+                "the send's retry count: 1 should emit an R2 failed-job retry cycle");
+        assertTrue(bpmn.contains("<serviceTask id=\"notifyOwner\" name=\"Notify Owner\" flowable:async=\"true\""),
+                "the send must keep its async boundary - a retry cycle only re-runs an async job");
+        assertTrue(
+                bpmn.contains("<boundaryEvent id=\"notifyOwnerError\" attachedToRef=\"notifyOwner\" cancelActivity=\"true\">")
+                        && bpmn.contains("sourceRef=\"notifyOwnerError\" targetRef=\"recordFailure\""),
+                "the send should carry its own cancelling error boundary, routed like a delegate's");
 
         // clearAfter: an end-listener on the completing step removes the credential from the
         // instance data (and thereby from the history).
@@ -1781,6 +1800,12 @@ class IntentEngineIT extends IntegrationTest {
                             fields:
                               - { name: id, type: integer, primaryKey: true, generated: true }
                               - { name: failureMessage, type: string }
+                          - name: TenantContact
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: email, type: string }
+                            relations:
+                              - { name: tenant, kind: manyToOne, to: TenantApplication }
                         processes:
                           - name: TenantProvisioning
                             trigger: { onCreate: TenantApplication }
@@ -1788,7 +1813,8 @@ class IntentEngineIT extends IntegrationTest {
                               - { name: dbPassword, clearAfter: nowhere }
                             steps:
                               - { name: createSchema, kind: serviceTask, args: { delegate: custom.SchemaProvisioner, produces: [dbPasword], retry: { cout: 3, every: 30seconds }, onError: recordFailur } }
-                              - { name: recordFailure, kind: serviceTask, args: { setField: failureMessage, value: "{error}", next: end } }
+                              - { name: recordFailure, kind: serviceTask, args: { setField: failureMessage, value: "{error}", next: end, retry: { count: 1, every: PT5S } } }
+                              - { name: hold, kind: serviceTask, args: { notify: { forEach: TenantContact, to: email, subject: "Held", body: "." }, onError: end, next: end } }
                         """;
         restAssuredExecutor.execute(() -> given().contentType("text/plain")
                                                  .body(yaml)
@@ -1802,7 +1828,18 @@ class IntentEngineIT extends IntegrationTest {
                                                          "process [TenantProvisioning] step [createSchema] `onError` references unknown step [recordFailur]",
                                                          "process [TenantProvisioning] step [createSchema] produces names undeclared var [dbPasword] - declare it under the process `vars:`",
                                                          "process [TenantProvisioning] var [dbPassword] clearAfter references unknown step [nowhere]",
-                                                         "process [TenantProvisioning] step [recordFailure] setField value {error} is only resolvable on a step reachable from an onError route")));
+                                                         "process [TenantProvisioning] step [recordFailure] setField value {error} is only resolvable on a step reachable from an onError route",
+                                                         // #7056: the keys apply to a delegate: or a notify: step. A setter is refused
+                                                         // because a
+                                                         // check-gated status write is refused synchronously to the person who acted, and a
+                                                         // fan-out send because it never fails the task, so neither key could ever fire
+                                                         // there.
+                                                         "process [TenantProvisioning] step [recordFailure] declares retry but is neither a `delegate:` nor a `notify:` service task"
+                                                                 + " - step resilience applies to those two shapes (a check-gated status write is refused synchronously to the"
+                                                                 + " person who acted, so its failure must not be routed away)",
+                                                         "process [TenantProvisioning] step [hold] declares onError on a fan-out notify (forEach) - a fan-out sends per row and is"
+                                                                 + " fail-soft per row, so the step never fails and nothing would retry or route; observe the delivery with"
+                                                                 + " `outcome:` and an `event: { onNotifyFailed: <Entity> }` consumer")));
     }
 
     @Test

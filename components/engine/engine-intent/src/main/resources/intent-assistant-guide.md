@@ -1427,10 +1427,11 @@ entity-agnostic helpers (e.g. a number generator over its own repository) belong
 and are called from the delegate (client Java compiles across all published projects). `delegate`
 cannot be combined with `setField` / `setRelationField` / `call`; `fields` values must be scalars.
 
-**Step resilience on a delegate: `retry:`, `onError:`, `{error}` and declared step data.** A
-delegate that talks to something remote - provision a schema, register a client in an identity
-provider, call a partner API - fails sometimes, and what happens then should be modeled, not left to
-the runtime's defaults. Both attributes apply to `delegate:` service tasks only:
+**Step resilience on a `delegate:` or a `notify:` step: `retry:`, `onError:`, `{error}` and declared
+step data.** A step that talks to something remote - provision a schema, register a client in an
+identity provider, call a partner API, send a mail - fails sometimes, and what happens then should be
+modeled, not left to the runtime's defaults. Both attributes apply to the two service-task shapes
+whose work is such a call: `delegate:` and `notify:`.
 
 ```yaml
 processes:
@@ -1445,6 +1446,15 @@ processes:
       - name: provisionApp
         kind: serviceTask
         args: { delegate: custom.AppProvisioner, uses: [dbPassword], retry: { count: 5, every: PT1M }, onError: recordFailure, next: done }
+      # a SEND may declare the same two keys: its whole work is the message, so a delivery failure
+      # fails the task - and SMTP blinks exactly as any of the calls above does.
+      - name: notifyOwner
+        kind: serviceTask
+        args:
+          notify: { to: owner.email, subject: "Tenant {title} is ready", body: "..." }
+          retry: { count: 3, every: PT30S }
+          onError: recordFailure
+          next: done
       - { name: recordFailure, kind: serviceTask, args: { setField: failureMessage, value: "{error}", next: markFailed } }
       - { name: markFailed,    kind: serviceTask, args: { setRelationField: Status, value: Failed, next: end } }
       - { name: done, kind: end }
@@ -1463,6 +1473,23 @@ processes:
   itself, the declaration is the contract, and an undeclared name in `produces`/`uses` is a parse
   error. `clearAfter: <step>` removes the value once that serviceTask/userTask completes normally,
   so a generated credential does not survive in the process history.
+
+**Where the two keys are refused, and what to author instead.** Every refusal is a parse error, so
+you never ship a declaration that silently never fires:
+
+- **A `setField` / `setRelationField` step.** A status write is refused by the model's own gates
+  (`checks:`, `lifecycle:`), and a gated one runs inside the transaction of the user action that
+  reached it precisely so its refusal reaches the person who acted. Routing that failure away would
+  take the message out of their hands, and re-attempting a deterministic refusal recovers nothing.
+- **A `call:` step or a bare service task** (no `delegate:`, no `notify:`). Not covered; bind the
+  handler with `delegate:` if it needs resilience.
+- **A fan-out send** (`notify:` carrying `forEach:`). A fan-out is fail-soft **per row** by
+  construction - one unreachable mailbox must not abort the rows after it, and re-attempting the
+  whole step would mail every recipient who already received the message a second time - so the step
+  never fails and neither key could fire. Observe the deliveries instead: `outcome: <string field>`
+  stamps `sent` / `failed: <reason>` per row, and `event: { onNotifyFailed: <Entity> }` is the axis a
+  reaction binds to.
+- A non-`serviceTask` kind at all: `retry:`/`onError:` are serviceTask arguments.
 
 **Waiting for a data event: `wait`.** A `wait` step **parks the process** until an entity lifecycle
 event resumes it - a support case waiting for the requester's reply, a dunning flow waiting for a
@@ -2606,7 +2633,14 @@ language, read off the record, since there is only one render for the whole fan-
 fails. A row with no address is skipped, a failed send is logged, and the step completes with a summary
 count. That is deliberate: failing the task would have the engine retry the WHOLE fan-out and mail
 everyone who already received their message a second time, and a partial send cannot be made
-idempotent.
+idempotent. It is also why a fan-out send may declare neither `retry:` nor `onError:` (refused at
+parse): the step never fails, so neither could ever fire - use `outcome:` and `onNotifyFailed` there.
+
+**A non-fan-out send on a `serviceTask` DOES fail the task**, deliberately - its whole work is the
+message - and that is what makes it one of the two shapes step resilience applies to: give it
+`retry: { count, every }` so a transient SMTP failure recovers by itself, and `onError: <step>` so an
+exhausted one lands on the record instead of a dead-letter incident. See the step-resilience section.
+Without either, the failure takes the engine's default path and the flow stops at the send.
 
 Where the block can sit - the three places an intent acts, plus the standalone `notifications` entry:
 
@@ -3655,8 +3689,8 @@ or a seeded name.
 | step `kind` | `userTask`, `serviceTask`, `decision`, `script`, `wait`, `end` |
 | wait event | `onCreate`, `onUpdate`, `onTransition` (never `onDelete`) |
 | userTask timers | `timeout: { after: <ISO-8601 duration>, then: <step> }`, `expire: { until: <date/timestamp field>, then: <step> }` |
-| serviceTask `retry` | `{ count: <integer >= 1>, every: <ISO-8601 duration> }` - `delegate:` steps only |
-| serviceTask `onError` | a declared step or `end` - `delegate:` steps only; `{error}` (a whole-value `setField` value) is readable on the route |
+| serviceTask `retry` | `{ count: <integer >= 1>, every: <ISO-8601 duration> }` - `delegate:` and non-fan-out `notify:` steps only |
+| serviceTask `onError` | a declared step or `end` - `delegate:` and non-fan-out `notify:` steps only; `{error}` (a whole-value `setField` value) is readable on the route |
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
@@ -3698,6 +3732,7 @@ or a seeded name.
 - "deleting a document under approval must kill the approval / must be refused while it runs" -> **processes** (`whenDeleted: abort | refuse`; the cancelling `-deleted` listener is generated regardless)
 - "deleting a header must delete its lines / must be refused while it has lines" -> the child's **composition relation** (`whenMasterDeleted: cascade | refuse`; cascade is the default, so nothing is ever orphaned)
 - "retry the flaky external call, and record the failure on the record instead of an incident" -> **processes** (`delegate:` serviceTask with `retry:` + `onError:`, the failure message via `{error}`)
+- "if the mail cannot go out, retry it and then record why - don't leave the process stuck" -> **processes** (the `notify:` serviceTask takes the same `retry:` + `onError:`; a fan-out send instead uses `outcome:` + `onNotifyFailed`)
 - "a screen to enter / edit X" -> **forms**
 - "a button on X's view that opens a custom page / action" -> **actions**
 - "void / cancel / close / reopen a finished document (a guarded manual status change, per record)" -> **transitions**
