@@ -2448,9 +2448,9 @@ public final class IntentParser {
      */
     private static void validateResolveOutcomes(ResolveIntent resolve, String subject, EntityIntent record, List<String> issues) {
         boolean anyStatus = false;
-        for (Map.Entry<String, Map<String, Object>> outcome : Map.of("found", resolve.getFound(), "notFound", resolve.getNotFound(),
-                "ambiguous", resolve.getAmbiguous())
-                                                                 .entrySet()) {
+        // Listed, not Map.of: the reported issues come out in this order on every JVM (issue #7130).
+        for (Map.Entry<String, Map<String, Object>> outcome : List.of(Map.entry("found", resolve.getFound()),
+                Map.entry("notFound", resolve.getNotFound()), Map.entry("ambiguous", resolve.getAmbiguous()))) {
             Object status = outcome.getValue()
                                    .get("setStatus");
             if (status == null) {
@@ -8167,9 +8167,8 @@ public final class IntentParser {
                        .equals(resolveRecordName(resolve))) {
                 continue;
             }
-            for (Map.Entry<String, Map<String, Object>> outcome : Map.of("found", resolve.getFound(), "notFound", resolve.getNotFound(),
-                    "ambiguous", resolve.getAmbiguous())
-                                                                     .entrySet()) {
+            for (Map.Entry<String, Map<String, Object>> outcome : List.of(Map.entry("found", resolve.getFound()),
+                    Map.entry("notFound", resolve.getNotFound()), Map.entry("ambiguous", resolve.getAmbiguous()))) {
                 Object routed = outcome.getValue()
                                        .get("setStatus");
                 if (!(routed instanceof Number) || reachable.contains(((Number) routed).intValue())) {

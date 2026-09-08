@@ -445,4 +445,52 @@ class GlueSchedulesTest {
         assertEquals("OverdueReminders", s.get("className"));
         assertTrue(s.containsKey("toExpression"));
     }
+
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void keyTermsSerializeInDeclarationOrderOnEveryJvm() {
+        // Issue #7130: the terms were built with Map.of, whose iteration order comes from a per-JVM
+        // random salt, so the same intent serialized {property, expr} on one container and
+        // {expr, property} on the next. The glue is a rewritten-in-place artifact - a regen hunk has
+        // to be attributable to a platform change or an authored edit, never to which JVM ran it.
+        String yaml = """
+                name: purchases
+                entities:
+                  - name: BillTemplate
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: active, type: boolean }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                  - name: Supplier
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: PurchaseInvoice
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: BillTemplate
+                    generate:
+                      to: PurchaseInvoice
+                      unique: [Supplier, { run: month }]
+                      map:
+                        Supplier: Supplier
+                      defaults:
+                        date: now
+                """;
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(IntentParser.parse(yaml))
+                                                   .get(0);
+
+        List<Map<String, Object>> unique = (List<Map<String, Object>>) s.get("genUnique");
+        assertEquals(List.of("property", "expr"), List.copyOf(unique.get(0)
+                                                                    .keySet()));
+        assertEquals(List.of("kind", "property", "lower", "upper"), List.copyOf(unique.get(1)
+                                                                                      .keySet()));
+    }
 }
