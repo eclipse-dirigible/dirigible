@@ -28,6 +28,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.tools.DiagnosticCollector;
 import javax.tools.FileObject;
@@ -420,6 +422,41 @@ class UniqueFieldConflictControllerTemplateIT {
 
     private Mapping mapping(Map<String, Object> parameters) throws Exception {
         return new Mapping(render(parameters));
+    }
+
+    /**
+     * The message the mapping RENDERED into one surface answers a driver message with - the same
+     * compile-and-run the power surface's own assertions go through, over a template this test rendered
+     * itself rather than through {@link #context()}.
+     *
+     * @param rendered the rendered controller
+     * @param driverMessage the driver's constraint-violation text
+     * @return the answered message, or {@code null} when the mapping rethrew the violation untouched
+     * @throws Exception when the extracted mapping does not compile
+     */
+    private static String answerFor(String rendered, String driverMessage) throws Exception {
+        return new Mapping(rendered).answerFor(driverMessage, UNIQUE_VIOLATION);
+    }
+
+    /**
+     * The constraint key to message pairs a rendered controller's duplicate map carries, read off the
+     * emitted {@code messages.put(...)} lines. Comparing the maps is what pins every surface to ONE set
+     * of words: a message that differed by surface would be a second refusal for the caller to learn.
+     *
+     * @param rendered the rendered controller
+     * @return the emitted pairs, keyed by the constraint name as the mapping keys it
+     */
+    private static Map<String, String> emittedMessages(String rendered) {
+        Matcher emitted = Pattern.compile("messages\\.put\\(\"([^\"]*)\"\\.toUpperCase\\(Locale\\.ROOT\\), \"([^\"]*)\"\\);")
+                                 .matcher(rendered);
+        Map<String, String> messages = new LinkedHashMap<>();
+        while (emitted.find()) {
+            messages.put(emitted.group(1)
+                                .toUpperCase(Locale.ROOT),
+                    emitted.group(2));
+        }
+        assertFalse(messages.isEmpty(), "the rendered controller carries no duplicate messages: " + rendered);
+        return messages;
     }
 
     private String render(Map<String, Object> parameters) throws Exception {
