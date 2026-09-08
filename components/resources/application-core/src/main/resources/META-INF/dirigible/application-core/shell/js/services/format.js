@@ -129,9 +129,23 @@
     .replace(/ss/g, pad(c.s));
 
   // An ISO-ish date / date-time string as a backend or a user may write it: "2026-09-06",
-  // "2026-09-06T17:02:31", "2026-09-06 17:02". Anything trailing (a zone, fractional seconds) is
-  // ignored - the components below are all the display patterns can render.
+  // "2026-09-06T17:02:31", "2026-09-06 17:02". Its fields are read LITERALLY, as the wall clock they
+  // spell; anything trailing (fractional seconds) is ignored - the components below are all the display
+  // patterns can render. A string carrying a zone offset is NOT one of these: see ZONED.
   const ISO_LIKE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/;
+
+  // A zone offset closing the TIME component: "...T17:02:31Z", "...+00:00", "...-0500", "...+03".
+  // Its presence means the string names an INSTANT rather than a wall clock, so its literal fields are
+  // the offset's, not the viewer's: Jackson serializes a java.util.Date / Instant / Timestamp as
+  // "2026-09-06T17:02:31.000+00:00", and reading that literally prints the UTC clock to a user three
+  // zones away. Such a value is parsed and rendered from its LOCAL fields, like the epoch-number branch.
+  const ZONED = /\d{2}:\d{2}(?::\d{2})?(?:[.,]\d+)?(?:Z|z|[+-]\d{2}(?::?\d{2})?)$/;
+
+  // The local (viewer-zone) date-time components of a Date, in the shape applyDatePattern takes.
+  const localComponents = (d) => ({
+    y: d.getFullYear(), mo: d.getMonth() + 1, da: d.getDate(),
+    h: d.getHours(), mi: d.getMinutes(), s: d.getSeconds(),
+  });
 
   // Pattern letters that carry a date field, and the order codes the Harmonia picker's config takes.
   const DATE_FIELDS = { y: 'year', M: 'month', d: 'day' };
@@ -198,9 +212,11 @@
 
     /**
      * Format a date/datetime value for display using the instance Date / Timestamp patterns. Jackson
-     * serializes java.time as arrays (LocalDate [y,m,d], LocalDateTime [y,m,d,h,mi,s,ns]) and
-     * Instant/Timestamp as an epoch number; both shapes are recognised. Empty -> '—'; an unrecognised
-     * value (e.g. an already-formatted string) passes through unchanged.
+     * serializes java.time as arrays (LocalDate [y,m,d], LocalDateTime [y,m,d,h,mi,s,ns]), an
+     * Instant/Timestamp as an epoch number, and a java.util.Date as an ISO string with a zone offset;
+     * all three shapes are recognised. An offset-carrying string is converted to the viewer's zone (an
+     * offset-less one is a wall clock and is read literally). Empty -> '—'; an unrecognised value
+     * (e.g. an already-formatted string) passes through unchanged.
      */
     value(v, isDate) {
       if (v === null || v === undefined || v === '') return '—';
@@ -212,13 +228,14 @@
       }
       if (isDate && (typeof v === 'number' || v instanceof Date)) {
         const d = v instanceof Date ? v : new Date(v < 1e11 ? v * 1000 : v); // epoch seconds or millis
-        if (!isNaN(d.getTime())) {
-          return applyDatePattern(p.dateTime, {
-            y: d.getFullYear(), mo: d.getMonth() + 1, da: d.getDate(), h: d.getHours(), mi: d.getMinutes(), s: d.getSeconds(),
-          });
-        }
+        if (!isNaN(d.getTime())) return applyDatePattern(p.dateTime, localComponents(d));
       }
       if (isDate && typeof v === 'string') {
+        // An offset-carrying string is an instant: convert to the viewer's zone before formatting.
+        if (ZONED.test(v)) {
+          const d = new Date(v);
+          if (!isNaN(d.getTime())) return applyDatePattern(p.dateTime, localComponents(d));
+        }
         const m = ISO_LIKE.exec(v);
         if (m) {
           const c = { y: +m[1], mo: +m[2], da: +m[3], h: +(m[4] || 0), mi: +(m[5] || 0), s: +(m[6] || 0) };
@@ -271,6 +288,7 @@
     /**
      * Convert a date/datetime value to the FIXED shape an HTML <input> requires — NOT pattern-driven.
      * `widget` is one of DATE, DATETIME-LOCAL, TIME, MONTH, WEEK (case-insensitive). Empty -> ''.
+     * An input holds a LOCAL wall clock, so an offset-carrying string is converted to the viewer's zone.
      * MONTH (YYYY-MM) and WEEK (YYYY-Www) are stored as plain strings, so they slice through unchanged.
      */
     toDateInput(value, widget) {
@@ -283,6 +301,13 @@
         y = value[0]; mo = value[1] || 1; da = value[2] || 1; h = value[3] || 0; mi = value[4] || 0;
       } else if (typeof value === 'number') {
         const d = new Date(value < 1e11 ? value * 1000 : value);
+        if (isNaN(d.getTime())) return '';
+        y = d.getFullYear(); mo = d.getMonth() + 1; da = d.getDate(); h = d.getHours(); mi = d.getMinutes();
+      } else if (ZONED.test(String(value))) {
+        // An offset-carrying string is an instant, and an <input> holds a LOCAL wall clock: slicing the
+        // raw string would seed the field with the offset's clock, which toPayload then reads back as a
+        // different instant. Derive the local components instead, as the number branch above does.
+        const d = new Date(String(value));
         if (isNaN(d.getTime())) return '';
         y = d.getFullYear(); mo = d.getMonth() + 1; da = d.getDate(); h = d.getHours(); mi = d.getMinutes();
       } else {
