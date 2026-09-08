@@ -54,14 +54,19 @@ public class BpmInboxEndpoint extends BaseEndpoint {
     @GetMapping(value = "/instance/{id}/tasks")
     public ResponseEntity<List<TaskDTO>> getProcessInstanceTasks(@PathVariable("id") String id,
             @RequestParam(value = "type", required = false) String type) {
-        return ResponseEntity.ok(mapToDTOs(bpmService.findTasks(id, extractPrincipalType(type))));
+        return ResponseEntity.ok(mapToDTOs(bpmService.findTasksWithProcessVariables(id, extractPrincipalType(type))));
     }
 
     /**
      * Maps a task list, resolving each process definition's task-label catalog once - a whole inbox is
      * typically a handful of definitions, and every task of one shares its catalog.
+     * <p>
+     * The tasks must come from a query that loaded their process variables
+     * ({@code findTasksWithProcessVariables}): every row's subject is derived from them, and reading
+     * them off the task is what keeps a listing at one statement instead of one variable query per task
+     * on every poll (issue #7141).
      *
-     * @param tasks the tasks
+     * @param tasks the tasks, with their process variables loaded
      * @return the DTOs
      */
     private List<TaskDTO> mapToDTOs(List<Task> tasks) {
@@ -125,23 +130,26 @@ public class BpmInboxEndpoint extends BaseEndpoint {
      * and the properties that identify it into the process variables; only those travel, and the client
      * resolves their values live.
      * <p>
-     * Best-effort: a task whose variables cannot be read is still listed, without a subject.
+     * Read off the variables the listing query already fetched with the task - never re-queried per
+     * task, which is what made an inbox of 100 tasks cost 100 variable reads on every 30 s poll (issue
+     * #7141).
+     * <p>
+     * Best-effort: a task whose variables are not there is still listed, without a subject.
      *
-     * @param task the task
+     * @param task the task, from a query that loaded its process variables
      * @return the subject locators, or null when the process declares none
      */
     private TaskSubject subjectOf(Task task) {
-        try {
-            return TaskSubject.from(bpmService.getTaskVariables(task.getId()));
-        } catch (RuntimeException ex) {
-            logger.debug("Could not read the variables of task [{}] - listing it without a subject", task.getId(), ex);
+        Map<String, Object> variables = task.getProcessVariables();
+        if (variables == null || variables.isEmpty()) {
             return null;
         }
+        return TaskSubject.from(variables);
     }
 
     @GetMapping(value = "/tasks")
     public ResponseEntity<List<TaskDTO>> getTasks(@RequestParam(value = "type", required = false) String type) {
-        return ResponseEntity.ok(mapToDTOs(bpmService.findTasks(extractPrincipalType(type))));
+        return ResponseEntity.ok(mapToDTOs(bpmService.findTasksWithProcessVariables(extractPrincipalType(type))));
     }
 
     @GetMapping(value = "/tasks/{taskId}/variables")

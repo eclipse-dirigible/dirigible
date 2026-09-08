@@ -196,12 +196,24 @@ class TaskServiceImpl implements TaskService {
 
     @Override
     public List<Task> findTasks(String processInstanceId, PrincipalType type) {
+        return findTasks(processInstanceId, type, false);
+    }
+
+    @Override
+    public List<Task> findTasksWithProcessVariables(String processInstanceId, PrincipalType type) {
+        return findTasks(processInstanceId, type, true);
+    }
+
+    private List<Task> findTasks(String processInstanceId, PrincipalType type, boolean withProcessVariables) {
         if (UserFacade.getUserRoles()
                       .isEmpty()) {
             return Collections.emptyList();
         }
         TaskInfoQuery<TaskQuery, Task> taskQuery = prepareQuery(type);
         taskQuery.processInstanceId(processInstanceId);
+        if (withProcessVariables) {
+            taskQuery.includeProcessVariables();
+        }
         return taskQuery.list();
     }
 
@@ -222,11 +234,33 @@ class TaskServiceImpl implements TaskService {
 
     @Override
     public List<Task> findTasks(PrincipalType type) {
+        return findTasks(type, false);
+    }
+
+    @Override
+    public List<Task> findTasksWithProcessVariables(PrincipalType type) {
+        return findTasks(type, true);
+    }
+
+    /**
+     * The tasks addressed to the given principal, optionally with their process variables joined in.
+     * {@code includeProcessVariables} makes Flowable fetch the variables WITH the tasks - one statement
+     * for the whole listing, instead of the variable query per task a caller reading
+     * {@code getVariables(taskId)} in a loop would issue (issue #7141).
+     *
+     * @param type the principal the tasks are addressed to
+     * @param withProcessVariables whether to load each task's process variables
+     * @return the tasks
+     */
+    private List<Task> findTasks(PrincipalType type, boolean withProcessVariables) {
         if (UserFacade.getUserRoles()
                       .isEmpty()) {
             return Collections.emptyList();
         }
         TaskInfoQuery<TaskQuery, Task> taskQuery = prepareQuery(type);
+        if (withProcessVariables) {
+            taskQuery.includeProcessVariables();
+        }
         return taskQuery.list();
     }
 

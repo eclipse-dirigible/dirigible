@@ -173,6 +173,30 @@ public interface TaskService {
     List<Task> findTasks(PrincipalType type);
 
     /**
+     * The same tasks as {@link #findTasks(String, PrincipalType)}, with every task's process variables
+     * already loaded - see {@link #findTasksWithProcessVariables(PrincipalType)}.
+     *
+     * @param processInstanceId the process instance to list the tasks of
+     * @param type the principal the tasks are addressed to
+     * @return the tasks, each carrying its process variables
+     */
+    List<Task> findTasksWithProcessVariables(String processInstanceId, PrincipalType type);
+
+    /**
+     * The same tasks as {@link #findTasks(PrincipalType)}, with every task's process variables already
+     * loaded, so that a listing which needs them - the Inbox derives each row's subject from the
+     * variables the process seeded - reads them off the task instead of issuing one variable query per
+     * task on every poll (issue #7141).
+     * <p>
+     * Only for a caller that actually reads the variables: the join makes the query itself heavier, so
+     * a listing that needs nothing but the tasks stays on {@link #findTasks(PrincipalType)}.
+     *
+     * @param type the principal the tasks are addressed to
+     * @return the tasks, each carrying its process variables
+     */
+    List<Task> findTasksWithProcessVariables(PrincipalType type);
+
+    /**
      * Counts the tenant's tasks assigned to the given user, whoever is asking - unlike
      * {@link #findTasks(PrincipalType)}, which serves the caller's own (act-as aware) world.
      *

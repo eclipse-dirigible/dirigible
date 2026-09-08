@@ -17,6 +17,7 @@ import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -4537,6 +4538,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body(org.hamcrest.Matchers.containsString("Confirm")),
+                30);
+
+        // ...and the row says what it is ABOUT (#7077): the subject locators the trigger seeded travel
+        // with the listing. They ride the task query itself now - one statement for the whole inbox
+        // instead of a variable read per task on every 30 s poll (#7141) - so a listing that lost them
+        // would silently go back to reading `Ref <id>`.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/inbox/tasks?type=assigned")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("find { it.name == 'Confirm' }.subject.url", notNullValue())
+                                                 .body("find { it.name == 'Confirm' }.subject.fields.property", hasItem("Name")),
                 30);
 
         // ...and the record knows about the instance that task belongs to: the trigger stamped the

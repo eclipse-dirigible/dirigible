@@ -439,6 +439,30 @@ public class BpmService {
                                   .findTasks(type);
     }
 
+    /**
+     * The same tasks as {@link #findTasks(String, PrincipalType)}, each carrying its process variables.
+     *
+     * @param processInstanceId the process instance to list the tasks of
+     * @param type the principal the tasks are addressed to
+     * @return the tasks, with their process variables loaded
+     */
+    public List<Task> findTasksWithProcessVariables(String processInstanceId, PrincipalType type) {
+        return bpmProviderFlowable.getTaskService()
+                                  .findTasksWithProcessVariables(processInstanceId, type);
+    }
+
+    /**
+     * The same tasks as {@link #findTasks(PrincipalType)}, each carrying its process variables - for a
+     * listing that reads them, which would otherwise cost one variable query per task (issue #7141).
+     *
+     * @param type the principal the tasks are addressed to
+     * @return the tasks, with their process variables loaded
+     */
+    public List<Task> findTasksWithProcessVariables(PrincipalType type) {
+        return bpmProviderFlowable.getTaskService()
+                                  .findTasksWithProcessVariables(type);
+    }
+
     public long countTasksByAssignee(String assignee) {
         return bpmProviderFlowable.getTaskService()
                                   .countTasksByAssignee(assignee);
