@@ -662,6 +662,13 @@ public class ${name}PartnerController {
     }
 
     /**
+     * The markers the drivers append the executed statement to their message behind - Hibernate's
+     * "[insert into ...]" and H2's "SQL statement:". Everything from there on is the SQL, not the
+     * violation.
+     */
+    private static final List<String> STATEMENT_MARKERS = List.of("SQL STATEMENT:", "[INSERT ", "[UPDATE ", "[DELETE ", "[MERGE ");
+
+    /**
      * A write that collided with one of those keys is a conflict the caller can act on - answered with
      * the message that names the field - and anything else is rethrown untouched. Matching is on the
      * key name inside the driver's message, which is the only handle the database gives back; every
@@ -669,20 +676,66 @@ public class ${name}PartnerController {
      */
     private static RuntimeException duplicateOrRethrow(RuntimeException e) {
         if (isConstraintViolation(e) && isDuplicateViolation(e)) {
-            for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
-                String message = cause.getMessage();
-                if (message == null) {
-                    continue;
-                }
-                String upper = message.toUpperCase(Locale.ROOT);
-                for (Map.Entry<String, String> constraint : DUPLICATE_MESSAGES.entrySet()) {
-                    if (upper.contains(constraint.getKey())) {
-                        return new ResponseStatusException(HttpStatus.CONFLICT, constraint.getValue());
-                    }
-                }
+            String message = duplicateMessageFor(violationText(e));
+            if (message != null) {
+                return new ResponseStatusException(HttpStatus.CONFLICT, message);
             }
         }
         return e;
+    }
+
+    /**
+     * The message of the business key the given violation names, or {@code null} when it names none of
+     * them - a primary key, or a uniqueness constraint of another table.
+     */
+    private static String duplicateMessageFor(String violation) {
+        if (violation == null) {
+            return null;
+        }
+        String upper = violation.toUpperCase(Locale.ROOT);
+        for (Map.Entry<String, String> constraint : DUPLICATE_MESSAGES.entrySet()) {
+            if (upper.contains(constraint.getKey())) {
+                return constraint.getValue();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The text of the violation the database raised: the message of the INNERMOST
+     * {@code java.sql.SQLException} in the chain - the one that carries the constraint name and the
+     * Detail line - with the statement the driver appends to it cut off.
+     * <p>
+     * Anchoring the match there is load-bearing, not tidiness. Hibernate re-reports the failure with
+     * the executed SQL attached ("... [insert into PRODUCT (PRODUCT_CODE, PRODUCT_NAME, ...)]") and H2
+     * appends its own "SQL statement:" block, so a message read whole lists EVERY column of the table:
+     * a collision on one unique field would be answered with the message of another, and a
+     * primary-key violation - SQLSTATE 23505 as well - with a business key's.
+     */
+    private static String violationText(Throwable e) {
+        String text = null;
+        for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+            if (cause instanceof java.sql.SQLException && cause.getMessage() != null) {
+                text = cause.getMessage();
+            }
+        }
+        if (text == null) {
+            text = e.getMessage();
+        }
+        return text == null ? null : withoutStatement(text);
+    }
+
+    /** The message up to the first statement marker in it, which is where the column list starts. */
+    private static String withoutStatement(String message) {
+        String upper = message.toUpperCase(Locale.ROOT);
+        int cut = message.length();
+        for (String marker : STATEMENT_MARKERS) {
+            int at = upper.indexOf(marker);
+            if (at >= 0 && at < cut) {
+                cut = at;
+            }
+        }
+        return message.substring(0, cut);
     }
 
     /**
@@ -691,23 +744,21 @@ public class ${name}PartnerController {
      * different conflict and must not be answered as a duplicate. Every supported dialect either
      * reports SQLSTATE 23505 or says so in words - PostgreSQL "duplicate key value violates unique
      * constraint", H2 "Unique index or primary key violation", MySQL "Duplicate entry", Oracle
-     * "unique constraint (...) violated".
+     * "unique constraint (...) violated" - and says it in the violation itself, so the words are read
+     * off the same anchored text the key match uses rather than off the statement appended to it.
      */
     private static boolean isDuplicateViolation(Throwable e) {
         for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
             if (cause instanceof java.sql.SQLException sqlException && "23505".equals(sqlException.getSQLState())) {
                 return true;
             }
-            String message = cause.getMessage();
-            if (message == null) {
-                continue;
-            }
-            String upper = message.toUpperCase(Locale.ROOT);
-            if (upper.contains("DUPLICATE") || upper.contains("UNIQUE")) {
-                return true;
-            }
         }
-        return false;
+        String violation = violationText(e);
+        if (violation == null) {
+            return false;
+        }
+        String upper = violation.toUpperCase(Locale.ROOT);
+        return upper.contains("DUPLICATE") || upper.contains("UNIQUE");
     }
 
 #end

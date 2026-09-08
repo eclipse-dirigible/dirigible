@@ -28,8 +28,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import javax.tools.DiagnosticCollector;
 import javax.tools.FileObject;
@@ -424,39 +422,8 @@ class UniqueFieldConflictControllerTemplateIT {
         return new Mapping(render(parameters));
     }
 
-    /**
-     * The message the mapping RENDERED into one surface answers a driver message with - the same
-     * compile-and-run the power surface's own assertions go through, over a template this test rendered
-     * itself rather than through {@link #context()}.
-     *
-     * @param rendered the rendered controller
-     * @param driverMessage the driver's constraint-violation text
-     * @return the answered message, or {@code null} when the mapping rethrew the violation untouched
-     * @throws Exception when the extracted mapping does not compile
-     */
-    private static String answerFor(String rendered, String driverMessage) throws Exception {
-        return new Mapping(rendered).answerFor(driverMessage, UNIQUE_VIOLATION);
-    }
-
-    /**
-     * The constraint key to message pairs a rendered controller's duplicate map carries, read off the
-     * emitted {@code messages.put(...)} lines. Comparing the maps is what pins every surface to ONE set
-     * of words: a message that differed by surface would be a second refusal for the caller to learn.
-     *
-     * @param rendered the rendered controller
-     * @return the emitted pairs, keyed by the constraint name as the mapping keys it
-     */
-    private static Map<String, String> emittedMessages(String rendered) {
-        Matcher emitted = Pattern.compile("messages\\.put\\(\"([^\"]*)\"\\.toUpperCase\\(Locale\\.ROOT\\), \"([^\"]*)\"\\);")
-                                 .matcher(rendered);
-        Map<String, String> messages = new LinkedHashMap<>();
-        while (emitted.find()) {
-            messages.put(emitted.group(1)
-                                .toUpperCase(Locale.ROOT),
-                    emitted.group(2));
-        }
-        assertFalse(messages.isEmpty(), "the rendered controller carries no duplicate messages: " + rendered);
-        return messages;
+    private Mapping mapping(String location, Map<String, Object> parameters) throws Exception {
+        return new Mapping(render(location, parameters));
     }
 
     private String render(Map<String, Object> parameters) throws Exception {
@@ -542,12 +509,54 @@ class UniqueFieldConflictControllerTemplateIT {
     @Test
     void aSelfServiceSurfaceAnswersADuplicateExactlyAsThePowerSurfaceDoes() throws Exception {
         for (String template : SELF_SERVICE_SURFACES) {
-            String rendered = render(BASE + template, selfServiceContext());
+            Mapping mapping = mapping(BASE + template, selfServiceContext());
 
-            assertEquals("A PublicHoliday with this 'Day' already exists", answerFor(rendered, POSTGRES_DUPLICATE),
-                    template + " must map the PostgreSQL duplicate to the message naming the field: " + rendered);
-            assertEquals("A PublicHoliday with this 'Day' already exists", answerFor(rendered, H2_DUPLICATE),
-                    template + " must map the H2 one too: " + rendered);
+            assertEquals("A PublicHoliday with this 'Day' already exists", mapping.answerFor(POSTGRES_DUPLICATE, UNIQUE_VIOLATION),
+                    template + " must map the PostgreSQL duplicate to the message naming the field");
+            assertEquals("A PublicHoliday with this 'Day' already exists", mapping.answerFor(H2_DUPLICATE, UNIQUE_VIOLATION),
+                    template + " must map the H2 one too");
+        }
+    }
+
+    /**
+     * The anchoring #7138 fixed on the power surface, run against the self-service ones: the driver
+     * messages these surfaces actually see carry the statement Hibernate appends, whose column list
+     * names EVERY business key of the table. Fed the bare driver string a surface never sees, a matcher
+     * that reads the message whole passes - which is how the defect rode into two more copies (#7176).
+     */
+    @Test
+    void aSelfServiceCollisionIsNamedOnTheCollidedFieldEvenWithTheStatementAttached() throws Exception {
+        Map<String, Object> context = selfServiceContext();
+        context.put("properties", List.of(primaryKey(), uniqueDay(), unique("DayOfNotice", "PUBLIC_HOLIDAY_DAY_OF_NOTICE")));
+
+        for (String template : SELF_SERVICE_SURFACES) {
+            Mapping mapping = mapping(BASE + template, context);
+
+            assertEquals("A PublicHoliday with this 'Day' already exists",
+                    mapping.answerFor(POSTGRES_DUPLICATE + HIBERNATE_INSERT, POSTGRES_DUPLICATE, UNIQUE_VIOLATION),
+                    template + ": the statement's column list must not decide which field the collision is reported on");
+            assertEquals("A PublicHoliday with this 'DayOfNotice' already exists", mapping.answerFor(
+                    "ERROR: duplicate key value violates unique constraint \"VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_OF_NOTICE_key\""
+                            + HIBERNATE_INSERT,
+                    "ERROR: duplicate key value violates unique constraint \"VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_OF_NOTICE_key\"",
+                    UNIQUE_VIOLATION), template + ": the other field must be answered on its own collision");
+        }
+    }
+
+    /**
+     * A primary-key collision reports SQLSTATE 23505 and carries the same statement tail, so on the
+     * pre-anchoring matcher it came back as a duplicate of a business key the caller never wrote - on
+     * whichever surface still carried that matcher.
+     */
+    @Test
+    void aSelfServicePrimaryKeyCollisionIsNotAnsweredAsABusinessKeyDuplicate() throws Exception {
+        for (String template : SELF_SERVICE_SURFACES) {
+            Mapping mapping = mapping(BASE + template, selfServiceContext());
+
+            assertNull(mapping.answerFor(POSTGRES_PRIMARY_KEY + HIBERNATE_INSERT, POSTGRES_PRIMARY_KEY, UNIQUE_VIOLATION),
+                    template + ": a primary-key violation must be rethrown, not renamed after a business key");
+            assertNull(mapping.answerFor(POSTGRES_FOREIGN_KEY + HIBERNATE_INSERT, POSTGRES_FOREIGN_KEY, FOREIGN_KEY_VIOLATION),
+                    template + ": a missing reference must not be answered as a duplicate");
         }
     }
 
@@ -567,16 +576,22 @@ class UniqueFieldConflictControllerTemplateIT {
         }
     }
 
-    /** Same key, same words: a message that differed by surface would be a second refusal to learn. */
+    /**
+     * Same key, same words, and the same matcher reading them: three hand-written copies of the same
+     * Java only stay one behaviour if they stay one text. Comparing the emitted MESSAGES alone is what
+     * let #7174's anchoring land on the power surface while the two copies #7173 made kept the matcher
+     * it replaced (#7176) - the maps were identical the whole time. The whole mapping is compared here,
+     * from the map down to the end of the discriminator.
+     */
     @Test
-    void everySurfaceCarriesTheSameMessagesForTheSameKeys() throws Exception {
+    void everySurfaceCarriesTheSameMappingVerbatim() throws Exception {
         Map<String, Object> context = selfServiceContext();
         context.put("uniqueConstraints", List.of(compositeKey()));
 
-        Map<String, String> power = emittedMessages(render(TEMPLATE, context));
+        String power = Mapping.mappingSource(render(TEMPLATE, context));
         for (String template : SELF_SERVICE_SURFACES) {
-            assertEquals(power, emittedMessages(render(BASE + template, context)),
-                    template + " must carry the power surface's mapping verbatim");
+            assertEquals(power, Mapping.mappingSource(render(BASE + template, context)),
+                    template + " must carry the power surface's map AND matcher verbatim");
         }
     }
 
