@@ -1417,7 +1417,11 @@ parameters with `fields: { <name>: <value>, ... }`:
 
 The delegate is bound via `flowable:class` (not the `${JavaTask}` dispatcher the `setField` /
 scaffolded-stub paths use), because only `flowable:class` lets Flowable inject the declared `fields`
-as delegate fields. Contrast the three "custom code" service-task shapes: `setField` /
+as delegate fields. The delegate's own **collaborators** come from the client bean container on both
+paths (a constructor or `@Inject` field over the project's `@Component`s) - but a delegate must never
+itself be a `@Component`: the engine creates it, so annotating it builds a second, fully-injected
+singleton that never runs. A `fields:` name must not collide with an injected member (the BPMN literal
+is applied last and wins). Contrast the three "custom code" service-task shapes: `setField` /
 `setRelationField` bind a **generated** delegate in the module-scoped events package (`gen.events.<module>`; the shorthand `gen.events.<ClassName>` in a `delegate:` always means THIS module's generated class); a **bare** serviceTask (no
 `delegate` / `call`) binds `custom.<Step>` and scaffolds a one-time stub under `custom/`; a
 `delegate` binds **your** named class and scaffolds nothing (you write it). **A delegate that touches

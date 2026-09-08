@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://www.flowable.org/processdef">
+  <process id="java-delegate-version" name="Java delegate version" isExecutable="true">
+    <startEvent id="start"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="version-task"/>
+    <serviceTask id="version-task" name="Versioned collaborator" flowable:class="delegateinjection.VersionDelegate"/>
+    <sequenceFlow id="f2" sourceRef="version-task" targetRef="end"/>
+    <endEvent id="end"/>
+  </process>
+</definitions>

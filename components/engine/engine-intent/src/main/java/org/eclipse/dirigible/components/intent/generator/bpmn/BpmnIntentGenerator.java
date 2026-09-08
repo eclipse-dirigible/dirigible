@@ -1352,10 +1352,10 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * Emit a service task bound to an author-named client
      * {@link org.flowable.engine.delegate.JavaDelegate} via {@code flowable:class} (resolved through
      * the client class loader by {@code BpmFlowableConfig}'s {@code ClientAwareClassLoader}). Unlike
-     * the {@code ${JavaTask}} dispatcher - which only forwards the {@code handler} field and
-     * instantiates the target with a no-arg constructor - {@code flowable:class} lets Flowable inject
-     * the declared {@code fields} into the delegate, so a reusable, parameterized delegate can be
-     * configured per step.
+     * the {@code ${JavaTask}} dispatcher - which only forwards the {@code handler} field -
+     * {@code flowable:class} lets Flowable inject the declared {@code fields} into the delegate, so a
+     * reusable, parameterized delegate can be configured per step. (The delegate's own collaborators
+     * are wired by the client bean container on both paths.)
      */
     private static void appendDelegateServiceTask(StringBuilder sb, StepIntent step, String delegateClass, List<String> clears) {
         sb.append("    <serviceTask id=\"")

@@ -13,6 +13,7 @@ import static org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionDat
 import static org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService.DIRIGIBLE_BPM_INTERNAL_SKIP_STEP;
 
 import java.util.Map;
+import java.util.Optional;
 
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.open.telemetry.OpenTelemetryProvider;
@@ -40,8 +41,10 @@ import io.opentelemetry.context.Scope;
  * {@code flowable:delegateExpression="${JavaTask}"} together with a {@code handler} field whose
  * value is the fully-qualified class name of a client class implementing {@link JavaDelegate}. The
  * class is resolved through the currently-installed {@link ClientClassLoader} (managed by
- * {@link ClientClassLoaderHolder}), instantiated via its public no-arg constructor on every
- * execution, and invoked with the engine-provided {@link DelegateExecution}.
+ * {@link ClientClassLoaderHolder}), instantiated afresh on every execution - through the client
+ * bean container when it declares an injection point (constructor or {@code @Inject} field), else
+ * via its public no-arg constructor - and invoked with the engine-provided
+ * {@link DelegateExecution}.
  *
  * <p>
  * For the alternative {@code flowable:class="..."} approach, see the classloader configured on the
@@ -181,16 +184,30 @@ public class DirigibleJavaCallDelegate implements JavaDelegate {
             throw new BpmnRuntimeException("Client Java class [" + fqn + "] does not implement " + JavaDelegate.class.getName() + ".");
         }
 
-        JavaDelegate delegate;
-        try {
-            delegate = (JavaDelegate) handlerClass.getDeclaredConstructor()
-                                                  .newInstance();
-        } catch (ReflectiveOperationException e) {
-            throw new BpmnRuntimeException(
-                    "Failed to instantiate client Java class [" + fqn + "]. A public no-arg " + "constructor is required.", e);
-        }
+        JavaDelegate delegate = instantiate(handlerClass, fqn);
 
         delegate.execute(execution);
+    }
+
+    /**
+     * Build the handler for this execution: the client bean container wires it when it declares an
+     * injection point, otherwise its public no-arg constructor is called as before. A dependency the
+     * container cannot satisfy throws from here, i.e. inside {@link #execute}, so the failure is the
+     * step's - routed by its {@code retry:} / {@code onError:} - not the deployment's.
+     */
+    private static JavaDelegate instantiate(Class<?> handlerClass, String fqn) {
+        Optional<JavaDelegate> wired = ClientDelegateBeans.createUnmanaged(handlerClass)
+                                                          .map(JavaDelegate.class::cast);
+        if (wired.isPresent()) {
+            return wired.get();
+        }
+        try {
+            return (JavaDelegate) handlerClass.getDeclaredConstructor()
+                                              .newInstance();
+        } catch (ReflectiveOperationException e) {
+            throw new BpmnRuntimeException("Failed to instantiate client Java class [" + fqn
+                    + "]. A public no-arg constructor is required, or declare the collaborators it injects as @Component.", e);
+        }
     }
 
 }

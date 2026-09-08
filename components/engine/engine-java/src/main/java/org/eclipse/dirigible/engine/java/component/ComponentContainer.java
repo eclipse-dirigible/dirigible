@@ -28,7 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import org.eclipse.dirigible.engine.java.runtime.ClientBeanResolver;
+import org.eclipse.dirigible.engine.java.runtime.ClientBeanFactory;
 import org.eclipse.dirigible.engine.java.runtime.ClientBeansHolder;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.eclipse.dirigible.sdk.component.Component;
@@ -47,8 +47,10 @@ import org.springframework.core.annotation.AnnotatedElementUtils;
  * {@link #instanceOf(Class)} rather than instantiating client classes themselves.
  *
  * <p>
- * Implements {@link ClientBeanResolver} and publishes itself into {@link ClientBeansHolder} so the
- * SDK facade {@code org.eclipse.dirigible.sdk.component.Beans} can resolve client beans.
+ * Implements {@link ClientBeanFactory} and publishes itself into {@link ClientBeansHolder} so the
+ * SDK facade {@code org.eclipse.dirigible.sdk.component.Beans} can resolve client beans, and the
+ * BPM engine can wire a client {@code JavaDelegate} Flowable instantiated itself
+ * ({@link #createUnmanaged(Class)}).
  *
  * <p>
  * Threading: {@link #rebuild(Collection)} runs on the single synchronization thread and publishes
@@ -56,7 +58,7 @@ import org.springframework.core.annotation.AnnotatedElementUtils;
  * HTTP dispatch threads.
  */
 @org.springframework.stereotype.Component
-public class ComponentContainer implements ClientBeanResolver {
+public class ComponentContainer implements ClientBeanFactory {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ComponentContainer.class);
 
@@ -188,28 +190,12 @@ public class ComponentContainer implements ClientBeanResolver {
         }
         inCreation.addLast(definition.name());
         try {
-            Constructor<?> constructor = definition.constructor();
-            Parameter[] parameters = constructor.getParameters();
-            Object[] args = new Object[parameters.length];
-            for (int i = 0; i < parameters.length; i++) {
-                args[i] = resolve(parameters[i].getType(), parameters[i].getParameterizedType(), parameterName(parameters[i]),
-                        definition.type(), byName, ordered, created, inCreation);
-            }
-            Object instance;
-            try {
-                instance = constructor.newInstance(args);
-            } catch (InvocationTargetException e) {
-                Throwable cause = e.getCause() != null ? e.getCause() : e;
-                throw new BeanContainerException("Constructor of [" + definition.type()
-                                                                                .getName()
-                        + "] threw: " + cause.getMessage(), cause);
-            } catch (ReflectiveOperationException e) {
-                throw new BeanContainerException("Cannot instantiate [" + definition.type()
-                                                                                    .getName()
-                        + "]: " + e.getMessage(), e);
-            }
+            CandidateSource source = generationSource(byName, ordered, created, inCreation);
+            Object instance = instantiate(definition, source);
+            // Registered before field injection on purpose: an @Inject-field cycle then terminates on
+            // the half-built instance, while a constructor cycle is caught above.
             created.put(definition.name(), instance);
-            injectFields(definition, instance, byName, ordered, created, inCreation);
+            injectFields(definition, instance, source);
             invokePostConstruct(definition, instance);
             return instance;
         } finally {
@@ -217,11 +203,36 @@ public class ComponentContainer implements ClientBeanResolver {
         }
     }
 
-    private void injectFields(BeanDefinition definition, Object instance, Map<String, BeanDefinition> byName, List<BeanDefinition> ordered,
-            Map<String, Object> created, Deque<String> inCreation) {
+    /**
+     * Construct one instance, resolving every constructor parameter through {@code source}. Shared by
+     * the rebuild path and {@link #createUnmanaged(Class)} so both obey one constructor-selection and
+     * one dependency-resolution rule.
+     */
+    private Object instantiate(BeanDefinition definition, CandidateSource source) {
+        Constructor<?> constructor = definition.constructor();
+        Parameter[] parameters = constructor.getParameters();
+        Object[] args = new Object[parameters.length];
+        for (int i = 0; i < parameters.length; i++) {
+            args[i] = resolve(parameters[i].getType(), parameters[i].getParameterizedType(), parameterName(parameters[i]),
+                    definition.type(), source);
+        }
+        try {
+            return constructor.newInstance(args);
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            throw new BeanContainerException("Constructor of [" + definition.type()
+                                                                            .getName()
+                    + "] threw: " + cause.getMessage(), cause);
+        } catch (ReflectiveOperationException e) {
+            throw new BeanContainerException("Cannot instantiate [" + definition.type()
+                                                                                .getName()
+                    + "]: " + e.getMessage(), e);
+        }
+    }
+
+    private void injectFields(BeanDefinition definition, Object instance, CandidateSource source) {
         for (Field field : definition.injectFields()) {
-            Object value = resolve(field.getType(), field.getGenericType(), field.getName(), definition.type(), byName, ordered, created,
-                    inCreation);
+            Object value = resolve(field.getType(), field.getGenericType(), field.getName(), definition.type(), source);
             try {
                 field.set(instance, value);
             } catch (IllegalAccessException e) {
@@ -233,42 +244,92 @@ public class ComponentContainer implements ClientBeanResolver {
     }
 
     /** Resolve one injection point — a collection of all matches, or the single matching bean. */
-    private Object resolve(Class<?> rawType, Type genericType, String nameHint, Class<?> owner, Map<String, BeanDefinition> byName,
-            List<BeanDefinition> ordered, Map<String, Object> created, Deque<String> inCreation) {
+    private Object resolve(Class<?> rawType, Type genericType, String nameHint, Class<?> owner, CandidateSource source) {
         if (Collection.class.isAssignableFrom(rawType)) {
             Class<?> element = elementType(genericType);
             List<Object> values = new ArrayList<>();
-            for (BeanDefinition candidate : ordered) {
-                if (element.isAssignableFrom(candidate.type())) {
-                    values.add(getOrCreate(candidate, byName, ordered, created, inCreation));
-                }
+            for (String name : source.namesAssignableTo(element)) {
+                values.add(source.instanceFor(name));
             }
             return Set.class.isAssignableFrom(rawType) ? new LinkedHashSet<>(values) : values;
         }
-        List<BeanDefinition> candidates = new ArrayList<>();
-        for (BeanDefinition candidate : ordered) {
-            if (rawType.isAssignableFrom(candidate.type())) {
-                candidates.add(candidate);
-            }
-        }
+        List<String> candidates = source.namesAssignableTo(rawType);
         if (candidates.size() == 1) {
-            return getOrCreate(candidates.get(0), byName, ordered, created, inCreation);
+            return source.instanceFor(candidates.get(0));
         }
         if (candidates.isEmpty()) {
             throw new BeanContainerException("No client bean of type [" + rawType.getName() + "] to inject into [" + owner.getName()
                     + "]. Declare it as @Component, or use Beans.get(...) for a platform service.");
         }
-        if (nameHint != null) {
-            BeanDefinition named = byName.get(nameHint);
-            if (named != null && rawType.isAssignableFrom(named.type())) {
-                return getOrCreate(named, byName, ordered, created, inCreation);
-            }
+        if (nameHint != null && candidates.contains(nameHint)) {
+            return source.instanceFor(nameHint);
         }
-        List<String> names = candidates.stream()
-                                       .map(BeanDefinition::name)
-                                       .toList();
         throw new BeanContainerException("Ambiguous dependency of type [" + rawType.getName() + "] for [" + owner.getName()
-                + "]: candidates " + names + ". Use a more specific type or match the parameter/field name to a bean name.");
+                + "]: candidates " + candidates + ". Use a more specific type or match the parameter/field name to a bean name.");
+    }
+
+    /**
+     * Where an injection point's candidates come from, and how one becomes an instance. Two
+     * implementations — the generation being built (constructing a collaborator on demand) and the live
+     * singletons (constructing nothing) — so {@link #resolve} states the resolution rule once, for
+     * beans and for unmanaged instances alike.
+     */
+    private interface CandidateSource {
+
+        /** Bean names assignable to {@code required}, in registration order. */
+        List<String> namesAssignableTo(Class<?> required);
+
+        /** The instance registered under {@code name}, created on demand if this source builds beans. */
+        Object instanceFor(String name);
+    }
+
+    /** Candidates from the generation currently being built; a collaborator is created on demand. */
+    private CandidateSource generationSource(Map<String, BeanDefinition> byName, List<BeanDefinition> ordered, Map<String, Object> created,
+            Deque<String> inCreation) {
+        return new CandidateSource() {
+
+            @Override
+            public List<String> namesAssignableTo(Class<?> required) {
+                List<String> names = new ArrayList<>();
+                for (BeanDefinition candidate : ordered) {
+                    if (required.isAssignableFrom(candidate.type())) {
+                        names.add(candidate.name());
+                    }
+                }
+                return names;
+            }
+
+            @Override
+            public Object instanceFor(String name) {
+                return getOrCreate(byName.get(name), byName, ordered, created, inCreation);
+            }
+        };
+    }
+
+    /**
+     * Candidates from the live generation's singletons — the source an unmanaged instance wires
+     * against. It constructs nothing, so a dependency cycle is impossible on this path; the snapshot is
+     * read once by the caller so the whole instance is wired against one consistent generation.
+     */
+    private static CandidateSource singletonSource(Map<String, Object> live) {
+        return new CandidateSource() {
+
+            @Override
+            public List<String> namesAssignableTo(Class<?> required) {
+                List<String> names = new ArrayList<>();
+                for (Map.Entry<String, Object> entry : live.entrySet()) {
+                    if (required.isInstance(entry.getValue())) {
+                        names.add(entry.getKey());
+                    }
+                }
+                return names;
+            }
+
+            @Override
+            public Object instanceFor(String name) {
+                return live.get(name);
+            }
+        };
     }
 
     private void invokePostConstruct(BeanDefinition definition, Object instance) {
@@ -361,6 +422,45 @@ public class ComponentContainer implements ClientBeanResolver {
             }
         }
         return result;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>
+     * The one client class the container cannot own: a {@code JavaDelegate}, which Flowable
+     * instantiates itself. Wiring it here rather than registering it as a bean is deliberate —
+     * annotating a delegate {@code @Component} would build a fully-injected singleton the engine never
+     * runs, next to the un-injected instance it does.
+     */
+    @Override
+    public <T> Optional<T> createUnmanaged(Class<T> type) {
+        BeanDefinition definition = new BeanDefinition(type.getName(), type);
+        if (!declaresInjectionPoint(definition)) {
+            // Nothing to wire: the caller's own no-arg instantiation is equivalent, so it stays on it
+            // and every class that worked before this existed behaves identically.
+            return Optional.empty();
+        }
+        // One read of the volatile snapshot, so the whole instance is wired against one generation.
+        CandidateSource source = singletonSource(singletons);
+        Object instance = instantiate(definition, source);
+        injectFields(definition, instance, source);
+        invokePostConstruct(definition, instance);
+        if (!definition.preDestroyMethods()
+                       .isEmpty()) {
+            LOGGER.warn("[{}] declares @PreDestroy, which is never invoked: the container does not own this instance.", type.getName());
+        }
+        return Optional.of(type.cast(instance));
+    }
+
+    /** Whether the container would do anything for this class beyond calling its no-arg constructor. */
+    private static boolean declaresInjectionPoint(BeanDefinition definition) {
+        return definition.constructor()
+                         .getParameterCount() > 0
+                || !definition.injectFields()
+                              .isEmpty()
+                || !definition.postConstructMethods()
+                              .isEmpty();
     }
 
     private static boolean isBean(Class<?> type) {

@@ -123,6 +123,10 @@ public class ServiceTaskHandlerGenerator implements IntentTargetGenerator {
                  *
                  * Scaffolded once under custom/ - it is yours: implement the real logic here, it is never
                  * regenerated or overwritten.
+                 *
+                 * Collaborators arrive by injection: declare a constructor taking the @Component beans this
+                 * step needs. Do NOT annotate the delegate itself @Component - the engine creates it, so an
+                 * annotated one would build a second, fully-injected instance that never runs.
                  */
                 public class %s implements JavaDelegate {
 

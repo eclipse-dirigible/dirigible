@@ -96,6 +96,24 @@ One Spring-singleton container, rebuilt per `ClientClassLoader` generation.
   client-facing lookup — resolves client beans first, then platform beans. Client code must **not**
   use the platform-internal `BeanProvider` (that's core-only; `JavaRepository.store()` uses it because
   it is platform code).
+- **`createUnmanaged(Class)` wires a client class the container does NOT own** — today exactly one
+  thing: a client `JavaDelegate`, which Flowable instantiates itself and which therefore never becomes
+  a bean (#7058). Same rules as a `@Component` (constructor / field `@Inject` / collection, by type
+  with the parameter or field name disambiguating, `@PostConstruct`), resolved against the **live**
+  singletons — it constructs no bean, so a cycle is impossible on this path — and the instance is
+  **not registered** (it never appears in `get` / `getAll` / `instanceOf`, and a failure here is not a
+  `wiringErrors()` entry: it belongs to the step being executed, not to the generation).
+  `@PreDestroy` is never invoked (nothing owns the instance) and the container logs one WARN if one is
+  declared. It answers **`Optional.empty()` when the class declares no injection point at all** (no
+  constructor parameters, no `@Inject` field, no `@PostConstruct`), which is what keeps every delegate
+  written before this byte-identical: the caller then stays on its own plain instantiation. The seam is
+  **`ClientBeanFactory extends ClientBeanResolver`** in `core-java`, deliberately not a fourth method on
+  the read view the SDK `Beans` facade wraps — handing client code a factory for instances nobody owns
+  would invite lifecycles the container cannot manage. It has to live in `core-java` because the one
+  consumer, `engine-bpm-flowable`, must not depend on `engine-java` (that closes a module cycle).
+  Ambiguity **refuses** rather than guessing, which is stricter than `Beans.get(SomeInterface.class)`
+  (that answers empty and falls through to the platform context, surfacing as "no such bean").
+  Unit coverage: `ComponentContainerUnmanagedTest`; end-to-end: `JavaDelegateInjectionIT`.
 
 ## Behaviour consumers (`JavaClassConsumer` SPI)
 
@@ -178,6 +196,29 @@ then `JavaClassRegistry` + `JavaHandler.handle`. A `JavaHandler` that is also `@
 as the container-built (injected) singleton; a plain `JavaHandler` (no `@Component`) is instantiated per
 request via its no-arg constructor.
 
+## `JavaDelegate` (BPMN service tasks) — injected, but never a bean
+
+A client `JavaDelegate` is created by **Flowable**, not by the container, so it is not a `@Component`
+and must not be annotated as one: that would build a fully-injected singleton the engine never runs,
+next to the un-injected instance it does — silently, with the fields reading `null` at runtime while
+the container looked correctly wired (#7058). Since the intent DSL's `processes:` makes `delegate:`
+steps the standard place for application logic, both paths now wire the instance the engine builds,
+through `ClientBeanFactory.createUnmanaged` (see the container section):
+
+- **`flowable:class`** — `ResilientClassDelegate.instantiateDelegate` (`engine-bpm-flowable`). Flowable
+  **caches** this instance on the parsed activity (`ClassDelegate.activityBehaviorInstance`), so it is
+  per activity and shared across executions, as it always was; `FlowableClientClassLoaderRefresher`
+  evicts the process-definition cache on every client rebuild, which is what re-wires it against the
+  new generation.
+- **`${JavaTask}` + a `handler` field** — `DirigibleJavaCallDelegate`, fresh per execution.
+
+Three properties worth keeping: a delegate stays **lazy** (nothing is built at publish, so an
+unsatisfiable dependency is a *step* failure routed by the step's `retry:` / `onError:`, never a
+publish-time wiring error); a class declaring **no injection point is built exactly as before**; and
+`<flowable:field>` declarations are applied **last**, so a BPMN-declared literal still wins for its own
+field — a `fields:` name and an injected member must therefore not collide. `Beans.get(...)` inside
+`execute` keeps working and remains the escape hatch for a lazy or deliberately ambiguous lookup.
+
 ## Extension points (no annotation)
 
 An extension point is a **plain Java interface**; a contribution is a `@Component` implementing it (its
@@ -242,11 +283,14 @@ browser-IDE developer sees what's wrong without reading the server log.
 
 ## Tests
 
-- Unit (`engine-java/src/test`): `ComponentContainerTest`, `ControllerClassConsumer*Test`,
+- Unit (`engine-java/src/test`): `ComponentContainerTest`, `ComponentContainerUnmanagedTest`,
+  `ControllerClassConsumer*Test`,
   `ControllerInvoker*Test`, `ControllerRouterTest`, `JavaLoaderTest`; (`data-store-java`)
   `JavaEntityToHbmMapperTest`, `EntityBeanMapperTest`, `CriteriaTest`.
 - HTTP ITs (extend `IntegrationTest`, no Selenide): `JavaEngineIT` (handler lifecycle), `JavaComponentIT`
-  (constructor + collection injection, and a `@Component` `JavaHandler`), `JavaNoMixingIT` (the
+  (constructor + collection injection, and a `@Component` `JavaHandler`), `JavaDelegateInjectionIT`
+  (both BPMN delegate paths injected, the unsatisfiable one failing the step and not the deployment,
+  and a recompiled collaborator reaching the cached delegate), `JavaNoMixingIT` (the
   no-mixing rejection), `JavaTemplateIT` (generated DAO/REST shape), `IntentEngineIT` (intent glue).
 
 ## Cross-repo effort (three repos)

@@ -10,9 +10,11 @@
 package org.eclipse.dirigible.components.engine.bpm.flowable.delegate;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.flowable.bpmn.model.MapExceptionEntry;
 import org.flowable.common.engine.api.delegate.Expression;
+import org.flowable.common.engine.impl.util.ReflectUtil;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.impl.bpmn.helper.ClassDelegate;
 import org.flowable.engine.impl.bpmn.parser.FieldDeclaration;
@@ -24,6 +26,11 @@ import org.flowable.engine.impl.bpmn.parser.FieldDeclaration;
  * boundary, the failure is converted into the caught BPMN error instead of dead-lettering - see
  * {@link IntentStepResilience}. A {@code BpmnError} the delegate throws itself, and any failure on
  * a task without the intent boundary, keep the stock behaviour (the superclass handles both).
+ *
+ * <p>
+ * It is also where a client delegate gets its collaborators: {@link #instantiateDelegate} routes
+ * the class through the client bean container, so a {@code flowable:class} delegate is wired like
+ * every other client class - see {@link ClientDelegateBeans}.
  */
 class ResilientClassDelegate extends ClassDelegate {
 
@@ -34,6 +41,28 @@ class ResilientClassDelegate extends ClassDelegate {
 
     ResilientClassDelegate(String className, List<FieldDeclaration> fieldDeclarations) {
         super(className, fieldDeclarations);
+    }
+
+    /**
+     * Construct the delegate through the client bean container (constructor and {@code @Inject} field
+     * injection over the container's singletons), falling back to Flowable's own reflective
+     * instantiation when the class declares no injection point.
+     *
+     * <p>
+     * Two things are deliberate. The {@code <flowable:field>} declarations are applied <b>last</b>, so
+     * a BPMN-declared literal still wins for its own field, as it always did - a {@code fields:} name
+     * and an injected member must therefore not collide. And an unsatisfiable dependency throws from
+     * here, which Flowable calls lazily from {@code getActivityBehaviorInstance()} inside
+     * {@link #execute}: the failure lands on the step, routed by its {@code retry:} / {@code onError:},
+     * never on the deployment.
+     */
+    @Override
+    protected Object instantiateDelegate(String className, List<FieldDeclaration> fieldDeclarations) {
+        Class<?> type = ReflectUtil.loadClass(className);
+        Optional<?> wired = ClientDelegateBeans.createUnmanaged(type);
+        Object instance = wired.isPresent() ? wired.get() : defaultInstantiateDelegate(type, List.of());
+        applyFieldDeclaration(fieldDeclarations, instance);
+        return instance;
     }
 
     @Override
