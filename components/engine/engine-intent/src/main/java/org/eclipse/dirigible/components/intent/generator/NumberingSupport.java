@@ -76,6 +76,19 @@ final class NumberingSupport {
     /**
      * The {@code init:} of the entity's relation named {@code per} ("" when the relation carries none):
      * the value the partition FK WILL hold on a row that left it unset.
+     *
+     * <p>
+     * Always a plain seed id, so it needs no unquoting the way the DAO template's
+     * {@code #defaultLiteral} does for a field default: a partition is a KEY compared against the
+     * values explicit rows allocate under, and a SQL-quoted {@code 'ACME'} beside {@code ACME} would be
+     * two counters for one company - but {@code init:} never reaches here in that shape. The parser
+     * resolves it against the target's own seeds and refuses anything that is neither a seeded name nor
+     * a numeric id ({@code StatusSymbolResolver}), so the quoted authoring shape a field default
+     * accepts is a parse error on a relation (#7147).
+     *
+     * @param entity the entity declaring the numbered field
+     * @param per the pascal-cased partition relation name ("" when the series is tenant-wide)
+     * @return the relation's init value, or "" when it declares none
      */
     private static String partitionDefault(EntityIntent entity, String per) {
         if (per.isEmpty()) {

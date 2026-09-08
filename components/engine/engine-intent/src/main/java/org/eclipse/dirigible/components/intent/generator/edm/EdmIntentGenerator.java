@@ -600,7 +600,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 properties.add(fkProperty);
                 relations.add(relationLink(name, relation, target, targetPerspective));
             }
-            putNumberPartitionDefaults(properties);
             // Explicit UI control order (intent `order:`): reorder the properties so the generated
             // form/list controls follow the author's sequence (fields and to-one relations interleaved)
             // instead of the default fields-then-relations layout. Unlisted properties keep their
@@ -1392,38 +1391,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * Wider than {@code ProcessId} because it holds several of them, and system-managed the same way:
      * read-only, never a major widget, and excluded from the generated forms and lists.
      */
-    /**
-     * Resolves the partition a {@code number: { per: X }} field falls back to when the partition FK is
-     * still null at allocation time (#7101). A relation's {@code init:} is a DATABASE default - the
-     * insert applies it - but {@code stampOn: create} draws the number BEFORE the insert, off the
-     * entity as the caller handed it in, so a row that leaves the FK unset (the default company's
-     * documents, which is exactly what {@code init:} is for) resolved to the series' BASE row
-     * (partition {@code ""}): the default company numbered on the base counter, and the next company's
-     * partition, materialized from that base row, started where the default company left off
-     * (VAC0000009 for both). {@code numberPerDefault} carries the init value so the generated allocator
-     * resolves the partition from the value the row WILL carry - every company starts at 1, nothing
-     * numbers on the base row.
-     *
-     * @param properties the entity's assembled properties (number fields and FK properties alike)
-     */
-    private static void putNumberPartitionDefaults(List<Map<String, Object>> properties) {
-        for (Map<String, Object> property : properties) {
-            Object per = property.get("numberPer");
-            if (per == null || per.toString()
-                                  .isBlank()) {
-                continue;
-            }
-            properties.stream()
-                      .filter(candidate -> per.equals(candidate.get("name")))
-                      .map(candidate -> candidate.get("dataDefaultValue"))
-                      .filter(init -> init != null && !init.toString()
-                                                           .isBlank())
-                      .findFirst()
-                      .ifPresent(init -> property.put("numberPerDefault", init.toString()
-                                                                              .trim()));
-        }
-    }
-
     private static Map<String, Object> processIdsProperty(String entityName) {
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("name", "ProcessIds");

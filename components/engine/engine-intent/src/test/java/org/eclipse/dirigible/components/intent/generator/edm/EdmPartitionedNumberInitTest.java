@@ -19,10 +19,17 @@ import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.junit.jupiter.api.Test;
 
 /**
- * A {@code number: { per: Company }} field whose Company relation carries {@code init: 1} resolves
- * a null FK to that default at allocation time (#7101). The init is a database default the insert
- * applies AFTER a {@code stampOn: create} number is drawn, so without the fallback the default
- * company numbered on the series' base row and the second company's partition forked from it.
+ * A {@code number: { per: Company }} field whose Company relation carries {@code init: 1} allocates
+ * in the default company's partition, never on the series' base row (#7101) - the second company's
+ * partition is materialized from that base row, so numbering the default company there made both
+ * companies share a counter (VAC0000009 for both).
+ *
+ * <p>
+ * The .model half of that guarantee is the partition FK's own {@code dataDefaultValue}: the
+ * generated repository assigns it as the first statement of {@code save()} (#7104), so the FK the
+ * allocator reads a few lines below is already the value the row will carry. The number property
+ * therefore carries no second copy of the init value (#7147) - one mechanism owns it, and a
+ * duplicate could only drift from the one the row is written with.
  */
 class EdmPartitionedNumberInitTest {
 
@@ -42,38 +49,37 @@ class EdmPartitionedNumberInitTest {
             """;
 
     @Test
-    void thePartitionFallsBackToTheRelationsInit() {
+    void thePartitionFkCarriesTheRelationsInitAsItsDefault() {
+        Map<String, Object> fk = property(VACATIONS, "VacationRequest", "Company");
+        assertEquals("1", fk.get("dataDefaultValue"), "the value save() defaults the FK to before the number is drawn");
+        assertEquals("INTEGER", fk.get("dataType"),
+                "a scalar type the repository's defaulting covers - it skips a date or a blob, whose DEFAULT is a SQL expression");
+        assertEquals("Company", property(VACATIONS, "VacationRequest", "Number").get("numberPer"),
+                "sanity: the number is partitioned by that relation");
+    }
+
+    @Test
+    void theNumberCarriesNoSecondCopyOfTheDefault() {
         Map<String, Object> number = property(VACATIONS, "VacationRequest", "Number");
-        assertEquals("Company", number.get("numberPer"));
-        assertEquals("1", number.get("numberPerDefault"),
-                "a row that leaves the FK unset WILL carry the init value - the allocator must partition by it, not by the base row");
-        assertEquals("1", property(VACATIONS, "VacationRequest", "Company").get("dataDefaultValue"), "sanity: the FK's database default");
+        assertNull(number.get("numberPerDefault"),
+                "the FK is defaulted before the allocation runs - a copy of the init on the number could only drift from it");
     }
 
     @Test
-    void aRelationWithoutInitLeavesNoFallback() {
-        String yaml = VACATIONS.replace(", init: 1", "");
-        Map<String, Object> number = property(yaml, "VacationRequest", "Number");
-        assertEquals("Company", number.get("numberPer"));
-        assertNull(number.get("numberPerDefault"), "no default to fall back to - a null FK is the tenant-wide base row, as before");
-    }
-
-    @Test
-    void anUnpartitionedNumberNeverCarriesOne() {
+    void anUnpartitionedNumberNamesNoRelation() {
         String yaml = VACATIONS.replace("per: Company, ", "");
         Map<String, Object> number = property(yaml, "VacationRequest", "Number");
-        assertEquals("", number.get("numberPer"));
-        assertNull(number.get("numberPerDefault"));
+        assertEquals("", number.get("numberPer"), "a tenant-wide series: one counter, no partition");
     }
 
     @Test
-    void theIssueStampedNumberCarriesTheSameFallback() {
-        // Both stamp paths read the same marker off the .model property; the issue path additionally
-        // rides the numbering glue (NumberingInitPartitionTest) - they must agree on the partition.
+    void theIssueStampedNumberIsPartitionedTheSameWay() {
+        // The issue path reads a row loaded from the database, so its fallback is live and rides the
+        // numbering glue descriptor instead (NumberingInitPartitionTest); the .model half is the same.
         String yaml = VACATIONS.replace("stampOn: create", "stampOn: issue");
-        Map<String, Object> number = property(yaml, "VacationRequest", "Number");
-        assertEquals("1", number.get("numberPerDefault"));
-        assertEquals("true", number.get("generatedUuid"), "sanity: still the UUID placeholder path");
+        assertEquals("Company", property(yaml, "VacationRequest", "Number").get("numberPer"));
+        assertEquals("1", property(yaml, "VacationRequest", "Company").get("dataDefaultValue"));
+        assertEquals("true", property(yaml, "VacationRequest", "Number").get("generatedUuid"), "sanity: still the UUID placeholder path");
     }
 
     @SuppressWarnings("unchecked")

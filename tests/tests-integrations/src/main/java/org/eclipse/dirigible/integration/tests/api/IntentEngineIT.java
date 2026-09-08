@@ -4284,7 +4284,9 @@ class IntentEngineIT extends IntegrationTest {
         // default the insert applies - AFTER a stampOn: create number is drawn off the entity as the
         // caller handed it in, so the default company's documents resolved to the series' base row ("")
         // and the second company's partition, materialized from that base row, started where the default
-        // company left off (VAC0000009 for both). Both stamp paths must resolve a null FK to the init.
+        // company left off (VAC0000009 for both). Both stamp paths must resolve a null FK to the init -
+        // the create path by reading a FK the repository has ALREADY defaulted (#7147), the issue path,
+        // whose row comes back from the database, by the descriptor's own fallback.
         writeIntent("""
                 name: vacations
                 entities:
@@ -4313,10 +4315,16 @@ class IntentEngineIT extends IntegrationTest {
         generateFromModel("template-application-events-java/template/template.js", "vacations.glue");
 
         String repository = codeOf("gen/vacations/data/vacationrequest/VacationRequestRepository.java");
+        int defaulted = repository.indexOf("entity.Company = Integer.valueOf(\"1\");");
+        int allocation = repository.indexOf("DocumentNumbers.next(\"Vacation Request\", ");
+        assertTrue(defaulted >= 0, "save() must assign the relation's init default before anything reads the FK: " + repository);
+        assertTrue(allocation > defaulted,
+                "the create-time allocator must partition by a Company the write has already defaulted, never by the base row: "
+                        + repository);
         assertTrue(
                 repository.contains(
-                        "DocumentNumbers.next(\"Vacation Request\", entity.Company == null ? \"1\" : String.valueOf(entity.Company))"),
-                "the create-time allocator must partition a null Company by its init default, never by the base row: " + repository);
+                        "DocumentNumbers.next(\"Vacation Request\", entity.Company == null ? null : String.valueOf(entity.Company))"),
+                "one mechanism owns the default - the allocator carries no second copy of the init value: " + repository);
 
         String stamp = codeOf("gen/events/vacations/PurchaseInvoiceNumberStamp.java");
         assertTrue(stamp.contains("DocumentNumbers.next(\"Purchase Invoice\","), "the stamp must allocate from the declared series");

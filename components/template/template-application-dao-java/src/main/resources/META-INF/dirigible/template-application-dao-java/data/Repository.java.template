@@ -382,17 +382,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 ## from the tenant's series. The number's SHAPE is not here - prefix and width live in the series
 ## configuration (the module's .numbers artefact, then per-tenant settings), so a deployment can change
 ## it without touching this model. `per` selects WHICH sequence: each value of that relation (typically
-## Company - a separate legal entity owes its own range) has its own counter. The number is drawn
-## BEFORE the insert, so a partition FK the caller left unset is still null here even when the relation
-## carries an init: default (the database applies that on insert) - the allocator therefore resolves
-## the partition from the init value (numberPerDefault), the value the row WILL carry, so the default
-## company gets ITS partition instead of the series' base row (#7101).
+## Company - a separate legal entity owes its own range) has its own counter. The partition is read off
+## the entity, which by this point carries the relation's init: default: the applyDefaults macro
+## assigned it as the FIRST statement of save() (dirigible #7104), so the FK the allocator sees is the
+## value the row WILL carry and the default company gets ITS partition instead of the series' base row
+## (#7101) - the guarantee lives in that one mechanism, not in a second copy of the init value here
+## (#7147). A null FK therefore means a relation that declares no init: at all: the tenant-wide
+## base row, as before.
 #foreach ($property in $properties)
 #if($property.numberStampOnCreate)
         if (entity.${property.name} == null || entity.${property.name}.isBlank()) {
-#if($property.numberPer && $property.numberPer != "" && $property.numberPerDefault && $property.numberPerDefault != "")
-            entity.${property.name} = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${property.numberSeries}", entity.${property.numberPer} == null ? "${property.numberPerDefault}" : String.valueOf(entity.${property.numberPer}));
-#elseif($property.numberPer && $property.numberPer != "")
+#if($property.numberPer && $property.numberPer != "")
             entity.${property.name} = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${property.numberSeries}", entity.${property.numberPer} == null ? null : String.valueOf(entity.${property.numberPer}));
 #else
             entity.${property.name} = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${property.numberSeries}");

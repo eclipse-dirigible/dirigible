@@ -10,11 +10,13 @@
 package org.eclipse.dirigible.components.intent.generator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.junit.jupiter.api.Test;
 
@@ -52,6 +54,16 @@ class NumberingInitPartitionTest {
         Map<String, Object> descriptor = onlyDescriptor(PURCHASE.replace(", init: 1", ""));
         assertEquals("Company", descriptor.get("per"));
         assertEquals("", descriptor.get("perDefault"), "an empty marker, like an unpartitioned per - the binder copies it verbatim");
+    }
+
+    @Test
+    void aQuotedInitCannotReachThePartitionAtAll() {
+        // A partition is a KEY compared against the values explicit rows allocate under, so a SQL-quoted
+        // 'ACME' beside ACME would be two counters for one company - the hazard the field-default path
+        // handles by unquoting (the DAO template's #defaultLiteral). A relation's init: never arrives in
+        // that shape: the parser resolves it against the target's own seeds and refuses anything that is
+        // neither a seeded name nor a numeric id, so the descriptor is always carrying a plain id (#7147).
+        assertThrows(IntentValidationException.class, () -> onlyDescriptor(PURCHASE.replace("init: 1", "init: \"'ACME'\"")));
     }
 
     @Test
