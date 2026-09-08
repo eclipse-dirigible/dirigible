@@ -2283,6 +2283,71 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void a_scheduled_generation_keeps_its_row_loads_and_unique_guard_inside_the_fail_soft_try() {
+        // Issue #7178: #7133 made each row's GENERATION fail-soft, but the row's one-hop relation loads
+        // and the `unique:` guard's lookup still ran BEFORE the try. Both read the database, so a throw
+        // from either - a connection blip, a foreign key at a row a concurrent delete removed - still
+        // aborted the whole tick: every later matching row silently ungenerated, no summary logged.
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Department
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Employee
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: status, type: string }
+                    relations:
+                      - { name: department, kind: manyToOne, to: Department }
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id,             type: integer, primaryKey: true, generated: true }
+                      - { name: period,         type: month }
+                      - { name: departmentName, type: string }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee }
+                schedules:
+                  - name: monthly-timesheets
+                    cron: "0 0 1 1 * ?"
+                    entity: Employee
+                    generate:
+                      to: EmployeeTimesheet
+                      unique: [Employee, Period]
+                      map:
+                        Employee: id
+                        departmentName: department.name
+                      defaults:
+                        Period: now
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "hr.glue");
+
+        String job = codeOf("gen/events/hr/MonthlyTimesheetsJob.java");
+        int loop = job.indexOf("for (EmployeeEntity entity : rows) {");
+        int tryOpens = job.indexOf("try {", loop);
+        int load = job.indexOf("Repository().findById(entity.Department)");
+        int guard = job.indexOf(".EmployeeTimesheetRepository().findAll(Criteria.create()");
+        int unit = job.indexOf("UnitOfWork.run(() -> {");
+        int catches = job.indexOf("} catch (Exception ex) {");
+        assertTrue(loop > 0 && tryOpens > 0 && load > 0 && guard > 0 && unit > 0 && catches > 0, "got: " + job);
+        // The ordering is the whole fix: the try must open before the first per-row database read.
+        assertTrue(tryOpens < load, "the one-hop relation load runs inside the fail-soft try");
+        assertTrue(tryOpens < guard, "the `unique:` guard's lookup runs inside the fail-soft try");
+        assertTrue(guard < unit && unit < catches, "guard, then generation, then the row's catch - one try encloses all three");
+        // Skipping a row whose target exists is still a `continue` - it leaves the try, not the loop.
+        int existed = job.indexOf("existed++;");
+        assertTrue(tryOpens < existed && existed < catches, "an already-existing row is still skipped from inside the try");
+        assertTrue(job.contains("could not generate EmployeeTimesheet from Employee [{}]"),
+                "a row that failed on a load or the guard is logged with its own key");
+    }
+
+    @Test
     void a_recurring_template_schedule_keys_on_the_period_of_the_run() {
         // Issue #7106: the recurring-template family had no key to declare. A monthly bill generated
         // from a standing BillTemplate is a plain document with a `date` - no period column to name -

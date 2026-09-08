@@ -63,23 +63,35 @@ public class ${className}Job implements JobHandler {
 #end
         for (${entity}Entity entity : rows) {
 #if($action == "generate")
+            // ONE TRANSACTION PER SOURCE ROW, and the WHOLE row is FAIL-SOFT. The header, its children and
+            // their grandchildren were each written in a transaction of their own, so a tick that died
+            // halfway left a childless header behind - and with the `unique:` guard below finding exactly
+            // that header, every later run reported "already existed" and the row stayed incomplete
+            // forever (#7133). A refused row now leaves nothing behind, so the next tick really does
+            // complete what this one could not; and one failing row no longer aborts the loop, which used
+            // to leave every later matching row silently ungenerated and the summary line unlogged.
+            // The try opens HERE, before the row's relation loads and the guard's lookup (#7178): those
+            // read the database too, and a throw from either - a connection blip, a foreign key at a row a
+            // concurrent delete removed - aborted the tick exactly as a refused generation did, with the
+            // rows after it never generated and no line saying so. One bad row costs one `failed`.
+            try {
 #foreach($load in $relationLoads)
-            // A one-hop `relation.field` map source: the queried row's foreign key loads the related row,
-            // once per row, and the mapping below reads a field off it. Null-guarded - a nullable relation
-            // is a legitimate empty value, not a reason to skip the row.
-            ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
+                // A one-hop `relation.field` map source: the queried row's foreign key loads the related row,
+                // once per row, and the mapping below reads a field off it. Null-guarded - a nullable relation
+                // is a legitimate empty value, not a reason to skip the row.
+                ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
 #end
 #if($hasGenUnique)
-            // IDEMPOTENCY (intent `generate.unique:` - issues #7070, #7106). A tick used to create
-            // unconditionally, so running this job twice - a redeploy, a Quartz misfire recovery, an
-            // admin pressing Run in Monitoring - minted a second ${genToEntity} for the same
-            // ${entity}, with a duplicate set of children under it. The natural key is looked up with
-            // the very values this row is about to be written from, so a re-run finds its own earlier
-            // output and skips the row entirely, children included. A `run:` period term is a RANGE
-            // over the date this run writes, which is how a target with no period column of its own
-            // ("one bill per template per month") is still keyed. Best-effort against two concurrent
-            // ticks, exactly as the event-driven create-from's guard is - a UNIQUE database key on the
-            // same columns is the durable backstop.
+                // IDEMPOTENCY (intent `generate.unique:` - issues #7070, #7106). A tick used to create
+                // unconditionally, so running this job twice - a redeploy, a Quartz misfire recovery, an
+                // admin pressing Run in Monitoring - minted a second ${genToEntity} for the same
+                // ${entity}, with a duplicate set of children under it. The natural key is looked up with
+                // the very values this row is about to be written from, so a re-run finds its own earlier
+                // output and skips the row entirely, children included. A `run:` period term is a RANGE
+                // over the date this run writes, which is how a target with no period column of its own
+                // ("one bill per template per month") is still keyed. Best-effort against two concurrent
+                // ticks, exactly as the event-driven create-from's guard is - a UNIQUE database key on the
+                // same columns is the durable backstop.
 #set($genUniqueValueTerms = 0)
 #foreach($u in $genUnique)
 #if($u.kind != "range")
@@ -87,51 +99,43 @@ public class ${className}Job implements JobHandler {
 #end
 #end
 #if($genUniqueValueTerms > 0)
-            // Each key value is read ONCE, into a local, because the lookup and the diagnostic below
-            // both need it and a term can be a field off a loaded relation.
-            java.util.List<String> nullKeyTerms = new java.util.ArrayList<>();
+                // Each key value is read ONCE, into a local, because the lookup and the diagnostic below
+                // both need it and a term can be a field off a loaded relation.
+                java.util.List<String> nullKeyTerms = new java.util.ArrayList<>();
 #foreach($u in $genUnique)
 #if($u.kind != "range")
-            Object key${u.property} = ${u.expr};
-            if (key${u.property} == null) {
-                nullKeyTerms.add("${u.property}");
-            }
+                Object key${u.property} = ${u.expr};
+                if (key${u.property} == null) {
+                    nullKeyTerms.add("${u.property}");
+                }
 #end
 #end
-            if (!nullKeyTerms.isEmpty()) {
-                // A NULL key term (issue #7134). The lookup itself is null-safe - Criteria.eq binds
-                // `is null` for a null value, so the guard still finds this tick's own earlier output
-                // instead of matching nothing and minting a duplicate on every re-run. What it cannot
-                // do is tell two source rows apart by a term that is null in both: under the declared
-                // key they ARE one output, so the second row is counted as already existing. That is
-                // the key being weaker than the author meant, and it is said out loud here rather than
-                // discovered as a missing document.
-                LOG.warn("Schedule ${name}: unique key term(s) {} are null for ${entity} [{}] - the natural key cannot tell rows sharing"
-                        + " that null apart, so they collapse to one ${genToEntity}; key on a property this generate always assigns",
-                        nullKeyTerms, entity.${attachKeyProperty});
-            }
+                if (!nullKeyTerms.isEmpty()) {
+                    // A NULL key term (issue #7134). The lookup itself is null-safe - Criteria.eq binds
+                    // `is null` for a null value, so the guard still finds this tick's own earlier output
+                    // instead of matching nothing and minting a duplicate on every re-run. What it cannot
+                    // do is tell two source rows apart by a term that is null in both: under the declared
+                    // key they ARE one output, so the second row is counted as already existing. That is
+                    // the key being weaker than the author meant, and it is said out loud here rather than
+                    // discovered as a missing document.
+                    LOG.warn("Schedule ${name}: unique key term(s) {} are null for ${entity} [{}] - the natural key cannot tell rows sharing"
+                            + " that null apart, so they collapse to one ${genToEntity}; key on a property this generate always assigns",
+                            nullKeyTerms, entity.${attachKeyProperty});
+                }
 #end
-            if (!new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Repository().findAll(Criteria.create()
+                if (!new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Repository().findAll(Criteria.create()
 #foreach($u in $genUnique)
 #if($u.kind == "range")
-                    .between("${u.property}", ${u.lower}, ${u.upper})
+                        .between("${u.property}", ${u.lower}, ${u.upper})
 #else
-                    .eq("${u.property}", key${u.property})
+                        .eq("${u.property}", key${u.property})
 #end
 #end
-                    ).isEmpty()) {
-                existed++;
-                continue;
-            }
+                        ).isEmpty()) {
+                    existed++;
+                    continue;
+                }
 #end
-            // ONE TRANSACTION PER SOURCE ROW, and the row is FAIL-SOFT. The header, its children and
-            // their grandchildren were each written in a transaction of their own, so a tick that died
-            // halfway left a childless header behind - and with the `unique:` guard above finding exactly
-            // that header, every later run reported "already existed" and the row stayed incomplete
-            // forever (#7133). A refused row now leaves nothing behind, so the next tick really does
-            // complete what this one could not; and one failing row no longer aborts the loop, which used
-            // to leave every later matching row silently ungenerated and the summary line unlogged.
-            try {
                 org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.run(() -> {
                     gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity target =
                             new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity();
