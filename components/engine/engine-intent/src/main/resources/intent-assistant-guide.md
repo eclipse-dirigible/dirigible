@@ -2935,6 +2935,14 @@ Pick the pair that identifies the RUN, not the source: `[Project, period]`, not 
 alone. A schedule's source is a standing row - the same `Project` matches the query every month - so a
 back-reference-only key would generate the first project-month and never another.
 
+Key on a term that is always ASSIGNED and never NULL. The assignment is what the parser can prove; the
+value is not. A term mapped from a nullable field, or from a `relation.field` off a null foreign key,
+binds null at run time - and a null is not a value the key can tell rows apart by. The lookup itself is
+null-safe (it queries `is null`, so the guard still finds this tick's own earlier output rather than
+matching nothing and duplicating on every re-run), but two source rows that are both null in that term
+are ONE output under the declared key, so the second is skipped as already existing. The tick logs a
+warning naming the null term when it happens; the fix is in the key, not the log.
+
 **`{ run: <period> }` - the period of the run, for a target with no period column.** The
 recurring-template family cannot name a period property, because there is none: a monthly rent bill or
 a quarterly retainer invoice generated from a standing template is a plain document with a `date`. Key

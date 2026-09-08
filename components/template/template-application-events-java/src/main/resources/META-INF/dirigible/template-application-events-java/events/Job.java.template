@@ -77,12 +77,43 @@ public class ${className}Job implements JobHandler {
             // ("one bill per template per month") is still keyed. Best-effort against two concurrent
             // ticks, exactly as the event-driven create-from's guard is - a UNIQUE database key on the
             // same columns is the durable backstop.
+#set($genUniqueValueTerms = 0)
+#foreach($u in $genUnique)
+#if($u.kind != "range")
+#set($genUniqueValueTerms = $genUniqueValueTerms + 1)
+#end
+#end
+#if($genUniqueValueTerms > 0)
+            // Each key value is read ONCE, into a local, because the lookup and the diagnostic below
+            // both need it and a term can be a field off a loaded relation.
+            java.util.List<String> nullKeyTerms = new java.util.ArrayList<>();
+#foreach($u in $genUnique)
+#if($u.kind != "range")
+            Object key${u.property} = ${u.expr};
+            if (key${u.property} == null) {
+                nullKeyTerms.add("${u.property}");
+            }
+#end
+#end
+            if (!nullKeyTerms.isEmpty()) {
+                // A NULL key term (issue #7134). The lookup itself is null-safe - Criteria.eq binds
+                // `is null` for a null value, so the guard still finds this tick's own earlier output
+                // instead of matching nothing and minting a duplicate on every re-run. What it cannot
+                // do is tell two source rows apart by a term that is null in both: under the declared
+                // key they ARE one output, so the second row is counted as already existing. That is
+                // the key being weaker than the author meant, and it is said out loud here rather than
+                // discovered as a missing document.
+                LOG.warn("Schedule ${name}: unique key term(s) {} are null for ${entity} [{}] - the natural key cannot tell rows sharing"
+                        + " that null apart, so they collapse to one ${genToEntity}; key on a property this generate always assigns",
+                        nullKeyTerms, entity.${attachKeyProperty});
+            }
+#end
             if (!new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Repository().findAll(Criteria.create()
 #foreach($u in $genUnique)
 #if($u.kind == "range")
                     .between("${u.property}", ${u.lower}, ${u.upper})
 #else
-                    .eq("${u.property}", ${u.expr})
+                    .eq("${u.property}", key${u.property})
 #end
 #end
                     ).isEmpty()) {

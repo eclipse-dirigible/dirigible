@@ -2155,12 +2155,23 @@ class IntentEngineIT extends IntegrationTest {
         String job = codeOf("gen/events/hr/MonthlyTimesheetsJob.java");
         assertTrue(job.contains(".EmployeeTimesheetRepository().findAll(Criteria.create()"),
                 "the guard should query the TARGET before building anything");
-        assertTrue(job.contains(".eq(\"Employee\", entity.Id)"), "the key term reuses the map assignment's own expression");
+        assertTrue(job.contains("Object keyEmployee = entity.Id;"), "the key term reuses the map assignment's own expression");
+        assertTrue(job.contains(".eq(\"Employee\", keyEmployee)"), "the guard queries by the value read for that term");
         // The sharp one: a month field's `now` is YearMonth.now().toString(), which is what makes "the
         // same month" comparable at all - a re-derived LocalDate.now() would never match the row the
         // first tick wrote.
-        assertTrue(job.contains(".eq(\"Period\", java.time.YearMonth.now().toString())"),
+        assertTrue(job.contains("Object keyPeriod = java.time.YearMonth.now().toString();"),
                 "the key term renders in the target field's own shape, exactly as the assignment does");
+        assertTrue(job.contains(".eq(\"Period\", keyPeriod)"), "the period half of the key is queried by that same value");
+        // Issue #7134: a key term whose value is null cannot tell two source rows apart, and the
+        // lookup used to match NOTHING for it - a duplicate on every re-run, reported as
+        // "already existed [0]". The value is now null-safe in the criteria (Criteria.eq binds
+        // `is null`) and the weak key is named in the log rather than left to be discovered.
+        assertTrue(job.contains("if (keyEmployee == null) {") && job.contains("nullKeyTerms.add(\"Employee\");"),
+                "a null key term is detected per row and named");
+        assertTrue(job.contains("unique key term(s) {} are null"), "the tick says which key term was null");
+        assertTrue(job.indexOf("nullKeyTerms.add(\"Employee\");") < job.indexOf(".eq(\"Employee\", keyEmployee)"),
+                "the diagnostic is emitted before the guard runs, so the reason is in the log either way");
         // Skipping the ROW, not just the header: `continue` is what leaves the children alone.
         assertTrue(job.contains("existed++;"), "a row whose target already exists is counted");
         assertTrue(
@@ -2221,7 +2232,8 @@ class IntentEngineIT extends IntegrationTest {
 
         String job = codeOf("gen/events/purchases/MonthlyRecurringBillsJob.java");
         assertTrue(job.contains(".PurchaseInvoiceRepository().findAll(Criteria.create()"), "the guard should query the TARGET");
-        assertTrue(job.contains(".eq(\"Supplier\", entity.Supplier)"), "the row half of the key reuses the map assignment's expression");
+        assertTrue(job.contains("Object keySupplier = entity.Supplier;") && job.contains(".eq(\"Supplier\", keySupplier)"),
+                "the row half of the key reuses the map assignment's expression");
         // The period term: a RANGE over the date the run writes, built from that assignment's own
         // LocalDate.now() - which is what makes the period queried the period the row is dated into.
         assertTrue(
