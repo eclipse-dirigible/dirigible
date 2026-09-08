@@ -1713,7 +1713,10 @@ module), which the generated Harmonia views render through the shared `customAct
 `page` action becomes a toolbar button, an `entity` action a per-record button that passes the
 selected record's id to the opened page (as `?id=`). External projects may contribute to the same
 point; the app's own declared actions and third-party contributions render through one path. The
-opened page dismisses the dialog by posting `{ type: 'harmonia.form.close' }` to its parent.
+opened page dismisses the dialog by posting `{ type: 'harmonia.form.close' }` to its parent, and the
+shell ANNOUNCES that outcome: the message may carry `status` (`ok` / `error` / `cancelled`) and
+`message`, one that carries nothing gets the default "<label> completed", and a page closed by its
+own Cancel button reports `cancelled` so an abandoned action is dismissed in silence.
 
 ### transitions - guarded on-demand status flips (void / cancel / close / reopen)
 

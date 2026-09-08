@@ -40,7 +40,8 @@
  * Every outcome is ANNOUNCED - a transient toast plus an entry in the notification centre (issue
  * #7073). A refusal shows the reason the server sent (a transition outside its `from:` statuses says
  * so in its 409), a success says what happened, and a page action that finished reports through the
- * same path. Nothing an action does ends in silence.
+ * same path. Nothing an action DOES ends in silence - but an action the user ABANDONED did nothing,
+ * so a page that closes itself as `cancelled` is dismissed silently (issue #7149).
  */
 document.addEventListener('alpine:init', () => {
   Alpine.store('customActions', {
@@ -77,12 +78,20 @@ document.addEventListener('alpine:init', () => {
     init() {
       this.load();
       // An action page (opened in the app-wide dialog) asks its host to close when it is done. That
-      // message means the page FINISHED its work (the user dismissing the dialog closes it directly
-      // instead), so it is also the outcome the toast reports - a page may say so itself with
-      // `status` ('ok' | 'error') and `message`, and one that says nothing still gets the default
+      // message carries the outcome the toast reports - a page may say so itself with `status`
+      // ('ok' | 'error' | 'cancelled') and `message`, and one that says nothing still gets the default
       // "<label> completed" rather than the silence Save as Template used to end in (issue #7073).
+      //
+      // `cancelled` is the page's OWN Cancel/Close button (issue #7149): the user opened the action,
+      // decided not to proceed, and abandoned it - so it is dismissed exactly as the dialog frame's X
+      // is, with no toast and no notification-centre entry. Announcing it reported "<label> completed"
+      // for work that deliberately never happened.
       window.addEventListener('message', (e) => {
         if (!e || !e.data || e.data.type !== 'harmonia.form.close' || !this.dialogOpen) return;
+        if (e.data.status === 'cancelled') {
+          this.closeDialog();
+          return;
+        }
         this.closeDialog({ status: e.data.status, message: e.data.message });
       });
       // Re-read the contributions on navigation so a newly published action shows without a full reload.

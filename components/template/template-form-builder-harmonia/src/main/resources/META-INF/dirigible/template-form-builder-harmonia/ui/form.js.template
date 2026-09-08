@@ -91,7 +91,10 @@ function formController(ctx) {
     return { show: (o) => ctx.notify(((o && o.title) ? o.title + ': ' : '') + ((o && o.description) || '')) };
   }
   function DialogHub() {
-    return { closeWindow: () => ctx.close(), close: () => ctx.close() };
+    // cancelWindow() is the "the user backed out" close: the host announces every outcome an action
+    // page reports, so a plain closeWindow() from a Cancel button read as a completion and toasted
+    // "<label> completed" for work that never happened (issue #7149).
+    return { closeWindow: () => ctx.close(), close: () => ctx.close(), cancelWindow: () => ctx.cancel() };
   }
 ]]#
 ${code}
@@ -122,13 +125,12 @@ document.addEventListener('alpine:init', () => {
           },
         },
         notify(message) { self.message = message; },
-        close() {
-          try {
-            if (window.parent && window.parent !== window) {
-              window.parent.postMessage({ type: 'harmonia.form.close' }, '*');
-            }
-          } catch (e) { /* standalone: nothing to close */ }
-        },
+        // The host ANNOUNCES the outcome a closing action page reports (issue #7073). `close()` says
+        // nothing about it, so the host applies its default "<label> completed"; `close(outcome)` may
+        // say so itself with { status: 'ok' | 'error', message }; and `cancel()` says the work was
+        // ABANDONED, on which the host stays quiet (issue #7149).
+        close(outcome) { self.postClose(outcome); },
+        cancel() { self.postClose({ status: 'cancelled' }); },
       };
       try {
         if (typeof formController === 'function') formController(this._ctx);
@@ -304,6 +306,18 @@ document.addEventListener('alpine:init', () => {
         out[c.model] = this.toInstant(v);
       });
       return out;
+    },
+
+    // Tell the host (the app-wide action dialog, the Inbox's iframe) that this page is done with
+    // itself. The optional outcome rides along on the SAME message, because it is the outcome the host
+    // announces: `status: 'error'` a refusal, `status: 'cancelled'` an abandoned action the host must
+    // NOT announce, nothing at all the host's default completion.
+    postClose(outcome) {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage(Object.assign({ type: 'harmonia.form.close' }, outcome || {}), '*');
+        }
+      } catch (e) { /* standalone: nothing to close */ }
     },
 
     // An HTML datetime-local value ("YYYY-MM-DDTHH:mm", local, no zone) -> a full ISO instant (…Z).

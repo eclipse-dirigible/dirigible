@@ -96,10 +96,11 @@ import org.springframework.stereotype.Component;
  * On success the handler closes its host via both {@code DialogHub.closeWindow()} and
  * {@code window.close()} - the former closes the dialog when the form is opened from an entity
  * view, the latter a standalone (script-opened) window; each is a harmless no-op where it does not
- * apply, including the Inbox's inline iframe (which clears its own pane on its refresh cycle).
- * Forms opened outside a task report the missing {@code taskId} instead of failing silently.
- * Business logic beyond completing the task belongs in a hand-written form override under
- * {@code custom/}.
+ * apply, including the Inbox's inline iframe (which clears its own pane on its refresh cycle). The
+ * non-completing {@code close} action closes through {@code DialogHub.cancelWindow()} instead, so
+ * the host can tell an abandoned action from a finished one and say nothing (issue #7149). Forms
+ * opened outside a task report the missing {@code taskId} instead of failing silently. Business
+ * logic beyond completing the task belongs in a hand-written form override under {@code custom/}.
  *
  * <p>
  * Idempotent: identical input always produces byte-identical output.
@@ -485,9 +486,16 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                 // Close does NOT complete the task: it just closes the dialog/window (same as the X), so
                 // the task stays open in the inbox. closeWindow() covers the dialog/inbox iframe host;
                 // window.close() covers a standalone window. Each is a harmless no-op where it doesn't apply.
+                //
+                // It closes with cancelWindow(), not closeWindow(): a plain close says nothing about the
+                // outcome, and a host that announces every outcome then reports the default
+                // "<label> completed" for an action the user deliberately ABANDONED (issue #7149).
+                // cancelWindow() says so, and the host stays quiet. The closeWindow() fallback keeps a
+                // form generated here running on a host runtime that predates cancelWindow().
                 sb.append("$scope.on")
                   .append(pascalCase(action))
-                  .append("Clicked = function () { __dialogs.closeWindow(); window.close(); };\n");
+                  .append("Clicked = function () { ")
+                  .append("(__dialogs.cancelWindow ? __dialogs.cancelWindow() : __dialogs.closeWindow()); window.close(); };\n");
             } else {
                 sb.append("$scope.on")
                   .append(pascalCase(action))
