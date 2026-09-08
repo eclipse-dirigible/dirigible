@@ -27,12 +27,12 @@
  * the toast, so a fail-soft send that did not leave is a warning rather than a success (issue #7023).
  *
  * It is a global Alpine store so every generated view reads it the same way:
- *   $store.customActions.getActions(perspective, view, 'page')    -> the view's toolbar actions
- *   $store.customActions.getActions(perspective, view, 'entity', record) -> the view's per-record actions,
- *                                                                  minus those the record's status bars
- *   $store.customActions.trigger(action, id)                      -> open the action page in the
- *                                                                    app-wide dialog (an entity action
- *                                                                    passes the record id as ?id=)
+ *   $store.customActions.getActions(view, 'page')            -> the view's toolbar actions
+ *   $store.customActions.getActions(view, 'entity', record)  -> the view's per-record actions, minus
+ *                                                               those the record's status bars
+ *   $store.customActions.trigger(action, id)                 -> open the action page in the app-wide
+ *                                                               dialog (an entity action passes the
+ *                                                               record id as ?id=)
  * The action page opens in the dialog wired in index.html; on its `harmonia.form.close` message (or an
  * explicit close) the store closes it and raises a `harmonia:action-done` window event, so a view that
  * a mutating action changed (duplicate / create-from / aggregate) can refresh without a manual reload.
@@ -181,18 +181,21 @@ document.addEventListener('alpine:init', () => {
     // fails open for the same reason `appliesTo` does: an absent guard, an absent record or a record
     // carrying no value for the guarded property all leave the action visible - hiding a button on a
     // value we do not have is how an action vanishes for no reason the user can see.
+    //
+    // The comparison is `appliesTo`'s, to the character: both guards read the SAME status property of
+    // the SAME record, so a rule that differs between them makes the two disagree on one row. String
+    // comparison is the rule (issue #7150) - the earlier `Number()` conversion made this guard fail
+    // open on any status value that is not numeric, leaving the button live while the server 409s it.
     isAvailable(action, record) {
       const guard = action && action.guard;
-      if (!guard || !guard.property || !record) return true;
-      const raw = record[guard.property];
-      if (raw === null || raw === undefined || raw === '') return true;
-      const current = Number(raw);
-      if (Number.isNaN(current)) return true;
+      if (!guard || !guard.property || !record || typeof record !== 'object') return true;
+      const current = record[guard.property];
+      if (current === undefined || current === null || current === '') return true;
       if (Array.isArray(guard.allowed) && guard.allowed.length) {
-        return guard.allowed.some((s) => Number(s) === current);
+        return guard.allowed.some((s) => String(s) === String(current));
       }
       if (Array.isArray(guard.blocked) && guard.blocked.length) {
-        return !guard.blocked.some((s) => Number(s) === current);
+        return !guard.blocked.some((s) => String(s) === String(current));
       }
       return true;
     },

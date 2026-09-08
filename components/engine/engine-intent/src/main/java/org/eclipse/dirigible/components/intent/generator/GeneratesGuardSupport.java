@@ -15,6 +15,7 @@ import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 
@@ -117,6 +118,12 @@ public final class GeneratesGuardSupport {
      * the owner model is not resolvable here - the button then carries no guard and the generated
      * controller's 409 stays the contract.
      *
+     * <p>
+     * An entity declaring two {@code function: EntityStatus} relations resolves to the FIRST, through
+     * {@link LifecycleStages#statusRelation}: one rule, shared with every other reader of THE status
+     * (the transitions guard, the abort support, the lifecycle stages), so the guard the controller
+     * enforces and the guard the button mirrors can never be read off different columns (issue #7150).
+     *
      * @param g the create-from
      * @param model the model being generated
      * @param context the generation context (may be null outside a Generate)
@@ -144,11 +151,8 @@ public final class GeneratesGuardSupport {
         for (EntityIntent entity : model.getEntities()) {
             if (g.getFrom()
                  .equals(entity.getName())) {
-                for (RelationIntent relation : entity.getRelations()) {
-                    if (relation.isEntityStatus()) {
-                        return IntentNaming.pascalCase(relation.getName());
-                    }
-                }
+                RelationIntent status = LifecycleStages.statusRelation(entity);
+                return status == null ? "" : IntentNaming.pascalCase(status.getName());
             }
         }
         return "";

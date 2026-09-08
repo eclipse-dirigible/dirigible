@@ -363,6 +363,47 @@ class GlueGeneratesTest {
     }
 
     @Test
+    void anAuthoredFromStatusResolvesTheStatusPropertyWithNoCompletionHook() {
+        // The guard-only path: no `sourceStatus:`, so nothing pre-resolved the source's status FK and
+        // GeneratesGuardSupport has to find it itself. It reads THE status the same way every other
+        // reader does - LifecycleStages.statusRelation, the first (and, per the parser, only)
+        // `function: EntityStatus` relation - so the button's guard and the controller's 409 are read
+        // off one column (issue #7150).
+        IntentModel model = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: ProformaStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Proforma
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                    relations:
+                      - { name: Stage, kind: manyToOne, to: ProformaStatus, function: EntityStatus, init: 1 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                generates:
+                  - name: invoice-from-proforma
+                    from: Proforma
+                    to: Invoice
+                    forEntity: Proforma
+                    fromStatus: [2]
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+
+        assertEquals("", g.get("sourceStatusProperty"));
+        assertEquals(true, g.get("hasStatusGuard"));
+        assertEquals("Stage", g.get("guardStatusProperty"));
+        assertEquals("currentStatus == 2", g.get("guardStatusExpr"));
+    }
+
+    @Test
     void aCreateFromWithNoStatusAtAllKeepsNoGuard() {
         Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(YAML))
                                                    .get(0);

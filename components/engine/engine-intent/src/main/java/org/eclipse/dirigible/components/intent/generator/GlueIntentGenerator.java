@@ -1017,11 +1017,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     }
                     sourceStatusProperty = sourceInfo.statusProperty();
                 } else {
-                    for (org.eclipse.dirigible.components.intent.model.RelationIntent relation : source.getRelations()) {
-                        if (relation.isEntityStatus()) {
-                            sourceStatusProperty = IntentNaming.pascalCase(relation.getName());
-                        }
-                    }
+                    sourceStatusProperty = entityStatusProperty(source);
                 }
             }
             // The from-status guard (issue #7068): the click is refused with 409 unless the source
@@ -1492,12 +1488,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                         LoggedValue.of(t.getName()));
                 continue;
             }
-            String statusProperty = "";
-            for (org.eclipse.dirigible.components.intent.model.RelationIntent relation : entity.getRelations()) {
-                if (relation.isEntityStatus()) {
-                    statusProperty = IntentNaming.pascalCase(relation.getName());
-                }
-            }
+            String statusProperty = entityStatusProperty(entity);
             if (statusProperty.isEmpty()) {
                 continue; // parser already reported the missing EntityStatus relation
             }
@@ -1879,11 +1870,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                             LoggedValue.of(p.getName()), LoggedValue.of(p.getEvent()));
                     continue;
                 }
-                for (RelationIntent relation : source.getRelations()) {
-                    if (relation.isEntityStatus()) {
-                        statusProperty = IntentNaming.pascalCase(relation.getName());
-                    }
-                }
+                statusProperty = entityStatusProperty(source);
                 if (statusProperty.isEmpty()) {
                     LOGGER.warn("posts [{}]: source [{}] has no function: EntityStatus relation for a status-triggered post - skipped",
                             LoggedValue.of(p.getName()), LoggedValue.of(p.getForEntity()));
@@ -2273,14 +2260,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return found;
     }
 
-    /** The {@code function: EntityStatus} relation's property of the entity, or {@code ""}. */
+    /**
+     * The {@code function: EntityStatus} relation's property of the entity, or {@code ""}. THE status
+     * of an entity declaring two is the FIRST - the one rule, shared through
+     * {@link LifecycleStages#statusRelation} with every other reader (the create-from guard, the abort
+     * support, the lifecycle stages), so a server-side check and the client guard mirroring it can
+     * never land on different columns (issue #7150).
+     */
     private static String entityStatusProperty(EntityIntent entity) {
-        for (RelationIntent relation : entity.getRelations() == null ? List.<RelationIntent>of() : entity.getRelations()) {
-            if (relation.isEntityStatus()) {
-                return IntentNaming.pascalCase(relation.getName());
-            }
-        }
-        return "";
+        RelationIntent status = LifecycleStages.statusRelation(entity);
+        return status == null ? "" : IntentNaming.pascalCase(status.getName());
     }
 
     /** An authored property name as the generated Java field, or {@code ""} when absent. */
