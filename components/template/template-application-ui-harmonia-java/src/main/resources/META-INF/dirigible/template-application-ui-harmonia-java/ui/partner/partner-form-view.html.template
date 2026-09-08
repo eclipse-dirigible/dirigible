@@ -54,7 +54,7 @@
 ## other control does.
 #if($property.widgetType != "CHECKBOX")
         <label x-h-label>
-          <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end')"></span>#if($property.isRequiredProperty == "true") <span class="text-destructive">*</span>#end
+          <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end
         </label>
 #end
 #if($property.widgetType == "DROPDOWN")
@@ -92,7 +92,7 @@
              absorbs the stretch, and the layout is then the power form's. -->
         <div class="hbox items-center gap-3">
           <span x-h-checkbox><input type="checkbox" id="f_${property.name}" x-model="form.${property.name}" /></span>
-          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end')"></span>#if($property.isRequiredProperty == "true") <span class="text-destructive">*</span>#end</label>
+          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
         </div>
 #elseif($property.widgetType == "DATE")
         <!-- Harmonia date picker: model is YYYY-MM-DD (same as the native date input it replaces),
