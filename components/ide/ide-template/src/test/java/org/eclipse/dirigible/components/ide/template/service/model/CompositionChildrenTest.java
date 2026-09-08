@@ -77,6 +77,42 @@ class CompositionChildrenTest {
         assertThat(projection.get("compositionChildren")).isNull();
     }
 
+    /**
+     * The intent generator only ever emits the flag as {@code "true"}, so a written-out {@code "false"}
+     * can only come from a hand-authored or tool-produced {@code .edm} - and it means the cascade, not
+     * the refusal a presence test would read it as (dirigible #7144).
+     */
+    @Test
+    void aWrittenOutFalseIsTheCascade() {
+        Map<String, Object> master = entity("Order", "PRIMARY", "sales");
+        Map<String, Object> item = child("OrderItem", "sales", "Order", "Order", false);
+        Map<String, Object> line = child("OrderLine", "sales", "Order", "Order", false);
+        propertyOf(item).put("relationshipMasterDeleteRefused", "false");
+        propertyOf(line).put("relationshipMasterDeleteRefused", "FALSE");
+        List<Map<String, Object>> entities = new ArrayList<>(List.of(master, item, line));
+
+        CompositionChildren.annotate(entities);
+
+        List<Object> owned = ModelValues.asList(master.get("compositionChildren"));
+        assertThat(asMap(owned.get(0))).containsEntry("refuse", "false");
+        assertThat(asMap(owned.get(1))).as("the attribute parses as a boolean, in any case")
+                                       .containsEntry("refuse", "false");
+    }
+
+    /** The refusal holds however the author cased it. */
+    @Test
+    void aWrittenOutTrueIsTheRefusal() {
+        Map<String, Object> master = entity("Order", "PRIMARY", "sales");
+        Map<String, Object> item = child("OrderItem", "sales", "Order", "Order", false);
+        propertyOf(item).put("relationshipMasterDeleteRefused", "True");
+        List<Map<String, Object>> entities = new ArrayList<>(List.of(master, item));
+
+        CompositionChildren.annotate(entities);
+
+        assertThat(asMap(ModelValues.asList(master.get("compositionChildren"))
+                                    .get(0))).containsEntry("refuse", "true");
+    }
+
     /** An entity with no composition parent is not anybody's child. */
     @Test
     void anEntityWithoutAMasterIsNotIndexed() {
@@ -115,6 +151,11 @@ class CompositionChildrenTest {
     }
 
     @SuppressWarnings("unchecked")
+    private static Map<String, Object> propertyOf(Map<String, Object> child) {
+        return asMap(ModelValues.asList(child.get("properties"))
+                                .get(0));
+    }
+
     private static Map<String, Object> asMap(Object value) {
         return (Map<String, Object>) value;
     }

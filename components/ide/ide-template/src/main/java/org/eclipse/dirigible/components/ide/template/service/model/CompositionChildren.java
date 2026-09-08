@@ -17,9 +17,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMaps;
+import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.bool;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.str;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.strOr;
-import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.truthy;
 
 /**
  * The reverse index of the composition edges: which children each MASTER owns, so the master's
@@ -76,12 +76,17 @@ final class CompositionChildren {
      * author's decision ({@code whenMasterDeleted: refuse}) that the master's delete is rejected while
      * children exist, rather than cascading into them.
      *
+     * <p>
+     * The attribute is read as a boolean, not for mere presence: the intent generator only ever emits
+     * it as {@code "true"}, but a hand-authored or tool-produced {@code .edm} may spell out
+     * {@code "false"}, which is the cascade the absent attribute means.
+     *
      * @param child the composition child
      * @return true when the master's delete must be refused
      */
     private static boolean refusesMasterDelete(Map<String, Object> child) {
         for (Map<String, Object> property : asMaps(child.get("properties"))) {
-            if ("COMPOSITION".equals(str(property, "relationshipType")) && truthy(property, "relationshipMasterDeleteRefused")) {
+            if ("COMPOSITION".equals(str(property, "relationshipType")) && bool(property, "relationshipMasterDeleteRefused")) {
                 return true;
             }
         }
