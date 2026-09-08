@@ -3024,6 +3024,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "an existing post must be compared cell by cell against what the source derives now");
         assertTrue(basePosting.contains("targetRepository.update(target) : targetRepository.save(target)"),
                 "a diverging post must be rewritten in place, never doubled");
+        // #7132: and every write of that rewrite is ONE transaction. A refused line (a validation, a
+        // constraint) must leave the previous post standing - a header with a partial line set has no
+        // second event to self-heal from, so it is worse than the stale but balanced post it replaced.
+        // Asserted by POSITION: the delete of the stale rows and the header write must both sit inside
+        // the block, which a mere "the file mentions UnitOfWork" check would not tell apart.
+        int unitOfWork = basePosting.indexOf("UnitOfWork.run(() -> {");
+        assertTrue(unitOfWork > 0, "the posting's write phase must run in a UnitOfWork");
+        assertTrue(basePosting.indexOf("itemsRepository.delete(stale)") > unitOfWork,
+                "the stale rows a rewrite replaces must be deleted inside the unit of work, not before it");
+        assertTrue(basePosting.indexOf("targetRepository.update(target)") > unitOfWork,
+                "the header write must run inside the unit of work");
+        assertTrue(basePosting.indexOf("itemsRepository.save(item)") > unitOfWork,
+                "the derived lines must be written inside the unit of work");
         assertTrue(basePosting.contains("-Doc-transitioned"), "a status-triggered posting must bind the -transitioned topic");
         // source-FK copy (#6533): a to-one relation item cell copies the source FK verbatim onto the
         // line - no Calc, no negation, and it must carry through UNCHANGED onto the reversal line.

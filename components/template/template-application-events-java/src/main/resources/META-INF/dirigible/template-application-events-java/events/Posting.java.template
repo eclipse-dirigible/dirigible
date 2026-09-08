@@ -30,7 +30,9 @@ import org.eclipse.dirigible.sdk.utils.Json;
  *   genuinely failed post is undone by a compensation action, not this handler;
  * - a missing rule row or a null referenced rule column SKIPS the posting (the document stays on the
  *   unposted worklist - final-status documents with no back-referencing ${targetEntity});
- * - all writes go through the generated repositories (numbering, status init, validations, checks);
+ * - all writes go through the generated repositories (numbering, status init, validations, checks),
+ *   and the whole post - the stale rows a rewrite replaces, the header, every derived line - is ONE
+ *   transaction, so a refused line leaves the previous post standing rather than a partial one;
  * - REVERSAL mode (intent reverses:): the handler locates the ORIGINAL document (back-reference set,
  *   storno link empty), skips fail-soft when none exists, and creates the negated copy (same sides,
  *   negative amounts - red storno) with the storno link stamped; its idempotency guard counts only
@@ -92,9 +94,9 @@ public class ${className}Posting implements MessageHandler {
         }
 #end
 #end
-        // Idempotent + resumable + amendable posting (cloud-native: no cross-step transaction). The
-        // back-reference identifies an existing post; comparing it with the freshly derived content is
-        // what tells the three cases apart: identical -> a redelivery, nothing to do; different ->
+        // Idempotent + resumable + amendable posting. The back-reference identifies an existing post;
+        // comparing it with the freshly derived content is what tells the three cases apart:
+        // identical -> a redelivery, nothing to do; different ->
         // either a HALF-post to complete or an AMENDED source to rewrite the post from (#7071).
         // Concurrent-redelivery de-duplication is best-effort until a UNIQUE key on the back-reference
         // lands with schema constraint emission; a genuinely failed post is reversed by a compensation
@@ -160,10 +162,12 @@ public class ${className}Posting implements MessageHandler {
 #end
         gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity target;
         boolean refresh = !existingTargets.isEmpty();
+        // The rows the post carries today: the ones a rewrite replaces, empty for a fresh post. Both
+        // branches assign it exactly once so the write block below can close over it.
+        java.util.List<gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity> currentItems;
         if (refresh) {
             target = existingTargets.get(0);
-            java.util.List<gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity> currentItems =
-                    itemsRepository.findAll(Criteria.create().eq("${itemsFk}", target.${targetPk}));
+            currentItems = itemsRepository.findAll(Criteria.create().eq("${itemsFk}", target.${targetPk}));
             boolean unchanged = currentItems.size() == derivedItems.size();
 #foreach($a in $headerAssignments)
             unchanged = unchanged && same(target.${a.targetProp}, ${a.expr});
@@ -197,28 +201,39 @@ public class ${className}Posting implements MessageHandler {
                 return;
             }
 #end
-            // Either a HALF-post (an item write failed after the target was saved) or an AMENDMENT
-            // (the source was re-issued with different content): both converge on rewriting the post
-            // to what the source derives now.
-            for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity stale : currentItems) {
-                itemsRepository.delete(stale);
-            }
         } else {
             target = new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity();
             target.${backRefProperty} = source.${sourceKeyField};
 #if($stornoProperty != "")
             target.${stornoProperty} = original.${targetPk};
 #end
+            currentItems = java.util.List.of();
         }
 #foreach($a in $headerAssignments)
         target.${a.targetProp} = ${a.expr};
 #end
-        gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity saved =
-                refresh ? targetRepository.update(target) : targetRepository.save(target);
-        for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item : derivedItems) {
-            item.${itemsFk} = saved.${targetPk};
-            itemsRepository.save(item);
-        }
+        // ONE transaction for the whole post: the stale rows a rewrite replaces, the header and every
+        // derived line either all become durable or none of them does. Written as separate
+        // transactions, a line the item repository refuses (a validation, a constraint) left the
+        // journal entry with a header and a PARTIAL set of lines - and unlike the half-post case there
+        // is no second event to self-heal from, so the ledger ended up worse than the stale but
+        // balanced state the rewrite set out to fix (dirigible #7132). A rewrite therefore deletes the
+        // rows it replaces inside the same unit: either the post says what the source derives now, or
+        // it still says what it said before.
+        org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.run(() -> {
+            // Either a HALF-post (an item write failed after the target was saved) or an AMENDMENT
+            // (the source was re-issued with different content): both converge on rewriting the post
+            // to what the source derives now. Empty for a fresh post, so no branch is needed.
+            for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity stale : currentItems) {
+                itemsRepository.delete(stale);
+            }
+            gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity saved =
+                    refresh ? targetRepository.update(target) : targetRepository.save(target);
+            for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item : derivedItems) {
+                item.${itemsFk} = saved.${targetPk};
+                itemsRepository.save(item);
+            }
+        });
     }
 
     /**

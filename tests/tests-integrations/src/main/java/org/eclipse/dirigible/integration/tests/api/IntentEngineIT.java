@@ -3126,10 +3126,11 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(glue.contains("\"postings\""), "the .glue should carry the postings collection");
         assertTrue(glue.contains("OrderLedger"), "the posting className should be carried in the glue");
 
-        // Events template: the generated handler is idempotent + resumable + amendable (the
-        // cloud-native posting semantics - no cross-step transaction). It derives the full content
-        // first and compares it with the existing post: identical is a no-op, different is either a
-        // half-post to complete or an amended source to rewrite from (#7071).
+        // Events template: the generated handler is idempotent + resumable + amendable. It derives the
+        // full content first and compares it with the existing post: identical is a no-op, different is
+        // either a half-post to complete or an amended source to rewrite from (#7071). The writes that
+        // rewrite are ONE transaction (#7132) - across STEPS the model stays non-transactional, a bad
+        // post being unwound by a correcting entry.
         generateFromModel("template-application-events-java/template/template.js", "postingtest.glue");
         String posting = codeOf("gen/events/postingtest/OrderLedgerPosting.java");
         assertTrue(posting.contains("implements MessageHandler"), "the posting is a self-describing message handler");
@@ -3141,6 +3142,14 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(posting.contains("itemsRepository.delete(stale)"), "a stale or partial item set is cleared before the rewrite");
         assertTrue(posting.contains("targetRepository.update(target) : targetRepository.save(target)"),
                 "an existing post is rewritten in place, a fresh one created");
+        // #7132: and all of it in one transaction - asserted by POSITION, since a header written outside
+        // the block with the lines inside it would still "mention UnitOfWork".
+        int unitOfWork = posting.indexOf("UnitOfWork.run(() -> {");
+        assertTrue(unitOfWork > 0, "the write phase runs in a unit of work");
+        assertTrue(posting.indexOf("itemsRepository.delete(stale)") > unitOfWork,
+                "the stale rows are deleted inside the unit of work, not before it");
+        assertTrue(posting.indexOf("targetRepository.update(target)") > unitOfWork, "the header is written inside the unit of work");
+        assertTrue(posting.indexOf("itemsRepository.save(item)") > unitOfWork, "the derived lines are written inside the unit of work");
         // The Ledger carries no status lifecycle, so there is nothing to act on and nothing to guard.
         assertFalse(posting.contains("was NOT rewritten"), "a target with no status lifecycle is always rewritable");
     }
