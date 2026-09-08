@@ -20,6 +20,17 @@ import org.eclipse.dirigible.sdk.http.Response;
  * declared fields, and saves it through the target's generated repository - so the target's create-time
  * logic (document numbering, status init, calculated fields) fires. Any composition items are cloned and
  * re-pointed at the new master.
+#if($itemWhere != "")
+ *
+ * Source-row rule (intent `items: where:` - issue #7091): only the source rows the rule qualifies become
+ * lines, and a source whose rows all fail it refuses the run rather than committing a header with no
+#if($itemRefuse != "")
+ * lines. An unqualified row refuses it too (`refuse:`), naming the rows: leaving a rejected line out of
+ * the document silently is as wrong as billing it silently, and this document says which it means.
+#{else}
+ * lines. An unqualified row is simply left out of the document (declare `refuse:` for the other reading).
+#end
+#end
  *
  * Generated from the intent generates block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories (validations / events / numbering).
@@ -211,10 +222,55 @@ public class ${className}Generate {
             gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved =
                     new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().save(target);
     #if($hasItems)
+    #if($itemWhere != "")
+            // Source-row rule (intent `items: where:` - issue #7091): only the source rows the rule
+            // qualifies become lines. Pushed into the very query that selects them by their master
+            // foreign key, so an unqualified row is never loaded. Without a rule every row was cloned,
+            // which billed a draft or rejected line at the same footing as an approved one - and, since
+            // the target refuses a line missing a required value, let ONE empty row stop the whole month
+            // from being invoiced with nothing the intent could say about it.
+            java.util.List<gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity> qualifying =
+                    new gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Repository()
+                            .findAll(Criteria.create()
+                                             .eq("${srcFkProperty}", sourceId)${itemWhere});
+    #if($itemRefuse != "")
+            // `refuse:` - an unqualified row stops the whole create-from instead of being left out.
+            // Dropping a rejected line silently and billing it silently are both wrong, for different
+            // months; which one this document means is the author's call, and this is it. The keys of
+            // the offending rows travel with the message: which of them to go and fix is the whole
+            // question the caller has.
+            java.util.Set<Object> qualifyingKeys = new java.util.HashSet<>();
+            for (gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity row : qualifying) {
+                qualifyingKeys.add(row.${fromItemPk});
+            }
+            java.util.List<Object> unqualified = new java.util.ArrayList<>();
+            for (gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity row :
+                    new gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Repository()
+                            .findAll(Criteria.create()
+                                             .eq("${srcFkProperty}", sourceId))) {
+                if (!qualifyingKeys.contains(row.${fromItemPk})) {
+                    unqualified.add(row.${fromItemPk});
+                }
+            }
+            if (!unqualified.isEmpty()) {
+                throw new org.eclipse.dirigible.sdk.db.ValidationException(
+                        "${itemRefuse} (${fromItemEntity} " + unqualified + ")");
+            }
+    #end
+            if (qualifying.isEmpty()) {
+                // Every row failed the rule, so the ${toEntity} would carry no lines at all. A document
+                // of no lines is not the document that was asked for, and it is the harder of the two
+                // failures to notice - it exists, it counts as the period's billing, and it is empty.
+                throw new org.eclipse.dirigible.sdk.db.ValidationException(
+                        "no ${fromItemEntity} row of the ${fromEntity} qualifies for ${name}, so the ${toEntity} would have no lines");
+            }
+            for (gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity srcItem : qualifying) {
+    #else
             for (gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity srcItem :
                     new gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Repository()
                             .findAll(Criteria.create()
                                              .eq("${srcFkProperty}", sourceId))) {
+    #end
                 gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity item =
                         new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity();
     #foreach($a in $itemFieldAssignments)

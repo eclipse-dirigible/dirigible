@@ -2192,18 +2192,94 @@ class IntentEngineIT extends IntegrationTest {
         String job = codeOf("gen/events/hr/MonthlyTimesheetsJob.java");
         assertTrue(job.contains(".EmployeeTimesheetRepository().findAll(Criteria.create()"),
                 "the guard should query the TARGET before building anything");
-        assertTrue(job.contains(".eq(\"Employee\", entity.Id)"), "the key term reuses the map assignment's own expression");
+        assertTrue(job.contains("Object keyEmployee = entity.Id;"), "the key term reuses the map assignment's own expression");
+        assertTrue(job.contains(".eq(\"Employee\", keyEmployee)"), "the guard queries by the value read for that term");
         // The sharp one: a month field's `now` is YearMonth.now().toString(), which is what makes "the
         // same month" comparable at all - a re-derived LocalDate.now() would never match the row the
         // first tick wrote.
-        assertTrue(job.contains(".eq(\"Period\", java.time.YearMonth.now().toString())"),
+        assertTrue(job.contains("Object keyPeriod = java.time.YearMonth.now().toString();"),
                 "the key term renders in the target field's own shape, exactly as the assignment does");
+        assertTrue(job.contains(".eq(\"Period\", keyPeriod)"), "the period half of the key is queried by that same value");
+        // Issue #7134: a key term whose value is null cannot tell two source rows apart, and the
+        // lookup used to match NOTHING for it - a duplicate on every re-run, reported as
+        // "already existed [0]". The value is now null-safe in the criteria (Criteria.eq binds
+        // `is null`) and the weak key is named in the log rather than left to be discovered.
+        assertTrue(job.contains("if (keyEmployee == null) {") && job.contains("nullKeyTerms.add(\"Employee\");"),
+                "a null key term is detected per row and named");
+        assertTrue(job.contains("unique key term(s) {} are null"), "the tick says which key term was null");
+        assertTrue(job.indexOf("nullKeyTerms.add(\"Employee\");") < job.indexOf(".eq(\"Employee\", keyEmployee)"),
+                "the diagnostic is emitted before the guard runs, so the reason is in the log either way");
         // Skipping the ROW, not just the header: `continue` is what leaves the children alone.
         assertTrue(job.contains("existed++;"), "a row whose target already exists is counted");
         assertTrue(
                 job.indexOf(".EmployeeTimesheetRepository().findAll(Criteria.create()") < job.indexOf(".EmployeeTimesheetEntity target ="),
                 "the guard must run BEFORE the target is built");
         assertTrue(job.contains("already existed [{}]"), "the tick reports what a re-run did nothing about");
+    }
+
+    @Test
+    void a_scheduled_generation_is_one_transaction_per_source_row_and_the_row_is_fail_soft() {
+        // Issue #7133: the header, its children and their grandchildren were written in a transaction
+        // each, so a tick that died halfway left a childless header behind - and once #7070's `unique:`
+        // guard found that header, every later run reported "already existed" and the project-month
+        // stayed childless forever. One failing row also aborted the whole tick, so every later matching
+        // row was silently never generated and the summary line never logged.
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: status, type: string }
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: month }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee }
+                  - name: EmployeeDayAllocation
+                    fields:
+                      - { name: id,  type: integer, primaryKey: true, generated: true }
+                      - { name: day, type: date }
+                    relations:
+                      - { name: EmployeeTimesheet, kind: manyToOne, to: EmployeeTimesheet }
+                schedules:
+                  - name: monthly-timesheets
+                    cron: "0 0 1 1 * ?"
+                    entity: Employee
+                    generate:
+                      to: EmployeeTimesheet
+                      unique: [Employee, Period]
+                      map:
+                        Employee: id
+                      defaults:
+                        Period: now
+                      children:
+                        - to: EmployeeDayAllocation
+                          parent: EmployeeTimesheet
+                          forEach: { days: workingDays }
+                          dayField: day
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "hr.glue");
+
+        String job = codeOf("gen/events/hr/MonthlyTimesheetsJob.java");
+        assertTrue(job.contains("UnitOfWork.run(() -> {"), "the whole generation of one source row is one transaction");
+        // The ordering is the point: the header must be built INSIDE the unit, or a refused child still
+        // leaves it behind - which is exactly the state the `unique:` guard then reads as "already done".
+        assertTrue(job.indexOf("UnitOfWork.run(() -> {") < job.indexOf(".EmployeeTimesheetEntity target ="),
+                "the header is created inside the unit, not before it");
+        assertTrue(job.indexOf(".EmployeeDayAllocationRepository().save(") > job.indexOf("UnitOfWork.run(() -> {"),
+                "the children are written inside the same unit as their header");
+        // Per-row fail-soft, like the notify branch: the loop goes on, and the row is counted and named.
+        assertTrue(job.contains("} catch (Exception ex) {"), "a refused row must not abort the tick");
+        assertTrue(job.contains("failed++;"), "a refused row is counted");
+        assertTrue(job.contains("could not generate EmployeeTimesheet from Employee [{}]"), "the refused row is logged with its own key");
+        assertTrue(job.contains("failed [{}]"), "the tick's summary reports the rows it could not generate");
     }
 
     @Test
@@ -2258,7 +2334,8 @@ class IntentEngineIT extends IntegrationTest {
 
         String job = codeOf("gen/events/purchases/MonthlyRecurringBillsJob.java");
         assertTrue(job.contains(".PurchaseInvoiceRepository().findAll(Criteria.create()"), "the guard should query the TARGET");
-        assertTrue(job.contains(".eq(\"Supplier\", entity.Supplier)"), "the row half of the key reuses the map assignment's expression");
+        assertTrue(job.contains("Object keySupplier = entity.Supplier;") && job.contains(".eq(\"Supplier\", keySupplier)"),
+                "the row half of the key reuses the map assignment's expression");
         // The period term: a RANGE over the date the run writes, built from that assignment's own
         // LocalDate.now() - which is what makes the period queried the period the row is dated into.
         assertTrue(
@@ -3163,10 +3240,11 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(glue.contains("\"postings\""), "the .glue should carry the postings collection");
         assertTrue(glue.contains("OrderLedger"), "the posting className should be carried in the glue");
 
-        // Events template: the generated handler is idempotent + resumable + amendable (the
-        // cloud-native posting semantics - no cross-step transaction). It derives the full content
-        // first and compares it with the existing post: identical is a no-op, different is either a
-        // half-post to complete or an amended source to rewrite from (#7071).
+        // Events template: the generated handler is idempotent + resumable + amendable. It derives the
+        // full content first and compares it with the existing post: identical is a no-op, different is
+        // either a half-post to complete or an amended source to rewrite from (#7071). The writes that
+        // rewrite are ONE transaction (#7132) - across STEPS the model stays non-transactional, a bad
+        // post being unwound by a correcting entry.
         generateFromModel("template-application-events-java/template/template.js", "postingtest.glue");
         String posting = codeOf("gen/events/postingtest/OrderLedgerPosting.java");
         assertTrue(posting.contains("implements MessageHandler"), "the posting is a self-describing message handler");
@@ -3178,6 +3256,14 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(posting.contains("itemsRepository.delete(stale)"), "a stale or partial item set is cleared before the rewrite");
         assertTrue(posting.contains("targetRepository.update(target) : targetRepository.save(target)"),
                 "an existing post is rewritten in place, a fresh one created");
+        // #7132: and all of it in one transaction - asserted by POSITION, since a header written outside
+        // the block with the lines inside it would still "mention UnitOfWork".
+        int unitOfWork = posting.indexOf("UnitOfWork.run(() -> {");
+        assertTrue(unitOfWork > 0, "the write phase runs in a unit of work");
+        assertTrue(posting.indexOf("itemsRepository.delete(stale)") > unitOfWork,
+                "the stale rows are deleted inside the unit of work, not before it");
+        assertTrue(posting.indexOf("targetRepository.update(target)") > unitOfWork, "the header is written inside the unit of work");
+        assertTrue(posting.indexOf("itemsRepository.save(item)") > unitOfWork, "the derived lines are written inside the unit of work");
         // The Ledger carries no status lifecycle, so there is nothing to act on and nothing to guard.
         assertFalse(posting.contains("was NOT rewritten"), "a target with no status lifecycle is always rewritable");
     }

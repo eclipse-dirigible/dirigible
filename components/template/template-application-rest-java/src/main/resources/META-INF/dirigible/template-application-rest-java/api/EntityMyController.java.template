@@ -1,5 +1,28 @@
 package gen.${javaGenFolderName}.api.${javaPerspectiveName};
 
+## A duplicate is the same refusal whichever door the caller used: a collision with a business key is
+## answered here with the 409 naming the field that the power surface answers with, rather than
+## letting the driver's text out as a 500 (#7137). Either kind of key earns the mapping: a composite
+## `unique:` the model NAMED, or a single-column `unique: true`, which is a column-level UNIQUE the
+## SCHEMA leaves for the database to name - the name every dialect generates is built from the
+## column, which is the handle the mapping keys on.
+#foreach($property in $properties)
+#if($property.dataUnique)
+#set($hasUniqueColumns = "true")
+#end
+#end
+## A see-only surface refuses every write with 403 before it reaches a statement, so there is no
+## collision to map there.
+#set($hasDuplicateKeys = false)
+#if(!$personalReadOnly)
+#if($uniqueConstraints && !$uniqueConstraints.isEmpty())
+#set($hasDuplicateKeys = true)
+#end
+#if($hasUniqueColumns)
+#set($hasDuplicateKeys = true)
+#end
+#end
+
 import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository;
 
@@ -20,6 +43,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+#if($hasDuplicateKeys)
+import java.util.Locale;
+#end
 import java.util.Map;
 
 ## Role-scoped properties (the modeler's per-property read/write role, or the intent's `visibleTo:`
@@ -191,7 +217,15 @@ public class ${name}MyController {
         // server has not finished deciding. Before the save, so a refused create never reaches the
         // insert - and never allocates a document number.
         validate(entity);
+#if($hasDuplicateKeys)
+        try {
+            return scrub(repository.save(entity));
+        } catch (RuntimeException e) {
+            throw duplicateOrRethrow(e);
+        }
+#else
         return scrub(repository.save(entity));
+#end
     }
 
     @Put("/{id}")
@@ -228,7 +262,15 @@ public class ${name}MyController {
 #end
 #end
         validate(entity);
+#if($hasDuplicateKeys)
+        try {
+            return scrub(repository.update(entity));
+        } catch (RuntimeException e) {
+            throw duplicateOrRethrow(e);
+        }
+#else
         return scrub(repository.update(entity));
+#end
     }
 
     @Delete("/{id}")
@@ -240,6 +282,9 @@ public class ${name}MyController {
 #end
 #if($masterLock)
         requireMasterMutable(existing.${masterLock.fkProperty});
+#end
+#if($processDeleteGuards)
+        requireNoRunningProcess(existing);
 #end
         try {
             repository.deleteById(id);
@@ -432,6 +477,25 @@ public class ${name}MyController {
     }
 
 #end
+#if($processDeleteGuards)
+
+    // Delete guard (intent process `whenDeleted: refuse`): while a flow this record started is still
+    // running, the record cannot be deleted - complete or abort the flow first, as on the power surface.
+    private void requireNoRunningProcess(${name}Entity existing) {
+        for (String guard : "${processDeleteGuards}".split(",")) {
+            String process = guard.substring(0, guard.indexOf(':'));
+            String label = guard.substring(guard.indexOf(':') + 1);
+            String instance = org.eclipse.dirigible.sdk.bpm.ProcessStamps.idFor(existing.ProcessIds, process);
+            if (instance == null && (existing.ProcessIds == null || existing.ProcessIds.isBlank())) {
+                instance = existing.ProcessId;
+            }
+            if (instance != null && !instance.isBlank() && org.eclipse.dirigible.sdk.bpm.Process.isRunning(instance)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "This ${name} is still in its " + label + " flow - complete or cancel it before deleting");
+            }
+        }
+    }
+#end
 #if($immutableStatusProperty && !$immutableAlways)
 
     private static boolean isStatusMutable(${name}Entity existing) {
@@ -613,6 +677,85 @@ public class ${name}MyController {
     }
 #end
 
+#if($hasDuplicateKeys)
+    /**
+     * The business keys of ${name}, keyed by the name the database puts into the violation it raises -
+     * a composite key by the constraint name the model emitted (so this map and the schema cannot
+     * drift), a single-column {@code unique} by its column name, which is what every dialect builds
+     * its own generated constraint name out of ("VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_key").
+     * Iterated longest key first, so a column whose name is a prefix of a longer one still answers
+     * with its own message rather than the shorter key's. The power surface's map verbatim - the same
+     * collision has to read the same whichever surface the caller wrote through.
+     */
+    private static final Map<String, String> DUPLICATE_MESSAGES = duplicateMessages();
+
+    private static Map<String, String> duplicateMessages() {
+        Map<String, String> messages = new java.util.TreeMap<>(java.util.Comparator.comparingInt(String::length)
+                                                                                   .reversed()
+                                                                                   .thenComparing(java.util.Comparator.naturalOrder()));
+#if($uniqueConstraints)
+#foreach($uniqueConstraint in $uniqueConstraints)
+        messages.put("${uniqueConstraint.name}".toUpperCase(Locale.ROOT), "${uniqueConstraint.message}");
+#end
+#end
+#foreach($property in $properties)
+#if($property.dataUnique)
+        messages.put("${property.dataName}".toUpperCase(Locale.ROOT), "A ${name} with this '${property.name}' already exists");
+#end
+#end
+        return java.util.Collections.unmodifiableMap(messages);
+    }
+
+    /**
+     * A write that collided with one of those keys is a conflict the caller can act on - answered with
+     * the message that names the field - and anything else is rethrown untouched. Matching is on the
+     * key name inside the driver's message, which is the only handle the database gives back; every
+     * dialect names the violated constraint there.
+     */
+    private static RuntimeException duplicateOrRethrow(RuntimeException e) {
+        if (isConstraintViolation(e) && isDuplicateViolation(e)) {
+            for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+                String message = cause.getMessage();
+                if (message == null) {
+                    continue;
+                }
+                String upper = message.toUpperCase(Locale.ROOT);
+                for (Map.Entry<String, String> constraint : DUPLICATE_MESSAGES.entrySet()) {
+                    if (upper.contains(constraint.getKey())) {
+                        return new ResponseStatusException(HttpStatus.CONFLICT, constraint.getValue());
+                    }
+                }
+            }
+        }
+        return e;
+    }
+
+    /**
+     * Whether the violation is specifically about UNIQUENESS. A column name matches the text of a
+     * foreign-key violation too ("Key (COMPANY_ID)=(5) is not present in table ..."), which is a
+     * different conflict and must not be answered as a duplicate. Every supported dialect either
+     * reports SQLSTATE 23505 or says so in words - PostgreSQL "duplicate key value violates unique
+     * constraint", H2 "Unique index or primary key violation", MySQL "Duplicate entry", Oracle
+     * "unique constraint (...) violated".
+     */
+    private static boolean isDuplicateViolation(Throwable e) {
+        for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+            if (cause instanceof java.sql.SQLException sqlException && "23505".equals(sqlException.getSQLState())) {
+                return true;
+            }
+            String message = cause.getMessage();
+            if (message == null) {
+                continue;
+            }
+            String upper = message.toUpperCase(Locale.ROOT);
+            if (upper.contains("DUPLICATE") || upper.contains("UNIQUE")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+#end
     /** Whether a persistence failure is (caused by) a database constraint violation. */
     private static boolean isConstraintViolation(Throwable e) {
         for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {

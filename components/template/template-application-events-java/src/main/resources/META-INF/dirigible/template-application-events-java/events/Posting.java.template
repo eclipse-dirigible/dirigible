@@ -30,7 +30,9 @@ import org.eclipse.dirigible.sdk.utils.Json;
  *   genuinely failed post is undone by a compensation action, not this handler;
  * - a missing rule row or a null referenced rule column SKIPS the posting (the document stays on the
  *   unposted worklist - final-status documents with no back-referencing ${targetEntity});
- * - all writes go through the generated repositories (numbering, status init, validations, checks);
+ * - all writes go through the generated repositories (numbering, status init, validations, checks),
+ *   and the whole post - the stale rows a rewrite replaces, the header, every derived line - is ONE
+ *   transaction, so a refused line leaves the previous post standing rather than a partial one;
  * - REVERSAL mode (intent reverses:): the handler locates the ORIGINAL document (back-reference set,
  *   storno link empty), skips fail-soft when none exists, and creates the negated copy (same sides,
  *   negative amounts - red storno) with the storno link stamped; its idempotency guard counts only
@@ -92,9 +94,9 @@ public class ${className}Posting implements MessageHandler {
         }
 #end
 #end
-        // Idempotent + resumable + amendable posting (cloud-native: no cross-step transaction). The
-        // back-reference identifies an existing post; comparing it with the freshly derived content is
-        // what tells the three cases apart: identical -> a redelivery, nothing to do; different ->
+        // Idempotent + resumable + amendable posting. The back-reference identifies an existing post;
+        // comparing it with the freshly derived content is what tells the three cases apart:
+        // identical -> a redelivery, nothing to do; different ->
         // either a HALF-post to complete or an AMENDED source to rewrite the post from (#7071).
         // Concurrent-redelivery de-duplication is best-effort until a UNIQUE key on the back-reference
         // lands with schema constraint emission; a genuinely failed post is reversed by a compensation
@@ -123,6 +125,14 @@ public class ${className}Posting implements MessageHandler {
 #if($row.guard != "")
         }
 #end
+#end
+#if($headerAssignments.size() > 0)
+        // The header values, evaluated ONCE. The comparison below and the assignment further down must
+        // see the SAME value: an expression read twice - anything reading the clock - would differ
+        // between the two reads and make every redelivery look like an amendment (#7131).
+#end
+#foreach($a in $headerAssignments)
+        var ${a.local} = ${a.expr};
 #end
         java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> relatedTargets =
                 targetRepository.findAll(Criteria.create().eq("${backRefProperty}", source.${sourceKeyField}));
@@ -160,13 +170,21 @@ public class ${className}Posting implements MessageHandler {
 #end
         gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity target;
         boolean refresh = !existingTargets.isEmpty();
+        // The rows the post carries today: the ones a rewrite replaces, empty for a fresh post. Both
+        // branches assign it exactly once so the write block below can close over it.
+        java.util.List<gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity> currentItems;
         if (refresh) {
             target = existingTargets.get(0);
-            java.util.List<gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity> currentItems =
-                    itemsRepository.findAll(Criteria.create().eq("${itemsFk}", target.${targetPk}));
+            currentItems = itemsRepository.findAll(Criteria.create().eq("${itemsFk}", target.${targetPk}));
             boolean unchanged = currentItems.size() == derivedItems.size();
 #foreach($a in $headerAssignments)
-            unchanged = unchanged && same(target.${a.targetProp}, ${a.expr});
+#if($a.expressionDefault)
+            unchanged = unchanged && sameUnlessDerivedIsEmpty(target.${a.targetProp}, ${a.local});
+#elseif($a.derivedDefault != "")
+            unchanged = unchanged && same(target.${a.targetProp}, ${a.local}, ${a.derivedDefault});
+#else
+            unchanged = unchanged && same(target.${a.targetProp}, ${a.local});
+#end
 #end
             // Row order is not guaranteed by the query, so each derived row is matched against an
             // unclaimed stored one rather than by position.
@@ -197,41 +215,86 @@ public class ${className}Posting implements MessageHandler {
                 return;
             }
 #end
-            // Either a HALF-post (an item write failed after the target was saved) or an AMENDMENT
-            // (the source was re-issued with different content): both converge on rewriting the post
-            // to what the source derives now.
-            for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity stale : currentItems) {
-                itemsRepository.delete(stale);
-            }
         } else {
             target = new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity();
             target.${backRefProperty} = source.${sourceKeyField};
 #if($stornoProperty != "")
             target.${stornoProperty} = original.${targetPk};
 #end
+            currentItems = java.util.List.of();
         }
 #foreach($a in $headerAssignments)
-        target.${a.targetProp} = ${a.expr};
+        target.${a.targetProp} = ${a.local};
 #end
-        gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity saved =
-                refresh ? targetRepository.update(target) : targetRepository.save(target);
-        for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item : derivedItems) {
-            item.${itemsFk} = saved.${targetPk};
-            itemsRepository.save(item);
-        }
+        // ONE transaction for the whole post: the stale rows a rewrite replaces, the header and every
+        // derived line either all become durable or none of them does. Written as separate
+        // transactions, a line the item repository refuses (a validation, a constraint) left the
+        // journal entry with a header and a PARTIAL set of lines - and unlike the half-post case there
+        // is no second event to self-heal from, so the ledger ended up worse than the stale but
+        // balanced state the rewrite set out to fix (dirigible #7132). A rewrite therefore deletes the
+        // rows it replaces inside the same unit: either the post says what the source derives now, or
+        // it still says what it said before.
+        org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.run(() -> {
+            // Either a HALF-post (an item write failed after the target was saved) or an AMENDMENT
+            // (the source was re-issued with different content): both converge on rewriting the post
+            // to what the source derives now. Empty for a fresh post, so no branch is needed.
+            for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity stale : currentItems) {
+                itemsRepository.delete(stale);
+            }
+            gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity saved =
+                    refresh ? targetRepository.update(target) : targetRepository.save(target);
+            for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item : derivedItems) {
+                item.${itemsFk} = saved.${targetPk};
+                itemsRepository.save(item);
+            }
+        });
     }
 
     /**
-     * Whether a stored item row still carries what the source derives for it now.
+     * Whether a stored item row still carries what the source derives for it now - compared over the
+     * values as they will be STORED, so a column the row's own rule leaves unassigned is compared
+     * against the default the insert would fill it with rather than against the raw null (#7131).
      */
     private static boolean sameItem(gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity stored,
             gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity derived) {
         return
 #foreach($p in $itemComparedProps)
-                same(stored.${p}, derived.${p}) &&
+#if($p.expressionDefault)
+                sameUnlessDerivedIsEmpty(stored.${p.name}, derived.${p.name}) &&
+#elseif($p.derivedDefault != "")
+                same(stored.${p.name}, derived.${p.name}, ${p.derivedDefault}) &&
+#else
+                same(stored.${p.name}, derived.${p.name}) &&
+#end
 #end
                 true;
     }
+#if($comparesAgainstDefaults)
+
+    /**
+     * Value equality against a DERIVED value that is not yet saved: a null one does not stay null in
+     * the column - the generated repository applies the authored default before the insert (#7104,
+     * #7115), so the stored row reads that default back and comparing it against the raw null would
+     * read every redelivery as an amendment (#7131). One row of a journal posting assigning Debit and
+     * the other Credit, both columns `default: 0`, is exactly that shape.
+     */
+    private static boolean same(Object stored, Object derived, Object derivedDefault) {
+        return same(stored, derived == null ? derivedDefault : derived);
+    }
+#end
+#if($comparesUnlessDerivedIsEmpty)
+
+    /**
+     * Value equality a not-yet-derived value simply does not assert: the column carries a default only
+     * the DATABASE can apply (its {@code DEFAULT} is a SQL expression such as {@code CURRENT_DATE},
+     * which has no Java stand-in, so the generated repository leaves it alone). What the stored row
+     * holds therefore cannot be derived, and an empty derived value says nothing about it - only a
+     * value the source does derive can disagree with the post (#7131).
+     */
+    private static boolean sameUnlessDerivedIsEmpty(Object stored, Object derived) {
+        return derived == null || same(stored, derived);
+    }
+#end
 
     /**
      * Null-safe value equality. Numbers compare by VALUE, so a stored amount the database handed back

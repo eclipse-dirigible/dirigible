@@ -16,6 +16,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.BinaryOperator;
 import java.util.regex.Matcher;
@@ -64,7 +65,7 @@ import org.springframework.stereotype.Component;
  * join is {@code INNER} for a relation the row cannot lack ({@code required: true} or a
  * composition) and {@code LEFT} for an optional one, so a row without the relation keeps its place
  * in the report (and in the count tile fed by it) with the dimension empty - see
- * {@link #joinType(RelationIntent)};</li>
+ * {@link #joinType(EntityIntent, RelationIntent)};</li>
  * <li>a bare to-one relation name ({@code book}) -&gt; the foreign-key column on the source;</li>
  * <li>a measure {@code count(*)} / {@code sum(total)} / {@code avg(price)} /
  * {@code min}/{@code max} -&gt; an aggregate column (and the dimensions become the
@@ -1642,10 +1643,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     /**
      * Resolve a reference against {@code baseAlias}, aliasing every table it joins with
      * {@code aliasSuffix} and joining it with {@code joinType}. For an ordinary dimension the suffix is
-     * empty and the type null - derived per relation by {@link #joinType(RelationIntent)}; the
-     * correspondence axis resolves the same paths a second time against the counter-side line, where
-     * the suffix keeps the two sets of aliases apart and an explicit LEFT keeps a line whose document
-     * has no counter side.
+     * empty and the type null - derived per relation by
+     * {@link #joinType(EntityIntent, RelationIntent)}; the correspondence axis resolves the same paths
+     * a second time against the counter-side line, where the suffix keeps the two sets of aliases apart
+     * and an explicit LEFT keeps a line whose document has no counter side.
      */
     private static ColumnRef resolve(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
             String reference, String aliasSuffix, String joinType) {
@@ -1658,14 +1659,14 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             if (relation != null && relation.getTo() != null) {
                 EntityIntent target = entityByName(model, relation.getTo());
                 String targetName = relation.getTo();
-                String targetAlias = targetName + aliasSuffix;
+                String targetAlias = joinAlias(source, relation, targetName) + aliasSuffix;
                 ref.tableAlias = targetAlias;
                 ref.physicalColumn = column(targetName, fieldName);
                 FieldIntent targetField = fieldByName(target, fieldName);
                 // A cross-model target's fields are not in this model; string is the safe display type.
                 ref.reportType = targetField == null ? "CHARACTER VARYING" : reportType(targetField.getType());
                 // The column is empty when the target field is, AND when the (left-joined) relation is.
-                ref.nullable = targetField == null || !targetField.isRequired() || !mandatory(relation);
+                ref.nullable = targetField == null || !targetField.isRequired() || !mandatory(source, relation);
                 ref.displayAlias = humanize(reference.replace('.', ' '));
                 ref.join = join(context, model, source, relation, target, targetName, targetAlias, baseAlias, joinType);
                 translate(context, ref, target, crossModelInfo(context, model, relation), fieldName);
@@ -1691,7 +1692,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
             EntityIntent target = entityByName(model, relation.getTo());
             String targetName = relation.getTo();
-            String targetAlias = targetName + aliasSuffix;
+            String targetAlias = joinAlias(source, relation, targetName) + aliasSuffix;
             // A cross-model target's label comes from the resolved owner model (its Name-like field).
             CrossModelSupport.TargetInfo info = crossModelInfo(context, model, relation);
             String labelField = info != null ? info.labelField() : labelFieldName(target);
@@ -1815,12 +1816,12 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * two differ when the same entity is joined twice in one query (the correspondence axis joins the
      * dimension's account and the counter-side account of the same document - see
      * {@link #CORRESPONDENT_SUFFIX}). A null {@code joinType} is derived from the relation - see
-     * {@link #joinType(RelationIntent)}.
+     * {@link #joinType(EntityIntent, RelationIntent)}.
      */
     private static Join join(IntentGenerationContext context, IntentModel model, EntityIntent source, RelationIntent relation,
             EntityIntent target, String targetName, String targetAlias, String baseAlias, String joinType) {
         if (joinType == null) {
-            joinType = joinType(relation);
+            joinType = joinType(source, relation);
         }
         String fkColumn = quote(column(source.getName(), relation.getName()));
         // A cross-model target's table and primary-key column come from the resolved owner model -
@@ -1844,17 +1845,82 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * relation still behaves as authored: {@code Store.name = 'X'} is false for a row with no store
      * under either join, and a left join additionally lets {@code Store.name IS NULL} be expressed.
      */
-    static String joinType(RelationIntent relation) {
-        return mandatory(relation) ? REQUIRED_JOIN_TYPE : OPTIONAL_JOIN_TYPE;
+    static String joinType(EntityIntent source, RelationIntent relation) {
+        return mandatory(source, relation) ? REQUIRED_JOIN_TYPE : OPTIONAL_JOIN_TYPE;
     }
 
     /**
      * Whether every row has the relation set - the same rule that makes the EDM generator emit the FK
-     * column NOT NULL: {@code required: true}, or a composition (a detail cannot exist without its
-     * parent).
+     * column NOT NULL: {@code required: true}, or the composition whose FK the EDM makes NOT NULL.
+     * Which composition that is depends on the entity, not on the relation alone - see
+     * {@link #impliedRequiredComposition(EntityIntent, RelationIntent)}.
      */
-    private static boolean mandatory(RelationIntent relation) {
-        return relation.isRequired() || relation.isComposition();
+    private static boolean mandatory(EntityIntent source, RelationIntent relation) {
+        return relation.isRequired() || impliedRequiredComposition(source, relation);
+    }
+
+    /**
+     * Whether this is the composition the EDM generator implicitly makes NOT NULL - which is only the
+     * FIRST one the entity declares.
+     *
+     * <p>
+     * A second composition is legal (the parser tolerates it, refusing only {@code whenMasterDeleted}
+     * there) and {@code EdmIntentGenerator} emits its FK as a plain nullable association unless
+     * {@code required: true} says otherwise. Reading {@code isComposition()} alone therefore claimed a
+     * strictness the schema does not have, and a report reaching through a second, optional composition
+     * INNER JOINed a nullable FK - dropping every row that left it unset, the exact {@code #7105}
+     * symptom in the one case that fix believed it had covered (dirigible #7140). A cross-model
+     * relation is never implicitly required either: the owner model owns the row, and the local FK
+     * follows {@code required:} alone. The iteration mirrors the EDM's own - same kinds, same skips,
+     * declaration order - so the two cannot drift on which composition it is.
+     */
+    private static boolean impliedRequiredComposition(EntityIntent source, RelationIntent relation) {
+        if (source == null || !relation.isComposition() || relation.isCrossModel()) {
+            return false;
+        }
+        for (RelationIntent declared : source.getRelations()) {
+            if (!isToOne(declared) || declared.isCrossModel() || declared.getName() == null || declared.getTo() == null) {
+                continue;
+            }
+            if (declared.isComposition()) {
+                return declared.getName()
+                               .equals(relation.getName());
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The two relation kinds that own an FK column on the declaring entity - the ones a report joins.
+     */
+    private static boolean isToOne(RelationIntent relation) {
+        return "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+    }
+
+    /**
+     * The SQL alias a relation's target table is joined under: the target entity name, which is what
+     * every report has always emitted - except when the source declares MORE THAN ONE to-one relation
+     * to that same target ({@code billTo} / {@code shipTo} -> {@code Customer}). Keying the alias on
+     * the target alone collapsed those onto one join through {@code putIfAbsent}: the first ON
+     * condition won, both references read the same joined row, and since #7105 whichever was resolved
+     * first also decided INNER vs LEFT for both (dirigible #7140). Ambiguous targets are therefore
+     * suffixed with the relation, while the relation NAMED after its target keeps the plain alias - so
+     * a model with one relation per target, which is nearly all of them, emits byte-identical SQL to
+     * before.
+     */
+    private static String joinAlias(EntityIntent source, RelationIntent relation, String targetName) {
+        if (source == null || relation == null || relation.getName() == null) {
+            return targetName;
+        }
+        int references = 0;
+        for (RelationIntent declared : source.getRelations()) {
+            if (isToOne(declared) && Objects.equals(declared.getTo(), relation.getTo())
+                    && Objects.equals(declared.getModel(), relation.getModel())) {
+                references++;
+            }
+        }
+        String pascal = IntentNaming.pascalCase(relation.getName());
+        return references > 1 && !pascal.equals(targetName) ? targetName + "_" + pascal : targetName;
     }
 
     /**
@@ -2144,9 +2210,12 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 return null;
             }
             EntityIntent target = entityByName(model, relation.getTo());
-            String targetAlias = relation.getTo();
-            joins.putIfAbsent(targetAlias, join(context, model, source, relation, target, targetAlias, targetAlias, baseAlias, null));
-            return targetAlias + "." + quote(column(targetAlias, fieldName));
+            String targetName = relation.getTo();
+            // The alias may be suffixed per relation (two hops to one target); the physical column is
+            // always prefixed with the target ENTITY - the table it lives on has one name.
+            String targetAlias = joinAlias(source, relation, targetName);
+            joins.putIfAbsent(targetAlias, join(context, model, source, relation, target, targetName, targetAlias, baseAlias, null));
+            return targetAlias + "." + quote(column(targetName, fieldName));
         });
         for (FieldIntent field : source.getFields()) {
             if (field.getName() != null && !field.getName()
@@ -2606,8 +2675,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
 
     /**
      * A join to another table - INNER for a relation every row has, LEFT for an optional one (see
-     * {@link #joinType(RelationIntent)}), for a language table, and for the correspondent line of a
-     * correspondence balance report.
+     * {@link #joinType(EntityIntent, RelationIntent)}), for a language table, and for the correspondent
+     * line of a correspondence balance report.
      */
     private static final class Join {
         private final String table;

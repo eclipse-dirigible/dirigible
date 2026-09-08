@@ -609,10 +609,19 @@ field may declare:
   **An amended source rewrites its post.** The handler derives the whole content first and compares it
   with the post the source already carries: identical is a redelivery (no-op), different is either a
   half-post to complete or a source that was rejected, edited and re-issued - and then the existing
-  post is REWRITTEN in place (never a second one). The rewrite stops at the created document's own
-  lifecycle: once it has left the status the posting created it in (its `init:`), someone has acted on
-  it, so the divergence is logged and left to a reversing entry. A created document with no
-  `function: EntityStatus` relation is always rewritable.
+  post is REWRITTEN in place (never a second one). The comparison is over the values as they will be
+  STORED, not as the derived rows stand: a column left unassigned by one row but carrying a
+  `defaultValue` (a journal's `debit`/`credit`, both `default: 0`) is compared against that default,
+  because the repository applies it before the insert - comparing it against the raw null would make
+  every redelivery look like an amendment and rewrite the post on every event. A `date`/`timestamp`
+  default is the exception: the database applies it, so the column is compared only for the rows that
+  do assign it. Each `map:` expression is evaluated once, so an expression reading the clock cannot
+  differ between the comparison and the write.
+  The rewrite stops at the created document's own
+  lifecycle: once it has left the status the posting created it in (its `init:`, written either as the
+  seed id or as the seeded status name), someone has acted on it, so the divergence is logged and left
+  to a reversing entry. A created document with no `function: EntityStatus` relation is always
+  rewritable - and so is one whose `init:` names no seeded status at all, which Generate reports.
   **Reversal mode (red storno):** a posting with `reverses: <sibling posting name>` undoes the
   sibling's document when the source is voided/cancelled - pair it with a `transitions:` void:
   ```yaml
@@ -1782,6 +1791,11 @@ generates:
     items:                         # optional MIRROR form (an OBJECT): clone each source item row
       from: ProjectTimesheetItem   #   1:1 into a target item row (map = copy, defaults = now/literal)
       to: SalesInvoiceItem
+      where:                       # optional SOURCE-ROW RULE: only the rows that satisfy every
+        - { field: Status, op: eq, value: APPROVED }    # condition become lines (default: skip
+        - { field: totalHours, op: gt, value: 0 }       # the rest). Same shape as schedules.where.
+      refuse: "Member timesheet is not approved"        # optional: an unqualified row REFUSES the
+                                                        # whole run (400) instead of being left out
       map:
         Description: Description
         Amount: Amount
@@ -1794,6 +1808,46 @@ generates:
     sourceStatusOnRetire: 2        # optional INVERSE of that hook: where the SOURCE returns when the
                                    # target is retired (cancelled/void) - see "void and reissue"
 ```
+
+**Which source rows become lines (`items: where:` / `refuse:`).** The mirror form clones every row
+of the source document by default, which is only ever right when the whole document qualifies. It
+usually does not: an unapproved member timesheet must not reach the customer's invoice, and an empty
+one (no hours) is a line the target refuses outright - so ONE bad row used to stop the whole month
+from being invoiced, with nothing the intent could say about it.
+
+```yaml
+    items:
+      from: EmployeeTimesheet
+      to: SalesInvoiceItem
+      where:
+        - { field: Status,     op: eq, value: APPROVED }   # only approved member timesheets
+        - { field: totalHours, op: gt, value: 0 }          # an empty one is not a line
+      map: { Name: employeeName, Quantity: totalHours, Price: rate }
+```
+
+`where:` takes the same `{ field, op, value }` triples a `schedules[].where` does - `op` is
+`eq`/`ne`/`gt`/`ge`/`lt`/`le`/`like`, and the value may be a moment (`CURRENT_DATE`,
+`CURRENT_TIMESTAMP-PT30M`), resolved against the clock of the run rather than of the generation. The
+`field` is a field or a to-one relation of the items `from:` entity, and a condition naming its
+`function: EntityStatus` relation may use the **seeded status name** as above (an id is positional -
+inserting a status mid-nomenclature would otherwise silently retarget the rule).
+
+**Skipping is the default; `refuse:` is the other reading.** An unqualified row left quietly out of
+an invoice and an unqualified row quietly billed are both wrong, for different months, so the
+document says which it means:
+
+```yaml
+      refuse: "Member timesheet is not approved"
+```
+
+With it, an unqualified row stops the whole create-from with a 400 carrying that message and the
+keys of the offending rows - which of a hundred lines to go and fix is the caller's whole question.
+`refuse:` requires `where:`; without conditions no row is ever unqualified.
+
+**A rule that qualifies no row refuses either way.** An invoice with no lines is not the invoice
+that was asked for, and it is the harder failure to notice - it exists and counts as the period's
+billing - so the run answers 400 rather than committing the header. An items block with no `where:`
+keeps exactly the behaviour it had.
 
 **A `map:` source may hop one relation - and that is how you SNAPSHOT a value.** A value is `map`ped
 rather than reached through a relation when the target must keep what was true at the moment it was
@@ -2972,6 +3026,14 @@ reports an advisory saying the second run will duplicate.
 Pick the pair that identifies the RUN, not the source: `[Project, period]`, not the back-reference
 alone. A schedule's source is a standing row - the same `Project` matches the query every month - so a
 back-reference-only key would generate the first project-month and never another.
+
+Key on a term that is always ASSIGNED and never NULL. The assignment is what the parser can prove; the
+value is not. A term mapped from a nullable field, or from a `relation.field` off a null foreign key,
+binds null at run time - and a null is not a value the key can tell rows apart by. The lookup itself is
+null-safe (it queries `is null`, so the guard still finds this tick's own earlier output rather than
+matching nothing and duplicating on every re-run), but two source rows that are both null in that term
+are ONE output under the declared key, so the second is skipped as already existing. The tick logs a
+warning naming the null term when it happens; the fix is in the key, not the log.
 
 **`{ run: <period> }` - the period of the run, for a target with no period column.** The
 recurring-template family cannot name a period property, because there is none: a monthly rent bill or

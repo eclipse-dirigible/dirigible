@@ -64,6 +64,26 @@ class CriteriaTest {
     }
 
     @Test
+    void aNullValueRendersANullSafePredicateRatherThanANeverTrueComparison() {
+        // Issue #7134: `property = :p` with a null bind is never true in SQL's three-valued logic, not
+        // even for a null column, so a lookup built from values that may be null matched NOTHING and
+        // said nothing about it - an idempotency guard keyed on a nullable property created a duplicate
+        // on every re-run while reporting that its target "already existed [0]" times.
+        Criteria criteria = Criteria.create()
+                                    .eq("customer", null)
+                                    .eq("status", "ACTIVE")
+                                    .ne("returnedOn", null);
+
+        assertEquals("from LoanEntity where customer is null and status = :p0 and returnedOn is not null",
+                criteria.append("from LoanEntity"));
+        // Only the non-null value binds: a null is part of the predicate, never a parameter.
+        assertEquals(1, criteria.parameters()
+                                .size());
+        assertEquals("ACTIVE", criteria.parameters()
+                                       .get("p0"));
+    }
+
+    @Test
     void rejectsNonIdentifierPropertyNamesToPreventInjection() {
         assertThrows(IllegalArgumentException.class, () -> Criteria.create()
                                                                    .eq("status; drop table", "x"));

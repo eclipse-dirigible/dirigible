@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -30,6 +31,10 @@ import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.eclipse.dirigible.sdk.utils.Json;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
+import org.hibernate.engine.spi.EntityHolder;
+import org.hibernate.engine.spi.EntityKey;
+import org.hibernate.engine.spi.PersistenceContext;
+import org.hibernate.engine.spi.SharedSessionContractImplementor;
 import org.hibernate.query.MutationQuery;
 import org.hibernate.query.Query;
 import org.slf4j.Logger;
@@ -255,11 +260,14 @@ public class JavaEntityStore {
                                 .getName();
         return write((session, events) -> {
             flushBeforeMutation(session);
-            return session.createMutationQuery(
-                    "update " + meta.entityName() + " set " + property + " = :value where " + idProperty + " = :id")
-                          .setParameter("value", value)
-                          .setParameter("id", id)
-                          .executeUpdate();
+            int updated = session
+                                 .createMutationQuery(
+                                         "update " + meta.entityName() + " set " + property + " = :value where " + idProperty + " = :id")
+                                 .setParameter("value", value)
+                                 .setParameter("id", id)
+                                 .executeUpdate();
+            evictAfterMutation(session, meta, id);
+            return updated;
         });
     }
 
@@ -353,6 +361,7 @@ public class JavaEntityStore {
             }
             int updated = query.setParameter("id", id)
                                .executeUpdate();
+            evictAfterMutation(session, meta, id);
             events.add(outbox.record(session, updated == 0 ? List.of()
                     : eventsOf(eventTopic, eventTopic == null ? null : readInTransaction(session, type, meta, id), additionalEvents)));
             return updated;
@@ -653,6 +662,60 @@ public class JavaEntityStore {
         if (UNIT_OF_WORK.get() != null) {
             session.flush();
         }
+    }
+
+    /**
+     * Drops the session's cached copy of the row a bulk mutation query just wrote, inside a unit of
+     * work — the symmetric half of {@link #flushBeforeMutation(Session)}. A targeted update executes
+     * straight against the connection and never touches the persistence context, so the instance the
+     * session is holding for that id still carries the PRE-mutation values; and an HQL entity query by
+     * id resolves to the already-managed instance rather than to the row it just read, so the follow-up
+     * read hands back exactly those stale values. That made a topic-bearing
+     * {@link #updateProperties(Class, Object, Map, String)} publish the OLD totals from inside a unit
+     * (a create-from copying lines and then re-summing the header), and a generated repository's
+     * {@code history} trail record {@code before == after} — an entry saying the write happened with
+     * nothing moved (issue #7135). Evicting after the mutation makes the next read reload the row, so
+     * the payload really is the row as the statement left it. It runs after
+     * {@link #flushBeforeMutation} and the mutation itself, so there is nothing pending on the instance
+     * to lose. Outside a unit each call has its own session with no cached instance, so it no-ops.
+     */
+    private static void evictAfterMutation(Session session, RegisteredEntity meta, Object id) {
+        if (UNIT_OF_WORK.get() == null) {
+            return;
+        }
+        PersistenceContext context = session.unwrap(SharedSessionContractImplementor.class)
+                                            .getPersistenceContextInternal();
+        for (Map.Entry<EntityKey, EntityHolder> held : new ArrayList<>(context.getEntityHoldersByKey()
+                                                                              .entrySet())) {
+            if (!meta.entityName()
+                     .equals(held.getKey()
+                                 .getEntityName())
+                    || !sameId(held.getKey()
+                                   .getIdentifier(),
+                            id)) {
+                continue;
+            }
+            Object managed = held.getValue()
+                                 .getEntity();
+            if (managed != null) {
+                session.evict(managed);
+            }
+        }
+    }
+
+    /**
+     * Whether a key the session filed the row under is the id this mutation wrote. The store's ids
+     * arrive as whatever the caller had — an {@code Integer} literal from a path parameter, a
+     * {@code String} from a query — while the session keys the row under the mapped identifier type, so
+     * the two can denote one row and still not be {@code equals}. Their textual forms decide it then,
+     * which is exact for the integral and string keys an entity id is.
+     */
+    private static boolean sameId(Object key, Object id) {
+        if (Objects.equals(key, id)) {
+            return true;
+        }
+        return key != null && id != null && String.valueOf(key)
+                                                  .equals(String.valueOf(id));
     }
 
     /**

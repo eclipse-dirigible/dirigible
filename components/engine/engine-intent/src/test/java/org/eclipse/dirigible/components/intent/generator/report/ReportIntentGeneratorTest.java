@@ -1104,4 +1104,110 @@ class ReportIntentGeneratorTest {
                 query);
         assertTrue(query.contains("COALESCE(Store.\"STORE_NAME\", '') LIKE '%' || :store || '%'"), query);
     }
+
+    /**
+     * A shipment with TWO compositions - only the first of which the EDM makes NOT NULL - and two
+     * separate hops to one and the same target entity.
+     */
+    private static final String AMBIGUOUS_RELATION_INTENT = """
+            name: shipping
+            entities:
+              - name: Customer
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true }
+              - name: Order
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string }
+              - name: Batch
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string }
+              - name: Shipment
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: weight, type: decimal }
+                relations:
+                  - { name: order, kind: manyToOne, to: Order, composition: true }
+                  - { name: batch, kind: manyToOne, to: Batch, composition: true }
+                  - { name: billTo, kind: manyToOne, to: Customer }
+                  - { name: shipTo, kind: manyToOne, to: Customer, required: true }
+            reports:
+              - name: ShipmentsByBatch
+                source: Shipment
+                dimensions: [order.number, batch.code, billTo.name, shipTo.name]
+                measures: ["sum(weight)"]
+              - name: ShipmentsForBillTo
+                source: Shipment
+                dimensions: [batch.code]
+                measures: ["sum(weight)"]
+                filter: "billTo.name <> 'X' and shipTo.name <> 'Y'"
+            """;
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void onlyTheFirstCompositionIsInnerJoined() {
+        IntentModel model = IntentParser.parse(AMBIGUOUS_RELATION_INTENT);
+        Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                            .get(0));
+        String query = (String) document.get("query");
+
+        // The FIRST composition is the one the EDM emits NOT NULL, so its hop stays INNER...
+        assertTrue(query.contains("INNER JOIN \"SHIPPING_ORDER\" as Order ON Shipment.\"SHIPMENT_ORDER\" = Order.\"ORDER_ID\""), query);
+        // ...and the second one is a plain nullable association in the schema: INNER JOINing it dropped
+        // every shipment with no batch, which is #7105 all over again (dirigible #7140).
+        assertTrue(query.contains("LEFT JOIN \"SHIPPING_BATCH\" as Batch ON Shipment.\"SHIPMENT_BATCH\" = Batch.\"BATCH_ID\""), query);
+
+        List<Map<String, Object>> joins = (List<Map<String, Object>>) document.get("joins");
+        Map<String, String> types = new LinkedHashMap<>();
+        for (Map<String, Object> join : joins) {
+            types.put((String) join.get("alias"), (String) join.get("type"));
+        }
+        assertEquals("INNER", types.get("Order"), joins.toString());
+        assertEquals("LEFT", types.get("Batch"), joins.toString());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void twoRelationsToTheSameTargetAreJoinedSeparately() {
+        IntentModel model = IntentParser.parse(AMBIGUOUS_RELATION_INTENT);
+        Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                            .get(0));
+        String query = (String) document.get("query");
+
+        // billTo and shipTo both reach Customer: one alias per RELATION, each with its own ON condition.
+        // Keyed on the target entity they collapsed onto a single join - the first ON won, both columns
+        // read the same row, and the first-resolved relation decided INNER vs LEFT for both.
+        assertEquals(2, query.split("JOIN \"SHIPPING_CUSTOMER\"", -1).length - 1, query);
+        assertTrue(query.contains("LEFT JOIN \"SHIPPING_CUSTOMER\" as Customer_BillTo ON "
+                + "Shipment.\"SHIPMENT_BILL_TO\" = Customer_BillTo.\"CUSTOMER_ID\""), query);
+        assertTrue(query.contains("INNER JOIN \"SHIPPING_CUSTOMER\" as Customer_ShipTo ON "
+                + "Shipment.\"SHIPMENT_SHIP_TO\" = Customer_ShipTo.\"CUSTOMER_ID\""), query);
+        // Each dimension selects from ITS own join, so the two customers can differ on a row.
+        assertTrue(query.contains("Customer_BillTo.\"CUSTOMER_NAME\""), query);
+        assertTrue(query.contains("Customer_ShipTo.\"CUSTOMER_NAME\""), query);
+
+        List<Map<String, Object>> joins = (List<Map<String, Object>>) document.get("joins");
+        Map<String, String> types = new LinkedHashMap<>();
+        for (Map<String, Object> join : joins) {
+            types.put((String) join.get("alias"), (String) join.get("type"));
+        }
+        // The optional hop is LEFT and the required one INNER even though they share a target.
+        assertEquals("LEFT", types.get("Customer_BillTo"), joins.toString());
+        assertEquals("INNER", types.get("Customer_ShipTo"), joins.toString());
+    }
+
+    @Test
+    void aFilterOverTwoRelationsToTheSameTargetQualifiesEachWithItsOwnAlias() {
+        IntentModel model = IntentParser.parse(AMBIGUOUS_RELATION_INTENT);
+        String query = (String) ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                     .get(1))
+                                                     .get("query");
+
+        // The filter path builds its joins itself - it must key them the same way, or a two-hop filter
+        // compares both predicates against one and the same joined row.
+        assertEquals(2, query.split("JOIN \"SHIPPING_CUSTOMER\"", -1).length - 1, query);
+        assertTrue(query.contains("WHERE Customer_BillTo.\"CUSTOMER_NAME\" <> 'X' and Customer_ShipTo.\"CUSTOMER_NAME\" <> 'Y'"), query);
+    }
 }

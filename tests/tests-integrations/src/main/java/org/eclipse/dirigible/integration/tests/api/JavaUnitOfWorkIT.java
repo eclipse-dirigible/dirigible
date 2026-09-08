@@ -11,9 +11,14 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
 import java.sql.Statement;
+import java.util.concurrent.TimeUnit;
+
+import org.awaitility.Awaitility;
+import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
 
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
@@ -51,6 +56,8 @@ class JavaUnitOfWorkIT extends IntegrationTest {
     private static final String DOCUMENTS = "/services/java/" + PROJECT + "/ledger/DocumentController";
     private static final String[] TABLE_NAMES = {"UOW_LEDGER_ENTRY", "UOW_LINE", "UOW_DOCUMENT"};
     private static final long TIMEOUT_SECONDS = 30;
+    private static final String ECHO_QUEUE = "uow-it-updated-echo";
+    private static final long RECEIVE_TIMEOUT_MILLIS = 2000;
 
     @Autowired
     private IRepository repository;
@@ -123,6 +130,66 @@ class JavaUnitOfWorkIT extends IntegrationTest {
                 TIMEOUT_SECONDS);
         String withEvents = observed[0].substring("id=".length(), observed[0].indexOf(' '));
         assertGet(DOCUMENTS + "/document/" + withEvents + "/total", 200, "12");
+    }
+
+    @Test
+    void a_read_after_a_targeted_write_in_the_same_unit_sees_the_row_the_statement_left() {
+        ClientJavaProjectDeployer.deploy(repository, projectUtil, synchronizationProcessor, PROJECT, PROJECT);
+
+        // The topic-bearing re-sum, with the header loaded earlier in the same unit. The whole exchange
+        // retries because a topic keeps nothing for a subscriber that is not there yet, and the client
+        // classes are compiled and subscribed asynchronously.
+        String[] observed = new String[1];
+        Awaitility.await()
+                  .pollInterval(1, TimeUnit.SECONDS)
+                  .atMost(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                  .ignoreExceptions()
+                  .until(() -> {
+                      drainEcho();
+                      restAssuredExecutor.execute(() -> observed[0] = given().when()
+                                                                             .get(DOCUMENTS + "/document/unit/topic/summed")
+                                                                             .then()
+                                                                             .statusCode(200)
+                                                                             .extract()
+                                                                             .asString(),
+                              TIMEOUT_SECONDS);
+                      String payload = receiveEcho();
+                      if (payload == null) {
+                          return false;
+                      }
+                      observed[0] = observed[0] + " payload=" + payload;
+                      return true;
+                  });
+
+        // The two reads the history block makes around the write: before it the header still carries the
+        // zero it was inserted with, after it the sum of the lines - a trail entry that records a change
+        // instead of before == after.
+        assertTrue(observed[0].contains("updated=1 before=0 after=12"),
+                "the read after the targeted write must be the row the statement left: " + observed[0]);
+
+        // ...and the payload the topic carried is that same row, not the one the session was holding -
+        // a roll-up or a notify {placeholder} downstream computes from exactly this.
+        assertTrue(observed[0].contains("\"total\":12"), "the '-updated' payload must carry the written total: " + observed[0]);
+
+        // What committed is the sum too, so the assertions above are about the read and not about a
+        // mutation that never landed.
+        String id = observed[0].substring("id=".length(), observed[0].indexOf(' '));
+        assertGet(DOCUMENTS + "/document/" + id + "/total", 200, "12");
+    }
+
+    /** Empties the echo queue so an assertion cannot read a previous attempt's message. */
+    private void drainEcho() {
+        while (receiveEcho() != null) {
+            // keep reading until the queue is empty
+        }
+    }
+
+    private String receiveEcho() {
+        try {
+            return MessagingFacade.receiveFromQueue(ECHO_QUEUE, RECEIVE_TIMEOUT_MILLIS);
+        } catch (RuntimeException nothingYet) {
+            return null;
+        }
     }
 
     private void assertGet(String path, int expectedStatus) {

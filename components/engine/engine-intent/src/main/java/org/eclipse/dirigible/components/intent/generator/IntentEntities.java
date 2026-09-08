@@ -316,4 +316,46 @@ public final class IntentEntities {
         FieldIntent pk = primaryKeyOf(entity);
         return pk == null ? "Id" : IntentNaming.pascalCase(pk.getName());
     }
+
+    /**
+     * The SQL type an authored field {@code type:} becomes - the one mapping the whole pipeline reads.
+     *
+     * <p>
+     * It is the EDM's {@code dataType}, and through it the generated Java class of the column, which is
+     * what tells a default that has a Java stand-in from one the database alone can apply. Two
+     * generators deciding that independently is how a defaulted column came to read as changed on every
+     * posting redelivery (#7131), so there is one answer here rather than a copy per caller.
+     *
+     * @param intentType the authored {@code type:}, or {@code null}
+     * @return the SQL type, {@code VARCHAR} for anything unrecognized (its widest stand-in)
+     */
+    public static String sqlType(String intentType) {
+        if (intentType == null) {
+            return "VARCHAR";
+        }
+        switch (intentType.trim()
+                          .toLowerCase(java.util.Locale.ROOT)) {
+            case "integer":
+            case "int":
+                return "INTEGER";
+            case "long":
+                return "BIGINT";
+            case "decimal":
+            case "double":
+                return "DECIMAL";
+            case "boolean":
+                return "BOOLEAN";
+            case "date":
+                return "DATE";
+            case "timestamp":
+                return "TIMESTAMP";
+            case "text": // a wide VARCHAR, not a CLOB - see TEXT_LENGTH
+            case "uuid":
+            case "string":
+            case "month": // stored as the picker's YYYY-MM string
+            case "week": // stored as the picker's YYYY-Www ISO-week string
+            default:
+                return "VARCHAR";
+        }
+    }
 }

@@ -3264,32 +3264,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String mapDataType(String type) {
-        if (type == null) {
-            return "VARCHAR";
-        }
-        switch (type.toLowerCase(Locale.ROOT)) {
-            case "integer":
-            case "int":
-                return "INTEGER";
-            case "long":
-                return "BIGINT";
-            case "decimal":
-            case "double":
-                return "DECIMAL";
-            case "boolean":
-                return "BOOLEAN";
-            case "date":
-                return "DATE";
-            case "timestamp":
-                return "TIMESTAMP";
-            case "text": // a wide VARCHAR, not a CLOB - see TEXT_LENGTH
-            case "uuid":
-            case "string":
-            case "month": // stored as the picker's YYYY-MM string
-            case "week": // stored as the picker's YYYY-Www ISO-week string
-            default:
-                return "VARCHAR";
-        }
+        return IntentEntities.sqlType(type); // the one mapping the pipeline shares - see IntentEntities.sqlType
     }
 
     /**

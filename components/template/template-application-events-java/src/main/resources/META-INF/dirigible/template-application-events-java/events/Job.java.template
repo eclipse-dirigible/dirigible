@@ -54,9 +54,12 @@ public class ${className}Job implements JobHandler {
         int sent = 0;
         int skipped = 0;
         int failed = 0;
-#elseif($hasGenUnique)
+#else
         int created = 0;
+        int failed = 0;
+#if($hasGenUnique)
         int existed = 0;
+#end
 #end
         for (${entity}Entity entity : rows) {
 #if($action == "generate")
@@ -77,12 +80,43 @@ public class ${className}Job implements JobHandler {
             // ("one bill per template per month") is still keyed. Best-effort against two concurrent
             // ticks, exactly as the event-driven create-from's guard is - a UNIQUE database key on the
             // same columns is the durable backstop.
+#set($genUniqueValueTerms = 0)
+#foreach($u in $genUnique)
+#if($u.kind != "range")
+#set($genUniqueValueTerms = $genUniqueValueTerms + 1)
+#end
+#end
+#if($genUniqueValueTerms > 0)
+            // Each key value is read ONCE, into a local, because the lookup and the diagnostic below
+            // both need it and a term can be a field off a loaded relation.
+            java.util.List<String> nullKeyTerms = new java.util.ArrayList<>();
+#foreach($u in $genUnique)
+#if($u.kind != "range")
+            Object key${u.property} = ${u.expr};
+            if (key${u.property} == null) {
+                nullKeyTerms.add("${u.property}");
+            }
+#end
+#end
+            if (!nullKeyTerms.isEmpty()) {
+                // A NULL key term (issue #7134). The lookup itself is null-safe - Criteria.eq binds
+                // `is null` for a null value, so the guard still finds this tick's own earlier output
+                // instead of matching nothing and minting a duplicate on every re-run. What it cannot
+                // do is tell two source rows apart by a term that is null in both: under the declared
+                // key they ARE one output, so the second row is counted as already existing. That is
+                // the key being weaker than the author meant, and it is said out loud here rather than
+                // discovered as a missing document.
+                LOG.warn("Schedule ${name}: unique key term(s) {} are null for ${entity} [{}] - the natural key cannot tell rows sharing"
+                        + " that null apart, so they collapse to one ${genToEntity}; key on a property this generate always assigns",
+                        nullKeyTerms, entity.${attachKeyProperty});
+            }
+#end
             if (!new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Repository().findAll(Criteria.create()
 #foreach($u in $genUnique)
 #if($u.kind == "range")
                     .between("${u.property}", ${u.lower}, ${u.upper})
 #else
-                    .eq("${u.property}", ${u.expr})
+                    .eq("${u.property}", key${u.property})
 #end
 #end
                     ).isEmpty()) {
@@ -90,75 +124,87 @@ public class ${className}Job implements JobHandler {
                 continue;
             }
 #end
-            gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity target =
-                    new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity();
+            // ONE TRANSACTION PER SOURCE ROW, and the row is FAIL-SOFT. The header, its children and
+            // their grandchildren were each written in a transaction of their own, so a tick that died
+            // halfway left a childless header behind - and with the `unique:` guard above finding exactly
+            // that header, every later run reported "already existed" and the row stayed incomplete
+            // forever (#7133). A refused row now leaves nothing behind, so the next tick really does
+            // complete what this one could not; and one failing row no longer aborts the loop, which used
+            // to leave every later matching row silently ungenerated and the summary line unlogged.
+            try {
+                org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.run(() -> {
+                    gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity target =
+                            new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity();
 #foreach($a in $genFieldAssignments)
-            target.${a.targetProp} = ${a.expr};
+                    target.${a.targetProp} = ${a.expr};
 #end
-            var savedTarget = new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Repository().save(target);
-#if($hasGenUnique)
-            created++;
-#end
+                    var savedTarget = new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Repository().save(target);
 #foreach($c in $genChildren)
 #if($c.kind == "days")
-            // ${c.toEntity}: one row per working day (Mon-Fri) of the current month.
-            for (java.time.LocalDate day = java.time.LocalDate.now().withDayOfMonth(1),
-                    monthEnd = java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1);
-                    day.isBefore(monthEnd); day = day.plusDays(1)) {
-                if (day.getDayOfWeek().getValue() >= 6) {
-                    continue;
-                }
-                ${c.toEntityClass} ${c.rowVar} = new ${c.toEntityClass}();
-                ${c.rowVar}.${c.parentFkProperty} = savedTarget.${genToPk};
-                ${c.rowVar}.${c.dayField} = day;
+                    // ${c.toEntity}: one row per working day (Mon-Fri) of the current month.
+                    for (java.time.LocalDate day = java.time.LocalDate.now().withDayOfMonth(1),
+                            monthEnd = java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1);
+                            day.isBefore(monthEnd); day = day.plusDays(1)) {
+                        if (day.getDayOfWeek().getValue() >= 6) {
+                            continue;
+                        }
+                        ${c.toEntityClass} ${c.rowVar} = new ${c.toEntityClass}();
+                        ${c.rowVar}.${c.parentFkProperty} = savedTarget.${genToPk};
+                        ${c.rowVar}.${c.dayField} = day;
 #foreach($a in $c.fieldAssignments)
-                ${c.rowVar}.${a.targetProp} = ${a.expr};
+                        ${c.rowVar}.${a.targetProp} = ${a.expr};
 #end
-                new ${c.toRepositoryClass}().save(${c.rowVar});
-            }
+                        new ${c.toRepositoryClass}().save(${c.rowVar});
+                    }
 #else
-            // ${c.toEntity}: one row per matching ${c.forEachEntity} of the source row.
-            for (${c.forEachEntityClass} ${c.rowVar} : new ${c.forEachRepositoryClass}().findAll(
-                    org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${c.matchProperty}", ${c.matchSourceExpression}))) {
-                ${c.toEntityClass} child${c.rowVar} = new ${c.toEntityClass}();
-                child${c.rowVar}.${c.parentFkProperty} = savedTarget.${genToPk};
+                    // ${c.toEntity}: one row per matching ${c.forEachEntity} of the source row.
+                    for (${c.forEachEntityClass} ${c.rowVar} : new ${c.forEachRepositoryClass}().findAll(
+                            org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${c.matchProperty}", ${c.matchSourceExpression}))) {
+                        ${c.toEntityClass} child${c.rowVar} = new ${c.toEntityClass}();
+                        child${c.rowVar}.${c.parentFkProperty} = savedTarget.${genToPk};
 #foreach($a in $c.fieldAssignments)
-                child${c.rowVar}.${a.targetProp} = ${a.expr};
+                        child${c.rowVar}.${a.targetProp} = ${a.expr};
 #end
-                var saved${c.rowVar} = new ${c.toRepositoryClass}().save(child${c.rowVar});
+                        var saved${c.rowVar} = new ${c.toRepositoryClass}().save(child${c.rowVar});
 #foreach($g in $c.children)
 #if($g.kind == "days")
-                // ${g.toEntity}: one row per working day (Mon-Fri) of the current month.
-                for (java.time.LocalDate day = java.time.LocalDate.now().withDayOfMonth(1),
-                        monthEnd = java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1);
-                        day.isBefore(monthEnd); day = day.plusDays(1)) {
-                    if (day.getDayOfWeek().getValue() >= 6) {
-                        continue;
-                    }
-                    ${g.toEntityClass} ${g.rowVar} = new ${g.toEntityClass}();
-                    ${g.rowVar}.${g.parentFkProperty} = saved${c.rowVar}.${c.toPk};
-                    ${g.rowVar}.${g.dayField} = day;
+                        // ${g.toEntity}: one row per working day (Mon-Fri) of the current month.
+                        for (java.time.LocalDate day = java.time.LocalDate.now().withDayOfMonth(1),
+                                monthEnd = java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1);
+                                day.isBefore(monthEnd); day = day.plusDays(1)) {
+                            if (day.getDayOfWeek().getValue() >= 6) {
+                                continue;
+                            }
+                            ${g.toEntityClass} ${g.rowVar} = new ${g.toEntityClass}();
+                            ${g.rowVar}.${g.parentFkProperty} = saved${c.rowVar}.${c.toPk};
+                            ${g.rowVar}.${g.dayField} = day;
 #foreach($a in $g.fieldAssignments)
-                    ${g.rowVar}.${a.targetProp} = ${a.expr};
+                            ${g.rowVar}.${a.targetProp} = ${a.expr};
 #end
-                    new ${g.toRepositoryClass}().save(${g.rowVar});
-                }
+                            new ${g.toRepositoryClass}().save(${g.rowVar});
+                        }
 #else
-                // ${g.toEntity}: one row per matching ${g.forEachEntity} of the source row.
-                for (${g.forEachEntityClass} ${g.rowVar} : new ${g.forEachRepositoryClass}().findAll(
-                        org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${g.matchProperty}", ${g.matchSourceExpression}))) {
-                    ${g.toEntityClass} child${g.rowVar} = new ${g.toEntityClass}();
-                    child${g.rowVar}.${g.parentFkProperty} = saved${c.rowVar}.${c.toPk};
+                        // ${g.toEntity}: one row per matching ${g.forEachEntity} of the source row.
+                        for (${g.forEachEntityClass} ${g.rowVar} : new ${g.forEachRepositoryClass}().findAll(
+                                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${g.matchProperty}", ${g.matchSourceExpression}))) {
+                            ${g.toEntityClass} child${g.rowVar} = new ${g.toEntityClass}();
+                            child${g.rowVar}.${g.parentFkProperty} = saved${c.rowVar}.${c.toPk};
 #foreach($a in $g.fieldAssignments)
-                    child${g.rowVar}.${a.targetProp} = ${a.expr};
+                            child${g.rowVar}.${a.targetProp} = ${a.expr};
 #end
-                    new ${g.toRepositoryClass}().save(child${g.rowVar});
-                }
+                            new ${g.toRepositoryClass}().save(child${g.rowVar});
+                        }
 #end
 #end
+                    }
+#end
+#end
+                });
+                created++;
+            } catch (Exception ex) {
+                failed++;
+                LOG.error("Schedule ${name}: could not generate ${genToEntity} from ${entity} [{}]", entity.${attachKeyProperty}, ex);
             }
-#end
-#end
 #else
 #foreach($load in $relationLoads)
             ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
@@ -255,12 +301,18 @@ public class ${className}Job implements JobHandler {
 #if($action != "generate")
         LOG.info("Schedule ${name}: mailed [{}] of [{}] matching ${entity} row(s), no recipient [{}], failed [{}]", sent, rows.size(),
                 skipped, failed);
-#elseif($hasGenUnique)
+#else
+#if($hasGenUnique)
         // "matched 40, created 0, already existed 40" is the line that says a re-run did nothing -
         // which is the whole point of the natural key, and is otherwise indistinguishable from a tick
-        // that never ran.
-        LOG.info("Schedule ${name}: created [{}] ${genToEntity}(s) from [{}] matching ${entity} row(s), already existed [{}]", created,
-                rows.size(), existed);
+        // that never ran. "failed" is the other half: a partial tick is now nothing at all and the next
+        // run completes it, so the count of rows this one could not generate has to be visible.
+        LOG.info("Schedule ${name}: created [{}] ${genToEntity}(s) from [{}] matching ${entity} row(s), already existed [{}],"
+                + " failed [{}]", created, rows.size(), existed, failed);
+#else
+        LOG.info("Schedule ${name}: created [{}] ${genToEntity}(s) from [{}] matching ${entity} row(s), failed [{}]", created,
+                rows.size(), failed);
+#end
 #end
     }
 #if($attach == "report")

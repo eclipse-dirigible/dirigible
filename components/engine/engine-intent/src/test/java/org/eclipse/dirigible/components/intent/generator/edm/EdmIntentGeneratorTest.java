@@ -1959,6 +1959,49 @@ class EdmIntentGeneratorTest {
                                                         .toList());
     }
 
+    /**
+     * Only the FIRST composition an entity declares gets the implicit NOT NULL FK; a second one is a
+     * plain nullable association unless {@code required: true} says otherwise. The report generator
+     * mirrors this rule to pick INNER vs LEFT for the hop, so it is asserted here as the rule's own
+     * statement - reading {@code composition: true} as "always NOT NULL" made a report INNER JOIN a
+     * nullable FK and drop every row that left it unset (dirigible #7140).
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void onlyTheFirstCompositionGetsTheImplicitNotNullForeignKey() {
+        String yaml = """
+                name: shipping
+                entities:
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Batch
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Crate
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Shipment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: order, kind: manyToOne, to: Order, composition: true }
+                      - { name: batch, kind: manyToOne, to: Batch, composition: true }
+                      - { name: crate, kind: manyToOne, to: Crate, composition: true, required: true }
+                """;
+        Map<String, Object> shipment =
+                entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "shipping")), "Shipment");
+
+        // The first composition: NOT NULL without anyone asking - a detail cannot exist without its
+        // master, and this is the master the entity is a detail OF.
+        assertEquals("false", propertyByName(shipment, "Order").get("dataNullable"));
+        // The second: nothing declares it required, so the column is nullable - the row can exist
+        // without it, which is exactly why a report must LEFT JOIN this hop.
+        assertEquals("true", propertyByName(shipment, "Batch").get("dataNullable"));
+        // ...and `required: true` still makes any of them NOT NULL, ordering notwithstanding.
+        assertEquals("false", propertyByName(shipment, "Crate").get("dataNullable"));
+    }
+
     private static List<Map<String, Object>> entities(Map<String, Object> modelJson) {
         return (List<Map<String, Object>>) ((Map<String, Object>) modelJson.get("model")).get("entities");
     }
