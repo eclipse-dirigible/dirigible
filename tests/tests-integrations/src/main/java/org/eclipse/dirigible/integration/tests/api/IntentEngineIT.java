@@ -2170,6 +2170,71 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void a_scheduled_generation_is_one_transaction_per_source_row_and_the_row_is_fail_soft() {
+        // Issue #7133: the header, its children and their grandchildren were written in a transaction
+        // each, so a tick that died halfway left a childless header behind - and once #7070's `unique:`
+        // guard found that header, every later run reported "already existed" and the project-month
+        // stayed childless forever. One failing row also aborted the whole tick, so every later matching
+        // row was silently never generated and the summary line never logged.
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: status, type: string }
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: month }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee }
+                  - name: EmployeeDayAllocation
+                    fields:
+                      - { name: id,  type: integer, primaryKey: true, generated: true }
+                      - { name: day, type: date }
+                    relations:
+                      - { name: EmployeeTimesheet, kind: manyToOne, to: EmployeeTimesheet }
+                schedules:
+                  - name: monthly-timesheets
+                    cron: "0 0 1 1 * ?"
+                    entity: Employee
+                    generate:
+                      to: EmployeeTimesheet
+                      unique: [Employee, Period]
+                      map:
+                        Employee: id
+                      defaults:
+                        Period: now
+                      children:
+                        - to: EmployeeDayAllocation
+                          parent: EmployeeTimesheet
+                          forEach: { days: workingDays }
+                          dayField: day
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "hr.glue");
+
+        String job = codeOf("gen/events/hr/MonthlyTimesheetsJob.java");
+        assertTrue(job.contains("UnitOfWork.run(() -> {"), "the whole generation of one source row is one transaction");
+        // The ordering is the point: the header must be built INSIDE the unit, or a refused child still
+        // leaves it behind - which is exactly the state the `unique:` guard then reads as "already done".
+        assertTrue(job.indexOf("UnitOfWork.run(() -> {") < job.indexOf(".EmployeeTimesheetEntity target ="),
+                "the header is created inside the unit, not before it");
+        assertTrue(job.indexOf(".EmployeeDayAllocationRepository().save(") > job.indexOf("UnitOfWork.run(() -> {"),
+                "the children are written inside the same unit as their header");
+        // Per-row fail-soft, like the notify branch: the loop goes on, and the row is counted and named.
+        assertTrue(job.contains("} catch (Exception ex) {"), "a refused row must not abort the tick");
+        assertTrue(job.contains("failed++;"), "a refused row is counted");
+        assertTrue(job.contains("could not generate EmployeeTimesheet from Employee [{}]"), "the refused row is logged with its own key");
+        assertTrue(job.contains("failed [{}]"), "the tick's summary reports the rows it could not generate");
+    }
+
+    @Test
     void a_recurring_template_schedule_keys_on_the_period_of_the_run() {
         // Issue #7106: the recurring-template family had no key to declare. A monthly bill generated
         // from a standing BillTemplate is a plain document with a `date` - no period column to name -
