@@ -2614,6 +2614,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 deleteAbort.contains("-deleted") && deleteAbort.contains("ProcessStamps.idFor(entity.ProcessIds, \"ApprovalFlow\")")
                         && deleteAbort.contains("Process.isRunning(instance)") && deleteAbort.contains("Process.cancel(instance,"),
                 "deleting the trigger row must cancel the process's own running instance");
+        // ...and a cancellation that does NOT happen is never silent (#7145). Only the already-ended
+        // case - the platform's IllegalArgumentException - is the expected no-op; every other failure
+        // leaves the orphaned task this listener exists to remove, and is logged with its throwable.
+        assertTrue(deleteAbort.contains("catch (IllegalArgumentException alreadyEnded)"),
+                "the already-ended miss must be caught by its own type, not by a blanket RuntimeException");
+        assertTrue(deleteAbort.contains("catch (RuntimeException failed)") && deleteAbort.contains("LOG.warn(\"Could not cancel")
+                && deleteAbort.contains("failed);"), "any other cancellation failure must be logged with the throwable");
+        assertFalse(deleteAbort.contains("catch (RuntimeException alreadyEnded)"),
+                "the empty catch that treated every failure as already-ended must be gone");
 
         // ...and the follow-up flow on the same record (#6862) is a listener of its own, on the status
         // channel, guarding on ITS OWN name. Reading the record's single ProcessId here is what made the
