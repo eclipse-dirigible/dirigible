@@ -5378,6 +5378,34 @@ public final class IntentParser {
     }
 
     /**
+     * The determination rule's {@code match} value must be an authored literal that says something.
+     *
+     * <p>
+     * The selector is rendered into the generated posting handler AS a Java literal, so a blank one
+     * emits {@code .eq("<Column>", "")} - a lookup that matches no rule row and therefore leaves every
+     * source document silently on the unposted worklist, with the intent, the generation and the
+     * publish all green. Refused here so the accident is named where it is authored (#7180). A value
+     * omitted outright ({@code documentType:} with nothing after it) never reaches this method: the
+     * typed mapping drops the null entry, so the empty selector is caught by the single-selector rule
+     * above.
+     *
+     * @param subject the message prefix naming the posting
+     * @param match the single-entry match selector
+     * @param issues collected validation issues
+     */
+    private static void validateRuleMatchHasALiteral(String subject, java.util.Map<?, ?> match, List<String> issues) {
+        Map.Entry<?, ?> selector = match.entrySet()
+                                        .iterator()
+                                        .next();
+        Object value = selector.getValue();
+        if (value == null || String.valueOf(value)
+                                   .isBlank()) {
+            issues.add(subject + " rule.match [" + selector.getKey()
+                    + "] has no value - a determination rule selects on a literal, and an empty one matches no rule row");
+        }
+    }
+
+    /**
      * The determination rule's {@code match} column must not be a translated one. The selector is a
      * literal authored in the model and compared against the rule row's own column, so the moment that
      * column carries per-language values the match is on a moving target: the read overlay hands the UI
@@ -7039,6 +7067,7 @@ public final class IntentParser {
                     issues.add(subject + " rule.match must be a single `column: literal` selector");
                 } else {
                     validateRuleMatchIsNotTranslated(subject, ruleEntity, (java.util.Map<?, ?>) match, issues);
+                    validateRuleMatchHasALiteral(subject, (java.util.Map<?, ?>) match, issues);
                 }
             }
             // items

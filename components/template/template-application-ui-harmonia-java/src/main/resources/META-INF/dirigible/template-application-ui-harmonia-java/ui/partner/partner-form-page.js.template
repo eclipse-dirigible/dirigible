@@ -28,6 +28,9 @@ document.addEventListener('alpine:init', () => {
     mode: 'create',
     id: null,
     error: null,
+    // The single property a rejected save NAMED ("The 'Name' property is required"), else null -
+    // drives :aria-invalid on that one control (see applyApiError).
+    fieldError: null,
     saving: false,
     deleteOpen: false,
     deleteBusy: false,
@@ -91,7 +94,7 @@ document.addEventListener('alpine:init', () => {
 #end
           this.state = 'default';
         } catch (e) {
-          this.error = (e && e.message) || 'Could not load the record.';
+          this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not load the record.');
           this.state = 'error';
         }
 #if($partnerChildren && $partnerChildren.size() > 0)
@@ -168,9 +171,26 @@ document.addEventListener('alpine:init', () => {
       return payload;
     },
 
+    // A rejected save that NAMES one of this form's properties ("The 'Name' property is required")
+    // marks that one control (fieldError -> aria-invalid) and repeats the server's own reason;
+    // anything else - a fault, a refusal naming nothing this form owns - keeps the generic banner.
+    // Mirrors baseFormPage.applyApiError / the line dialog's applyItemError (#7062/#7152); never the
+    // developer-facing e.message.
+    applyApiError(e, fallback) {
+      const named = App.services.apiErrors.namedProperty(e, Object.keys(this.form));
+      if (named) {
+        this.fieldError = named;
+        this.error = App.services.apiErrors.messageWithLabels(e, {});
+        return;
+      }
+      this.fieldError = null;
+      this.error = App.services.apiErrors.refusalMessageFor(e, fallback);
+    },
+
     async save() {
       this.saving = true;
       this.error = null;
+      this.fieldError = null;
       try {
         if (this.mode === 'edit') {
           await App.services.api.put(this.apiPath + '/' + this.id, this.toPayload());
@@ -179,7 +199,7 @@ document.addEventListener('alpine:init', () => {
         }
         this.goBack();
       } catch (e) {
-        this.error = (e && e.message) || 'Could not save.';
+        this.applyApiError(e, 'Could not save.');
       } finally {
         this.saving = false;
       }
@@ -192,7 +212,7 @@ document.addEventListener('alpine:init', () => {
         this.deleteOpen = false;
         this.goBack();
       } catch (e) {
-        this.error = (e && e.message) || 'Could not delete.';
+        this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not delete.');
         this.deleteOpen = false;
       } finally {
         this.deleteBusy = false;

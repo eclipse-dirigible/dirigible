@@ -1227,6 +1227,35 @@ class IntentParserTest {
                 "expected an unknown-classifier issue, got: " + ex.getIssues());
     }
 
+    /**
+     * A determination rule's {@code match} needs a literal that says something (#7180).
+     *
+     * <p>
+     * The value is rendered into the generated posting handler AS an authored Java literal, so a blank
+     * one emits a lookup on the empty string - it matches no rule row, and every source document is
+     * left silently on the unposted worklist with the parse, the generation and the publish all green.
+     * A value omitted outright is already refused as an empty selector (the typed mapping drops a null
+     * entry, so the selector is not there at all); both readings now fail where they are authored.
+     */
+    @Test
+    void postingRuleMatchWithNoLiteralIsRejected() {
+        String item = "{ Account: rule(BankAccount), debit: \"Amount\" }";
+        String blank = conditionalRulePosting(item).replace("match: { documentType: \"Payment\" }", "match: { documentType: \"\" }");
+        IntentValidationException blankEx = assertThrows(IntentValidationException.class, () -> IntentParser.parse(blank));
+        assertTrue(blankEx.getIssues()
+                          .stream()
+                          .anyMatch(i -> i.contains("rule.match [documentType] has no value")),
+                "expected a blank rule.match issue, got: " + blankEx.getIssues());
+        String omitted = conditionalRulePosting(item).replace("match: { documentType: \"Payment\" }", "match: { documentType: }");
+        IntentValidationException omittedEx = assertThrows(IntentValidationException.class, () -> IntentParser.parse(omitted));
+        assertTrue(omittedEx.getIssues()
+                            .stream()
+                            .anyMatch(i -> i.contains("rule.match must be a single `column: literal` selector")),
+                "expected an empty-selector issue, got: " + omittedEx.getIssues());
+        // ...and the authored literal still parses, so nothing written before this changes.
+        IntentParser.parse(conditionalRulePosting(item));
+    }
+
     /** The event declares exactly one trigger - onTransition XOR onCreate. */
     @Test
     void postingEventDeclaresExactlyOneTrigger() {

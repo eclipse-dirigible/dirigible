@@ -874,6 +874,9 @@ class EdmIntentGeneratorTest {
         assertEquals("0", guard.get("minimum"));
         assertEquals("Insufficient stock", guard.get("message"));
         assertEquals("INVENTORY_BLOCK_NEGATIVE_STOCK", guard.get("enabledBy"));
+        // The guard names the aggregate it protects, so the skip it logs for a row that belongs to no
+        // key-tuple can be traced back to a declaration (#7180).
+        assertEquals("onHand", guard.get("aggregate"));
         List<Map<String, String>> keys = (List<Map<String, String>>) guard.get("keys");
         assertEquals(2, keys.size());
         assertEquals("Product", keys.get(0)

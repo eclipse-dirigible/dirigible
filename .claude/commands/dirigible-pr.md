@@ -2,7 +2,10 @@
 description: Prepare the branch for a PR — format Java + validate javadoc on changed modules, fix issues
 ---
 
-Prepare the current branch for a pull request. Do NOT commit or push — leave that to the user.
+Prepare the current branch for a pull request. On its own this command does NOT commit or push —
+it leaves that to the user. When it runs as the verification step of `/dirigible-take` or of a
+"take this: <issue>" request, the chain in `.claude/docs/take-this-workflow.md` continues with
+commit, push and `gh pr create` without asking.
 
 Announce each step to the user as you go (e.g. "Scoping changed modules…", "Formatting modules X, Y…",
 "Running the javadoc check…", "Fixing javadoc errors in …", "Done — summary below") so it is always
@@ -27,4 +30,5 @@ clear what is happening at the moment.
 
 5. **Summarize.** Report: which modules were formatted, what javadoc issues were fixed (if any),
    the final pass/fail state, and a short summary of the diff suitable for a PR description.
-   Remind the user the changes are staged for them to review/commit/push.
+   When invoked standalone, remind the user the changes are staged for them to review/commit/push;
+   inside a take-this run, continue with the commit, push and PR.

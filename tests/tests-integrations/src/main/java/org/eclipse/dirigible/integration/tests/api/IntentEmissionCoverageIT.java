@@ -1997,10 +1997,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // sweeping N lines away with their master issued N reads, N targeted updates and N SYSTEM
         // "totals changed" history rows against a row that is gone microseconds later. The master marks
         // its own id for the duration of the cascade, and recalculate honours the mark (#7143).
+        // Asserted on Bill, the fixture's DOCUMENT master: the suspension exists only where a totals
+        // write-back does. Entry declares no aggregate of its lines and neither of its two composition
+        // children is the document's items, so its repository carries no recalculate to suspend - the
+        // guard could never be emitted there.
+        String documentMasterRepository = contentOf("gen/emission/data/bill/BillRepository.java");
         assertTrue(
-                entryRepository.contains("DELETING_IDS.get().add(deletingMaster)")
-                        && entryRepository.contains("if (DELETING_IDS.get().contains(String.valueOf(id)))"),
-                "a master being deleted must suspend the per-line totals write-back, got: " + entryRepository);
+                documentMasterRepository.contains("DELETING_IDS.get().add(deletingMaster)")
+                        && documentMasterRepository.contains("if (DELETING_IDS.get().contains(String.valueOf(id)))"),
+                "a master being deleted must suspend the per-line totals write-back, got: " + documentMasterRepository);
         // The children's own repositories own nothing: neither may cascade into its master.
         assertFalse(contentOf("gen/emission/data/entry/EntryLineRepository.java").contains("deleteOwnedChildren"),
                 "a childless composition child must emit no cascade at all");
@@ -2324,6 +2329,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // both PERSIST the row and mark it instead of throwing.
         assertTrue(ledgerRepository.contains("Criteria.create().eq(\"Person\", entity.Person).eq(\"Unit\", entity.Unit)"),
                 "a guard must recompute its aggregate over the incoming row's full key-tuple");
+        // ...and only for a row that HAS a full key-tuple. Criteria.eq is null-safe (#7134), so a null
+        // key no longer matches nothing - it matches the null group, a pool of tuple-less rows that the
+        // aggregate handler ignores by contract and materialises no target row for (#7180).
+        assertTrue(ledgerRepository.contains("boolean guardKeyed = entity.Person != null && entity.Unit != null;"),
+                "a guard must test every grouping key for null before it recomputes: " + ledgerRepository);
+        assertTrue(ledgerRepository.contains("boolean guardWithin = true;") && ledgerRepository.contains("if (guardKeyed) {"),
+                "a row belonging to no key-tuple must pass the guard untouched - no throw, no marker, no forced status");
         assertTrue(ledgerRepository.contains("throw new ValidationException(\"Insufficient balance\")"),
                 "outcome block must fail the write with the authored message");
         assertTrue(ledgerRepository.contains("Configurations.get(\"EMISSION_BLOCK_NEGATIVE_LEDGER\""),
@@ -2904,6 +2916,39 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the personal line dialog must show its error INSIDE the dialog - the items-pane banner sits behind it");
         assertTrue(myRosterPage.contains("applyItemError") && myRosterPage.contains("namedProperty"),
                 "a refused personal line must be mapped onto the property the server named, not printed raw");
+
+        // #7242: #7151/#7152 reached the shared apiErrors helper and the line dialogs only - the
+        // personal/partner form save and the document HEADER save still printed the raw developer-
+        // facing e.message and marked no field. Mirror baseFormPage.applyApiError on both surfaces:
+        // namedProperty -> fieldError, messageWithLabels, else the refusal text, else the neutral
+        // fallback - and route the load/delete paths through the same safe refusalMessageFor helper.
+        assertTrue(myFormPage.contains("applyApiError") && myFormPage.contains("namedProperty"),
+                "the personal form save must map a named rejection onto its property, not print e.message");
+        assertTrue(myFormPage.contains("refusalMessageFor"),
+                "the personal form's load/delete paths must go through the safe refusal helper, not e.message");
+        assertFalse(myFormPage.contains("(e && e.message)"), "the personal form must never surface the developer-facing e.message");
+        assertTrue(myForm.contains(":aria-invalid=\"fieldError === "),
+                "the personal form's header controls must mark the field a rejection named");
+
+        String partnerForm = contentOf("gen/emission/views/partner/PartnerTicket-form.html");
+        String partnerFormPage = contentOf("gen/emission/js/components/pages/partner/PartnerTicketPartnerFormPage.js");
+        assertTrue(partnerFormPage.contains("applyApiError") && partnerFormPage.contains("namedProperty"),
+                "the partner form save must map a named rejection onto its property, not print e.message");
+        assertTrue(partnerFormPage.contains("refusalMessageFor"),
+                "the partner form's load/delete paths must go through the safe refusal helper, not e.message");
+        assertFalse(partnerFormPage.contains("(e && e.message)"), "the partner form must never surface the developer-facing e.message");
+        assertTrue(partnerForm.contains(":aria-invalid=\"fieldError === "),
+                "the partner form's header controls must mark the field a rejection named");
+
+        // The document HEADER save gets the identical treatment - the my-document class is the one
+        // #7242 was filed reviewing (the line dialog got it in #7152, the header did not).
+        assertTrue(myRosterPage.contains("applyApiError") && myRosterPage.contains("namedProperty"),
+                "the personal document's header save must map a named rejection onto its property");
+        assertTrue(myRosterPage.contains("refusalMessageFor"),
+                "the personal document's load/delete/items paths must go through the safe refusal helper");
+        assertFalse(myRosterPage.contains("(e && e.message)"), "the personal document must never surface the developer-facing e.message");
+        assertTrue(myRosterDoc.contains(":aria-invalid=\"fieldError === "),
+                "the personal document's header controls must mark the field a rejection named");
 
         // The app-test manifest carries the personal UI-parity metadata the runner's my flow
         // drives (wave 2): the /my route, the layout family the personal page belongs to, and

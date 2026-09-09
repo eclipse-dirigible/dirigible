@@ -76,6 +76,9 @@ public class ${className}Posting implements MessageHandler {
 #if($hasRule)
         // Determination rule first (the item derivation depends on it): a missing rule or a null
         // referenced column SKIPS - the document stays on the unposted worklist, never half-posted.
+        // The match value is the AUTHORED literal of rule.match, not a value read off the source, so it
+        // is never null here and the NULL-SAFE Criteria.eq (#7134) cannot turn this lookup into a match
+        // on the rule table's null group; an empty authored literal is refused at parse (#7180).
         java.util.List<gen.${javaGenFolderName}.data.${ruleJavaPerspective}.${ruleEntity}Entity> ruleRows =
                 new gen.${javaGenFolderName}.data.${ruleJavaPerspective}.${ruleEntity}Repository().findAll(
                         Criteria.create().eq("${ruleMatchProperty}", ${ruleMatchValueJava}));
@@ -160,7 +163,7 @@ public class ${className}Posting implements MessageHandler {
         java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> existingTargets =
                 relatedTargets;
 #end
-#if($headerAssignments.size() > 0)
+#if($hoistsHeaderValues)
         // The header values, evaluated ONCE. The comparison below and the assignment further down must
         // see the SAME value: an expression read twice - anything reading the clock - would differ
         // between the two reads and make every redelivery look like an amendment (#7131). Evaluated
@@ -169,7 +172,9 @@ public class ${className}Posting implements MessageHandler {
         // an expression with a cost or a side effect must not run for those (#7177).
 #end
 #foreach($a in $headerAssignments)
+#if($a.hoisted)
         var ${a.local} = ${a.expr};
+#end
 #end
         gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity target;
         boolean refresh = !existingTargets.isEmpty();
@@ -184,11 +189,11 @@ public class ${className}Posting implements MessageHandler {
 #if($a.overwrittenOnSave)
             // ${a.targetProp} is not compared: the write computes it itself (#7177).
 #elseif($a.compareOnlyWhenDerived)
-            unchanged = unchanged && sameUnlessDerivedIsEmpty(target.${a.targetProp}, ${a.local});
+            unchanged = unchanged && sameUnlessDerivedIsEmpty(target.${a.targetProp}, ${a.value});
 #elseif($a.derivedDefault != "")
-            unchanged = unchanged && same(target.${a.targetProp}, ${a.local}, ${a.derivedDefault});
+            unchanged = unchanged && same(target.${a.targetProp}, ${a.value}, ${a.derivedDefault});
 #else
-            unchanged = unchanged && same(target.${a.targetProp}, ${a.local});
+            unchanged = unchanged && same(target.${a.targetProp}, ${a.value});
 #end
 #end
             // Row order is not guaranteed by the query, so each derived row is matched against an
@@ -229,7 +234,7 @@ public class ${className}Posting implements MessageHandler {
             currentItems = java.util.List.of();
         }
 #foreach($a in $headerAssignments)
-        target.${a.targetProp} = ${a.local};
+        target.${a.targetProp} = ${a.value};
 #end
         // ONE transaction for the whole post: the stale rows a rewrite replaces, the header and every
         // derived line either all become durable or none of them does. Written as separate
