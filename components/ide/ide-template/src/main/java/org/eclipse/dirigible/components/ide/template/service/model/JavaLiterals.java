@@ -64,11 +64,10 @@ final class JavaLiterals {
      * <p>
      * A numeric default is parsed from its authored text rather than inlined as a numeric literal, so
      * an author's {@code "8.0"} on an integer column fails that one create instead of failing the whole
-     * generated build. A string default is accepted in either authoring shape - bare ({@code DRAFT},
-     * what the item dialog seeds) or SQL-quoted ({@code 'DRAFT'}, what a working DB DEFAULT needs,
-     * since the value reaches the DDL verbatim) - and both yield the string the column would hold. A
-     * date/time or binary column has no literal: its DEFAULT is emitted verbatim into the DDL and is
-     * typically a SQL expression ({@code CURRENT_DATE}, {@code now()}).
+     * generated build. A string default is read in either authoring shape ({@link AuthoredDefaults}),
+     * and both yield the string the column would hold. A date/time or binary column has no literal: its
+     * DEFAULT is emitted verbatim into the DDL and is typically a SQL expression ({@code CURRENT_DATE},
+     * {@code now()}).
      *
      * @param javaClass the property's Java class, as the parameter graph resolved it
      * @param defaultValue the authored default, as the model carries it
@@ -85,33 +84,9 @@ final class JavaLiterals {
             case "Long" -> "Long.valueOf(\"" + escape(defaultValue) + "\")";
             case "Integer" -> "Integer.valueOf(\"" + escape(defaultValue) + "\")";
             case "Short" -> "Short.valueOf(\"" + escape(defaultValue) + "\")";
-            case "Boolean" -> isTrueLiteral(defaultValue) ? "Boolean.TRUE" : "Boolean.FALSE";
-            case "String" -> "\"" + escape(unquote(defaultValue)) + "\"";
+            case "Boolean" -> AuthoredDefaults.readsAsTrue(defaultValue) ? "Boolean.TRUE" : "Boolean.FALSE";
+            case "String" -> "\"" + escape(AuthoredDefaults.unquote(defaultValue)) + "\"";
             default -> null;
         };
-    }
-
-    /**
-     * Whether an authored boolean default reads as true.
-     *
-     * @param defaultValue the authored default
-     * @return true when it does
-     */
-    private static boolean isTrueLiteral(String defaultValue) {
-        return "true".equals(defaultValue) || "TRUE".equals(defaultValue) || "1".equals(defaultValue);
-    }
-
-    /**
-     * Strips the SQL single quotes an authored string default may carry, leaving the string the column
-     * would hold.
-     *
-     * @param defaultValue the authored default
-     * @return the value without its surrounding quotes
-     */
-    private static String unquote(String defaultValue) {
-        if (defaultValue.length() > 1 && defaultValue.startsWith("'") && defaultValue.endsWith("'")) {
-            return defaultValue.substring(1, defaultValue.length() - 1);
-        }
-        return defaultValue;
     }
 }

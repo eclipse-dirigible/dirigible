@@ -3079,6 +3079,53 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void an_authored_default_is_escaped_into_the_item_dialog_seed() {
+        // #7207: the seed for a new line was interpolated into a JavaScript string literal verbatim,
+        // so an authored apostrophe ended the literal and the whole register was a syntax error - the
+        // page failed to load entirely, rather than one field mis-seeding. Sibling of #7154, which
+        // fixed the same interpolation one language over (the repository's Java literal).
+        writeIntent("""
+                name: registers
+                entities:
+                  - name: Ticket
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: issued, type: date }
+                    relations:
+                      - { name: lines, kind: oneToMany, to: TicketLine }
+
+                  - name: TicketLine
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: copy,     type: string,  length: 40, defaultValue: "Owner's copy" }
+                      - { name: path,     type: string,  length: 40, defaultValue: 'C:\\tmp' }
+                      - { name: quantity, type: integer, defaultValue: 1 }
+                      - { name: billable, type: boolean, defaultValue: true }
+                      - { name: stage,    type: string,  length: 20, defaultValue: DRAFT }
+                    relations:
+                      - { name: ticket, kind: manyToOne, to: Ticket, composition: true }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "registers.model");
+        String detailRegister = contentOf("gen/registers/js/components/pages/Ticket/TicketLine.detail.js");
+
+        // The seed keeps the shape the draft holds - a checkbox a real boolean, a numeric column a
+        // real number, everything else a string...
+        assertTrue(detailRegister.contains(", def: true"), "a boolean default must seed a real boolean, got: " + detailRegister);
+        assertTrue(detailRegister.contains(", def: 1"), "a numeric default must seed a real number, got: " + detailRegister);
+        assertTrue(detailRegister.contains(", def: 'DRAFT'"), "a string default must seed a quoted string, got: " + detailRegister);
+        // ...and a value carrying the apostrophe that delimits it is escaped into the literal instead
+        // of ending it.
+        assertTrue(detailRegister.contains(", def: 'Owner\\'s copy'"),
+                "a default carrying the apostrophe that delimits the seed must be escaped into it, got: " + detailRegister);
+        assertTrue(detailRegister.contains(", def: 'C:\\\\tmp'"),
+                "a default carrying a backslash must be escaped into the seed, got: " + detailRegister);
+    }
+
+    @Test
     void report_widget_generates_the_kpi_block_and_replaces_entity_tiles() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()

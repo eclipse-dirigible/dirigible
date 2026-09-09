@@ -355,6 +355,9 @@ final class ModelParameterProcessor {
         resolveDefaultValueLiterals(property);
 
         resolveWidgetLengths(property, entity, dataType);
+        // After the widget flags: the seed is emitted in the shape the draft holds, and a numeric
+        // column is what decides between a real number and a string.
+        resolveDefaultValueJsLiteral(property);
         property.put("inputRule", strOr(property, "widgetPattern", ""));
         collectMasterProperties(property, entity);
         collectReferencedProjections(property, entity, entities);
@@ -400,6 +403,30 @@ final class ModelParameterProcessor {
         String expression = JavaLiterals.defaultValueExpression(str(property, "dataTypeJavaClass"), defaultValue);
         if (expression != null) {
             property.put("dataDefaultValueJavaLiteral", expression);
+        }
+    }
+
+    /**
+     * Derives the authored default as the JavaScript value the item dialog seeds a new line with.
+     *
+     * <p>
+     * The column already carries this value as a DB DEFAULT and the repository applies it on create
+     * (#7104); seeding the dialog is what makes it visible and editable before the row is posted. The
+     * seed is resolved here rather than assembled in the template, so an authored value carrying an
+     * apostrophe or a backslash is escaped instead of ending the literal it is written into and making
+     * the whole generated register a syntax error - which fails the page, not the one field (#7207).
+     *
+     * <p>
+     * A key with no expression is left absent rather than null: a template reads the key's presence as
+     * "this property has a default to seed".
+     *
+     * @param property the property
+     */
+    private static void resolveDefaultValueJsLiteral(Map<String, Object> property) {
+        String expression = JsLiterals.defaultValueExpression(str(property, "widgetType"),
+                Boolean.TRUE.equals(property.get("isNumberType")), str(property, "dataDefaultValue"));
+        if (expression != null) {
+            property.put("dataDefaultValueJsLiteral", expression);
         }
     }
 
