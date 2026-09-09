@@ -1945,39 +1945,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /**
      * Render a {@code posts:} {@code set:} value to a Java expression over the {@code source} entity
-     * and the per-item {@code item} entity. Supported forms (the inventory ledger's needs):
-     * {@code item.<Field>} (item copy), {@code -item.<Field>} (negated item copy, null-safe),
-     * {@code source.<Field>} (source copy), an integer literal (a constant FK/int), a quoted string,
-     * else pass-through (best effort). Fuller {@code Calc} expressions are a follow-up.
+     * and the per-item {@code item} entity. The vocabulary lives in {@link PostSetSupport}, shared with
+     * the parse-time refusal so the two cannot drift: a plain constant renders as an escaped string
+     * literal, and a value that reads as an expression this renderer cannot compile never reaches here
+     * - the parser refuses it.
+     *
+     * @param raw the authored value
+     * @return the Java expression
      */
     private static String postSetExpr(String raw) {
-        if (raw == null) {
-            return "null";
-        }
-        String v = raw.trim();
-        java.util.regex.Matcher neg = java.util.regex.Pattern.compile("^-\\s*item\\.(\\w+)$")
-                                                             .matcher(v);
-        if (neg.matches()) {
-            String f = "item." + IntentNaming.pascalCase(neg.group(1));
-            return f + " == null ? null : " + f + ".negate()";
-        }
-        java.util.regex.Matcher item = java.util.regex.Pattern.compile("^item\\.(\\w+)$")
-                                                              .matcher(v);
-        if (item.matches()) {
-            return "item." + IntentNaming.pascalCase(item.group(1));
-        }
-        java.util.regex.Matcher src = java.util.regex.Pattern.compile("^source\\.(\\w+)$")
-                                                             .matcher(v);
-        if (src.matches()) {
-            return "source." + IntentNaming.pascalCase(src.group(1));
-        }
-        if (v.matches("-?\\d+")) {
-            return v; // integer constant (e.g. a Direction FK id)
-        }
-        if (v.matches("\"[^\"]*\"")) {
-            return v; // already-quoted string literal
-        }
-        return v; // pass-through (best effort); fuller Calc rendering is a follow-up
+        return PostSetSupport.expression(raw);
     }
 
     /** Test hook: build the {@code posts} glue collection without a repository. */

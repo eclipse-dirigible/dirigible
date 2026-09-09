@@ -30,6 +30,7 @@ import org.eclipse.dirigible.components.intent.generator.FileNameSupport;
 import org.eclipse.dirigible.components.intent.generator.NotificationSupport;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
+import org.eclipse.dirigible.components.intent.generator.PostSetSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
@@ -410,6 +411,7 @@ public final class IntentParser {
         validateExpansions(model, issues);
         validateSettlements(model, issues);
         validateResolves(model, entityNames, issues);
+        validatePostSets(model, issues);
         validateIdempotencyGuardOwnership(model, issues);
         validatePermissions(model, issues);
         if (!issues.isEmpty()) {
@@ -7172,6 +7174,36 @@ public final class IntentParser {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * The value vocabulary of a {@code posts:} {@code set:} entry: a per-item or source copy, a number,
+     * a boolean, {@code null}, or a plain constant. A value that reads as an expression the renderer
+     * cannot compile - a dotted path off anything but {@code item} / {@code source}, or a negation of
+     * anything but a per-item copy - is refused here.
+     *
+     * <p>
+     * It is refused rather than rendered because both other outcomes are silent: passing the text
+     * through emits a bare Java identifier and breaks the compile of the whole generated module
+     * (dirigible #7246), and rendering it as a string constant would put the text of the path into the
+     * ledger cell instead of the value it names. An author who really means the text quotes it.
+     *
+     * @param model the model
+     * @param issues the collected issues
+     */
+    private static void validatePostSets(IntentModel model, List<String> issues) {
+        for (PostIntent post : model.getPosts()) {
+            String subject = "posts [" + post.getName() + "]";
+            for (Map.Entry<String, String> assignment : post.getSet()
+                                                            .entrySet()) {
+                if (PostSetSupport.isUnsupportedExpression(assignment.getValue())) {
+                    issues.add(subject + " set [" + assignment.getKey() + "]: value [" + assignment.getValue()
+                            + "] is not a value this rule can render - write item.<Field>, source.<Field>,"
+                            + " -item.<Field>, a number, or a plain constant; quote it (\"" + assignment.getValue()
+                            + "\") to mean that text.");
                 }
             }
         }

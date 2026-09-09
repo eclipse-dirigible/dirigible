@@ -10,12 +10,15 @@
 package org.eclipse.dirigible.components.intent.generator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -71,6 +74,7 @@ class GluePostsTest {
                   Quantity: "-item.Quantity"
                   Direction: 2
                   Store: source.Store
+                  Note: issued
             """;
 
     @SuppressWarnings("unchecked")
@@ -98,11 +102,44 @@ class GluePostsTest {
         assertEquals("GoodsIssue", p.get("backRef"));
 
         List<Map<String, String>> assigns = (List<Map<String, String>>) p.get("assigns");
-        assertEquals(4, assigns.size());
+        assertEquals(5, assigns.size());
         // item copy, null-safe negation, integer constant, source copy - rendered to Java expressions.
         assertEquals(Map.of("field", "Product", "expr", "item.Product"), assigns.get(0));
         assertEquals(Map.of("field", "Quantity", "expr", "item.Quantity == null ? null : item.Quantity.negate()"), assigns.get(1));
         assertEquals(Map.of("field", "Direction", "expr", "2"), assigns.get(2));
         assertEquals(Map.of("field", "Store", "expr", "source.Store"), assigns.get(3));
+        // a plain constant: a Java string literal, never the bare identifier that would not compile.
+        assertEquals(Map.of("field", "Note", "expr", "\"issued\""), assigns.get(4));
+    }
+
+    /** A constant carrying a quote or a backslash cannot end the literal it is written into. */
+    @Test
+    void escapesAConstantThatWouldCloseTheLiteral() {
+        assertEquals("\"6\\\" pipe\"", PostSetSupport.expression("6\" pipe"));
+        assertEquals("\"back\\\\slash\"", PostSetSupport.expression("back\\slash"));
+    }
+
+    /** The forms that are values rather than text: numbers, booleans, an explicitly quoted constant. */
+    @Test
+    void rendersTheNonTextForms() {
+        assertEquals("2", PostSetSupport.expression("2"));
+        assertEquals("-3.5", PostSetSupport.expression("-3.5"));
+        assertEquals("true", PostSetSupport.expression("true"));
+        assertEquals("null", PostSetSupport.expression("null"));
+        assertEquals("\"source.Store\"", PostSetSupport.expression("\"source.Store\""));
+    }
+
+    /**
+     * A value that reads as an expression the renderer cannot compile is refused at parse time, naming
+     * the rule and the field - never rendered, since both other outcomes are silent.
+     */
+    @Test
+    void refusesAnExpressionItCannotRender() {
+        String yaml = YAML.replace("Store: source.Store", "Store: Receipt.Store");
+        IntentValidationException failure = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(failure.getIssues()
+                          .stream()
+                          .anyMatch(issue -> issue.contains("posts [goodsIssueLedger] set [Store]") && issue.contains("[Receipt.Store]")),
+                "expected the refusal to name the rule and the field, got " + failure.getIssues());
     }
 }
