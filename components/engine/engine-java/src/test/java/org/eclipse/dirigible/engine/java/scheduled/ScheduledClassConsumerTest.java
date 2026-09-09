@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.jobs.domain.Job;
 import org.eclipse.dirigible.components.jobs.manager.JobsManager;
@@ -68,7 +69,10 @@ class ScheduledClassConsumerTest {
         componentContainer = mock(ComponentContainer.class);
         jobsManager = mock(JobsManager.class);
         jobService = mock(JobService.class);
+        Tenant tenant = mock(Tenant.class);
+        when(tenant.getId()).thenReturn("default-tenant");
         TenantContext tenantContext = mock(TenantContext.class);
+        when(tenantContext.getCurrentTenant()).thenReturn(tenant);
         // Registration runs per tenant; run the callable once so the test sees what it writes.
         when(tenantContext.executeForEachTenant(any())).thenAnswer(invocation -> {
             ((CallableResultAndException) invocation.getArgument(0)).call();

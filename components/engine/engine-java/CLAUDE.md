@@ -171,6 +171,18 @@ instantiate client classes.
   the repeats, plus one WARN summary per incomplete pass — a permanently refused subscription (every
   node of a deployment derives the same durable id, so the second one to attach is turned away for
   good) would otherwise emit a line per tenant per tick forever.
+- **A retry pass touches only what is still missing, on both sides.** Each consumer records the
+  `(declaration, tenant)` pairs that landed — `Registration.isSubscribed` / `isRegistered` — and a
+  pass skips them. The bound matters most on the scheduled side, because a registration there is a
+  *write*: `ScheduledClassConsumer` used to re-run `jobService.save` (`saveAndFlush`) +
+  `jobsManager.scheduleJob` + an INFO line for every job of every loaded class in every tenant on
+  every tick while any ONE job's registration was failing, so N x T row writes and reschedules every
+  30 s from every node of the cluster onto the same shared `DIRIGIBLE_JOBS` rows, burying the single
+  WARN that was the actual fault (#7265). A class **reload** still re-registers everything the class
+  declares: a fresh `Registration` records nothing as landed, which is what lets a changed cron reach
+  the row. The per-tenant work also sits in a `try` **inside** the `executeForEachTenant` body, since
+  that helper propagates the first throw — without it one tenant's refusal leaves every tenant behind
+  it untouched and forces the ones in front of it to be redone by the retry.
 - `WebsocketClassConsumer` + `JavaWebsocketRegistry` — websockets; `WebsocketProcessor`
   (`engine-websockets`) calls `JavaWebsocketRegistry.dispatch(...)` reflectively (keeps that module free
   of an `engine-java` dependency).
