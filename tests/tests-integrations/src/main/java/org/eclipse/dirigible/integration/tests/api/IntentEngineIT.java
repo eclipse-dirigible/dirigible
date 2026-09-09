@@ -124,11 +124,11 @@ class IntentEngineIT extends IntegrationTest {
     private static final String DEPENDENCY_GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + DEPENDENCY_PROJECT + "&path=app.intent";
     /**
-     * The generated -transitioned publish, matched on its sendToTopic argument. The code comments that
-     * explain the flip mention "-transitioned" as well, and they sit before the target save - matching
-     * the bare word would find a comment and read as a publish in the wrong place.
+     * The generated -transitioned announcement, matched on the topic ARGUMENT of the targeted write it
+     * rides (#7160). The code comments that explain the flip mention "-transitioned" as well, so
+     * matching the bare word would find a comment and read as an announcement.
      */
-    private static final String TRANSITIONED_PUBLISH = "-transitioned\", Json.stringify(transitionedSource)";
+    private static final String TRANSITIONED_PUBLISH = "-transitioned\");";
     private static final String AGENT_URL = "/services/ide/intent/agent";
     private static final String ASSIST_URL = "/services/ide/intent/assist";
 
@@ -3559,18 +3559,21 @@ class IntentEngineIT extends IntegrationTest {
 
         generateFromModel("template-application-events-java/template/template.js", "proforma.glue");
         String generate = codeOf("gen/events/proforma/InvoiceFromProformaGenerate.java");
-        // The completion hook flips the source status via the targeted single-column primitive...
+        // The completion hook flips the source status via the targeted primitive - and the
+        // "-transitioned" announcement RIDES that very write (#7160), so the flip and its event are
+        // recorded in the outbox by one statement pair inside the unit's own transaction.
         // (the create-from's body is a create(Integer sourceId) method both the button endpoint and an
         // event trigger call - hence sourceId rather than the posted request's id, since #6711.)
-        assertTrue(generate.contains("updateProperty(sourceId, \"Status\", 3)"),
-                "the source status must be flipped with the targeted updateProperty write");
-        // ...and reloads before publishing so the -transitioned payload is the committed row - which
-        // since #7069 is read back after the unit of work, into its own local, because the commit is
-        // what makes the transition true.
-        assertTrue(generate.contains("findById(sourceId)"), "it should reload the source for the -transitioned payload");
-        // Anchored on the sendToTopic ARGUMENT, not the bare word: the explanatory comments around the
-        // flip name "-transitioned" too, and a comment must not stand in for the publish.
-        assertTrue(generate.contains(TRANSITIONED_PUBLISH), "it should publish the source's -transitioned channel");
+        assertTrue(generate.contains("updateProperties(sourceId, java.util.Map.of(\"Status\", 3),"),
+                "the source status must be flipped with the targeted updateProperties write");
+        // Anchored on the topic ARGUMENT, not the bare word: the explanatory comments around the flip
+        // name "-transitioned" too, and a comment must not stand in for the announcement.
+        assertTrue(generate.contains(TRANSITIONED_PUBLISH), "it should announce the source's -transitioned channel");
+        // The event must not be published on the side, past the write's own transaction: a crash
+        // between the commit and a separate send loses it outright, and EventOutboxRelayJob cannot
+        // recover what was never recorded.
+        assertFalse(generate.contains("Producer.sendToTopicDurable"),
+                "the -transitioned announcement must ride the write into the outbox, not a bare publish");
         // ...NOT the full-row merge that would revert a concurrent write to the source row (the actual
         // call pattern; an explanatory code comment naming it is expected and must not trip this).
         assertFalse(generate.contains("Repository().updateWithoutEvent(source)"),
@@ -3579,12 +3582,9 @@ class IntentEngineIT extends IntegrationTest {
         // enforces, so a move the graph does not declare must throw with nothing yet created - flipping
         // afterwards left a committed document behind whose source never transitioned, and the guard on
         // the back-reference then made a redelivery return that document instead of repairing the flip.
-        // The publish stays last: the transition is complete only once the document it was about exists.
-        int flip = generate.indexOf("updateProperty(sourceId, \"Status\", 3)");
+        int flip = generate.indexOf("updateProperties(sourceId, java.util.Map.of(\"Status\", 3),");
         int save = generate.indexOf("Repository().save(target)");
-        int publish = generate.indexOf(TRANSITIONED_PUBLISH);
         assertTrue(flip < save, "the source flip must precede the target save, got flip@" + flip + " save@" + save);
-        assertTrue(save < publish, "the -transitioned publish must follow the target save, got save@" + save + " publish@" + publish);
 
         // #7069: the header, its lines and the flip are ONE transaction, so a line the target refuses
         // takes the header and the flip with it. Written as separate transactions, a create-from that
@@ -3593,10 +3593,12 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(generate.contains("UnitOfWork.call(() -> {"), "the create-from body must run as one unit of work");
         int unit = generate.indexOf("UnitOfWork.call(() -> {");
         assertTrue(unit < flip && unit < save, "the unit of work must open before the flip and the save");
-        // The announcement stays OUTSIDE it: the commit is what makes the transition true, so publishing
-        // it inside would state a transition a failing commit then rolled back.
-        assertTrue(generate.indexOf("\n        });") < publish,
-                "the -transitioned publish must follow the unit of work's close, got publish@" + publish);
+        // ...and the announcement is recorded INSIDE it (#7160), which is what makes it atomic with the
+        // flip. It still states a COMPLETED transition: a unit's events reach the broker only once the
+        // whole unit has committed, so a target its lines refuse takes the flip and its notice along.
+        int announcement = generate.indexOf(TRANSITIONED_PUBLISH);
+        assertTrue(unit < announcement && announcement < generate.indexOf("\n        });"),
+                "the -transitioned announcement must be recorded inside the unit of work, got announcement@" + announcement);
 
         // The completion hook also IMPLIES the from-status guard (#7068): a Proforma already standing
         // at the status the hook writes has been invoiced, so a second click - or a second POST to the

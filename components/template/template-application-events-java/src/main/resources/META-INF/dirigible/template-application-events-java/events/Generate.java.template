@@ -134,18 +134,14 @@ public class ${className}Generate {
 #end
      */
     public gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity create(Integer sourceId#if($hasPrompt), java.util.Map<String, Object> values#end) {
-#if($sourceStatusValue != "")
-        // Set on the one path that actually generated a document, so the announcement below is skipped
-        // by the early returns (no source, or an existing target the guard handed back).
-        boolean[] transitioned = {false};
-#end
         // ONE transaction for the whole create-from: the target header, its lines and the source's
         // sourceStatus flip either all become durable or none of them does. Written as separate
         // transactions, a line that a validation or a constraint refuses left behind a header-only
         // document whose source was already marked as generated-from - a document that exists, counts
         // as the period's billing, and is missing exactly what it was for, with no way back but an
         // administrator (dirigible #7069). Reads inside the block see the block's own writes, so the
-        // reload below carries the flipped status.
+        // status the flip below wrote is what the rest of the block - and its announcement's payload -
+        // reads.
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity result =
                 org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
             gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
@@ -211,13 +207,24 @@ public class ${className}Generate {
             // posting and integration keyed on the new status silently never ran; and because the guard above
             // returns on the existing document, a redelivery could not repair it either. This way a redelivery
             // re-runs the flip as a no-op (previous == next) and goes on to create what is missing.
-            // Flip ONLY the status column through the targeted single-column primitive. A full-row
+            // Flip ONLY the status column, through the targeted primitive. A full-row
             // updateWithoutEvent(source) would merge the snapshot loaded at the top of create() and silently
             // revert any concurrent write to the source row (recalculated totals, a workflow status). Same
-            // reason the process trigger writes ProcessId via updateProperty rather than update().
+            // reason the process trigger writes ProcessId through the targeted primitive rather than update().
+            // The "-transitioned" notice RIDES that write into the tenant's outbox, inside this unit's
+            // own transaction, so the flip and its announcement commit together - a crash between the
+            // commit and a separate publish lost the event outright, and the relay cannot recover what
+            // was never recorded (dirigible #7160). It still announces a COMPLETED transition: the
+            // events a unit records are handed to the broker only once the whole unit has committed,
+            // so a target the lines below refuse takes the flip and this notice with it. The payload is
+            // the source row exactly as the statement left it - never a re-read a concurrent write
+            // could have moved on. No "-updated" re-fire either (no onUpdate reactions): the dedicated
+            // "-transitioned" channel is what posting glue and integrations bind, as for a transitions
+            // button and a workflow setter.
             gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
                     new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository();
-            sourceRepository.updateProperty(sourceId, "${sourceStatusProperty}", ${sourceStatusValue});
+            sourceRepository.updateProperties(sourceId, java.util.Map.of("${sourceStatusProperty}", ${sourceStatusValue}),
+                    "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned");
     #end
             gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved =
                     new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().save(target);
@@ -308,27 +315,8 @@ public class ${className}Generate {
             }
     #end
     #end
-    #if($sourceStatusValue != "")
-            transitioned[0] = true;
-    #end
             return saved;
         });
-#if($sourceStatusValue != "")
-        // The transition is only COMPLETE now that the document it was about exists AND is committed, so
-        // this is where it is announced - outside the unit of work, whose commit is the thing that makes
-        // it true. Announcing it inside would state a transition a failing commit then rolled back, and
-        // every posting and integration keyed on the new status would have run against nothing. It is a
-        // workflow-style system write: no "-updated" re-fire (no onUpdate reactions), but the dedicated
-        // "-transitioned" topic IS published so posting glue / integrations observe it. Read back so the
-        // payload carries the committed row (the flipped status plus any write the target creation
-        // performed on the source), not the stale pre-generation snapshot.
-        if (transitioned[0]) {
-            gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity transitionedSource =
-                    new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(sourceId);
-            org.eclipse.dirigible.sdk.messaging.Producer.sendToTopicDurable(
-                    "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned", Json.stringify(transitionedSource));
-        }
-#end
         return result;
     }
 }

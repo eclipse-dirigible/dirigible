@@ -155,8 +155,7 @@ public class JavaEntityStore {
 
     /**
      * Insert a new entity, publishing it on the given topic plus any further events the write emits
-     * about other rows — e.g. a create-from announcing its source's completed transition only once the
-     * document that transition was about exists. All of them share the insert's transaction.
+     * about other rows. All of them share the insert's transaction.
      *
      * @param <T> the entity type
      * @param entity the entity to insert
