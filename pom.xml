@@ -124,7 +124,7 @@
              and passed, so no integration test ran anywhere - PR gate, master push or nightly - for
              three days. Surefire is unaffected (its tag filtering works on 3.6.0, container tests
              included), hence only this one is held back. -->
-        <maven-failsafe-plugin.version>3.5.6</maven-failsafe-plugin.version>
+        <maven-failsafe-plugin.version>3.6.0</maven-failsafe-plugin.version>
         <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
         <maven-jacoco-plugin.version>0.8.15</maven-jacoco-plugin.version>
