@@ -78,7 +78,10 @@ class ResilienceBpmnTest {
             "      - { name: notifyOwner, kind: serviceTask, args: { notify: { to: owner@example.com, subject: \"Tenant provisioned\","
                     + " body: \"Ready.\" }, retry: { count: 1, every: PT5S }, onError: recordFailure, next: done } }\n"
                     + "      - { name: recordFailure,")
-                                                .replace("onError: recordFailure, next: done", "onError: recordFailure, next: notifyOwner");
+                                                // Rewire only provisionApp (its PT1M cycle is unique) to lead to the send; the send keeps
+                                                // its own next: done, so the chain is provisionApp -> notifyOwner -> done, not a self-loop.
+                                                .replace("every: PT1M }, onError: recordFailure, next: done",
+                                                        "every: PT1M }, onError: recordFailure, next: notifyOwner");
 
     private static String bpmn(String yaml) {
         IntentModel model = IntentParser.parse(yaml);
@@ -247,6 +250,10 @@ class ResilienceBpmnTest {
         assertTrue(bpmn.contains("<boundaryEvent id=\"notifyOwnerError\" attachedToRef=\"notifyOwner\" cancelActivity=\"true\">"),
                 "the send needs its own cancelling boundary in:\n" + bpmn);
         assertFlow(bpmn, "notifyOwnerError", "recordFailure");
+        // The normal chain is provisionApp -> notifyOwner -> done (the end step, emitted as "end"): the
+        // send advances, never loops to itself.
+        assertFlow(bpmn, "provisionApp", "notifyOwner");
+        assertFlow(bpmn, "notifyOwner", "end");
         assertTrue(bpmn.contains("BPMNShape_notifyOwnerError"), "the boundary needs a shape or the modeler opens broken:\n" + bpmn);
         assertTrue(bpmn.contains("BPMNEdge_flow_notifyOwnerError_then"), "the error route needs its edge:\n" + bpmn);
     }
@@ -254,8 +261,7 @@ class ResilienceBpmnTest {
     /** A send that declares nothing emits no cycle - the send path stays byte-identical too. */
     @Test
     void aSendWithoutResilienceKeysEmitsNoCycle() {
-        String bpmn = bpmn(SEND_YAML.replace("retry: { count: 1, every: PT5S }, onError: notifyOwner, ", "")
-                                    .replace("retry: { count: 1, every: PT5S }, onError: recordFailure, ", ""));
+        String bpmn = bpmn(SEND_YAML.replace("retry: { count: 1, every: PT5S }, onError: recordFailure, ", ""));
 
         int task = bpmn.indexOf("<serviceTask id=\"notifyOwner\"");
         int nextTask = bpmn.indexOf("<serviceTask id=\"recordFailure\"");

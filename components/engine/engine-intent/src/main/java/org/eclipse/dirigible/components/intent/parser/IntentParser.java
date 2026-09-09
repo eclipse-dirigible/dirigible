@@ -6278,9 +6278,15 @@ public final class IntentParser {
                 }
             }
             String next = stepArg(step, "next");
-            if (next != null && !next.isBlank() && !isRoutingLiteral(next) && !stepNames.contains(next)) {
-                issues.add(
-                        "process [" + process.getName() + "] step [" + step.getName() + "] `next` references unknown step [" + next + "]");
+            if (next != null && !next.isBlank() && !isRoutingLiteral(next)) {
+                if (next.equals(step.getName())) {
+                    // A step whose `next` is itself emits a self-targeting sequence flow the engine spins on.
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] `next` targets itself - a self-loop that never advances");
+                } else if (!stepNames.contains(next)) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName() + "] `next` references unknown step [" + next
+                            + "]");
+                }
             }
         }
     }
