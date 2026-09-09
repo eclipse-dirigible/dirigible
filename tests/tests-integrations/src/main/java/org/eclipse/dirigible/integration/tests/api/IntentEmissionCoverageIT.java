@@ -2320,6 +2320,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // both PERSIST the row and mark it instead of throwing.
         assertTrue(ledgerRepository.contains("Criteria.create().eq(\"Person\", entity.Person).eq(\"Unit\", entity.Unit)"),
                 "a guard must recompute its aggregate over the incoming row's full key-tuple");
+        // ...and only for a row that HAS a full key-tuple. Criteria.eq is null-safe (#7134), so a null
+        // key no longer matches nothing - it matches the null group, a pool of tuple-less rows that the
+        // aggregate handler ignores by contract and materialises no target row for (#7180).
+        assertTrue(ledgerRepository.contains("boolean guardKeyed = entity.Person != null && entity.Unit != null;"),
+                "a guard must test every grouping key for null before it recomputes: " + ledgerRepository);
+        assertTrue(ledgerRepository.contains("boolean guardWithin = true;") && ledgerRepository.contains("if (guardKeyed) {"),
+                "a row belonging to no key-tuple must pass the guard untouched - no throw, no marker, no forced status");
         assertTrue(ledgerRepository.contains("throw new ValidationException(\"Insufficient balance\")"),
                 "outcome block must fail the write with the authored message");
         assertTrue(ledgerRepository.contains("Configurations.get(\"EMISSION_BLOCK_NEGATIVE_LEDGER\""),

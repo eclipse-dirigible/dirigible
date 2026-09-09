@@ -76,6 +76,9 @@ public class ${className}Posting implements MessageHandler {
 #if($hasRule)
         // Determination rule first (the item derivation depends on it): a missing rule or a null
         // referenced column SKIPS - the document stays on the unposted worklist, never half-posted.
+        // The match value is the AUTHORED literal of rule.match, not a value read off the source, so it
+        // is never null here and the NULL-SAFE Criteria.eq (#7134) cannot turn this lookup into a match
+        // on the rule table's null group; an empty authored literal is refused at parse (#7180).
         java.util.List<gen.${javaGenFolderName}.data.${ruleJavaPerspective}.${ruleEntity}Entity> ruleRows =
                 new gen.${javaGenFolderName}.data.${ruleJavaPerspective}.${ruleEntity}Repository().findAll(
                         Criteria.create().eq("${ruleMatchProperty}", ${ruleMatchValueJava}));
