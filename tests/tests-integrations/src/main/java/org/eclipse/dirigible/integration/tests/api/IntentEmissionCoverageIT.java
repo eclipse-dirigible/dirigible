@@ -2082,6 +2082,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the report repository must bind each authored parameter, typed from its target field");
         assertTrue(contentOf("gen/claimsbyunit/api/reports/ClaimsByUnitController.java").contains("@QueryParam(\"minTotal\")"),
                 "the report controller must expose each authored parameter as a query parameter");
+        // A dashboard count tile over an AGGREGATING report reads ONE aggregated number: the rows are
+        // groups, so the record count is the count(*) measure SUMMED, and summing it in the browser
+        // meant shipping every group row of the report per tile per dashboard load (dirigible #7161).
+        assertTrue(claimsByUnitRepository.contains("SELECT SUM(\\\"\" + column + \"\\\") AS \\\"REPORT_SUM\\\" FROM ("),
+                "the report repository must aggregate the count column in SQL: " + claimsByUnitRepository);
+        assertTrue(claimsByUnitRepository.contains("NUMERIC_COLUMN_TYPES.contains"),
+                "the summed column must be validated as numeric - a total over a text column is a client error");
+        assertTrue(contentOf("gen/claimsbyunit/api/reports/ClaimsByUnitController.java").contains("@Post(\"/sum\")"),
+                "the report controller must expose the server-side sum the count tile reads");
 
         // kind: statement (#6938): the line classification is a generated .view artifact next to the
         // .report - the selectors and labels live THERE, as data the ViewsSynchronizer provisions,
@@ -3561,6 +3570,47 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("$", hasSize(0)));
+
+        // The count tile's number, server-side (dirigible #7161). Both claims sit in ONE unit group,
+        // so the report yields a single row: its record count is the count(*) measure SUMMED (2) and
+        // NOT the number of rows (1), which is what the count endpoint reports - the two answers here
+        // differ, so this asserts the tile reads the right one. Only numeric columns total: the
+        // grouping label and an alias the report does not carry are client errors, not 500s.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"column\":\"Count\"}")
+                                                 .when()
+                                                 .post(REPORT_API + "/ClaimsByUnitController/sum")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 // Generic report JSON, so the number is a float here -
+                                                 // the tile formats it through the column's pattern.
+                                                 .body("sum", equalTo(2.0F)));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(REPORT_API + "/ClaimsByUnitController/count")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("count", equalTo(1)));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"column\":\"Unit\"}")
+                                                 .when()
+                                                 .post(REPORT_API + "/ClaimsByUnitController/sum")
+                                                 .then()
+                                                 .statusCode(400));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"column\":\"Nonexistent\"}")
+                                                 .when()
+                                                 .post(REPORT_API + "/ClaimsByUnitController/sum")
+                                                 .then()
+                                                 .statusCode(400));
+        // ... and the tile's `at` pins ride the same per-column conditions the report page filters
+        // with, so a pinned sum narrows to the pinned group.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"column\":\"Count\",\"conditions\":[{\"column\":\"Unit\",\"operator\":\"EQ\",\"value\":\"Nothing\"}]}")
+                                                 .when()
+                                                 .post(REPORT_API + "/ClaimsByUnitController/sum")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("sum", equalTo(0)));
 
         // kind: statement, end to end (#6938): the published .view artifact was provisioned by the
         // ViewsSynchronizer AFTER the tables it reads, and the thin repository query joins it - so

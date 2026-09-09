@@ -128,6 +128,19 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 				$scope.fileChanged();
 			}
 		}
+		// A count tile's column must be a count(*) one - a count(<field>) sums to the number of rows
+		// carrying that field, not to the record count (dirigible #7161). Drop a stored one that is
+		// not, rather than leave the widget naming a column the picker no longer offers.
+		const widget = report.widget;
+		if (widget && widget.countColumn) {
+			const column = (report.columns || []).find(c => c.alias === widget.countColumn);
+			if (!isCountAllColumn(column)) {
+				console.warn('report editor: dropping the count tile\'s column [' + widget.countColumn
+					+ '] - only a count(*) column sums to the record count');
+				delete widget.countColumn;
+				$scope.fileChanged();
+			}
+		}
 		return report;
 	}
 
@@ -1643,7 +1656,19 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	// record count is a COUNT measure summed over the rows - the count endpoint would report the
 	// number of groups (dirigible #7102). Left empty for a report that is not aggregated: there one
 	// row is one record and the endpoint is right.
-	$scope.widgetCountColumns = () => ($scope.report.columns || []).filter(c => c.aggregate === 'COUNT');
+	//
+	// Only count(*) qualifies (dirigible #7161): summing a count(<field>) yields the number of rows
+	// where that field is NOT NULL, which is a different number and never the record count. The
+	// star is the column NAME of such a column (or its raw expression on a hand-authored one).
+	$scope.widgetCountColumns = () => ($scope.report.columns || []).filter(isCountAllColumn);
+
+	function isCountAllColumn(column) {
+		if (!column || column.aggregate !== 'COUNT') return false;
+		const term = (column.expression !== undefined && column.expression !== null && column.expression !== '')
+			? column.expression
+			: column.name;
+		return typeof term === 'string' && term.trim() === '*';
+	}
 
 	// The measure the tile shows: an aggregate column of this report. Type and (money) pattern ride
 	// along so the dashboard can format the number without re-deriving the column.
