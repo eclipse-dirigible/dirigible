@@ -391,10 +391,17 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
         // Resolving the physical name is inside the try with the attach it belongs to: anything thrown
         // between here and the consumer must stay this subscription's problem, or it escapes the
         // per-tenant fan-out and skips every tenant behind this one.
+        // The connection is held outside the try because the factory START()s it before returning: every
+        // step after that - the session, the destination, the redelivery policy, the consumer - can be
+        // refused by the broker with a live transport socket and its thread already in existence. A
+        // refusal that is permanent (a destination the broker's authorization refuses) is retried on
+        // every reconciliation pass, so an attempt that walked away from its connection would orphan one
+        // per subscription per tenant per tick until the process ran out of file descriptors.
+        Connection connection = null;
         try {
             String destinationName = destinationNameManager.toTenantName(subscription.destination());
             String subscriptionId = topic ? durableSubscriptionId(label, destinationName) : null;
-            Connection connection = connectionFactory.createConnection(
+            connection = connectionFactory.createConnection(
                     ex -> LOGGER.error("[java-listener] JMS error for [{}]: {}", label, ex.getMessage(), ex), subscriptionId);
             Session session = connectionFactory.createSession(connection);
             Destination destination = topic ? session.createTopic(destinationName) : session.createQueue(destinationName);
@@ -419,7 +426,24 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
             // exactly the failure this whole retry exists for. Left uncaught it escaped the per-tenant
             // fan-out, skipping every remaining tenant and leaking the connections already opened.
             reportFailure(label, scope, e);
+            closeQuietly(label, connection);
             return null;
+        }
+    }
+
+    /**
+     * Close a connection nothing will ever hold a reference to. The failure that brought us here is
+     * already reported, and a broker that just refused the subscription is likely to refuse the close
+     * too, so this one is DEBUG - it must not add a second line per tick to a lasting outage.
+     */
+    private static void closeQuietly(String label, Connection connection) {
+        if (connection == null) {
+            return;
+        }
+        try {
+            connection.close();
+        } catch (JMSException | RuntimeException e) {
+            LOGGER.debug("Failed to close the JMS connection of the refused subscription [{}]: {}", label, e.getMessage(), e);
         }
     }
 
