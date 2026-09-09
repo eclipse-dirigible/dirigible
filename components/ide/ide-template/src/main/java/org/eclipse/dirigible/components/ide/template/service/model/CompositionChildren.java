@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMaps;
-import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.bool;
+import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.isTrue;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.str;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.strOr;
 
@@ -86,7 +86,7 @@ final class CompositionChildren {
      */
     private static boolean refusesMasterDelete(Map<String, Object> child) {
         for (Map<String, Object> property : asMaps(child.get("properties"))) {
-            if ("COMPOSITION".equals(str(property, "relationshipType")) && bool(property, "relationshipMasterDeleteRefused")) {
+            if ("COMPOSITION".equals(str(property, "relationshipType")) && isTrue(property, "relationshipMasterDeleteRefused")) {
                 return true;
             }
         }
