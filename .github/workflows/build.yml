@@ -232,6 +232,19 @@ jobs:
       - name: Integration tests
         run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
 
+      # Guards #7215: a tag expression that discovers nothing leaves the reports directory absent
+      # and the build green, so what ran is asserted by count instead of by the job's colour.
+      # Failsafe's own failIfNoTests cannot cover this - scanning does find the IT classes, the tag
+      # filter drops them afterwards - and every shard expression selects a non-empty set.
+      - name: Assert integration tests ran
+        run: |
+          ran=$(ls tests/tests-integrations/target/failsafe-reports/TEST-*.xml 2>/dev/null | wc -l)
+          if [ "$ran" -eq 0 ]; then
+            echo "::error::No integration test was executed - the ITs stopped being discovered (see #7215)"
+            exit 1
+          fi
+          echo "$ran integration test classes ran"
+
       - name: Generate a random artifact name
         if: always()
         id: generate_name
@@ -322,6 +335,19 @@ jobs:
 
       - name: Integration tests
         run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
+
+      # Guards #7215: a tag expression that discovers nothing leaves the reports directory absent
+      # and the build green, so what ran is asserted by count instead of by the job's colour.
+      # Failsafe's own failIfNoTests cannot cover this - scanning does find the IT classes, the tag
+      # filter drops them afterwards - and every shard expression selects a non-empty set.
+      - name: Assert integration tests ran
+        run: |
+          ran=$(ls tests/tests-integrations/target/failsafe-reports/TEST-*.xml 2>/dev/null | wc -l)
+          if [ "$ran" -eq 0 ]; then
+            echo "::error::No integration test was executed - the ITs stopped being discovered (see #7215)"
+            exit 1
+          fi
+          echo "$ran integration test classes ran"
         env:
           DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER: org.postgresql.Driver
           DIRIGIBLE_DATASOURCE_DEFAULT_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
