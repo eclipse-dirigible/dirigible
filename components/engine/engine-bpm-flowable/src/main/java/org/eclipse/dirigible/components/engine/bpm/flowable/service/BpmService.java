@@ -272,6 +272,13 @@ public class BpmService {
     /**
      * Map process instance.
      *
+     * <p>
+     * The activity id is resolved rather than read off the instance: Flowable leaves it unset on a root
+     * process-instance execution, which is what every running instance is, so the field was always
+     * null. Resolving it costs a few indexed lookups per instance - hence the already resolved instance
+     * handed to the provider - and stays null while an instance is forked across several activities,
+     * the field being singular; {@code getProcessInstanceActiveActivityIds} answers for a fan-out.
+     *
      * @param processInstance the process instance
      * @return the process instance data
      */
@@ -291,8 +298,20 @@ public class BpmService {
         processInstanceData.setStartTime(processInstance.getStartTime());
         processInstanceData.setReferenceId(processInstance.getReferenceId());
         processInstanceData.setCallbackId(processInstance.getCallbackId());
-        processInstanceData.setActivityId(processInstance.getActivityId());
+        processInstanceData.setActivityId(resolveActivityId(processInstance));
         return processInstanceData;
+    }
+
+    /**
+     * The single activity a process instance sits on, or null when it sits on none or on several.
+     *
+     * @param processInstance the process instance
+     * @return the activity id, or null
+     */
+    private String resolveActivityId(ProcessInstance processInstance) {
+        List<String> activityIds = bpmProviderFlowable.getProcessInstanceActivityIds(processInstance);
+
+        return activityIds.size() == 1 ? activityIds.get(0) : null;
     }
 
     /**
