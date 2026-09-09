@@ -261,7 +261,7 @@ public class ${className}Generate {
             }
             if (!unqualified.isEmpty()) {
                 throw new org.eclipse.dirigible.sdk.db.ValidationException(
-                        "${itemRefuse} (${fromItemEntity} " + unqualified + ")");
+                        "${itemRefuseJavaLiteral} (${fromItemEntity} " + unqualified + ")");
             }
     #end
             if (qualifying.isEmpty()) {

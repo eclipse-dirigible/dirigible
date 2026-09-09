@@ -123,6 +123,7 @@ final class ModelParameterProcessor {
         }
         entity.put("referencedProjections", new ArrayList<>());
         splitChecks(entity, parameters);
+        resolveUniqueConstraintLiterals(entity);
         resolveDataOrder(entity);
 
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
@@ -218,6 +219,7 @@ final class ModelParameterProcessor {
         List<Object> documentChecks = new ArrayList<>();
         for (Map<String, Object> check : checks) {
             String kind = str(check, "kind");
+            resolveMessageLiteral(check);
             resolveCheckPathLoads(check, parameters);
             if ("exactlyOne".equals(kind) || "compare".equals(kind)) {
                 rowChecks.add(check);
@@ -235,6 +237,47 @@ final class ModelParameterProcessor {
         entity.put("rowChecks", rowChecks);
         entity.put("guardChecks", guardChecks);
         entity.put("documentChecks", documentChecks);
+    }
+
+    /**
+     * Derives the escaped twin of an authored message, for the templates that write it into a Java
+     * string literal.
+     *
+     * <p>
+     * A check's, a guard's or a unique key's message is prose an author writes - and the very messages
+     * the DSL's own examples suggest quote a field name ({@code A "due" date is never before the
+     * invoice date}). Interpolated verbatim, that quote ends the literal it is written into and fails
+     * the compile of every generated class of the module, not just the one carrying the message (#7241,
+     * the sibling of #7154). The raw value is left in place for the surfaces that render it as text;
+     * only the Java sites read the twin.
+     *
+     * <p>
+     * A holder carrying no message is left untouched rather than given an empty twin, as the default
+     * value literal is: the key's absence is what a template reads.
+     *
+     * @param holder the check or unique constraint
+     */
+    private static void resolveMessageLiteral(Map<String, Object> holder) {
+        String message = str(holder, "message");
+        if (message != null) {
+            holder.put("messageJavaLiteral", JavaLiterals.escape(message));
+        }
+    }
+
+    /**
+     * Derives the escaped twins of a unique key's authored name and message, both of which the REST
+     * controllers write into Java string literals when they translate a constraint violation.
+     *
+     * @param entity the entity
+     */
+    private static void resolveUniqueConstraintLiterals(Map<String, Object> entity) {
+        for (Map<String, Object> constraint : asMaps(entity.get("uniqueConstraints"))) {
+            resolveMessageLiteral(constraint);
+            String name = str(constraint, "name");
+            if (name != null) {
+                constraint.put("nameJavaLiteral", JavaLiterals.escape(name));
+            }
+        }
     }
 
     /**

@@ -295,6 +295,53 @@ class ModelParameterProcessorTest {
     }
 
     @Test
+    void carriesEveryAuthoredMessageAsAnEscapedJavaLiteralToo() {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("kind", "compare");
+        row.put("message", "A \"due\" date is never before the invoice date");
+        Map<String, Object> guard = new LinkedHashMap<>();
+        guard.put("kind", "guard");
+        guard.put("message", "Insufficient balance in C:\\ledger");
+        Map<String, Object> document = new LinkedHashMap<>();
+        document.put("kind", "itemsMin");
+        document.put("message", "An invoice needs at least one \"line\"");
+        Map<String, Object> unique = new LinkedHashMap<>();
+        unique.put("name", "INVOICE_\"NUMBER\"");
+        unique.put("message", "This \"number\" is already registered");
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Total", "DECIMAL"));
+        entity.put("checks", List.of(row, guard, document));
+        entity.put("uniqueConstraints", List.of(unique));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        // The raw value stays for the surfaces that render it as text; only the Java sites read the
+        // twin, whose quote is escaped rather than ending the literal it is written into (#7241).
+        assertEquals("A \"due\" date is never before the invoice date", row.get("message"));
+        assertEquals("A \\\"due\\\" date is never before the invoice date", row.get("messageJavaLiteral"));
+        assertEquals("Insufficient balance in C:\\\\ledger", guard.get("messageJavaLiteral"));
+        assertEquals("An invoice needs at least one \\\"line\\\"", document.get("messageJavaLiteral"));
+        assertEquals("This \\\"number\\\" is already registered", unique.get("messageJavaLiteral"));
+        assertEquals("INVOICE_\\\"NUMBER\\\"", unique.get("nameJavaLiteral"));
+    }
+
+    @Test
+    void leavesTheMessageLiteralAbsentWhereNoMessageIsAuthored() {
+        Map<String, Object> check = new LinkedHashMap<>();
+        check.put("kind", "exactlyOne");
+        Map<String, Object> unique = new LinkedHashMap<>();
+        unique.put("name", "INVOICE_NUMBER");
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Total", "DECIMAL"));
+        entity.put("checks", List.of(check));
+        entity.put("uniqueConstraints", List.of(unique));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertFalse(check.containsKey("messageJavaLiteral"));
+        assertFalse(unique.containsKey("messageJavaLiteral"));
+        assertEquals("INVOICE_NUMBER", unique.get("nameJavaLiteral"));
+    }
+
+    @Test
     void resolvesTheHopsAConditionalRequirementReadsItsValueThrough() {
         Map<String, Object> hop = new LinkedHashMap<>();
         hop.put("local", "hop0");

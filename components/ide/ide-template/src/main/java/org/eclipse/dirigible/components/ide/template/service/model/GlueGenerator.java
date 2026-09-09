@@ -709,6 +709,9 @@ class GlueGenerator {
         // always had rather than its own literal into Java that would not compile.
         context.put("itemWhere", strOr(item, "itemWhere", ""));
         context.put("itemRefuse", strOr(item, "itemRefuse", ""));
+        // The refusal is written into a Java string literal, so a quote or a backslash in the authored
+        // message would end that literal and fail the compile of the whole generated module (#7241).
+        context.put("itemRefuseJavaLiteral", JavaLiterals.escape(strOr(item, "itemRefuse", "")));
         // The one-hop `relation.field` map sources: one load per distinct relation, which the template
         // emits before the mapping reads a field off it. A .glue written before this key existed carries
         // none, and the loop renders nothing - the direct-property mapping it always had.

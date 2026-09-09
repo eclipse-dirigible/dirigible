@@ -218,7 +218,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 history: true
                 immutableWhen: "Status == 2"
                 checks:
-                  - { kind: itemsMin, count: 1, status: 2, message: "Entry needs at least one line" }
+                  - { kind: itemsMin, count: 1, status: 2, message: 'An entry needs at least one "line"' }
                   - { kind: itemsSumEqual, over: [debit, credit], status: 2, message: "Debits must equal credits" }
                   # requiredWhen (#7094), gated + over a relation hop: the value lives on the related
                   # account, so the generated repository loads it by FK before it can read it, and the
@@ -227,7 +227,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                       message: "An audited entry must be booked against a named account" }
                   # Two values of the SAME row, related (#7095) - one temporal pair and one numeric,
                   # the two comparison families the generated code emits differently.
-                  - { kind: compare, field: due,  op: ge, than: date,  message: "Due cannot be before the entry date" }
+                  - { kind: compare, field: due,  op: ge, than: date,  message: 'A "due" date is never before the entry date' }
                   - { kind: compare, field: paid, op: le, than: debit, message: "Paid cannot exceed the debit total" }
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
@@ -293,7 +293,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # answered with the authored message rather than a server error.
               - name: PartyCode
                 unique:
-                  - { fields: [party, code], message: "This code is already registered for the party" }
+                  - { fields: [party, code], message: 'This "code" is already registered for the party' }
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: code, type: string, required: true, length: 50 }
@@ -804,7 +804,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - kind: guard
                     aggregate: ledgerTotal
                     minimum: 0
-                    message: Insufficient balance
+                    message: 'Insufficient "balance"'
                     enabledBy: EMISSION_BLOCK_NEGATIVE_LEDGER
               - name: LedgerTotal
                 fields:
@@ -1452,7 +1452,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   to: BillLine
                   where:
                     - { field: amount, op: gt, value: 0 }
-                  refuse: "Stay night carries no amount"
+                  refuse: 'Stay night carries no "amount"'
                   map:
                     Amount: amount
                 defaults:
@@ -1827,7 +1827,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(
                 entryController.contains("if (entity.Due != null && entity.Date != null")
                         && entryController.contains("!(entity.Due.compareTo(entity.Date) >= 0)")
-                        && entryController.contains("Due cannot be before the entry date"),
+                        && entryController.contains("A \\\"due\\\" date is never before the entry date"),
                 "checks: compare over two dates must emit a compareTo comparison in the REST controller, got: " + entryController);
         assertTrue(entryController.contains(
                 "!(new java.math.BigDecimal(entity.Paid.toString()).compareTo(new java.math.BigDecimal(entity.Debit.toString())) <= 0)"),
@@ -1940,8 +1940,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "an ungated check is not the repository's - a gate it does not carry cannot be tested there");
 
         String entryRepository = contentOf("gen/emission/data/entry/EntryRepository.java");
-        assertTrue(entryRepository.contains("Entry needs at least one line"),
-                "checks: itemsMin must emit its authored message into the repository gate");
+        assertTrue(entryRepository.contains("An entry needs at least one \\\"line\\\""),
+                "checks: itemsMin must emit its authored message into the repository gate, escaped for the literal it lands in");
         assertTrue(entryRepository.contains("Debits must equal credits"),
                 "checks: itemsSumEqual must emit its authored message into the repository gate");
         // A value required only under a condition (#7094). The rule reaches the value THROUGH the
@@ -2050,7 +2050,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // layer dropped it.
         assertTrue(schema.contains("\"PartyCode_Party_Code\""), "the composite business key must be emitted into the schema: " + schema);
         String partyCodeController = contentOf("gen/emission/api/partycode/PartyCodeController.java");
-        assertTrue(partyCodeController.contains("This code is already registered for the party"),
+        assertTrue(partyCodeController.contains("This \\\"code\\\" is already registered for the party"),
                 "the generated controller must carry the authored conflict message");
         assertTrue(schema.contains("EMISSION_UNIT_LANG"), "multilingual must emit the _LANG translation table into the schema");
         // manyToMany: the link entity is an ordinary entity from parse time on, so it must reach the
@@ -2320,7 +2320,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // both PERSIST the row and mark it instead of throwing.
         assertTrue(ledgerRepository.contains("Criteria.create().eq(\"Person\", entity.Person).eq(\"Unit\", entity.Unit)"),
                 "a guard must recompute its aggregate over the incoming row's full key-tuple");
-        assertTrue(ledgerRepository.contains("throw new ValidationException(\"Insufficient balance\")"),
+        assertTrue(ledgerRepository.contains("throw new ValidationException(\"Insufficient \\\"balance\\\"\")"),
                 "outcome block must fail the write with the authored message");
         assertTrue(ledgerRepository.contains("Configurations.get(\"EMISSION_BLOCK_NEGATIVE_LEDGER\""),
                 "enabledBy must wrap the guard in a config gate, so a tenant can turn it off");
@@ -3311,7 +3311,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // The other reading: the refusal names the rows, so the caller knows which of a hundred lines
         // to go and fix - the whole question they have.
         String checkedBillFromStay = contentOf("gen/events/emission/CheckedBillFromStayGenerate.java");
-        assertTrue(checkedBillFromStay.contains("\"Stay night carries no amount (StayNight \" + unqualified + \")\""),
+        assertTrue(checkedBillFromStay.contains("\"Stay night carries no \\\"amount\\\" (StayNight \" + unqualified + \")\""),
                 "refuse: must throw the authored message carrying the keys of the offending rows");
 
         // generates on the step axis + mode: append (#6800): the listener binds the step-scoped topic
@@ -3880,7 +3880,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/entry/EntryController")
                                                  .then()
                                                  .statusCode(400)
-                                                 .body("message", containsString("Due cannot be before the entry date")));
+                                                 .body("message", containsString("A \"due\" date is never before the entry date")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Date\":\"2026-01-15\",\"Due\":\"2026-01-15\",\"Account\":2}")
                                                  .when()
@@ -4898,7 +4898,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post("/services/java/" + PROJECT + "/gen/events/emission/CheckedBillFromStayGenerate/run")
                                                  .then()
                                                  .statusCode(400)
-                                                 .body(containsString("Stay night carries no amount")));
+                                                 .body("message", containsString("Stay night carries no \"amount\"")));
 
         // No rule qualifies a row, so the document would have no lines at all - refused, not committed.
         restAssuredExecutor.execute(() -> given().contentType("application/json")

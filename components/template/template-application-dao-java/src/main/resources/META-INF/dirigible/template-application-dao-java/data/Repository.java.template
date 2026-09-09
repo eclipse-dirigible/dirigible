@@ -208,7 +208,7 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
             }
 #else
             if (!guardWithin) {
-                throw new ValidationException("${guard.message}");
+                throw new ValidationException("${guard.messageJavaLiteral}");
             }
 #end
         }
@@ -1030,7 +1030,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
             Object requiredValue = ${check.valueExpression};
             if ((${check.guard}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
-                throw new ValidationException("${check.message}");
+                throw new ValidationException("${check.messageJavaLiteral}");
             }
 #elseif($check.kind == "itemsSumEqual")
             java.math.BigDecimal sum${check.overA} = java.math.BigDecimal.ZERO;
@@ -1045,12 +1045,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                 }
             }
             if (sum${check.overA}.compareTo(sum${check.overB}) != 0) {
-                throw new ValidationException("${check.message}");
+                throw new ValidationException("${check.messageJavaLiteral}");
             }
 #else
             if (new ${check.itemsEntity}Repository().findAll(
                     Criteria.create().eq("${check.itemsFk}", entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end)).size() < ${check.count}) {
-                throw new ValidationException("${check.message}");
+                throw new ValidationException("${check.messageJavaLiteral}");
             }
 #end
         }
