@@ -62,6 +62,13 @@ class StatusSymbolIntentTest {
                 source: Invoice
                 filter: "Status != VOIDED"
                 measures: ["sum(paid)"]
+            schedules:
+              - name: dunning
+                cron: "0 0 8 * * ?"
+                entity: Invoice
+                where:
+                  - { field: Status, op: eq, value: ISSUED }
+                notify: { to: ops@example.com, subject: "Invoice overdue" }
             seeds:
               - name: invoice-statuses
                 entity: InvoiceStatus
@@ -108,6 +115,23 @@ class StatusSymbolIntentTest {
                                          .get(0)
                                          .getFilter(),
                 "report filter");
+        assertEquals("3", String.valueOf(model.getSchedules()
+                                              .get(0)
+                                              .getWhere()
+                                              .get(0)
+                                              .getValue()),
+                "schedule where status");
+    }
+
+    /**
+     * The row query of a cron schedule (issue #7251) - the site a status guard is written at most
+     * often, and the one left behind when the sibling {@code items: where:} gained the rewrite: a name
+     * there generated {@code .eq("Status", "OVERDUE")} into the job and matched nothing forever.
+     */
+    @Test
+    void anUnknownStatusNameInAScheduleQueryIsRejected() {
+        assertIssue(YAML.replace("field: Status, op: eq, value: ISSUED", "field: Status, op: eq, value: ISUED"),
+                "not a seeded status of [InvoiceStatus]");
     }
 
     /** The point of the exercise: a mistyped status is a parse error, not another status. */

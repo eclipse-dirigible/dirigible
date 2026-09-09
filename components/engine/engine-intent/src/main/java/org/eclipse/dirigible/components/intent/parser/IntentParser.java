@@ -933,6 +933,7 @@ public final class IntentParser {
                             + "] (supported: eq/ne/gt/ge/lt/le/like)");
                 }
                 validateScheduleMoment(condition, source, "schedule [" + name + "]", issues);
+                validateWhereStatusValue(condition, source, "schedule [" + name + "]", issues);
             }
             // A schedule performs exactly one per-row action: notify (mail) or generate (create-from).
             boolean hasNotify = schedule.getNotify() != null;
@@ -2021,6 +2022,66 @@ public final class IntentParser {
             issues.add(subject + " where-condition compares the [" + field.getType() + "] field [" + condition.getField()
                     + "] with a moment of the other shape - use "
                     + (fieldShape == ScheduleSupport.Moment.Shape.DATE ? "CURRENT_DATE" : "CURRENT_TIMESTAMP"));
+        }
+    }
+
+    /**
+     * A {@code where} condition on the queried entity's own {@code function: EntityStatus} relation
+     * must carry a status ID.
+     *
+     * <p>
+     * A status may be referenced by its seeded NAME, and that rewrite ({@code StatusSymbolResolver},
+     * issue #7251) runs on the raw tree before this validation - so a name never arrives here: it has
+     * already become the seed id, or been refused as an unknown one. What can still arrive is a value
+     * no status can ever equal (a stage word, a blank, a moment token), which renders as
+     * {@code .eq("Status", "OVERDUE")} into the generated query and then matches nothing for as long as
+     * the schedule keeps ticking. Refusing it here also keeps the invariant checkable independently of
+     * the resolver's site list - the drift that left {@code schedules[].where} behind when the sibling
+     * {@code items: where:} gained the rewrite.
+     *
+     * <p>
+     * Only the status condition is checked: every other condition compares an ordinary column, where a
+     * string literal is just a literal. A cross-model source has no local relations to check against
+     * (its field references are resolved at generation time against the owner's {@code .model}), so it
+     * keeps the numeric-id form the same way every other cross-model status site does.
+     */
+    private static void validateWhereStatusValue(ScheduleConditionIntent condition, EntityIntent source, String subject,
+            List<String> issues) {
+        if (source == null || source.getRelations() == null || condition.getField() == null) {
+            return;
+        }
+        for (RelationIntent relation : source.getRelations()) {
+            if (!relation.isEntityStatus() || relation.getName() == null || !relation.getName()
+                                                                                     .equalsIgnoreCase(condition.getField())) {
+                continue;
+            }
+            if (!isIntegerLiteral(condition.getValue())) {
+                issues.add(subject + " where-condition on the status relation [" + relation.getName() + "] compares it with ["
+                        + condition.getValue() + "], which is not a status - a status is an integer FK, so name the seeded status"
+                        + " (resolved to its id at parse) or give the numeric seed id");
+            }
+            return;
+        }
+    }
+
+    /** Whether a {@code where} value is a whole number - as an id, or as the text of one. */
+    private static boolean isIntegerLiteral(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue() == number.doubleValue();
+        }
+        if (value == null) {
+            return false;
+        }
+        String text = String.valueOf(value)
+                            .trim();
+        if (text.isEmpty()) {
+            return false;
+        }
+        try {
+            Long.parseLong(text);
+            return true;
+        } catch (NumberFormatException ex) {
+            return false;
         }
     }
 
@@ -7462,6 +7523,7 @@ public final class IntentParser {
                         + "], which is not a field or to-one relation of [" + itemSource.getName() + "]");
             }
             validateScheduleMoment(condition, itemSource, subject + " items", issues);
+            validateWhereStatusValue(condition, itemSource, subject + " items", issues);
         }
     }
 
