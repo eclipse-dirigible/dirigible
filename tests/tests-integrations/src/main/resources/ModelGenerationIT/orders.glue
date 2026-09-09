@@ -629,5 +629,54 @@
             "notifyOutcomeKeyProperty": "Id",
             "notifyOutcomeLength": "64"
         }
+    ],
+    "postings": [
+        {
+            "name": "PostOrderToLedger",
+            "className": "PostOrderToLedger",
+            "isCreate": "false",
+            "sourceEntity": "SalesOrder",
+            "sourcePerspective": "Sales Orders",
+            "sourceKeyField": "Id",
+            "guardProperty": "Status",
+            "guardValue": "2",
+            "targetEntity": "JournalEntry",
+            "targetPerspective": "Journal",
+            "targetPk": "Id",
+            "itemsEntity": "JournalEntryLine",
+            "itemsPerspective": "Journal",
+            "itemsFk": "JournalEntry",
+            "backRefProperty": "SalesOrder",
+            "stornoProperty": "",
+            "stornoFilterProperty": "",
+            "hasRule": "false",
+            "ruleEntity": "",
+            "rulePerspective": "",
+            "ruleMatchProperty": "",
+            "ruleMatchValueJava": "",
+            "usedRuleColumns": [],
+            "conditionalRuleGuards": [],
+            "headerAssignments": [
+                {
+                    "targetProp": "Date",
+                    "expr": "source.Date"
+                },
+                {
+                    "targetProp": "Description",
+                    "expr": "\"Sales order \" + source.Number"
+                }
+            ],
+            "itemRows": [
+                {
+                    "guard": "",
+                    "assigns": [
+                        {
+                            "targetProp": "Debit",
+                            "expr": "source.Total"
+                        }
+                    ]
+                }
+            ]
+        }
     ]
 }

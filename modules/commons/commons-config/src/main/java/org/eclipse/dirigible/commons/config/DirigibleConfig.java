@@ -253,6 +253,13 @@ public enum DirigibleConfig {
      */
     EVENT_OUTBOX_RELAY_GRACE_SECONDS("DIRIGIBLE_EVENT_OUTBOX_RELAY_GRACE_SECONDS", "60"),
 
+    /**
+     * Interval (seconds) between ticks of the watchdog that re-attempts client-Java runtime state a
+     * previous pass could not establish - a JMS subscription the broker refused, a job registration
+     * that threw.
+     */
+    JAVA_RECONCILE_INTERVAL_SECONDS("DIRIGIBLE_JAVA_RECONCILE_INTERVAL_SECONDS", "30"),
+
     /** Anthropic API key powering the Intent Editor's AI assistant; blank disables the assistant. */
     INTENT_AI_API_KEY("DIRIGIBLE_INTENT_AI_API_KEY", null),
 

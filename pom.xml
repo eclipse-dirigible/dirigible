@@ -123,7 +123,8 @@
              testClassesDirectory below: with a non-empty <groups> every IT job answered "Tests run: 0"
              and passed, so no integration test ran anywhere - PR gate, master push or nightly - for
              three days. Surefire is unaffected (its tag filtering works on 3.6.0, container tests
-             included), hence only this one is held back. -->
+             included), hence only this one is held back. .github/dependabot.yml ignores minor and
+             major updates of this plugin so the bump is not re-proposed daily (#7252). -->
         <maven-failsafe-plugin.version>3.5.6</maven-failsafe-plugin.version>
         <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
