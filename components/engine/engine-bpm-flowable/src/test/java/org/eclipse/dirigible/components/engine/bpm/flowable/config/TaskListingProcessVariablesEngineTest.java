@@ -52,7 +52,7 @@ class TaskListingProcessVariablesEngineTest {
     @BeforeAll
     static void startEngine() {
         StandaloneInMemProcessEngineConfiguration configuration = new StandaloneInMemProcessEngineConfiguration();
-        configuration.setJdbcUrl("jdbc:h2:mem:task-listing-variables-test;DB_CLOSE_DELAY=1000");
+        configuration.setJdbcUrl("jdbc:h2:mem:task-listing-variables-test;DB_CLOSE_DELAY=-1");
         engine = configuration.buildProcessEngine();
         engine.getRepositoryService()
               .createDeployment()
