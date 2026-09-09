@@ -18,10 +18,16 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
+import org.eclipse.dirigible.components.data.structures.domain.Table;
+import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
+import org.eclipse.dirigible.components.data.structures.synchronizer.SchemasSynchronizer;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -32,6 +38,9 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 
 /**
  * End-to-end test for the intent editor services: {@code POST /services/ide/intent/parse} (the
@@ -449,6 +458,12 @@ class IntentEngineIT extends IntegrationTest {
 
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
+
+    /**
+     * Reads a generated .schema back exactly as the runtime does, to assert what it creates from it.
+     */
+    @Autowired
+    private SchemasSynchronizer schemasSynchronizer;
 
     @Test
     void parse_returns_the_full_model() {
@@ -3921,6 +3936,47 @@ class IntentEngineIT extends IntegrationTest {
         // user deliberately cleared stays cleared through update().
         assertEquals(1, occurrencesOf(repository, "entity.VatRate = new java.math.BigDecimal(\"20\")"),
                 "the default must be applied on create only, never re-applied by update(): " + repository);
+    }
+
+    @Test
+    void an_authored_default_carrying_a_quote_keeps_the_schema_parseable() {
+        // #7206: the .schema wrote the authored default into a JSON string verbatim, so an authored inch
+        // mark ended that string and left the whole artefact unparseable - the synchronizer then created
+        // NO table for any entity of the project, not just the one column's. The sibling of #7154 in the
+        // other literal syntax the same value reaches.
+        writeIntent("""
+                name: sizing
+                entities:
+                  - name: Panel
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: size,  type: string, length: 20, defaultValue: '6" \\ wide' }
+                      - { name: stage, type: string, length: 20, defaultValue: DRAFT }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-schema/template/template.js", "sizing.model");
+        String schema = contentOf("gen/sizing/schema/" + PROJECT + ".schema");
+
+        try {
+            assertNotNull(new Gson().fromJson(schema, JsonObject.class));
+        } catch (RuntimeException e) {
+            throw new AssertionError("the emitted schema must be valid JSON: " + schema, e);
+        }
+        // And the DEFAULT the synchronizer reads back is the value as authored - escaping it keeps the
+        // artefact parseable without changing what the column defaults to. A quote in it remains the
+        // author's broken SQL, on that one column.
+        Table table = schemasSynchronizer.parseSchema("/sizing-it/application.schema", schema)
+                                         .getTables()
+                                         .get(0);
+        Map<String, String> defaults = new LinkedHashMap<>();
+        for (TableColumn column : table.getColumns()) {
+            defaults.put(column.getName(), column.getDefaultValue());
+        }
+        assertTrue(defaults.containsValue("6\" \\ wide"), "the authored default must reach the schema intact: " + defaults);
+        assertTrue(defaults.containsValue("DRAFT"), "an ordinary default must be unchanged: " + defaults);
     }
 
     @Test
