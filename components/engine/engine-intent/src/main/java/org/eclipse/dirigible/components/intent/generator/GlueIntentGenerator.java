@@ -4745,8 +4745,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @return the term, iterating in that order
      */
     private static Map<String, Object> term(Object... keysAndValues) {
+        if (keysAndValues.length % 2 != 0) {
+            throw new IllegalArgumentException("a term is written as key/value pairs, got " + keysAndValues.length + " arguments");
+        }
         Map<String, Object> term = new LinkedHashMap<>();
-        for (int i = 0; i < keysAndValues.length; i += 2) {
+        for (int i = 0; i + 1 < keysAndValues.length; i += 2) {
             term.put(String.valueOf(keysAndValues[i]), keysAndValues[i + 1]);
         }
         return term;
