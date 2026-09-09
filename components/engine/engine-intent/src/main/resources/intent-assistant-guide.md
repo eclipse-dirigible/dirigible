@@ -593,7 +593,10 @@ field may declare:
   references, arithmetic over the SOURCE's fields, or - for a to-one relation cell - a bare SOURCE
   relation name whose FK is copied onto the line; a row `when` is `<SourceField> ==|!= <number>`.
   A missing rule row or null referenced column SKIPS the posting (the unposted worklist = final-status
-  documents with no back-referencing target), never throws.
+  documents with no back-referencing target), never throws. `rule.match` is a single
+  `column: literal` selector and the literal must be there - an empty one is refused at parse, because
+  it is rendered into the handler as the authored literal and would select no rule row at all, leaving
+  every source document on the worklist with nothing failing anywhere.
   **Conditional rule column** - when the account must be chosen by a source value (a payment posts to
   the bank account for a transfer, the cash account for cash), a single row selects the rule column by
   a classifier instead of duplicating the row per case (the `by`/`cases`/`default` shape the

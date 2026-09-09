@@ -113,6 +113,38 @@ class ModelParameterProcessorTest {
         assertFalse(generatedKey.containsKey("dataDefaultValueJavaLiteral"));
     }
 
+    /**
+     * The .schema declares the same default as the column's DB DEFAULT, in a JSON string - so the
+     * parameter graph carries it escaped for one too, as authored (the value reaches the DDL verbatim
+     * by design) and quotes included. It used to be interpolated unescaped, and an authored quote left
+     * the whole schema artefact unparseable, so the synchronizer created no table for ANY entity of the
+     * project (#7206).
+     */
+    @Test
+    void carriesTheAuthoredDefaultAsAnEscapedJsonLiteralToo() {
+        Map<String, Object> quoted = property("Size", "VARCHAR");
+        quoted.put("dataDefaultValue", "6\" \\ wide");
+        Map<String, Object> status = property("Status", "VARCHAR");
+        status.put("dataDefaultValue", "'DRAFT'");
+        Map<String, Object> issued = property("Issued", "DATE");
+        issued.put("dataDefaultValue", "CURRENT_DATE");
+        // The database assigns the generated key, so it carries no Java literal - but the schema still
+        // declares whatever was authored on it.
+        Map<String, Object> generatedKey = property("Id", "INTEGER");
+        generatedKey.put("dataPrimaryKey", "true");
+        generatedKey.put("dataAutoIncrement", "true");
+        generatedKey.put("dataDefaultValue", "1");
+        Map<String, Object> none = property("Name", "VARCHAR");
+        ModelParameterProcessor.process(model(entity("Line", "Lines", quoted, status, issued, generatedKey, none)), parameters());
+
+        assertEquals("\"6\\\" \\\\ wide\"", quoted.get("dataDefaultValueJsonLiteral"));
+        assertEquals("\"'DRAFT'\"", status.get("dataDefaultValueJsonLiteral"),
+                "the SQL quotes are the DDL's, so the schema keeps the value as authored");
+        assertEquals("\"CURRENT_DATE\"", issued.get("dataDefaultValueJsonLiteral"));
+        assertEquals("\"1\"", generatedKey.get("dataDefaultValueJsonLiteral"));
+        assertFalse(none.containsKey("dataDefaultValueJsonLiteral"), "a property with no default must leave the key absent");
+    }
+
     @Test
     void defaultsTheWidgetLabelFromThePropertyName() {
         Map<String, Object> property = property("TaxEventDate", "DATE");

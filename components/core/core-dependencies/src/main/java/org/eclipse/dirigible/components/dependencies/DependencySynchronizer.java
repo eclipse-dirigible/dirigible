@@ -264,10 +264,12 @@ class DependencySynchronizer {
             }
         }
         if (!removedEntries.isEmpty()) {
-            // an entry is only removed when NO remaining jar still carries it
+            // an entry is only removed when NO remaining jar still carries it. The new generation is
+            // already installed by the time this runs, so its jar set IS the staying set - a leaving jar
+            // cannot appear in it, and needs no guard here
             ModulesClassLoader current = loaderHolder.current();
             for (Path staying : current.jars()) {
-                if (removed.contains(staying) || !Files.isRegularFile(staying)) {
+                if (!Files.isRegularFile(staying)) {
                     continue;
                 }
                 try {

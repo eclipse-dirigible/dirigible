@@ -13,8 +13,10 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.TenantPostProvisioningStep;
@@ -89,6 +91,14 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
     /** fqn -> the jobs it declared (a class may declare several @Scheduled methods). */
     private final ConcurrentMap<String, List<JobDeclaration>> registered = new ConcurrentHashMap<>();
 
+    /** Set while a declared job is not registered in every tenant; drives {@link #reconcile()}. */
+    private final AtomicBoolean registrationsIncomplete = new AtomicBoolean();
+
+    /**
+     * Job names already reported as failing, so a retry on a timer does not log the same line forever.
+     */
+    private final Set<String> reportedFailures = ConcurrentHashMap.newKeySet();
+
     @Autowired
     public ScheduledClassConsumer(ComponentContainer componentContainer, JobsManager jobsManager, JobService jobService,
             TenantContext tenantContext) {
@@ -150,14 +160,15 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
             LOGGER.warn("Scheduled job [{}] produced no schedule.", info.fqn());
             return;
         }
-        List<JobDeclaration> scheduled = new ArrayList<>();
+        // Track what the class DECLARES, not what happened to register: a registration that threw - the
+        // scheduler or the tenant's database briefly unavailable - must stay retryable, and comparing the
+        // previous names against the successful ones instead would make a transient failure DELETE the
+        // Job row a previous run created, along with the operator's enabled flag on it.
+        retainOnly(info.fqn(), declarations);
+        registered.put(info.fqn(), declarations);
         for (JobDeclaration declaration : declarations) {
-            if (register(declaration)) {
-                scheduled.add(declaration);
-            }
+            register(declaration);
         }
-        retainOnly(info.fqn(), scheduled);
-        registered.put(info.fqn(), scheduled);
     }
 
     @Override
@@ -181,8 +192,34 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
      */
     @Override
     public void execute() {
-        registered.values()
-                  .forEach(declarations -> declarations.forEach(this::register));
+        registerAll();
+    }
+
+    /**
+     * Re-attempt the registrations that did not land, on the reconciliation timer. Gated on the flag,
+     * so an instance whose jobs are all registered pays nothing per tick - and the flag is cleared
+     * before the pass, never after, or a failure the pass itself records would be lost.
+     */
+    @Override
+    public void reconcile() {
+        if (!registrationsIncomplete.compareAndSet(true, false)) {
+            return;
+        }
+        registerAll();
+    }
+
+    /**
+     * Re-register every job of every loaded class. Idempotent, so covering the healthy ones is free.
+     */
+    private void registerAll() {
+        registered.forEach((fqn, declarations) -> {
+            if (registered.get(fqn) != declarations) {
+                // Replaced or unloaded while this pass was running - re-registering it now would
+                // recreate rows the unload has just deleted.
+                return;
+            }
+            declarations.forEach(this::register);
+        });
     }
 
     @Override
@@ -191,6 +228,7 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         // shutdown (other nodes keep running them; a restart re-registers idempotently). Just drop the
         // local tracking.
         registered.clear();
+        reportedFailures.clear();
     }
 
     /**
@@ -202,9 +240,8 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
      * thread and a rebuild registers from the synchronizer's, and the find-then-save below is exactly
      * the window in which two of them could insert the same job row twice.
      *
-     * @return true if the job is now registered in every tenant
      */
-    private synchronized boolean register(JobDeclaration declaration) {
+    private synchronized void register(JobDeclaration declaration) {
         String name = declaration.name();
         String handler = declaration.handler();
         String expression = declaration.expression();
@@ -246,19 +283,27 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
                 jobsManager.scheduleJob(job);
                 return null;
             });
+            reportedFailures.remove(name);
             LOGGER.info("Registered client-Java job [{}] (handler [{}]) with cron '{}' on the shared scheduler.", name, handler,
                     expression);
-            return true;
         } catch (Exception e) {
-            LOGGER.error("Failed to register client-Java job [{}] with cron '{}': {}", handler, expression, e.getMessage(), e);
-            return false;
+            registrationsIncomplete.set(true);
+            String message = "Failed to register client-Java job [" + handler + "] with cron '" + expression
+                    + "' - it does not fire until it is registered; retrying on the next reconciliation pass.";
+            // Once, then quietly: the retry runs on a timer, and a job that can never be registered would
+            // otherwise log the same line every tick for the life of the process.
+            if (reportedFailures.add(name)) {
+                LOGGER.warn("{} {}", message, e.getMessage(), e);
+            } else {
+                LOGGER.debug("{} {}", message, e.getMessage(), e);
+            }
         }
     }
 
     /**
      * Drop the jobs a class registered before but no longer declares - a {@code @Scheduled} method that
-     * was renamed or removed. The ones it still declares were just re-registered onto their existing
-     * rows, so they keep their operator state.
+     * was renamed or removed. The ones it still declares are re-registered onto their existing rows, so
+     * they keep their operator state.
      */
     private void retainOnly(String fqn, List<JobDeclaration> current) {
         List<JobDeclaration> previous = registered.get(fqn);
@@ -281,6 +326,7 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         if (declarations == null) {
             return;
         }
+        declarations.forEach(declaration -> reportedFailures.remove(declaration.name()));
         remove(declarations.stream()
                            .map(JobDeclaration::name)
                            .toList());

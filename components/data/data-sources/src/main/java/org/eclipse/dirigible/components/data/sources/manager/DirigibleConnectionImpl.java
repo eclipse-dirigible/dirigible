@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.data.sources.manager;
 
+import com.zaxxer.hikari.pool.LeakedConnectionsDoctor;
 import org.eclipse.dirigible.components.database.DatabaseSystem;
 import org.eclipse.dirigible.components.database.DirigibleConnection;
 
@@ -72,6 +73,7 @@ class DirigibleConnectionImpl implements DirigibleConnection {
     @Override
     public void close() throws SQLException {
         connection.close();
+        LeakedConnectionsDoctor.unregisterConnection(connection);
     }
 
     @Override

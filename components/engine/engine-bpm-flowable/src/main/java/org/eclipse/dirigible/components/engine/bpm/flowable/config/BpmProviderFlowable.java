@@ -12,12 +12,16 @@ package org.eclipse.dirigible.components.engine.bpm.flowable.config;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
@@ -32,6 +36,7 @@ import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.bpmn.model.Process;
+import org.flowable.engine.ManagementService;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.ProcessEngineConfiguration;
 import org.flowable.engine.RepositoryService;
@@ -432,7 +437,6 @@ public class BpmProviderFlowable implements BpmProvider {
         RepositoryService repositoryService = processEngine.getRepositoryService();
 
         ProcessEngineConfiguration processEngineConfiguration = processEngine.getProcessEngineConfiguration();
-        RuntimeService runtimeService = processEngine.getRuntimeService();
 
         ProcessInstance processInstance = getProcessInstance(processInstanceId);
 
@@ -444,11 +448,10 @@ public class BpmProviderFlowable implements BpmProvider {
         if (processDefinition != null && processDefinition.hasGraphicalNotation()) {
             BpmnModel bpmnModel = repositoryService.getBpmnModel(processDefinition.getId());
             ProcessDiagramGenerator diagramGenerator = processEngineConfiguration.getProcessDiagramGenerator();
-            InputStream resource = diagramGenerator.generateDiagram(bpmnModel, "png",
-                    runtimeService.getActiveActivityIds(processInstance.getId()), Collections.emptyList(),
-                    processEngineConfiguration.getActivityFontName(), processEngineConfiguration.getLabelFontName(),
-                    processEngineConfiguration.getAnnotationFontName(), processEngineConfiguration.getClassLoader(), 1.0,
-                    processEngineConfiguration.isDrawSequenceFlowNameWithNoLabelDI());
+            InputStream resource = diagramGenerator.generateDiagram(bpmnModel, "png", getProcessInstanceActivityIds(processInstance),
+                    Collections.emptyList(), processEngineConfiguration.getActivityFontName(),
+                    processEngineConfiguration.getLabelFontName(), processEngineConfiguration.getAnnotationFontName(),
+                    processEngineConfiguration.getClassLoader(), 1.0, processEngineConfiguration.isDrawSequenceFlowNameWithNoLabelDI());
 
             try {
                 byte[] byteArray = IOUtils.toByteArray(resource);
@@ -609,46 +612,119 @@ public class BpmProviderFlowable implements BpmProvider {
         }
     }
 
+    /**
+     * Reports where a running process instance currently sits, per activity.
+     *
+     * <p>
+     * An active execution is only half the evidence. Flowable deactivates an execution as soon as an
+     * asynchronous attempt fails - its {@code JobRetryCmd} moves the job to the timer-job table and
+     * clears the active flag - and {@code RuntimeService#getActiveActivityIds} reports active
+     * executions only, so a step waiting between retry attempts is invisible there and only its own
+     * pending job still names it. Executable and timer jobs therefore count towards {@code positive}
+     * alongside the active executions, by the higher of the two counts rather than by their sum: a
+     * token that has not failed yet is active <em>and</em> job-bearing, so adding the two would report
+     * every pending asynchronous step twice. Dead-lettered jobs stay {@code negative}.
+     *
+     * <p>
+     * A retrying step is deliberately counted as {@code positive} - it is the step the instance is on,
+     * and its failure is already visible as the job's exception message and as {@code negative} once
+     * the retries are exhausted.
+     *
+     * @param processInstanceId the process instance id
+     * @return the counters per activity id, empty when no such instance runs in the current tenant
+     */
     public Map<String, ActivityStatusData> getProcessInstanceActiveActivityIds(String processInstanceId) {
         ProcessInstance processInstance = getProcessInstance(processInstanceId);
         if (null == processInstance) {
             return Collections.emptyMap();
         }
-        RuntimeService runtimeService = processEngine.getRuntimeService();
-        List<String> positiveActiveActivityIds = runtimeService.getActiveActivityIds(processInstance.getId());
 
-        List<Job> jobs = processEngine.getManagementService()
-                                      .createDeadLetterJobQuery()
-                                      .processInstanceId(processInstanceId)
-                                      .list();
-
-        List<String> negativeActiveActivityIds = jobs.stream()
-                                                     .map(Job::getElementId)
-                                                     .collect(Collectors.toList());
+        Map<String, Integer> activeExecutions = countByValue(processEngine.getRuntimeService()
+                                                                          .getActiveActivityIds(processInstance.getId()));
+        // Merged by the higher count, never added, because the two sources overlap on every token that
+        // has not failed yet. That undercounts only an element hosting both a waiting token and a
+        // retrying one - an asynchronous task behind a loop or a fan-in - which would take a further
+        // per-activity execution query to tell apart.
+        Map<String, Integer> pendingJobs = countByElementId(getPendingJobs(processInstanceId));
+        Map<String, Integer> deadLetterJobs = countByElementId(processEngine.getManagementService()
+                                                                            .createDeadLetterJobQuery()
+                                                                            .processInstanceId(processInstanceId)
+                                                                            .list());
 
         Map<String, ActivityStatusData> statuses = new HashMap<>();
-        for (String positive : positiveActiveActivityIds) {
-            ActivityStatusData data = statuses.get(positive);
-            if (data == null) {
-                data = new ActivityStatusData();
-                data.positive = 1;
-                statuses.put(positive, data);
-                continue;
-            }
-            data.positive += 1;
-        }
-        for (String negative : negativeActiveActivityIds) {
-            ActivityStatusData data = statuses.get(negative);
-            if (data == null) {
-                data = new ActivityStatusData();
-                data.negative = 1;
-                statuses.put(negative, data);
-                continue;
-            }
-            data.negative += 1;
-        }
+        activeExecutions.forEach((activityId, tokens) -> statusOf(statuses, activityId).positive = tokens);
+        pendingJobs.forEach((activityId, jobs) -> {
+            ActivityStatusData status = statusOf(statuses, activityId);
+            status.positive = Math.max(status.positive, jobs);
+        });
+        deadLetterJobs.forEach((activityId, jobs) -> statusOf(statuses, activityId).negative = jobs);
 
         return statuses;
+    }
+
+    /**
+     * The activity ids a running process instance occupies: its active executions plus the elements of
+     * its pending jobs, which are the only evidence left for a step parked between retry attempts.
+     *
+     * @param processInstance the already resolved process instance
+     * @return the occupied activity ids without duplicates, active executions first
+     */
+    public List<String> getProcessInstanceActivityIds(ProcessInstance processInstance) {
+        Set<String> activityIds = new LinkedHashSet<>(processEngine.getRuntimeService()
+                                                                   .getActiveActivityIds(processInstance.getId()));
+        activityIds.addAll(elementIds(getPendingJobs(processInstance.getId())));
+
+        return List.copyOf(activityIds);
+    }
+
+    /**
+     * The jobs a process instance is waiting on: the executable ones, including a job an executor
+     * currently holds, and the timer ones, where a failed job with retries left is parked between
+     * attempts.
+     *
+     * @param processInstanceId the process instance id
+     * @return the pending jobs
+     */
+    private List<Job> getPendingJobs(String processInstanceId) {
+        ManagementService managementService = processEngine.getManagementService();
+
+        List<Job> pendingJobs = new ArrayList<>(managementService.createJobQuery()
+                                                                 .processInstanceId(processInstanceId)
+                                                                 .list());
+        pendingJobs.addAll(managementService.createTimerJobQuery()
+                                            .processInstanceId(processInstanceId)
+                                            .list());
+
+        return pendingJobs;
+    }
+
+    private static ActivityStatusData statusOf(Map<String, ActivityStatusData> statuses, String activityId) {
+        return statuses.computeIfAbsent(activityId, id -> new ActivityStatusData());
+    }
+
+    private static Map<String, Integer> countByElementId(List<? extends Job> jobs) {
+        return countByValue(elementIds(jobs));
+    }
+
+    /**
+     * The flow elements the given jobs belong to. A job bound to no element - an asynchronous variable
+     * write, a process-instance migration - contributes nothing.
+     *
+     * @param jobs the jobs
+     * @return the element ids, duplicates kept
+     */
+    private static List<String> elementIds(List<? extends Job> jobs) {
+        return jobs.stream()
+                   .map(Job::getElementId)
+                   .filter(Objects::nonNull)
+                   .toList();
+    }
+
+    private static Map<String, Integer> countByValue(List<String> values) {
+        Map<String, Integer> counts = new HashMap<>();
+        values.forEach(value -> counts.merge(value, 1, Integer::sum));
+
+        return counts;
     }
 
     public Map<String, ActivityStatusData> getProcessDefinitionActiveActivityIds(String processDefinitionId) {

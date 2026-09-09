@@ -11,10 +11,12 @@ package org.eclipse.dirigible.components.dependencies;
 
 import org.eclipse.dirigible.components.dependencies.DependencySynchronizer.SwapOutcome;
 import org.eclipse.dirigible.components.initializers.classpath.ClasspathExpander;
+import org.eclipse.dirigible.engine.java.runtime.ModulesClassLoader;
 import org.eclipse.dirigible.engine.java.runtime.ModulesClassLoaderHolder;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.local.LocalRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -24,6 +26,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.jar.JarEntry;
@@ -45,6 +48,13 @@ class DependencySwapTest {
     private DependencySynchronizer synchronizer;
     private Path localRepository;
 
+    /**
+     * Every generation the holder installed, in order. The holder deliberately never closes a loader -
+     * a retired generation may still be serving in-flight requests - so the test owns the handles and
+     * closes them, or an open jar handle blocks the {@link TempDir} cleanup on Windows.
+     */
+    private final List<ModulesClassLoader> generations = new ArrayList<>();
+
     @BeforeEach
     void setUp() throws IOException {
         repository = new LocalRepository(tempDir.resolve("repository")
@@ -56,12 +66,20 @@ class DependencySwapTest {
         localRepository = Files.createDirectories(tempDir.resolve("m2"));
     }
 
+    @AfterEach
+    void closeGenerations() throws IOException {
+        for (ModulesClassLoader generation : generations) {
+            generation.close();
+        }
+        generations.clear();
+    }
+
     @Test
     void aNativeLibraryRejectsOnlyItsOwnDeclaration() throws IOException {
         Path plain = artifact("com.example", "plain", "1.0.0", Map.of("com/example/Plain.class", "bytes"));
         Path nativeBearing = artifact("com.example", "sqlite", "1.0.0", Map.of("org/sqlite/native/libsqlite.so", "bytes"));
 
-        SwapOutcome outcome = synchronizer.swap(localRepository, List.of(plain, nativeBearing), List.of(), Map.of());
+        SwapOutcome outcome = swap(plain, nativeBearing);
 
         // the offending coordinate is refused; every other project's dependency still activates -
         // one library shipping a native resource must not block the whole instance
@@ -79,11 +97,11 @@ class DependencySwapTest {
         Path version1 = artifact("com.example", "mod", "1.0.0", Map.of("META-INF/dirigible/mod/greeting.txt", "v1"));
         Path version2 = artifact("com.example", "mod", "1.1.0", Map.of("META-INF/dirigible/mod/greeting.txt", "v2"));
 
-        synchronizer.swap(localRepository, List.of(version1), List.of(), Map.of());
+        swap(version1);
         // a customization published into the module's project folder, by a developer or another tool
         repository.createResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/mod/mine.txt", "mine".getBytes(StandardCharsets.UTF_8));
 
-        synchronizer.swap(localRepository, List.of(version2), List.of(), Map.of());
+        swap(version2);
 
         assertThat(content("/mod/greeting.txt")).isEqualTo("v2");
         assertThat(content("/mod/mine.txt")).isEqualTo("mine");
@@ -92,10 +110,10 @@ class DependencySwapTest {
     @Test
     void aRemovedModuleTakesOnlyItsOwnPayload() throws IOException {
         Path mod = artifact("com.example", "mod", "1.0.0", Map.of("META-INF/dirigible/mod/greeting.txt", "v1"));
-        synchronizer.swap(localRepository, List.of(mod), List.of(), Map.of());
+        swap(mod);
         repository.createResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/mod/mine.txt", "mine".getBytes(StandardCharsets.UTF_8));
 
-        synchronizer.swap(localRepository, List.of(), List.of(), Map.of());
+        swap();
 
         assertThat(repository.hasResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/mod/greeting.txt")).isFalse();
         assertThat(content("/mod/mine.txt")).isEqualTo("mine");
@@ -105,13 +123,29 @@ class DependencySwapTest {
     void aSkippedJarNeverRemovesAProjectOfTheSameName() throws IOException {
         Path skipped = artifact("com.example", "skipped", "1.0.0",
                 Map.of("META-INF/dirigible/.skip", "", "META-INF/dirigible/mine/hidden.txt", "never laid down"));
-        synchronizer.swap(localRepository, List.of(skipped), List.of(), Map.of());
+        swap(skipped);
         // a developer's own project that happens to carry the same name as the jar's skipped payload
         repository.createResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/mine/file.txt", "mine".getBytes(StandardCharsets.UTF_8));
 
-        synchronizer.swap(localRepository, List.of(), List.of(), Map.of());
+        swap();
 
         assertThat(content("/mine/file.txt")).isEqualTo("mine");
+    }
+
+    /**
+     * Swaps to a generation over the given module jars and takes ownership of the installed loader, so
+     * {@link #closeGenerations()} can release its jar handles.
+     *
+     * @param moduleJars the module-tier jars of the new generation
+     * @return the outcome
+     */
+    private SwapOutcome swap(Path... moduleJars) {
+        SwapOutcome outcome = synchronizer.swap(localRepository, List.of(moduleJars), List.of(), Map.of());
+        ModulesClassLoader installed = loaderHolder.current();
+        if (!generations.contains(installed)) {
+            generations.add(installed);
+        }
+        return outcome;
     }
 
     private String content(String registryRelativePath) {

@@ -70,6 +70,19 @@ jobs:
       - name: Integration tests
         run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
 
+      # Guards #7215: a tag expression that discovers nothing leaves the reports directory absent
+      # and the build green, so what ran is asserted by count instead of by the job's colour.
+      # Failsafe's own failIfNoTests cannot cover this - scanning does find the IT classes, the tag
+      # filter drops them afterwards - and every shard expression selects a non-empty set.
+      - name: Assert integration tests ran
+        run: |
+          ran=$(ls tests/tests-integrations/target/failsafe-reports/TEST-*.xml 2>/dev/null | wc -l)
+          if [ "$ran" -eq 0 ]; then
+            echo "::error::No integration test was executed - the ITs stopped being discovered (see #7215)"
+            exit 1
+          fi
+          echo "$ran integration test classes ran"
+
       - name: Generate a random artifact name
         if: always()
         id: generate_name
@@ -157,8 +170,11 @@ jobs:
       - name: Create the SystemDB database
         run: PGPASSWORD=${{ env.POSTGRES_PASS }} psql -h localhost -U ${{ env.POSTGRES_USER }} -d ${{ env.POSTGRES_DB }} -c 'CREATE DATABASE ${{ env.POSTGRES_SYSTEM_DB }}'
 
+      # env: is placed before run: on purpose (#7249): with the block after it, a step appended to
+      # the job takes the datasource configuration with it, and this leg then runs the whole suite on
+      # file-backed H2 while still reporting itself as the PostgreSQL one. The run: refuses to start
+      # the suite without the variables, which turns that theft from silent into loud.
       - name: Integration tests
-        run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
         env:
           DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER: org.postgresql.Driver
           DIRIGIBLE_DATASOURCE_DEFAULT_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
@@ -168,6 +184,40 @@ jobs:
           DIRIGIBLE_DATABASE_SYSTEM_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_SYSTEM_DB }}
           DIRIGIBLE_DATABASE_SYSTEM_USERNAME: ${{ env.POSTGRES_USER }}
           DIRIGIBLE_DATABASE_SYSTEM_PASSWORD: ${{ env.POSTGRES_PASS }}
+        run: |
+          if [ -z "$DIRIGIBLE_DATASOURCE_DEFAULT_URL" ] || [ -z "$DIRIGIBLE_DATABASE_SYSTEM_URL" ]; then
+            echo "::error::The datasource configuration did not reach this step - the suite would run on H2 (see #7249)"
+            exit 1
+          fi
+          mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
+
+      # Guards #7215: a tag expression that discovers nothing leaves the reports directory absent
+      # and the build green, so what ran is asserted by count instead of by the job's colour.
+      # Failsafe's own failIfNoTests cannot cover this - scanning does find the IT classes, the tag
+      # filter drops them afterwards - and every shard expression selects a non-empty set.
+      # Guards #7249 too: the count says nothing about WHICH database ran the suite. The ITs clean
+      # both databases between test classes, so a finished run leaves no table to look for - what is
+      # asserted instead is that PostgreSQL was written to at all, through pg_stat_database's
+      # counters, which survive that cleanup. A database an H2 fallback never connected to reports
+      # zero rows inserted.
+      - name: Assert integration tests ran on PostgreSQL
+        run: |
+          ran=$(ls tests/tests-integrations/target/failsafe-reports/TEST-*.xml 2>/dev/null | wc -l)
+          if [ "$ran" -eq 0 ]; then
+            echo "::error::No integration test was executed - the ITs stopped being discovered (see #7215)"
+            exit 1
+          fi
+          echo "$ran integration test classes ran"
+          inserted=$(PGPASSWORD=${{ env.POSTGRES_PASS }} psql -v ON_ERROR_STOP=1 -h localhost -U ${{ env.POSTGRES_USER }} -d ${{ env.POSTGRES_DB }} -tAc \
+            "SELECT coalesce(sum(tup_inserted), 0) FROM pg_stat_database WHERE datname IN ('${{ env.POSTGRES_DB }}', '${{ env.POSTGRES_SYSTEM_DB }}')") || {
+            echo "::error::Cannot read pg_stat_database - the database guard for #7249 could not run"
+            exit 1
+          }
+          if [ "$inserted" -eq 0 ]; then
+            echo "::error::The suite wrote nothing to PostgreSQL - this leg ran on H2 (see #7249)"
+            exit 1
+          fi
+          echo "$inserted row(s) were written to PostgreSQL"
 
       - name: Generate a random artifact name
         if: always()

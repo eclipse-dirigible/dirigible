@@ -2149,6 +2149,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     keys.add(pair);
                 }
                 checkMap.put("keys", keys);
+                // The guard names the aggregate it protects, so the skip it logs for a row belonging to
+                // no key-tuple can be traced back to a declaration (#7180).
+                checkMap.put("aggregate", check.getAggregate());
                 checkMap.put("sumField", IntentNaming.pascalCase(agg.getSum()));
                 FieldIntent guardPk = primaryKeyOf(entity);
                 checkMap.put("pk", guardPk == null ? "Id" : IntentNaming.pascalCase(guardPk.getName()));

@@ -25,17 +25,45 @@
 document.addEventListener('alpine:init', () => {
   // Records already fetched while building subject lines, keyed by '<controller url>/<id>'. Deliberately
   // outside the store: it is a request cache, not view state, and several tasks of the same document (or
-  // several documents of the same customer) must share one fetch rather than one each. Cleared by an
-  // explicit refresh(), which is what makes a manual Refresh authoritative while the 30s poll stays cheap.
+  // several documents of the same customer) must share one fetch rather than one each.
+  //
+  // It is BOUNDED in both directions, because a shell stays open for a working day: an entry older than
+  // the TTL is re-fetched (so a record edited elsewhere stops answering with the value it had this
+  // morning), and the map never holds more than MAX entries (least recently used dropped first), so the
+  // memory a long session holds is a function of the cap, not of how many documents were ever inspected.
+  const RECORD_CACHE_TTL_MS = 60000;
+  const RECORD_CACHE_MAX = 200;
   const recordCache = new Map();
 
+  const cacheKey = (url, id) => url + '/' + id;
+
   const fetchRecord = (url, id) => {
-    const key = url + '/' + id;
-    if (!recordCache.has(key)) {
-      recordCache.set(key, App.services.api.get(url + '/' + encodeURIComponent(id), { baseUrl: '' })
-        .catch(() => null));   // unreachable or not permitted: the subject simply omits what it cannot read
+    const key = cacheKey(url, id);
+    const cached = recordCache.get(key);
+    if (cached && (Date.now() - cached.at) < RECORD_CACHE_TTL_MS) {
+      // A Map iterates in insertion order, so re-inserting a hit makes it the most recently used and the
+      // eviction below always drops the coldest entry.
+      recordCache.delete(key);
+      recordCache.set(key, cached);
+      return cached.promise;
     }
-    return recordCache.get(key);
+    const promise = App.services.api.get(url + '/' + encodeURIComponent(id), { baseUrl: '' })
+      .catch(() => null);   // unreachable or not permitted: the subject simply omits what it cannot read
+    recordCache.delete(key);
+    recordCache.set(key, { at: Date.now(), promise });
+    while (recordCache.size > RECORD_CACHE_MAX) recordCache.delete(recordCache.keys().next().value);
+    return promise;
+  };
+
+  // The cache keys each task's subject line was built from — the record itself plus every relation target
+  // a label was read from — keyed by task id, since the task objects themselves are replaced on every
+  // load. Dropping exactly those keys is what lets a task whose record just changed re-read it while
+  // every other task keeps its warm entry.
+  const subjectKeys = new Map();
+
+  const forgetTask = (taskId) => {
+    (subjectKeys.get(taskId) || []).forEach((key) => recordCache.delete(key));
+    subjectKeys.delete(taskId);
   };
 
   Alpine.store('processTasks', {
@@ -46,6 +74,7 @@ document.addEventListener('alpine:init', () => {
     formUrl: '',
     formTitle: '',
     formTitleKey: '',   // the open task's translation key; '' for a process that declares no catalog
+    formTaskId: '',     // the open task, so closing the form re-reads exactly the record it wrote
     subjects: {},       // taskId -> the resolved business-identity line; '' while unresolved or when there is none
     serverUnavailable: false,   // set once the backend is unreachable; stops the poll until a reload
     _poll: null,
@@ -120,13 +149,24 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // An explicit refresh re-reads the records the subject lines are built from; the periodic poll only
-    // resolves the tasks it has not seen yet, so a shell sitting open does not re-fetch every document
-    // every 30 seconds.
+    // An explicit refresh — the Inbox's Refresh button — re-reads the records the subject lines are built
+    // from, which is what makes it authoritative. Everything automatic (the 30s poll, the Inbox's 15s
+    // auto-refresh) goes through load() instead and only resolves the tasks it has not seen yet, so a
+    // shell sitting open does not re-fetch every document, and the subject lines do not blank out and
+    // repopulate on every cycle (#7157).
     refresh() {
       recordCache.clear();
+      subjectKeys.clear();
       this.subjects = {};
       return this.load();
+    },
+
+    // The targeted counterpart: the record behind ONE task has just been written (its form completed), so
+    // that task alone re-resolves and every other subject stays warm.
+    invalidate(task) {
+      if (!task) return;
+      forgetTask(task.id);
+      delete this.subjects[task.id];
     },
 
     /**
@@ -146,7 +186,11 @@ document.addEventListener('alpine:init', () => {
 
     async resolveSubjects(tasks) {
       const current = new Set(tasks.map((t) => t.id));
-      Object.keys(this.subjects).forEach((id) => { if (!current.has(id)) delete this.subjects[id]; });
+      Object.keys(this.subjects).forEach((id) => {
+        if (current.has(id)) return;
+        delete this.subjects[id];
+        subjectKeys.delete(id);   // the records stay cached (another task may share them); they age out on TTL
+      });
       const pending = tasks.filter((t) => t.subject && this.subjects[t.id] === undefined);
       if (!pending.length) return;
       await Promise.all(pending.map((t) => this.resolveSubject(t)));
@@ -159,11 +203,13 @@ document.addEventListener('alpine:init', () => {
       this.subjects[task.id] = '';   // claim it, so a concurrent load does not resolve the same task twice
       try {
         const declared = task.subject;
+        const keys = [cacheKey(declared.url, declared.id)];
         const record = await fetchRecord(declared.url, declared.id);
+        subjectKeys.set(task.id, keys);
         if (!record) return;
         const parts = [];
         for (const field of declared.fields) {
-          const value = await this.subjectPart(field, record[field.property]);
+          const value = await this.subjectPart(field, record[field.property], keys);
           if (value) parts.push(value);
         }
         this.subjects[task.id] = parts.join(' · ');
@@ -173,9 +219,10 @@ document.addEventListener('alpine:init', () => {
     },
 
     // One property of a subject line, rendered the way the record's own application renders it.
-    async subjectPart(field, value) {
+    async subjectPart(field, value, keys) {
       if (value === null || value === undefined || value === '') return '';
       if (field.kind === 'relation') {
+        if (keys) keys.push(cacheKey(field.url, value));
         const related = await fetchRecord(field.url, value);
         const label = related && related[field.label];
         return label === null || label === undefined || label === '' ? '' : String(label);
@@ -254,16 +301,21 @@ document.addEventListener('alpine:init', () => {
       // (and the catalogs, which may still be loading) rather than being resolved once here.
       this.formTitle = task.name || 'Task';
       this.formTitleKey = task.nameKey || '';
+      this.formTaskId = task.id;
       this.formOpen = true;
     },
 
     // Called when the task-form dialog closes; the generated task form completes the task itself,
     // so a re-fetch drops the finished task from the originating view's badge.
     closeForm() {
+      // The form just wrote the record this task is about, so that one subject is re-read; the rest of
+      // the inbox is untouched and keeps its cache.
+      this.invalidate({ id: this.formTaskId });
       this.formOpen = false;
       this.formUrl = '';
       this.formTitleKey = '';
-      this.refresh();
+      this.formTaskId = '';
+      this.load();
     },
   });
 }, { once: true });
