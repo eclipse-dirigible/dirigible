@@ -1997,10 +1997,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // sweeping N lines away with their master issued N reads, N targeted updates and N SYSTEM
         // "totals changed" history rows against a row that is gone microseconds later. The master marks
         // its own id for the duration of the cascade, and recalculate honours the mark (#7143).
+        // Asserted on Bill, the fixture's DOCUMENT master: the suspension exists only where a totals
+        // write-back does. Entry declares no aggregate of its lines and neither of its two composition
+        // children is the document's items, so its repository carries no recalculate to suspend - the
+        // guard could never be emitted there.
+        String documentMasterRepository = contentOf("gen/emission/data/bill/BillRepository.java");
         assertTrue(
-                entryRepository.contains("DELETING_IDS.get().add(deletingMaster)")
-                        && entryRepository.contains("if (DELETING_IDS.get().contains(String.valueOf(id)))"),
-                "a master being deleted must suspend the per-line totals write-back, got: " + entryRepository);
+                documentMasterRepository.contains("DELETING_IDS.get().add(deletingMaster)")
+                        && documentMasterRepository.contains("if (DELETING_IDS.get().contains(String.valueOf(id)))"),
+                "a master being deleted must suspend the per-line totals write-back, got: " + documentMasterRepository);
         // The children's own repositories own nothing: neither may cascade into its master.
         assertFalse(contentOf("gen/emission/data/entry/EntryLineRepository.java").contains("deleteOwnedChildren"),
                 "a childless composition child must emit no cascade at all");
