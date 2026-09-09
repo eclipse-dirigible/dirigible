@@ -37,12 +37,16 @@ document.addEventListener('alpine:init', () => {
     actAs: { acting: null, hiddenTasks: 0 },
 
     init() {
-      // The store self-loads at startup; refresh on entry so the list is current.
-      this.refresh();
+      // The store self-loads at startup; re-read the list on entry so it is current — warm, since nothing
+      // has changed under us just by navigating here.
+      this.reload();
       this._onMessage = (e) => {
         if (e && e.data && e.data.type === 'harmonia.form.close') {
+          // The form wrote the record the selected task is about — that one subject re-reads, the rest of
+          // the list keeps its cache.
+          Alpine.store('processTasks').invalidate({ id: this.selectedId });
           this.selectedId = null;
-          this.refresh();
+          this.reload();
         }
       };
       window.addEventListener('message', this._onMessage);
@@ -100,7 +104,8 @@ document.addEventListener('alpine:init', () => {
       this.busy = true;
       try {
         await App.services.api.post('/services/inbox/tasks/' + task.id, { action: 'CLAIM' }, { baseUrl: '' });
-        await this.refresh();
+        // A claim changes who owns the task, not the record it is about; the subjects stay valid.
+        await this.reload();
         this.selectedId = task.id; // keep the selection after the list re-fetches
       } catch (e) {
         console.error('inbox: unable to claim task', e);
@@ -125,9 +130,24 @@ document.addEventListener('alpine:init', () => {
       if (res.ok) window.location.reload();
     },
 
-    async refresh() {
+    // The Refresh button: authoritative, so it drops the subject cache and re-reads every record the
+    // subject lines are built from.
+    refresh() {
+      return this._load(true);
+    },
+
+    // Everything automatic — page entry, the auto-refresh tick, a claim, a completed form — re-reads the
+    // task LIST and keeps the subject cache warm. Clearing it on a 15s timer meant every record and every
+    // relation target was re-fetched each cycle and the subject lines blanked out and repopulated (#7157);
+    // what a cycle can genuinely invalidate is one task, and that is invalidated where it happens.
+    reload() {
+      return this._load(false);
+    },
+
+    async _load(authoritative) {
       await this.loadActAs();
-      await Alpine.store('processTasks').refresh();
+      const store = Alpine.store('processTasks');
+      await (authoritative ? store.refresh() : store.load());
       this.lastUpdated = new Date();
       // A completed task drops out of the list — clear a stale selection.
       if (this.selectedId && !this.tasks.some(t => t.id === this.selectedId)) this.selectedId = null;
@@ -142,7 +162,7 @@ document.addEventListener('alpine:init', () => {
           if (!this.$root || !this.$root.isConnected) return this.stopAuto();
           // Server gone — processTasks already stopped its own poll; stop auto-refresh too (refresh to resume).
           if (Alpine.store('processTasks').serverUnavailable) return this.stopAuto();
-          this.refresh();
+          this.reload();
         }, 15000);
       } else {
         this.stopAuto();
