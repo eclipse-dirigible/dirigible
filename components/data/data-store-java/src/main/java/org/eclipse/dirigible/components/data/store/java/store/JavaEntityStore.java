@@ -78,7 +78,8 @@ public class JavaEntityStore {
     /**
      * Runs a block of entity work as ONE unit: every write and read this thread makes through the store
      * inside it joins a single session and a single transaction, which commits when the block returns
-     * and rolls back whole when it throws.
+     * and rolls back whole when it throws — for any failure the block raises, an {@link Error}
+     * included.
      *
      * <p>
      * Without it each store call is its own transaction, so a multi-write operation that fails halfway
@@ -115,7 +116,12 @@ public class JavaEntityStore {
             try {
                 result = work.get();
                 unit.transaction.commit();
-            } catch (RuntimeException ex) {
+            } catch (Throwable ex) {
+                // Throwable, not RuntimeException: an Error — an assertion, a StackOverflow from a
+                // handler that recursed, an OOME — is exactly the failure that must not leave the
+                // unit's writes behind, and it would otherwise reach the finally below and close the
+                // session with the transaction still active, making the outcome depend on what the
+                // pool does with such a connection rather than on an explicit rollback.
                 rollback(unit.transaction, ex);
                 throw ex;
             }
@@ -739,7 +745,9 @@ public class JavaEntityStore {
             try {
                 result = work.apply(session, events);
                 tx.commit();
-            } catch (RuntimeException ex) {
+            } catch (Throwable ex) {
+                // Throwable for the same reason as in inUnitOfWork: an Error must roll this write
+                // back rather than ride out on the try-with-resources close.
                 rollback(tx, ex);
                 throw ex;
             }
@@ -804,9 +812,9 @@ public class JavaEntityStore {
 
     /**
      * Rolls back a transaction whose work failed, keeping the original failure as the one the caller
-     * sees.
+     * sees. A rollback that itself fails is attached to it as suppressed rather than replacing it.
      */
-    private static void rollback(Transaction tx, RuntimeException cause) {
+    private static void rollback(Transaction tx, Throwable cause) {
         try {
             if (tx.isActive()) {
                 tx.rollback();
