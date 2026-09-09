@@ -11,9 +11,21 @@
  * its own minimal fetch client so the page is self-contained (not part of the SPA shell).
  */
 const reportHttp = {
+  // A failure carries the status and the server's text the way the shell's ApiError does, so the
+  // shared apiErrors gate decides what the page may show: a 400/409 refusal (a parameter the report
+  // controller rejected) is quoted, anything else keeps the neutral fallback (#7151, #7263).
+  async failure(r) {
+    const text = await r.text().catch(() => '');
+    let reason = text;
+    try { const j = JSON.parse(text); reason = j.errorMessage || j.message || text; } catch (_) { /* non-JSON */ }
+    const err = new Error('HTTP ' + r.status);
+    err.httpStatus = r.status;
+    err.errorMessage = reason;
+    return err;
+  },
   async get(url) {
     const r = await fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (!r.ok) throw await this.failure(r);
     const t = await r.text();
     return t ? JSON.parse(t) : null;
   },
@@ -24,7 +36,7 @@ const reportHttp = {
       body: JSON.stringify(body || {}),
       credentials: 'same-origin',
     });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (!r.ok) throw await this.failure(r);
     const t = await r.text();
     return t ? JSON.parse(t) : null;
   },
@@ -183,7 +195,7 @@ document.addEventListener('alpine:init', () => {
         if (!this.count) this.count = this.rows.length;
         this.state = this.rows.length ? 'default' : 'empty';
       } catch (e) {
-        this.error = (e && e.message) || 'Could not run the ${name} report.';
+        this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not run the ${name} report.');
         this.state = 'error';
       }
       this.refreshIcons();
@@ -315,7 +327,7 @@ document.addEventListener('alpine:init', () => {
         a.click();
         URL.revokeObjectURL(a.href);
       } catch (e) {
-        this.error = (e && e.message) || 'Export failed.';
+        this.error = App.services.apiErrors.refusalMessageFor(e, 'Export failed.');
       }
     },
 
@@ -350,7 +362,7 @@ document.addEventListener('alpine:init', () => {
         w.focus();
         w.print();
       } catch (e) {
-        this.error = (e && e.message) || 'Print failed.';
+        this.error = App.services.apiErrors.refusalMessageFor(e, 'Print failed.');
       }
     },
 

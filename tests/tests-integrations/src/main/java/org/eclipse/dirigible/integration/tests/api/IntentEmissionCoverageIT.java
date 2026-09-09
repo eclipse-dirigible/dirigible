@@ -44,6 +44,7 @@ import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
+import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -2941,6 +2942,32 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(myRosterDoc.contains(":aria-invalid=\"fieldError === "),
                 "the personal document's header controls must mark the field a rejection named");
 
+        // #7263: the checks above name four files, and the fix they guard missed the admin surface
+        // #7242 listed, the personal/partner list + calendar loads, the standalone report page and the
+        // task form. The rule is a property of EVERY generated page, so it is asserted over every
+        // generated page: nothing under gen/ prints e.message - a 500's raw exception text - and the
+        // shared apiErrors gate is the only path from a REST error body to a banner.
+        List<String> emittedPages = emittedPages("gen");
+        // The walk is load-bearing only if it really saw the pages: pin it to files the checks above read.
+        assertTrue(
+                emittedPages.contains("gen/emission/admin/index.html")
+                        && emittedPages.contains("gen/emission/js/components/pages/my/ClaimMyListPage.js"),
+                "the generated-page walk must cover the admin page and the SPA pages, else the rule below is vacuous: " + emittedPages);
+        List<String> rawMessagePages = emittedPages.stream()
+                                                   .filter(page -> {
+                                                       String content = contentOf(page);
+                                                       return content.contains("(e && e.message)") || content.contains("String(e.message");
+                                                   })
+                                                   .toList();
+        assertTrue(rawMessagePages.isEmpty(),
+                "every generated page must route a failure through apiErrors, never print e.message: " + rawMessagePages);
+        assertTrue(myList.contains("refusalMessageFor(e, 'Could not load your"),
+                "a failed personal list load must show the refusal text or the neutral fallback, never e.message (#7263)");
+        assertTrue(partnerList.contains("refusalMessageFor(e, 'Could not load your"),
+                "a failed partner list load must show the refusal text or the neutral fallback, never e.message (#7263)");
+        assertTrue(myLeaveCalendar.contains("refusalMessageFor(e, 'Could not load your"),
+                "a failed personal calendar load must show the refusal text or the neutral fallback, never e.message (#7263)");
+
         // The app-test manifest carries the personal UI-parity metadata the runner's my flow
         // drives (wave 2): the /my route, the layout family the personal page belongs to, and
         // the relation columns that must resolve to labels on the personal list.
@@ -3277,6 +3304,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(adminPage.contains("\"lookup\":{\"url\":"), "a relation column must carry its lookup URL for the combobox");
         assertTrue(adminPage.contains("loadLookups"), "the admin page must resolve relation ids to labels");
         assertTrue(adminPage.contains("\"readonly\":true"), "identity/calculated/audit columns must be marked read-only");
+        // The admin banner quotes the server's text only for a 400/409 refusal, through the shared gate
+        // the page loads for that purpose - a 500's exception text goes to the console, not the screen
+        // (#7151, #7263).
+        assertTrue(adminPage.contains("shell/js/services/apiError.js"), "the admin page must load the shared refusal gate");
+        assertTrue(adminPage.contains("App.services.apiErrors.refusalMessageFor("),
+                "the admin banner must go through the shared refusal gate, never the raw response text");
+        assertFalse(adminPage.contains("String(e.message"), "the admin surface must never print the developer-facing e.message");
         String adminPerspective = contentOf("gen/emission/perspectives/admin/perspective.js");
         assertTrue(adminPerspective.contains("kind: 'ADMIN'"), "the admin perspective must declare the ADMIN kind");
         assertFalse(adminPerspective.contains("groupId"), "an admin perspective must not bake in the shell's navigation group id (#6646)");
@@ -5805,6 +5839,30 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             existing.setContent(content.getBytes(StandardCharsets.UTF_8));
         } else {
             repository.createResource(path, content.getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    /**
+     * Every generated script and view under {@code folder} (project-relative), as project-relative
+     * paths - the surface a rule about "every generated page" is asserted over, so a page a template
+     * adds later cannot fall outside the check by not being named.
+     */
+    private List<String> emittedPages(String folder) {
+        List<String> pages = new java.util.ArrayList<>();
+        collectPages(repository.getCollection(PROJECT_PATH + "/" + folder), pages);
+        return pages;
+    }
+
+    private void collectPages(ICollection collection, List<String> pages) {
+        for (IResource resource : collection.getResources()) {
+            String name = resource.getName();
+            if (name.endsWith(".js") || name.endsWith(".html")) {
+                pages.add(resource.getPath()
+                                  .substring(PROJECT_PATH.length() + 1));
+            }
+        }
+        for (ICollection child : collection.getCollections()) {
+            collectPages(child, pages);
         }
     }
 
