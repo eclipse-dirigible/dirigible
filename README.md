@@ -430,6 +430,7 @@ type the command in a Claude Code session opened in this repo.
 | `/dirigible-stop`  | Stops the running instance.                                                                    |
 | `/dirigible-test`  | Runs the tests — all by default, or just the unit or just the integration tests.               |
 | `/dirigible-pr`    | Gets your branch ready for a pull request (formats the code and checks the docs build).        |
+| `/dirigible-take`  | Takes a GitHub issue end to end: worktree off `origin/master`, implement, verify, commit, push, open the PR. Saying `take this: <issue url>` in plain words does the same. |
 
 `/dirigible-start` accepts two optional keywords you can add in any combination:
 
@@ -456,6 +457,9 @@ type the command in a Claude Code session opened in this repo.
 /dirigible-test integration   # run only the integration tests
 
 /dirigible-pr                 # format + validate before you open a PR
+
+/dirigible-take https://github.com/eclipse-dirigible/dirigible/issues/1234
+                              # take an issue end to end: worktree, fix, verify, commit, push, PR
 ```
 
 > **Note:** the integration tests boot the whole application and drive a headless Chrome, so they

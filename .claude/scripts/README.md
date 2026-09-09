@@ -38,6 +38,12 @@ front and the log tail runs as a background task.
 - **`/dirigible-pr`** → format + javadoc-validate the changed Maven modules (the `mvn formatter:format`
   and release-profile javadoc commands from the root CLAUDE.md), fix issues, summarize; does **not**
   commit/push.
+- **`/dirigible-take <issue>`** → the whole delivery chain for one GitHub issue, per
+  `.claude/docs/take-this-workflow.md` (imported into CLAUDE.md, so the plain phrase
+  `take this: <issue url>` triggers the same chain): worktree off `origin/master`, private Maven
+  repository when other builds may run, implement, the verification bar, plain `git commit`,
+  push, `gh pr create` with `Fixes #NNNN`. It is the one command that DOES commit and push; it
+  never merges. `/dirigible-pr` is its verification step when run standalone.
 
 ## `dirigible.mjs` subcommands
 
