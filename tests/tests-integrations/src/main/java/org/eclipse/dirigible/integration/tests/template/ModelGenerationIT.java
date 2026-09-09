@@ -171,6 +171,11 @@ class ModelGenerationIT extends IntegrationTest {
             // keeping its own MANAGE layout - the partitions no other fixture exercises, because none
             // of them declares a view.
             new Case("views.model", TEMPLATE_APPLICATION, false), //
+            // The glue fixture's posting is deliberately written in the shape a .glue committed before
+            // #7163 holds - a header assignment carrying its expression alone, none of the keys the
+            // hoisted-local comparison reads. Velocity renders an undefined reference as its own
+            // literal, so a binder that stops normalising those entries emits `var $a.local = ...`
+            // and the unresolved-reference check below catches it (#7195).
             new Case("orders.glue", TEMPLATE_GLUE, false), //
             new Case("leave-request.form", TEMPLATE_FORM, false), //
             new Case("revenue.report", TEMPLATE_REPORT, false), //
