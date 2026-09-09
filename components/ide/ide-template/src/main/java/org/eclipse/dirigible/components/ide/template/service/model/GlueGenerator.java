@@ -792,7 +792,7 @@ class GlueGenerator {
         copy(context, item, "name", "className", "isCreate", "sourcePerspective", "sourceEntity", "sourceKeyField", "guardProperty",
                 "guardValue", "targetEntity", "targetPk", "itemsEntity", "itemsFk", "backRefProperty", "stornoProperty",
                 "stornoFilterProperty", "hasRule", "ruleEntity", "ruleMatchProperty", "ruleMatchValueJava", "usedRuleColumns",
-                "conditionalRuleGuards", "headerAssignments", "itemRows");
+                "conditionalRuleGuards", "itemRows");
         // The bound axis (issue #6929): the channel the handler subscribes to, and the sentence its
         // header comment describes it in. Both are absent from a .glue written before the enrichment
         // phase existed, and a bare reference would render as its own literal - so each falls back to
@@ -820,6 +820,44 @@ class GlueGenerator {
         // before the amendment half carries neither key and needs neither helper.
         context.put("comparesAgainstDefaults", truthy(item, "comparesAgainstDefaults"));
         context.put("comparesUnlessDerivedIsEmpty", truthy(item, "comparesUnlessDerivedIsEmpty"));
+        List<Map<String, Object>> headerAssignments = headerAssignments(item.get("headerAssignments"));
+        context.put("headerAssignments", headerAssignments);
+        context.put("hoistsHeaderValues", headerAssignments.stream()
+                                                           .anyMatch(assignment -> truthy(assignment, "hoisted")));
+    }
+
+    /**
+     * Normalises the header assignments of a posting. The keys the hoisting half of the amend
+     * comparison reads (#7131) live <em>inside</em> each entry rather than on the descriptor, so the
+     * fallbacks the descriptor's own keys carry do not reach them: an entry written before that change
+     * carries {@code targetProp} and {@code expr} alone, and the bare references would render as their
+     * own literal text - {@code var $a.local = source.Date;}, which does not compile.
+     *
+     * <p>
+     * Each entry therefore falls back to exactly what its shape used to emit: the expression read
+     * inline at both the comparison and the assignment, no hoisted local, and no default-aware
+     * comparison. {@code value} is what both sites read, so the template needs no branch of its own.
+     *
+     * @param raw the declared assignments
+     * @return the normalised assignments
+     */
+    private static List<Map<String, Object>> headerAssignments(Object raw) {
+        List<Map<String, Object>> assignments = new ArrayList<>();
+        for (Map<String, Object> declared : asMaps(raw)) {
+            String local = strOr(declared, "local", "");
+            String expr = strOr(declared, "expr", "");
+            Map<String, Object> assignment = new LinkedHashMap<>();
+            assignment.put("targetProp", declared.get("targetProp"));
+            assignment.put("expr", expr);
+            assignment.put("hoisted", !local.isEmpty());
+            assignment.put("local", local);
+            assignment.put("value", local.isEmpty() ? expr : local);
+            assignment.put("derivedDefault", strOr(declared, "derivedDefault", ""));
+            assignment.put("compareOnlyWhenDerived", truthy(declared, "compareOnlyWhenDerived"));
+            assignment.put("overwrittenOnSave", truthy(declared, "overwrittenOnSave"));
+            assignments.add(assignment);
+        }
+        return assignments;
     }
 
     /**

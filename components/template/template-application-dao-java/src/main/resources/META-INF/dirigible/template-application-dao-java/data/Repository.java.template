@@ -178,7 +178,8 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## Aggregate guard (intent `checks: kind: guard`): reject a create/update whose post-state would drop
 ## a keyed aggregate sum below its minimum (negative stock, credit limit). Recomputed synchronously from
 ## THIS entity's store for the incoming row's key-tuple (race-free, not the async-maintained target),
-## excluding this row on update, then adding the incoming value. Optionally gated by a config key.
+## excluding this row on update, then adding the incoming value. Optionally gated by a config key. A row
+## with any grouping key null belongs to no key-tuple and is not guarded at all (#7180).
 #macro(aggregateGuardCheck)
 #if($guardChecks && $guardChecks.size() > 0)
 #foreach($guard in $guardChecks)
@@ -186,17 +187,32 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
         if ("true".equalsIgnoreCase(org.eclipse.dirigible.sdk.core.Configurations.get("${guard.enabledBy}", ""))) {
 #end
         {
-            java.math.BigDecimal guardSum = java.math.BigDecimal.ZERO;
-            for (${name}Entity aggRow : findAll(Criteria.create()#foreach($k in $guard.keys).eq("${k.key}", entity.${k.key})#end)) {
-                if (entity.${guard.pk} != null && entity.${guard.pk}.equals(aggRow.${guard.pk})) {
-                    continue;
+            // A row with any grouping key null belongs to NO key-tuple, and the aggregate this guards
+            // ignores it for exactly that reason (the generated aggregate handler's own contract), so
+            // it contributes to no sum and can breach no minimum: there is nothing to guard and the
+            // row passes. Said explicitly, because the lookup below no longer says it by accident -
+            // Criteria.eq is NULL-SAFE (#7134), so a null key that used to match no row now matches
+            // the null group, weighing the write against a pool of tuple-less rows that no aggregate
+            // row materialises (#7180). The sibling roll-up capacity guard skips on a null FK the
+            // same way.
+            boolean guardKeyed = #foreach($k in $guard.keys)#if($foreach.first)entity.${k.key} != null#else && entity.${k.key} != null#end#end;
+            boolean guardWithin = true;
+            if (guardKeyed) {
+                java.math.BigDecimal guardSum = java.math.BigDecimal.ZERO;
+                for (${name}Entity aggRow : findAll(Criteria.create()#foreach($k in $guard.keys).eq("${k.key}", entity.${k.key})#end)) {
+                    if (entity.${guard.pk} != null && entity.${guard.pk}.equals(aggRow.${guard.pk})) {
+                        continue;
+                    }
+                    if (aggRow.${guard.sumField} != null) {
+                        guardSum = guardSum.add(aggRow.${guard.sumField});
+                    }
                 }
-                if (aggRow.${guard.sumField} != null) {
-                    guardSum = guardSum.add(aggRow.${guard.sumField});
-                }
+                java.math.BigDecimal guardIncoming = entity.${guard.sumField} == null ? java.math.BigDecimal.ZERO : entity.${guard.sumField};
+                guardWithin = guardSum.add(guardIncoming).compareTo(new java.math.BigDecimal("${guard.minimum}")) >= 0;
+            } else {
+                LOG.debug("Aggregate guard [${guard.aggregate}] skipped for a ${name} with a null grouping key"
+                        + " - the row belongs to no key-tuple of the aggregate and contributes to no sum");
             }
-            java.math.BigDecimal guardIncoming = entity.${guard.sumField} == null ? java.math.BigDecimal.ZERO : entity.${guard.sumField};
-            boolean guardWithin = guardSum.add(guardIncoming).compareTo(new java.math.BigDecimal("${guard.minimum}")) >= 0;
 #if($guard.outcome == "task")
             // outcome: task - do NOT fail the write. Stamp the marker so this entity's process decision
             // can route the record to a hold/review step (the order is accepted, then parked).
@@ -258,7 +274,7 @@ import org.eclipse.dirigible.sdk.utils.Calc;
 #if($haveCalculatedPropertyAction)
 import org.eclipse.dirigible.sdk.component.Beans;
 #end
-#if($reportedOnUpdate.size() > 0)
+#if($reportedOnUpdate.size() > 0 || ($guardChecks && $guardChecks.size() > 0))
 import org.eclipse.dirigible.sdk.log.Logger;
 import org.eclipse.dirigible.sdk.log.Logging;
 #end
@@ -305,8 +321,11 @@ ${importsCode}
 @Component("${javaGenFolderName}_${name}Repository")
 public class ${name}Repository extends JavaRepository<${name}Entity> {
 
-#if($reportedOnUpdate.size() > 0)
-    /** Reports a system-owned column a full-row update() carried a different value for - see update(). */
+#if($reportedOnUpdate.size() > 0 || ($guardChecks && $guardChecks.size() > 0))
+    /**
+     * Reports a system-owned column a full-row update() carried a different value for - see update() -
+     * and an aggregate guard skipped for a row that belongs to no key-tuple - see save().
+     */
     private static final Logger LOG = Logging.getLogger("gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository");
 
 #end

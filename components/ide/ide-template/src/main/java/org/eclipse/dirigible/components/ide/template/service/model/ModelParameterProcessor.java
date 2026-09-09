@@ -395,7 +395,7 @@ final class ModelParameterProcessor {
             property.put("widgetIsMajor", Boolean.FALSE);
         }
 
-        resolveDefaultValueLiteral(property);
+        resolveDefaultValueLiterals(property);
 
         resolveWidgetLengths(property, entity, dataType);
         property.put("inputRule", strOr(property, "widgetPattern", ""));
@@ -406,27 +406,41 @@ final class ModelParameterProcessor {
     }
 
     /**
-     * Derives the authored default as a Java expression, for the properties whose default the generated
-     * repository can apply itself.
+     * Derives the authored default as the literals the generated artefacts write it into.
      *
      * <p>
-     * The default is also the column's DB DEFAULT, but the database supplies it at INSERT - which is
-     * after the create-time calculations have already run in Java and read a null (#7104), so the
-     * repository assigns it first. The expression is resolved here rather than assembled in the
-     * template, so an authored value carrying a quote or a backslash is escaped instead of ending the
-     * literal it is written into and failing the compile of the whole generated module (#7154).
+     * The value is a piece of authored text that ends up inside a Java string literal (the repository
+     * assigning the default) and inside a JSON string (the {@code .schema} declaring the column
+     * DEFAULT). Interpolated verbatim by a template, a value carrying a quote or a backslash ended the
+     * literal it was being written into and took the whole artefact with it - a failed compile of the
+     * generated module (#7154), an unparseable schema for which the synchronizer then created no table
+     * at all (#7206). Resolving the literals here keeps the worst case at one mis-valued field.
      *
      * <p>
-     * A key with no expression is left absent rather than null: a template reads the key's presence as
-     * "this property has a default to apply".
+     * The JSON literal is the value as authored, because the schema's DEFAULT reaches the DDL verbatim
+     * by design - a malformed default is the author's broken SQL, and only escaped so that it cannot
+     * break anything but its own column. The Java expression is of the property's own type and exists
+     * only where a literal can stand in for the default at all.
+     *
+     * <p>
+     * A key with no value is left absent rather than null: a template reads the key's presence as "this
+     * property has a default".
      *
      * @param property the property
      */
-    private static void resolveDefaultValueLiteral(Map<String, Object> property) {
+    private static void resolveDefaultValueLiterals(Map<String, Object> property) {
+        String defaultValue = str(property, "dataDefaultValue");
+        if (defaultValue == null || defaultValue.isEmpty()) {
+            return;
+        }
+        property.put("dataDefaultValueJsonLiteral", JsonLiterals.stringLiteral(defaultValue));
+
+        // The generated key is the database's to assign, so its default is never applied in Java - the
+        // schema, which only declares what was authored, keeps carrying it.
         if (Boolean.TRUE.equals(property.get("dataPrimaryKey")) || Boolean.TRUE.equals(property.get("dataAutoIncrement"))) {
             return;
         }
-        String expression = JavaLiterals.defaultValueExpression(str(property, "dataTypeJavaClass"), str(property, "dataDefaultValue"));
+        String expression = JavaLiterals.defaultValueExpression(str(property, "dataTypeJavaClass"), defaultValue);
         if (expression != null) {
             property.put("dataDefaultValueJavaLiteral", expression);
         }

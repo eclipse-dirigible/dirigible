@@ -8,3 +8,13 @@ updates:
     open-pull-requests-limit: 30
     labels:
       - dependencies
+    ignore:
+      # Pinned to 3.5.6 - see #7215. 3.6.0's unified provider discovers none of the integration
+      # tests in tests/tests-integrations (they live in src/main/java and are reached through the
+      # root pom's testClassesDirectory override), so every IT job reports "Tests run: 0" and
+      # passes. Patches still arrive; a minor or major bump needs the ITs moved to src/test/java
+      # first, which is what would let the testClassesDirectory override - and this rule - go away.
+      - dependency-name: "org.apache.maven.plugins:maven-failsafe-plugin"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"

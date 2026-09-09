@@ -735,7 +735,7 @@
               <!-- Fill Month: the fill-target date column picks the MONTH - every working day gets a line. -->
               <template x-if="!col.readonly && col.widget === 'DATE' && draftMode === 'fill' && col.name === fillDateName()">
                 <div x-h-month-picker>
-                  <input type="text" />
+                  <input type="text" :aria-invalid="draftFieldError === col.name" />
                   <button x-h-month-picker-trigger aria-label="Choose month"></button>
                   <div x-h-month-picker-popup x-model="draft[col.name]"></div>
                 </div>
