@@ -310,9 +310,16 @@ public class BpmProviderFlowable implements BpmProvider {
     /**
      * Correlates a message event to the process instance.
      *
+     * An instance that is not subscribed to the message is the expected miss for the fail-soft glue
+     * that drives waits and aborts - it is reported by its own type, like an instance that has already
+     * ended, so a caller can tell it apart from a real fault (a database or Flowable failure, the wrong
+     * tenant scope, a mis-generated message name) instead of meeting a NullPointerException.
+     *
      * @param processInstanceId the process instance id
      * @param messageName the name of the event
      * @param variables the variables to be passed with the event
+     * @throws IllegalArgumentException if the instance does not exist in the current tenant, or is not
+     *         waiting on a message with this name
      */
     public void correlateMessageEvent(String processInstanceId, String messageName, Map<String, Object> variables) {
         flowableArtefactsValidator.validateProcessInstanceId(processInstanceId);
@@ -324,6 +331,11 @@ public class BpmProviderFlowable implements BpmProvider {
                                             .processInstanceId(processInstanceId)
                                             .executionTenantId(getTenantId())
                                             .singleResult();
+
+        if (execution == null) {
+            throw new IllegalArgumentException("Process instance with id [" + processInstanceId
+                    + "] is not waiting on a message event with name [" + messageName + "]");
+        }
 
         runtimeService.messageEventReceived(messageName, execution.getId(), variables);
     }

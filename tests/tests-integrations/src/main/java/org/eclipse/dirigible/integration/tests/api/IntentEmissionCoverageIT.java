@@ -2577,6 +2577,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the wait listener must correlate the message on its own process's stamped instance");
         assertTrue(waitHandler.contains("new RfqRepository().findById(entity.Rfq)"),
                 "the wait listener must resolve the parked record through the via back-reference");
+        // ...and a correlation that does NOT happen is never silent (#7230). Only the not-parked case -
+        // the platform's IllegalArgumentException - is the expected no-op; anything else leaves the
+        // instance waiting on a step nobody will resume, and is logged with its throwable.
+        assertTrue(
+                waitHandler.contains("catch (IllegalArgumentException notParked)") && waitHandler.contains("LOG.debug(")
+                        && waitHandler.contains("notParked);"),
+                "the not-parked miss must be caught by its own type and logged with the throwable");
+        assertTrue(waitHandler.contains("catch (RuntimeException failed)") && waitHandler.contains("LOG.warn(\"Could not resume")
+                && waitHandler.contains("failed);"), "any other correlation failure must be logged with the throwable");
+        assertFalse(waitHandler.contains("catch (RuntimeException notParked)"),
+                "the empty catch that treated every failure as not-parked must be gone");
         String timerLoader = contentOf("gen/events/emission/LoadRfqFlowReviewExpire.java");
         assertTrue(timerLoader.contains("execution.setVariable(\"__reviewExpireDate\", due)"),
                 "the expire date loader must publish the variable the boundary timer arms from");
@@ -2668,6 +2679,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         && abortHandler.contains("ProcessStamps.idFor(entity.ProcessIds, \"ApprovalFlow\")")
                         && abortHandler.contains("Process.correlateMessageEvent(instance, \"ApprovalFlowAbort\""),
                 "the abort listener must match the status on -transitioned and abort ITS OWN instance, not whichever flow stamped last");
+        // ...and an abort that does NOT happen is never silent (#7230), on the same recipe: the
+        // not-in-scope miss by its own type at debug, every other failure at warn with its throwable -
+        // an instance that should have been cancelled otherwise keeps running with nothing in the log.
+        assertTrue(
+                abortHandler.contains("catch (IllegalArgumentException notAborting)") && abortHandler.contains("LOG.debug(")
+                        && abortHandler.contains("notAborting);"),
+                "the not-in-abort-scope miss must be caught by its own type and logged with the throwable");
+        assertTrue(abortHandler.contains("catch (RuntimeException failed)") && abortHandler.contains("LOG.warn(\"Could not abort")
+                && abortHandler.contains("failed);"), "any other abort failure must be logged with the throwable");
+        assertFalse(abortHandler.contains("catch (RuntimeException notAborting)"),
+                "the empty catch that treated every failure as not-aborting must be gone");
         // ...and the row's DELETE retires the flow too (#7074): a listener on -deleted for every
         // entity-triggered process, cancelling ITS OWN still-running instance, whether or not abortOn is
         // declared - an Inbox task over a row that is gone opens an empty form and can still be completed.
