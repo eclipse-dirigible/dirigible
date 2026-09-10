@@ -207,6 +207,75 @@ public final class IntentEntities {
     }
 
     /**
+     * The model's DOCUMENT MASTERS - each header entity whose generated repository resums its totals
+     * from its lines on every write - mapped to that line-items entity.
+     *
+     * <p>
+     * This is the rule the EDM generator emits the document layout by ({@code MANAGE_DOCUMENT} plus
+     * {@code documentItemsEntity}), and so the rule the generation pipeline builds the DAO's
+     * {@code documentMaster} from: such a master's {@code save()} and {@code update()} end in
+     * {@code recalculate()}, which sets every {@code aggregate: true} header column the lines also
+     * declare to the sum over those lines, and the lines' own writes resum the master. A consumer
+     * asking "does the write overwrite this header column?" must resolve the master through THIS rule,
+     * not through {@link #documentItemsChild} - that is the broader "what are this document's items"
+     * answer a check or a posting reads its lines through, and it also names a sole or first
+     * composition child whose master the pipeline never treats as a document (dirigible #7234).
+     *
+     * <p>
+     * Two passes, both in entity-declaration order so the first {@code *Item} child wins
+     * deterministically when a master has several: a composition child that is the document's line
+     * items - explicit {@code function: DocumentItem}, or the legacy {@code *Item} naming - makes its
+     * composition parent a master; then {@code function: Document} on a master whose SINGLE composition
+     * child is neither flagged nor {@code *Item}-named makes that sole child the items (the author
+     * declared the document intent).
+     *
+     * @param entities every entity of the model, in declaration order
+     * @param compositionParents the composition-parent map ({@link #compositionParents(IntentModel)})
+     * @return each document master's name mapped to its line-items entity's name
+     */
+    public static Map<String, String> documentMasters(Collection<EntityIntent> entities, Map<String, String> compositionParents) {
+        Map<String, String> masters = new LinkedHashMap<>();
+        for (EntityIntent entity : entities) {
+            String child = entity.getName();
+            if (child == null) {
+                continue;
+            }
+            String parent = compositionParents.get(child);
+            if (parent == null) {
+                continue;
+            }
+            if ((entity.isDocumentItem() || child.endsWith("Item")) && !masters.containsKey(parent)) {
+                masters.put(parent, child);
+            }
+        }
+        for (EntityIntent entity : entities) {
+            String name = entity.getName();
+            if (name == null || !entity.isDocument() || masters.containsKey(name)) {
+                continue;
+            }
+            String sole = soleCompositionChild(entities, compositionParents, name);
+            if (sole != null) {
+                masters.put(name, sole);
+            }
+        }
+        return masters;
+    }
+
+    /** The single composition child of {@code master}, or {@code null} when it has zero or several. */
+    private static String soleCompositionChild(Collection<EntityIntent> entities, Map<String, String> compositionParents, String master) {
+        String only = null;
+        for (EntityIntent entity : entities) {
+            if (entity.getName() != null && master.equals(compositionParents.get(entity.getName()))) {
+                if (only != null) {
+                    return null; // ambiguous - more than one composition child
+                }
+                only = entity.getName();
+            }
+        }
+        return only;
+    }
+
+    /**
      * The composition parent of {@code entity}: the target of its first {@code composition: true}
      * to-one relation, or {@code null} when it is not a dependent entity. The single-entity form of
      * {@link #compositionParents(IntentModel)}.

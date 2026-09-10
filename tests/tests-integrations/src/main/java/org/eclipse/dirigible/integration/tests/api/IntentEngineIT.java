@@ -3167,6 +3167,53 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void an_authored_default_is_escaped_into_the_item_dialog_seed() {
+        // #7207: the seed for a new line was interpolated into a JavaScript string literal verbatim,
+        // so an authored apostrophe ended the literal and the whole register was a syntax error - the
+        // page failed to load entirely, rather than one field mis-seeding. Sibling of #7154, which
+        // fixed the same interpolation one language over (the repository's Java literal).
+        writeIntent("""
+                name: registers
+                entities:
+                  - name: Ticket
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: issued, type: date }
+                    relations:
+                      - { name: lines, kind: oneToMany, to: TicketLine }
+
+                  - name: TicketLine
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: copy,     type: string,  length: 40, defaultValue: "Owner's copy" }
+                      - { name: path,     type: string,  length: 40, defaultValue: 'C:\\tmp' }
+                      - { name: quantity, type: integer, defaultValue: 1 }
+                      - { name: billable, type: boolean, defaultValue: true }
+                      - { name: stage,    type: string,  length: 20, defaultValue: DRAFT }
+                    relations:
+                      - { name: ticket, kind: manyToOne, to: Ticket, composition: true }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "registers.model");
+        String detailRegister = contentOf("gen/registers/js/components/pages/Ticket/TicketLine.detail.js");
+
+        // The seed keeps the shape the draft holds - a checkbox a real boolean, a numeric column a
+        // real number, everything else a string...
+        assertTrue(detailRegister.contains(", def: true"), "a boolean default must seed a real boolean, got: " + detailRegister);
+        assertTrue(detailRegister.contains(", def: 1"), "a numeric default must seed a real number, got: " + detailRegister);
+        assertTrue(detailRegister.contains(", def: 'DRAFT'"), "a string default must seed a quoted string, got: " + detailRegister);
+        // ...and a value carrying the apostrophe that delimits it is escaped into the literal instead
+        // of ending it.
+        assertTrue(detailRegister.contains(", def: 'Owner\\'s copy'"),
+                "a default carrying the apostrophe that delimits the seed must be escaped into it, got: " + detailRegister);
+        assertTrue(detailRegister.contains(", def: 'C:\\\\tmp'"),
+                "a default carrying a backslash must be escaped into the seed, got: " + detailRegister);
+    }
+
+    @Test
     void report_widget_generates_the_kpi_block_and_replaces_entity_tiles() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()
@@ -3434,6 +3481,104 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(posting.indexOf("itemsRepository.save(item)") > unitOfWork, "the derived lines are written inside the unit of work");
         // The Ledger carries no status lifecycle, so there is nothing to act on and nothing to guard.
         assertFalse(posting.contains("was NOT rewritten"), "a target with no status lifecycle is always rewritable");
+    }
+
+    @Test
+    void posts_writes_every_row_of_one_source_event_in_one_transaction() {
+        // #7179: the FLAT per-item mode (posts:, no header document) had the same multi-write shape as
+        // the posting rewrite and no unit of work - one save per row, one transaction each. A row the
+        // repository refused left the rows before it durable, and the guard here is coarser than the
+        // posting's: it asks whether ANY row back-references this source, so the partial set read as a
+        // finished post and no redelivery ever wrote the rest. The half-post was PERMANENT. The rows
+        // are derived first and written together, so the guard sees a whole post or nothing.
+        String yaml = """
+                name: poststest
+                entities:
+                  - name: GoodsIssueStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: Product
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: GoodsIssue
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 40 }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: GoodsIssueStatus, function: EntityStatus, init: 1 }
+                  - name: GoodsIssueItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, precision: 18, scale: 3 }
+                    relations:
+                      - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue, composition: true, required: true }
+                      - { name: Product, kind: manyToOne, to: Product }
+                  - name: StockMovement
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, precision: 18, scale: 3 }
+                    relations:
+                      - { name: Product, kind: manyToOne, to: Product }
+                      - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue }
+                  - name: StockNote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 100 }
+                    relations:
+                      - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue }
+                posts:
+                  - name: goodsIssueLedger
+                    forEntity: GoodsIssue
+                    event: 2
+                    forEach: items
+                    into: StockMovement
+                    idempotentBy: GoodsIssue
+                    set:
+                      Product: item.Product
+                      Quantity: "-item.Quantity"
+                  - name: goodsIssueNote
+                    forEntity: GoodsIssue
+                    event: create
+                    into: StockNote
+                    idempotentBy: GoodsIssue
+                    set:
+                      Note: source.Number
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        String glue = contentOf("poststest.glue");
+        assertTrue(glue.contains("\"posts\""), "the .glue should carry the posts collection");
+        assertTrue(glue.contains("GoodsIssueLedger"), "the post className should be carried in the glue");
+
+        generateFromModel("template-application-events-java/template/template.js", "poststest.glue");
+        String post = codeOf("gen/events/poststest/GoodsIssueLedgerPost.java");
+        assertTrue(post.contains("implements MessageHandler"), "the post is a self-describing message handler");
+        assertTrue(post.contains("-transitioned"), "a status-triggered post listens on the source's -transitioned channel");
+        assertTrue(post.contains("Criteria.create().eq(\"GoodsIssue\", source.Id)"), "the guard asks the back-reference on the target");
+        // Asserted by POSITION, since a save left inside the derivation loop would still "mention
+        // UnitOfWork": every row is mapped in memory first, and the ONE save site sits inside the block.
+        int derived = post.indexOf("rows.add(row)");
+        int unitOfWork = post.indexOf("UnitOfWork.run(() -> {");
+        int save = post.indexOf("targetRepository.save(row)");
+        assertTrue(derived > 0, "the rows must be derived into a list before anything is written");
+        assertTrue(unitOfWork > derived, "the unit of work must open after the derivation, not around the reads");
+        assertTrue(save > unitOfWork, "every row must be saved inside the unit of work");
+        assertEquals(save, post.lastIndexOf("targetRepository.save(row)"),
+                "there must be exactly ONE save site - a second one outside the block would write rows unprotected");
+        assertFalse(post.contains("${"), "the post template must render every placeholder");
+
+        // The single-row mode (no forEach) writes one row through one repository call - a transaction on
+        // its own, so it needs no unit of work and must not pretend to open one.
+        String single = codeOf("gen/events/poststest/GoodsIssueNotePost.java");
+        assertTrue(single.contains("targetRepository.save(row)"), "the single-row post writes its one row");
+        assertFalse(single.contains("UnitOfWork"), "one repository call is already one transaction");
     }
 
     @Test

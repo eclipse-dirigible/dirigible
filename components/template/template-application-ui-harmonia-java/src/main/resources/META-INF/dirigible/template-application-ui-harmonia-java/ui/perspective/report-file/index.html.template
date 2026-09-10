@@ -185,6 +185,8 @@
 
     <!-- Value formatter (window.HarmoniaFormat): report.js formats numeric cells through it; must load before Alpine inits. -->
     <script src="/services/web/application-core/shell/js/services/format.js"></script>
+    <!-- The shared refusal gate: a report failure reaches the banner only through App.services.apiErrors (#7263). -->
+    <script src="/services/web/application-core/shell/js/services/apiError.js"></script>
     <!-- i18n: the shared shell translator (window.T + the Alpine i18n store). This page is standalone
          (no SPA shell / app.js), so the catalog namespace is bootstrapped inline: i18n.js reads
          App.config.projectName at load to fetch the project's catalogs next to 'application-core'. -->

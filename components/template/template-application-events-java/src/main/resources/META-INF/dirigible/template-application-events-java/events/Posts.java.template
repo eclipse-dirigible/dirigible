@@ -18,7 +18,10 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * - binds the source's #if($isCreate)create (bare entity)#{else}-transitioned#end topic and RE-LOADS the source by
  *   id (the payload is as-of the event and may lack later-step data);
  * - idempotent by ${backRef}: if ${into} rows already back-reference this source, it is a no-op;
- * - all writes go through the generated ${into} repository (so its own create logic fires).
+ * - all writes go through the generated ${into} repository (so its own create logic fires), and the
+ *   rows one source event derives are ONE transaction, so the back-reference either finds the whole
+ *   post or finds nothing at all - a tick that fails part-way leaves nothing behind to be mistaken
+ *   for a finished post (dirigible #7179).
  */
 @Component("${javaGenFolderName}_${className}Post")
 public class ${className}Post implements MessageHandler {
@@ -55,7 +58,10 @@ public class ${className}Post implements MessageHandler {
         gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Repository targetRepository =
                 new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Repository();
 #if($backRef != "")
-        // Idempotency: a row already back-referencing this source means the post ran - no-op.
+        // Idempotency: a row already back-referencing this source means the post ran - no-op. Mere
+        // EXISTENCE is an exact test only because the rows below are written as one transaction: a
+        // failed tick commits none of them, so the back-reference is present for a whole post and
+        // absent for no post - there is no partial set for this guard to read as finished (#7179).
         if (!targetRepository.findAll(Criteria.create().eq("${backRef}", source.${sourceKeyField})).isEmpty()) {
             return;
         }
@@ -63,6 +69,8 @@ public class ${className}Post implements MessageHandler {
 #if($perItem)
         gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Repository itemsRepository =
                 new gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Repository();
+        // Derive every row first - reads and in-memory mapping only, nothing written yet.
+        java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Entity> rows = new java.util.ArrayList<>();
         for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item :
                 itemsRepository.findAll(Criteria.create().eq("${itemsFk}", source.${sourceKeyField}))) {
             gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Entity row =
@@ -73,8 +81,19 @@ public class ${className}Post implements MessageHandler {
 #if($backRef != "")
             row.${backRef} = source.${sourceKeyField};
 #end
-            targetRepository.save(row);
+            rows.add(row);
         }
+        // ONE transaction for every row this source event derives. Written one save per transaction, a
+        // row the repository refused (a validation, a constraint) left the earlier rows durable - and
+        // since the guard above reads the back-reference as mere existence, every redelivery afterwards
+        // was a no-op and the missing rows were never written: the half-post was PERMANENT
+        // (dirigible #7179). All of them commit or none does, so the redelivery finds nothing and
+        // writes the whole set.
+        org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.run(() -> {
+            for (gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Entity row : rows) {
+                targetRepository.save(row);
+            }
+        });
 #else
         gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Entity row =
                 new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Entity();
@@ -84,6 +103,7 @@ public class ${className}Post implements MessageHandler {
 #if($backRef != "")
         row.${backRef} = source.${sourceKeyField};
 #end
+        // One row, one repository call - a transaction on its own, so no unit of work is needed here.
         targetRepository.save(row);
 #end
     }

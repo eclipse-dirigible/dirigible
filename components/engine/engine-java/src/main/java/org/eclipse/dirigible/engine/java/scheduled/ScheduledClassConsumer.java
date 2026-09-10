@@ -14,9 +14,11 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.TenantPostProvisioningStep;
@@ -67,12 +69,18 @@ import org.springframework.stereotype.Component;
  * client-Java generation is JVM-wide and only rebuilt when the Java synchronizer goes dirty on a
  * publish - so a tenant provisioned afterwards would have no {@code Job} row and no Quartz trigger
  * for any client-Java job, with nothing in the Jobs perspective to point at the cause. This
- * consumer is therefore also a {@link TenantPostProvisioningStep} that re-registers what it is
- * tracking once a provisioning round completes, exactly as the sibling
- * {@code ListenerClassConsumer} tops up a late tenant's subscriptions. The top-up needs no
- * per-tenant bookkeeping of its own because a registration is idempotent by construction: it lands
- * on the existing row and {@link JobsManager#scheduleJob} returns early once the job and its
- * trigger are there.
+ * consumer is therefore also a {@link TenantPostProvisioningStep} that tops up what it is tracking
+ * once a provisioning round completes, exactly as the sibling {@code ListenerClassConsumer} tops up
+ * a late tenant's subscriptions.
+ *
+ * <p>
+ * <b>A pass registers only what is missing.</b> The top-up and the reconciliation retry are both
+ * per {@code (job, tenant)}: a registration that landed is recorded and skipped from then on. A
+ * registration is idempotent, so repeating it would be harmless in isolation - but a single job the
+ * scheduler refuses keeps the retry timer firing, and covering the healthy ones on every tick would
+ * mean an N x T {@code saveAndFlush} + Quartz reschedule + INFO line every 30 s for the life of the
+ * failure, rewriting the same shared {@code DIRIGIBLE_JOBS} rows from every node of the cluster and
+ * burying the one WARN that is the actual fault (#7265).
  */
 @Component
 @Order(400)
@@ -83,19 +91,24 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
     /** The user-defined job group (the only group routed through the handler/engine dispatch). */
     private static final String JOB_GROUP = "defined";
 
+    /** Separator of the {@code (job name, tenant id)} bookkeeping key. */
+    private static final String KEY_SEPARATOR = "@";
+
     private final ComponentContainer componentContainer;
     private final JobsManager jobsManager;
     private final JobService jobService;
     private final TenantContext tenantContext;
 
-    /** fqn -> the jobs it declared (a class may declare several @Scheduled methods). */
-    private final ConcurrentMap<String, List<JobDeclaration>> registered = new ConcurrentHashMap<>();
+    /** fqn -> what it declared, plus which of those registrations landed in which tenant. */
+    private final ConcurrentMap<String, Registration> registrations = new ConcurrentHashMap<>();
 
     /** Set while a declared job is not registered in every tenant; drives {@link #reconcile()}. */
     private final AtomicBoolean registrationsIncomplete = new AtomicBoolean();
 
     /**
-     * Job names already reported as failing, so a retry on a timer does not log the same line forever.
+     * The {@code (job, tenant)} registrations already reported as failing, so a retry on a timer does
+     * not log the same line forever. Keyed per tenant, not per job: a job the scheduler refuses in one
+     * tenant only must still get its own first WARN for the next tenant it fails in.
      */
     private final Set<String> reportedFailures = ConcurrentHashMap.newKeySet();
 
@@ -165,10 +178,12 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         // previous names against the successful ones instead would make a transient failure DELETE the
         // Job row a previous run created, along with the operator's enabled flag on it.
         retainOnly(info.fqn(), declarations);
-        registered.put(info.fqn(), declarations);
-        for (JobDeclaration declaration : declarations) {
-            register(declaration);
-        }
+        // A reload installs a FRESH registration, with nothing recorded as landed - so it does re-register
+        // every job of the class in every tenant, which is the point: the cron the class declares, or the
+        // method a handler stands for, may have changed since the previous generation.
+        Registration registration = new Registration(declarations);
+        registrations.put(info.fqn(), registration);
+        register(info.fqn(), registration);
     }
 
     @Override
@@ -178,48 +193,191 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
     }
 
     /**
-     * Re-register every job of every loaded class, so a tenant provisioned after the last client-Java
-     * rebuild gets its {@code Job} rows and Quartz triggers too. Called once a provisioning round has
-     * actually provisioned something - {@code TenantsProvisioner} skips the post-provisioning steps
-     * when no tenant was in INITIAL status - so this is not a per-round cost.
-     *
-     * <p>
-     * Unlike the listener consumer's top-up this does not track which tenants it has already covered,
-     * and does not need to: re-registering finds the existing row and updates it in place (keeping the
-     * operator's enabled flag), and {@link JobsManager#scheduleJob} returns early when the job and its
-     * trigger already exist. A second consumer on a JMS destination competes for messages; a second
-     * registration of the same job is a no-op.
+     * Top up the registrations the provisioned tenants do not have yet, so a tenant provisioned after
+     * the last client-Java rebuild gets its {@code Job} rows and Quartz triggers too. Called once a
+     * provisioning round has actually provisioned something - {@code TenantsProvisioner} skips the
+     * post-provisioning steps when no tenant was in INITIAL status - so this is not a per-round cost.
      */
     @Override
     public void execute() {
-        registerAll();
+        topUp();
     }
 
     /**
      * Re-attempt the registrations that did not land, on the reconciliation timer. Gated on the flag,
-     * so an instance whose jobs are all registered pays nothing per tick - and the flag is cleared
-     * before the pass, never after, or a failure the pass itself records would be lost.
+     * so an instance whose jobs are all registered pays nothing per tick - not even the tenant lookup
+     * the fan-out performs - and the flag is cleared before the pass, never after, or a failure the
+     * pass itself records would be lost.
      */
     @Override
     public void reconcile() {
         if (!registrationsIncomplete.compareAndSet(true, false)) {
             return;
         }
-        registerAll();
+        topUp();
     }
 
     /**
-     * Re-register every job of every loaded class. Idempotent, so covering the healthy ones is free.
+     * One pass over everything loaded, registering only the {@code (job, tenant)} pairs still missing.
+     * The tenant fan-out happens <b>once for the pass</b> rather than once per class, because
+     * {@link TenantContext#executeForEachTenant} reads the provisioned tenants from the database and a
+     * per-class fan-out would turn one tick into one query per registered class.
      */
-    private void registerAll() {
-        registered.forEach((fqn, declarations) -> {
-            if (registered.get(fqn) != declarations) {
-                // Replaced or unloaded while this pass was running - re-registering it now would
-                // recreate rows the unload has just deleted.
+    private void topUp() {
+        forEachTenant(tenantId -> registrations.forEach((fqn, registration) -> registerTenant(fqn, registration, tenantId)),
+                "top up the client-Java job registrations of the provisioned tenants");
+        reportIncomplete();
+    }
+
+    /** Register one class's jobs in every provisioned tenant that does not have them yet. */
+    private void register(String fqn, Registration registration) {
+        forEachTenant(tenantId -> registerTenant(fqn, registration, tenantId),
+                "register the client-Java jobs of [" + fqn + "] for the provisioned tenants");
+        reportIncomplete();
+    }
+
+    /**
+     * Run the given work once per provisioned tenant, with that tenant's context active.
+     *
+     * <p>
+     * The per-tenant try is not decoration: {@link TenantContext#executeForEachTenant} propagates the
+     * FIRST throw, so without it anything escaping the work in one tenant aborts the fan-out and leaves
+     * every tenant behind that one untouched - while the tenants in front of it, already done, would be
+     * re-registered by the retry that failure schedules.
+     *
+     * @param work what to do in the tenant whose id it is given
+     * @param description what this fan-out was for, for the log if the fan-out itself fails
+     */
+    private void forEachTenant(Consumer<String> work, String description) {
+        try {
+            tenantContext.executeForEachTenant(() -> {
+                String tenantId = tenantContext.getCurrentTenant()
+                                               .getId();
+                try {
+                    work.accept(tenantId);
+                } catch (RuntimeException e) {
+                    registrationsIncomplete.set(true);
+                    LOGGER.warn("Failed to register the client-Java jobs of tenant [{}]: {}", tenantId, e.getMessage(), e);
+                }
+                return null;
+            });
+        } catch (Exception e) {
+            registrationsIncomplete.set(true);
+            LOGGER.error("Failed to {}: {}", description, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Register one class's outstanding jobs in the tenant whose context is currently active.
+     *
+     * <p>
+     * Serialized against the other registrations: the post-provisioning top-up runs on the provisioning
+     * thread and a rebuild registers from the synchronizer's, and the find-then-save below is exactly
+     * the window in which two of them could insert the same job row twice.
+     */
+    private synchronized void registerTenant(String fqn, Registration registration, String tenantId) {
+        for (JobDeclaration declaration : registration.declarations()) {
+            // Re-checked per declaration, not once for the class: an unpublish landing mid-pass drops
+            // the entry and deletes the rows, and registering the rest of a class that no longer
+            // exists would recreate them.
+            if (isSuperseded(fqn, registration)) {
                 return;
             }
-            declarations.forEach(this::register);
-        });
+            if (registration.isRegistered(declaration, tenantId)) {
+                continue;
+            }
+            if (registerJob(declaration, tenantId)) {
+                registration.registered(declaration, tenantId);
+            }
+        }
+    }
+
+    /**
+     * Register one job (a JobHandler class or a single @Scheduled method) as a Job on the shared
+     * scheduler, in the tenant whose context is currently active. Each tenant gets its own scheduled
+     * row + tenant-prefixed Quartz job, like the JS {@code .job}/{@code scheduled.ts} synchronizer
+     * does: the job body runs in that tenant's context at fire time (the jobs engine restores it from
+     * the job data), so a global client bean's repository access is correctly tenant-scoped.
+     *
+     * @param declaration the job to register
+     * @param tenantId the tenant whose context is active, for the log and the bookkeeping key
+     * @return whether the registration landed
+     */
+    private boolean registerJob(JobDeclaration declaration, String tenantId) {
+        String name = declaration.name();
+        String handler = declaration.handler();
+        String expression = declaration.expression();
+        String key = key(name, tenantId);
+        try {
+            // findByName THROWS when absent (it does not return null) - treat that as "new", and
+            // otherwise mutate the existing managed row so save() updates it rather than duplicating.
+            Job job;
+            boolean enabled = true;
+            try {
+                job = jobService.findByName(name);
+                // The enabled flag belongs to the OPERATOR, not to the code: it is what the Jobs
+                // perspective's enable/disable writes. Carry it over, so a disabled job stays
+                // disabled across restarts and hot reloads instead of quietly firing again - and so
+                // no spurious "job enabled" notification mail goes out (#6626). A brand-new job
+                // starts enabled, like every other artefact-defined one.
+                enabled = job.isEnabled();
+            } catch (Exception notFound) {
+                job = new Job();
+            }
+            job.setName(name);
+            job.setGroup(JOB_GROUP);
+            job.setClazz("");
+            job.setHandler(handler);
+            job.setEngine(JavaJobExecutor.ENGINE_JAVA);
+            job.setExpression(expression);
+            job.setSingleton(false);
+            job.setEnabled(enabled);
+            job.setDescription("Client-Java scheduled job [" + handler + "]");
+            job.setType(Job.ARTEFACT_TYPE);
+            job.setLocation(JavaJobExecutor.RUNTIME_LOCATION_PREFIX + handler);
+            job.updateKey();
+            jobService.save(job);
+            jobsManager.scheduleJob(job);
+            reportedFailures.remove(key);
+            LOGGER.info("Registered client-Java job [{}] (handler [{}]) with cron '{}' for tenant [{}] on the shared scheduler.", name,
+                    handler, expression, tenantId);
+            return true;
+        } catch (Exception e) {
+            registrationsIncomplete.set(true);
+            String message = "Failed to register client-Java job [" + handler + "] with cron '" + expression + "' for tenant [" + tenantId
+                    + "] - it does not fire until it is registered; retrying on the next reconciliation pass.";
+            // Once, then quietly: the retry runs on a timer, and a job that can never be registered would
+            // otherwise log the same line every tick for the life of the process.
+            if (reportedFailures.add(key)) {
+                LOGGER.warn("{} {}", message, e.getMessage(), e);
+            } else {
+                LOGGER.debug("{} {}", message, e.getMessage(), e);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Whether this registration has been replaced or unloaded since the caller picked it up. A pass
+     * iterates a weakly consistent map, so a republish or an unpublish can drop it in between - and
+     * registering it anyway would recreate rows the unload has just deleted.
+     */
+    private boolean isSuperseded(String fqn, Registration registration) {
+        return registrations.get(fqn) != registration;
+    }
+
+    /**
+     * One line per pass while anything is still down. The per-attempt log falls to DEBUG after the
+     * first failure, so this summary is what keeps a lasting outage visible instead of scrolling past
+     * once at boot.
+     */
+    private void reportIncomplete() {
+        if (!registrationsIncomplete.get() || reportedFailures.isEmpty()) {
+            // An empty set means the fan-out itself failed, which the outer catch has already reported.
+            return;
+        }
+        LOGGER.warn("[{}] client-Java job registration(s) did not land, so those jobs do not fire: {}."
+                + " Retrying on the next reconciliation pass.", reportedFailures.size(), new TreeSet<>(reportedFailures));
     }
 
     @Override
@@ -227,77 +385,8 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         // The Job rows + Quartz triggers are the persistent, cluster-shared definition - leave them on
         // shutdown (other nodes keep running them; a restart re-registers idempotently). Just drop the
         // local tracking.
-        registered.clear();
+        registrations.clear();
         reportedFailures.clear();
-    }
-
-    /**
-     * Register one job (a JobHandler class or a single @Scheduled method) as a Job on the shared
-     * scheduler.
-     *
-     * <p>
-     * Serialized against the other registrations: the post-provisioning top-up runs on the provisioning
-     * thread and a rebuild registers from the synchronizer's, and the find-then-save below is exactly
-     * the window in which two of them could insert the same job row twice.
-     *
-     */
-    private synchronized void register(JobDeclaration declaration) {
-        String name = declaration.name();
-        String handler = declaration.handler();
-        String expression = declaration.expression();
-        // Register the job PER TENANT (like the JS .job/scheduled.ts synchronizer does): each tenant
-        // gets its own scheduled row + tenant-prefixed Quartz job. The job body runs in that tenant's
-        // context at fire time (the jobs engine restores it from the job data), so a global client
-        // bean's repository access is correctly tenant-scoped. Class loading happens off any tenant
-        // thread, hence the explicit executeForEachTenant.
-        try {
-            tenantContext.executeForEachTenant(() -> {
-                // findByName THROWS when absent (it does not return null) - treat that as "new", and
-                // otherwise mutate the existing managed row so save() updates it rather than duplicating.
-                Job job;
-                boolean enabled = true;
-                try {
-                    job = jobService.findByName(name);
-                    // The enabled flag belongs to the OPERATOR, not to the code: it is what the Jobs
-                    // perspective's enable/disable writes. Carry it over, so a disabled job stays
-                    // disabled across restarts and hot reloads instead of quietly firing again - and so
-                    // no spurious "job enabled" notification mail goes out (#6626). A brand-new job
-                    // starts enabled, like every other artefact-defined one.
-                    enabled = job.isEnabled();
-                } catch (Exception notFound) {
-                    job = new Job();
-                }
-                job.setName(name);
-                job.setGroup(JOB_GROUP);
-                job.setClazz("");
-                job.setHandler(handler);
-                job.setEngine(JavaJobExecutor.ENGINE_JAVA);
-                job.setExpression(expression);
-                job.setSingleton(false);
-                job.setEnabled(enabled);
-                job.setDescription("Client-Java scheduled job [" + handler + "]");
-                job.setType(Job.ARTEFACT_TYPE);
-                job.setLocation(JavaJobExecutor.RUNTIME_LOCATION_PREFIX + handler);
-                job.updateKey();
-                jobService.save(job);
-                jobsManager.scheduleJob(job);
-                return null;
-            });
-            reportedFailures.remove(name);
-            LOGGER.info("Registered client-Java job [{}] (handler [{}]) with cron '{}' on the shared scheduler.", name, handler,
-                    expression);
-        } catch (Exception e) {
-            registrationsIncomplete.set(true);
-            String message = "Failed to register client-Java job [" + handler + "] with cron '" + expression
-                    + "' - it does not fire until it is registered; retrying on the next reconciliation pass.";
-            // Once, then quietly: the retry runs on a timer, and a job that can never be registered would
-            // otherwise log the same line every tick for the life of the process.
-            if (reportedFailures.add(name)) {
-                LOGGER.warn("{} {}", message, e.getMessage(), e);
-            } else {
-                LOGGER.debug("{} {}", message, e.getMessage(), e);
-            }
-        }
     }
 
     /**
@@ -306,14 +395,15 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
      * they keep their operator state.
      */
     private void retainOnly(String fqn, List<JobDeclaration> current) {
-        List<JobDeclaration> previous = registered.get(fqn);
+        Registration previous = registrations.get(fqn);
         if (previous == null) {
             return;
         }
         List<String> currentNames = current.stream()
                                            .map(JobDeclaration::name)
                                            .toList();
-        List<String> stale = previous.stream()
+        List<String> stale = previous.declarations()
+                                     .stream()
                                      .map(JobDeclaration::name)
                                      .filter(name -> !currentNames.contains(name))
                                      .toList();
@@ -322,12 +412,12 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
 
     /** Unschedule + remove the Job rows a class previously registered (per tenant). */
     private void unregister(String fqn) {
-        List<JobDeclaration> declarations = registered.remove(fqn);
-        if (declarations == null) {
+        Registration registration = registrations.remove(fqn);
+        if (registration == null) {
             return;
         }
-        declarations.forEach(declaration -> reportedFailures.remove(declaration.name()));
-        remove(declarations.stream()
+        remove(registration.declarations()
+                           .stream()
                            .map(JobDeclaration::name)
                            .toList());
     }
@@ -335,6 +425,7 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
     /** Unschedule + delete the given job rows, per tenant. */
     private synchronized void remove(List<String> names) {
         for (String name : names) {
+            reportedFailures.removeIf(key -> key.startsWith(name + KEY_SEPARATOR));
             try {
                 tenantContext.executeForEachTenant(() -> {
                     try {
@@ -353,6 +444,40 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
             } catch (Exception e) {
                 LOGGER.warn("Failed to unregister client-Java job [{}]: {}", name, e.getMessage());
             }
+        }
+    }
+
+    private static String key(String name, String tenantId) {
+        return name + KEY_SEPARATOR + tenantId;
+    }
+
+    /**
+     * What one loaded class declares, and where those declarations have already landed. The per-tenant
+     * bookkeeping is what keeps a reconciliation pass proportional to what is still missing rather than
+     * to everything loaded: a registration is idempotent, but repeating it costs a row write, a Quartz
+     * reschedule and an INFO line per job per tenant per tick (#7265).
+     */
+    private static final class Registration {
+
+        private final List<JobDeclaration> declarations;
+
+        /** {@link ScheduledClassConsumer#key(String, String)} of every registration that landed. */
+        private final Set<String> completed = ConcurrentHashMap.newKeySet();
+
+        Registration(List<JobDeclaration> declarations) {
+            this.declarations = declarations;
+        }
+
+        List<JobDeclaration> declarations() {
+            return declarations;
+        }
+
+        boolean isRegistered(JobDeclaration declaration, String tenantId) {
+            return completed.contains(key(declaration.name(), tenantId));
+        }
+
+        void registered(JobDeclaration declaration, String tenantId) {
+            completed.add(key(declaration.name(), tenantId));
         }
     }
 

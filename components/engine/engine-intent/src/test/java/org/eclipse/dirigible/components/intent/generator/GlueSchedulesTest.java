@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.generator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -17,6 +18,7 @@ import java.util.Map;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -27,6 +29,44 @@ import org.junit.jupiter.api.Test;
  * class identifier.
  */
 class GlueSchedulesTest {
+
+    /** A dunning run: the overdue invoices of a nomenclature seeded in this model. */
+    private static final String DUNNING = """
+            name: billing
+            entities:
+              - name: InvoiceStatus
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: SalesInvoice
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string, documentTitle: true }
+                  - { name: dueOn, type: date }
+                  - { name: contactEmail, type: string }
+                relations:
+                  - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+            schedules:
+              - name: dunning
+                cron: "0 0 8 * * ?"
+                entity: SalesInvoice
+                where:
+                  - { field: Status, op: eq, value: OVERDUE }
+                  - { field: dueOn,  op: lt, value: CURRENT_DATE }
+                notify:
+                  to: contactEmail
+                  subject: "Invoice {number} is overdue"
+                  body: "Please settle the attached invoice."
+            seeds:
+              - name: invoice-statuses
+                entity: InvoiceStatus
+                rows:
+                  - { id: 1, name: DRAFT }
+                  - { id: 2, name: ISSUED }
+                  - { id: 3, name: OVERDUE }
+                  - { id: 4, name: PAID }
+            """;
 
     @SuppressWarnings("unchecked")
     @Test
@@ -344,6 +384,55 @@ class GlueSchedulesTest {
 
     @SuppressWarnings("unchecked")
     @Test
+    void theRunPeriodRangesOverTheDateFieldNotAnotherNowAssignment() {
+        // Issue #7229: parser and generator must not each decide "the date this run writes". The parser
+        // pins the single `date`-typed default it chose; the generator ranges over exactly that. Here a
+        // second default assigns `now` to a `timestamp` field, which renders as the same LocalDate.now()
+        // the `date` field does - so a generator that re-derived the run date by string-matching that
+        // expression counted two candidates and dropped a schedule the parser had accepted.
+        String yaml = """
+                name: purchases
+                entities:
+                  - name: BillTemplate
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                  - name: Supplier
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: PurchaseInvoice
+                    fields:
+                      - { name: id,        type: integer,   primaryKey: true, generated: true }
+                      - { name: date,      type: date }
+                      - { name: createdAt, type: timestamp }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: BillTemplate
+                    generate:
+                      to: PurchaseInvoice
+                      unique: [Supplier, { run: month }]
+                      map:
+                        Supplier: Supplier
+                      defaults:
+                        date: now
+                        createdAt: now
+                """;
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(IntentParser.parse(yaml))
+                                                   .get(0);
+
+        assertEquals(true, s.get("hasGenUnique"));
+        List<Map<String, Object>> unique = (List<Map<String, Object>>) s.get("genUnique");
+        assertEquals(Map.of("property", "Supplier", "expr", "entity.Supplier"), unique.get(0));
+        assertEquals(Map.of("kind", "range", "property", "Date", "lower", "java.time.LocalDate.now().withDayOfMonth(1)", "upper",
+                "java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1).minusDays(1)"), unique.get(1));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
     void aQuarterlyRunPeriodRangesOverTheIsoQuarter() {
         String yaml = """
                 name: purchases
@@ -415,6 +504,35 @@ class GlueSchedulesTest {
         assertEquals("generate", s.get("action"));
         assertEquals(false, s.get("hasGenUnique"));
         assertTrue(((List<Map<String, Object>>) s.get("genUnique")).isEmpty());
+    }
+
+    /**
+     * Issue #7251: the query of a dunning run names the status the row must stand in, and that name is
+     * resolved to its seed id before the typed mapping - so the criteria compares the integer status FK
+     * with an integer. Left as the authored name it rendered {@code .eq("Status", "OVERDUE")}, a query
+     * that matched nothing for as long as the schedule kept ticking.
+     */
+    @Test
+    void aSeededStatusNameInTheQueryRendersAsItsSeedId() {
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(IntentParser.parse(DUNNING))
+                                                   .get(0);
+
+        assertEquals("Criteria.create().eq(\"Status\", 3).lt(\"DueOn\", java.time.LocalDate.now())", s.get("criteriaExpression"));
+    }
+
+    /**
+     * The backstop that keeps the invariant checkable independently of the resolver's site list: a
+     * value the resolver never even reads as a symbol (a blank) is still no status the FK can equal, so
+     * it is refused rather than generated into a query that matches nothing.
+     */
+    @Test
+    void aValueThatIsNoStatusAtAllIsRefused() {
+        IntentValidationException failure =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(DUNNING.replace("value: OVERDUE", "value: \"\"")));
+
+        assertTrue(failure.getMessage()
+                          .contains("which is not a status"),
+                "the failure must say the value is no status: " + failure.getMessage());
     }
 
     @Test

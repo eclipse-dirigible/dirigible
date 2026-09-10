@@ -1945,39 +1945,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /**
      * Render a {@code posts:} {@code set:} value to a Java expression over the {@code source} entity
-     * and the per-item {@code item} entity. Supported forms (the inventory ledger's needs):
-     * {@code item.<Field>} (item copy), {@code -item.<Field>} (negated item copy, null-safe),
-     * {@code source.<Field>} (source copy), an integer literal (a constant FK/int), a quoted string,
-     * else pass-through (best effort). Fuller {@code Calc} expressions are a follow-up.
+     * and the per-item {@code item} entity. The vocabulary lives in {@link PostSetSupport}, shared with
+     * the parse-time refusal so the two cannot drift: a plain constant renders as an escaped string
+     * literal, and a value that reads as an expression this renderer cannot compile never reaches here
+     * - the parser refuses it.
+     *
+     * @param raw the authored value
+     * @return the Java expression
      */
     private static String postSetExpr(String raw) {
-        if (raw == null) {
-            return "null";
-        }
-        String v = raw.trim();
-        java.util.regex.Matcher neg = java.util.regex.Pattern.compile("^-\\s*item\\.(\\w+)$")
-                                                             .matcher(v);
-        if (neg.matches()) {
-            String f = "item." + IntentNaming.pascalCase(neg.group(1));
-            return f + " == null ? null : " + f + ".negate()";
-        }
-        java.util.regex.Matcher item = java.util.regex.Pattern.compile("^item\\.(\\w+)$")
-                                                              .matcher(v);
-        if (item.matches()) {
-            return "item." + IntentNaming.pascalCase(item.group(1));
-        }
-        java.util.regex.Matcher src = java.util.regex.Pattern.compile("^source\\.(\\w+)$")
-                                                             .matcher(v);
-        if (src.matches()) {
-            return "source." + IntentNaming.pascalCase(src.group(1));
-        }
-        if (v.matches("-?\\d+")) {
-            return v; // integer constant (e.g. a Direction FK id)
-        }
-        if (v.matches("\"[^\"]*\"")) {
-            return v; // already-quoted string literal
-        }
-        return v; // pass-through (best effort); fuller Calc rendering is a follow-up
+        return PostSetSupport.expression(raw);
     }
 
     /** Test hook: build the {@code posts} glue collection without a repository. */
@@ -2501,6 +2478,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("ruleMatchProperty", IntentNaming.pascalCase(String.valueOf(selector.getKey())));
                 e.put("ruleMatchValueJava", javaLiteral(selector.getValue()));
             }
+            // The lines the generated repository resums the created document's `aggregate: true` header
+            // columns from on every write - resolved through the rule the document layout (and so the
+            // DAO's documentMaster) is emitted by, which is NARROWER than the items resolution above: a
+            // sole or first composition child the pipeline does not treat as a document leaves its
+            // master's aggregates merely preserved on update (#7234). Null for such a master, and for
+            // the lines themselves unless they are a document in their own right.
+            Map<String, String> documentMasters = IntentEntities.documentMasters(model.getEntities(), compositionParents);
+            EntityIntent headerLines = linesOf(creates, documentMasters, byName);
+            EntityIntent itemLines = linesOf(itemsEntity, documentMasters, byName);
             // Header assignments: copy / literal / {placeholder} template - pre-rendered Java.
             List<Map<String, Object>> headerAssignments = new ArrayList<>();
             if (effective.getMap() != null) {
@@ -2512,10 +2498,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     // expression (#7131). Numbered, so no authored name can collide with it.
                     assignment.put("local", "header" + (headerAssignments.size() + 1));
                     // ... and what a null one will still end up carrying once stored - the target
-                    // column's own default (see derivedDefault), plus whatever save() itself fills
-                    // into the column afterwards (see putSaveTimeFill).
+                    // column's own default (see derivedDefault), plus whatever save() - or, on a
+                    // rewrite, update() - itself fills into the column afterwards (see putSaveTimeFill).
                     putDerivedDefault(assignment, creates, byName, entry.getKey());
-                    putSaveTimeFill(assignment, creates, entry.getKey(), posting.getName(), context);
+                    putSaveTimeFill(assignment, creates, headerLines, true, entry.getKey(), posting.getName(), context);
                     headerAssignments.add(assignment);
                 }
             }
@@ -2590,8 +2576,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // (#7104/#7115), so each compared property carries the default its own derived side will
             // end up with (#7131) - without it a defaulted column read back off the stored row is a
             // difference no redelivery can ever clear. The defaults are not the only thing save() puts
-            // there either: a calculated, uuid or numbered column is filled by the write itself, and a
-            // row assigning one of those is compared accordingly (#7177).
+            // there either: a calculated, aggregate, uuid or numbered column is filled by the write
+            // itself, and a row assigning one of those is compared accordingly (#7177, #7234).
             Map<String, Map<String, Object>> comparedProperties = new LinkedHashMap<>();
             for (Map<String, Object> row : itemRows) {
                 @SuppressWarnings("unchecked")
@@ -2605,7 +2591,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     Map<String, Object> compared = new LinkedHashMap<>();
                     compared.put("name", property);
                     putDerivedDefault(compared, itemsEntity, byName, authoredCell);
-                    putSaveTimeFill(compared, itemsEntity, authoredCell, posting.getName(), context);
+                    // A line is never rewritten in place: a rewrite deletes the stored rows and saves the
+                    // derived ones, so only the CREATE-time fills apply to it.
+                    putSaveTimeFill(compared, itemsEntity, itemLines, false, authoredCell, posting.getName(), context);
                     comparedProperties.put(property, compared);
                 }
             }
@@ -2774,22 +2762,32 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * What the generated {@code save()} fills into one column ITSELF, after the defaults #7131 already
-     * accounts for. A rule cell (or a {@code map:} entry) writing such a column derives one value while
-     * the stored row carries another, permanently - the exact #7131 symptom, reached by a different
-     * route: every redelivery reads as an amendment and rewrites the whole post (#7177).
+     * What the generated {@code save()} - and, on a rewrite, {@code update()} - fills into one column
+     * ITSELF, after the defaults #7131 already accounts for. A rule cell (or a {@code map:} entry)
+     * writing such a column derives one value while the stored row carries another, permanently - the
+     * exact #7131 symptom, reached by a different route: every redelivery reads as an amendment and
+     * rewrites the whole post (#7177, #7234).
      *
      * <p>
      * Two shapes, and they are not the same defect:
      * <ul>
-     * <li>{@code overwrittenOnSave} - the column is filled UNCONDITIONALLY: a field's
-     * {@code calculatedOnCreate} / {@code calculatedActionOnCreate}. The derived value never reaches
-     * the column at all, so the property is dropped from the comparison entirely and the discarded
-     * assignment is reported - what the row really carries is derived from the entity's OTHER columns,
-     * which are compared. (The other unconditional fill, an entity {@code label:} recomputing its
-     * {@code Name}, cannot be reached: that property is synthesized rather than authored, and the
-     * parser refuses a cell or a {@code map:} key naming anything but an authored field or
-     * to-one.)</li>
+     * <li>{@code overwrittenOnSave} - the column is filled UNCONDITIONALLY, so the derived value never
+     * STAYS in it. On every write: a field's {@code calculatedOnCreate} /
+     * {@code calculatedActionOnCreate}, and an {@code aggregate: true} column of a document master that
+     * its lines also declare, which {@code recalculate()} sets to the sum over the lines (#7234 - the
+     * item sum the write stored against the source value the map computed, differing by a rounding, a
+     * sign convention or a partially posted line set). On every REWRITE, for the one entity the posting
+     * rewrites in place through {@code update()} - the created document; its lines are deleted and
+     * re-inserted instead: a {@code calculatedOnUpdate} / {@code calculatedActionOnUpdate} column,
+     * recomputed by the rewrite, and an {@code aggregate} or {@code readOnly} column, which
+     * {@code update()} preserves from the stored row (the #6226/#6306 lost-update family's user-update
+     * edition) - the derived value is written once, on the create, and discarded by every rewrite after
+     * it, so after one legitimate amendment the compared cell mismatches forever. Either way the
+     * property is dropped from the comparison entirely and the discarded assignment is reported - what
+     * the row really carries is derived from the entity's OTHER columns, which are compared. (The other
+     * unconditional fill, an entity {@code label:} recomputing its {@code Name}, cannot be reached:
+     * that property is synthesized rather than authored, and the parser refuses a cell or a
+     * {@code map:} key naming anything but an authored field or to-one.)</li>
      * <li>{@code compareOnlyWhenDerived} - the column is filled only when the write leaves it empty: a
      * {@code uuid} field, or a {@code number:} field (a {@code stampOn: create} allocation, or the UUID
      * placeholder a {@code stampOn: issue} carries until the issue step). A value the rule does derive
@@ -2801,22 +2799,38 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @param target the map to write the keys onto - {@code compareOnlyWhenDerived} is raised on top of
      *        what {@link #putDerivedDefault} left there, so call this after it
      * @param entity the entity the property belongs to
+     * @param lines the line-items entity the generated repository resums {@code entity}'s aggregate
+     *        columns from, or {@code null} when the pipeline does not treat it as a document master
+     *        (see {@link IntentEntities#documentMasters})
+     * @param updatedOnRewrite whether the posting rewrites a stored row of {@code entity} in place
+     *        through {@code update()} - the created document - rather than deleting and re-inserting it
+     *        - its lines
      * @param authoredKey the cell/map key as authored
      * @param postingName the posting whose rule writes the column, for the report
      * @param context the generation context collecting the issue, may be {@code null}
      */
-    private static void putSaveTimeFill(Map<String, Object> target, EntityIntent entity, String authoredKey, String postingName,
-            IntentGenerationContext context) {
+    private static void putSaveTimeFill(Map<String, Object> target, EntityIntent entity, EntityIntent lines, boolean updatedOnRewrite,
+            String authoredKey, String postingName, IntentGenerationContext context) {
         target.put("overwrittenOnSave", false);
         FieldIntent field = fieldOf(entity, authoredKey);
         if (field == null) {
             return; // a to-one relation: its FK carries only the init: default putDerivedDefault read
         }
+        String fill = null;
         if (isSet(field.getCalculatedOnCreate()) || isSet(field.getCalculatedActionOnCreate())) {
+            fill = "computes itself on create - the assigned value is discarded by the write";
+        } else if (field.isAggregate() && lines != null && fieldOf(lines, field.getName()) != null) {
+            fill = "resums from its " + lines.getName() + " lines on every write - the assigned value is discarded by the write";
+        } else if (updatedOnRewrite && (isSet(field.getCalculatedOnUpdate()) || isSet(field.getCalculatedActionOnUpdate()))) {
+            fill = "recomputes itself on every rewrite of the post - the assigned value is kept only until the first amendment";
+        } else if (updatedOnRewrite && (field.isAggregate() || field.isReadOnly())) {
+            fill = "preserves from the stored row on every rewrite of the post - the assigned value is kept only until the first"
+                    + " amendment";
+        }
+        if (fill != null) {
             target.put("overwrittenOnSave", true);
-            String issue = "Posting [" + postingName + "] assigns [" + entity.getName() + "." + authoredKey
-                    + "], which the repository computes itself on create - the assigned value is discarded by the write, so the column"
-                    + " is left out of the amend comparison";
+            String issue = "Posting [" + postingName + "] assigns [" + entity.getName() + "." + authoredKey + "], which the repository "
+                    + fill + ", so the column is left out of the amend comparison";
             LOGGER.warn(LoggedValue.of(issue));
             if (context != null) {
                 context.addIssue(issue);
@@ -2869,6 +2883,24 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      */
     private static EntityIntent compositionChild(EntityIntent entity, IntentModel model) {
         return entity == null ? null : IntentEntities.documentItemsChild(entity.getName(), model.getEntities());
+    }
+
+    /**
+     * The line-items entity the generated repository resums {@code entity}'s {@code aggregate: true}
+     * columns from on every write, or {@code null} when the pipeline does not treat it as a document
+     * master. Resolved through {@link IntentEntities#documentMasters} - the rule the document layout,
+     * and so the DAO's {@code documentMaster}, is emitted by - and deliberately NOT through
+     * {@link #compositionChild}: that broader resolution also names a sole or first composition child
+     * whose master keeps the master-detail layout, where nothing resums anything (#7234).
+     *
+     * @param entity the entity whose aggregates may be resummed, may be {@code null}
+     * @param documentMasters the model's document masters, by name
+     * @param byName the model's entities by name
+     * @return the lines entity, or {@code null}
+     */
+    private static EntityIntent linesOf(EntityIntent entity, Map<String, String> documentMasters, Map<String, EntityIntent> byName) {
+        String lines = entity == null ? null : documentMasters.get(entity.getName());
+        return lines == null ? null : byName.get(lines);
     }
 
     /** The entity's field by authored name (case-insensitive), or null. */
@@ -4668,31 +4700,27 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * current period exists. That is what makes a re-run on the 14th find what the 1st created, and it
      * is why no hidden period column and no run ledger were introduced.
      *
-     * @param entry the {@code { run: <period> }} entry, with an optional {@code of:} naming the date
+     * @param entry the {@code { run: <period> }} entry, its {@code of:} carrying the date the parser
+     *        resolved and pinned (issue #7229) - authored, or the single {@code date} default it chose
      * @param byProperty the rendered assignment expression per target property
-     * @return the term, or null when the date it would range over is absent or ambiguous (the parser
-     *         reports both; a generation reached by another route drops the schedule rather than
-     *         emitting a guard over the wrong column)
+     * @return the term, or null when {@code of:} is unpinned (an unvalidated model reached by another
+     *         route) or names a property this generate does not assign - either way the schedule is
+     *         dropped rather than a guard emitted over the wrong column
      */
     private static Map<String, Object> runTerm(UniqueKeyIntent entry, Map<String, String> byProperty) {
-        String property = null;
-        if (entry.getOf() != null && !entry.getOf()
-                                           .isBlank()) {
-            String named = IntentNaming.pascalCase(entry.getOf());
-            property = TODAY.equals(byProperty.get(named)) ? named : null;
-        } else {
-            // The date the run writes is the assignment that renders as today - a `month` / `week`
-            // field's `now` renders as its own string shape and is keyed on as an ordinary property.
-            for (Map.Entry<String, String> assignment : byProperty.entrySet()) {
-                if (TODAY.equals(assignment.getValue())) {
-                    if (property != null) {
-                        return null;
-                    }
-                    property = assignment.getKey();
-                }
-            }
+        // The date the run writes is the property the parser PINNED onto `of` (issue #7229): the single
+        // `date` field this block assigns from `now`, chosen by a type check. Reusing that one resolution
+        // is what keeps the two layers from each defining "the date assigned from now" - this method sees
+        // only rendered expressions, and `now` on a timestamp field renders as the same LocalDate.now() a
+        // `date` field does, so the string scan this replaced counted a field the parser's check excludes.
+        // An `of` that is blank means an unvalidated model reached here by another route; drop the guard
+        // rather than range it over a guessed column.
+        if (entry.getOf() == null || entry.getOf()
+                                          .isBlank()) {
+            return null;
         }
-        if (property == null) {
+        String property = IntentNaming.pascalCase(entry.getOf());
+        if (byProperty.get(property) == null) {
             return null;
         }
         String period = entry.getRun()

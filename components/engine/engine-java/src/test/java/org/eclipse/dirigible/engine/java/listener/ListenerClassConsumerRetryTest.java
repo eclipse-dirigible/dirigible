@@ -40,6 +40,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import jakarta.jms.Connection;
+import jakarta.jms.JMSSecurityException;
 import jakarta.jms.MessageConsumer;
 import jakarta.jms.Queue;
 import jakarta.jms.Session;
@@ -98,6 +99,13 @@ class ListenerClassConsumerRetryTest {
     /** When set, only attempts made in that tenant's context fail. */
     private final AtomicReference<String> brokerRefusingForTenant = new AtomicReference<>();
 
+    /**
+     * While set, the connection is handed out and only the step AFTER it - the session - is refused,
+     * which is where a broker's destination authorization really says no.
+     */
+    private final AtomicBoolean brokerRefusingTheSession = new AtomicBoolean();
+
+    private Connection connection;
     private Session session;
     private TenantContext tenantContext;
     private ListenerClassConsumer consumer;
@@ -113,7 +121,7 @@ class ListenerClassConsumerRetryTest {
         when(componentContainer.instanceOf(GlobalOrdersHandler.class)).thenReturn(Optional.of(new GlobalOrdersHandler()));
 
         ActiveMQConnectionArtifactsFactory connectionFactory = mock(ActiveMQConnectionArtifactsFactory.class);
-        Connection connection = mock(Connection.class);
+        connection = mock(Connection.class);
         session = mock(Session.class);
         when(connectionFactory.createConnection(any(), any())).thenAnswer(invocation -> {
             String refusingFor = brokerRefusingForTenant.get();
@@ -122,7 +130,12 @@ class ListenerClassConsumerRetryTest {
             }
             return connection;
         });
-        when(connectionFactory.createSession(connection)).thenReturn(session);
+        when(connectionFactory.createSession(connection)).thenAnswer(invocation -> {
+            if (brokerRefusingTheSession.get()) {
+                throw new JMSSecurityException("Destination authorization refused");
+            }
+            return session;
+        });
         when(session.createQueue(anyString())).thenReturn(mock(Queue.class));
         when(session.createConsumer(any())).thenReturn(mock(MessageConsumer.class));
 
@@ -235,6 +248,49 @@ class ListenerClassConsumerRetryTest {
         // database, and this tick fires every 30 seconds for the life of the process.
         verify(tenantContext, times(1)).executeForEachTenant(any());
         verify(session, times(1)).createQueue("orders");
+    }
+
+    /**
+     * The factory START()s the connection before returning it, so a refusal that arrives later - the
+     * session, the destination, the consumer - leaves a live transport socket and its thread behind. An
+     * attempt that walked away from that connection orphaned one per subscription per tenant, and once
+     * the reconciliation timer began retrying a permanently refused destination every 30 seconds, the
+     * retry itself became the outage it was added to prevent (issue #7264).
+     */
+    @Test
+    void aRefusalAfterTheConnectionWasStartedClosesIt() throws Exception {
+        brokerRefusingTheSession.set(true);
+
+        loadListener();
+
+        // Nothing was subscribed, and neither connection the two tenants opened is still around.
+        verify(session, never()).createQueue(anyString());
+        verify(connection, times(provisionedTenants.size())).close();
+    }
+
+    /** The retry must not accumulate what the attempt it repeats leaks. */
+    @Test
+    void everyRetryOfALastingRefusalClosesItsOwnConnection() throws Exception {
+        brokerRefusingTheSession.set(true);
+        loadListener();
+
+        consumer.reconcile();
+        consumer.reconcile();
+
+        verify(connection, times(3 * provisionedTenants.size())).close();
+    }
+
+    /** A closed attempt is not a recorded one: the subscription still opens once the broker accepts. */
+    @Test
+    void theSubscriptionStillOpensAfterAClosedAttempt() throws Exception {
+        brokerRefusingTheSession.set(true);
+        loadListener();
+
+        brokerRefusingTheSession.set(false);
+        consumer.reconcile();
+
+        verify(session, times(1)).createQueue("orders");
+        verify(session, times(1)).createQueue("acme###orders");
     }
 
     private void addTenant(String tenantId) {

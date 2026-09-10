@@ -187,7 +187,7 @@ public class ${className}Posting implements MessageHandler {
             boolean unchanged = currentItems.size() == derivedItems.size();
 #foreach($a in $headerAssignments)
 #if($a.overwrittenOnSave)
-            // ${a.targetProp} is not compared: the write computes it itself (#7177).
+            // ${a.targetProp} is not compared: the write fills it itself (#7177, #7234).
 #elseif($a.compareOnlyWhenDerived)
             unchanged = unchanged && sameUnlessDerivedIsEmpty(target.${a.targetProp}, ${a.value});
 #elseif($a.derivedDefault != "")
@@ -270,7 +270,7 @@ public class ${className}Posting implements MessageHandler {
         return
 #foreach($p in $itemComparedProps)
 #if($p.overwrittenOnSave)
-                // ${p.name} is not compared: the write computes it itself (#7177).
+                // ${p.name} is not compared: the write fills it itself (#7177, #7234).
 #elseif($p.compareOnlyWhenDerived)
                 sameUnlessDerivedIsEmpty(stored.${p.name}, derived.${p.name}) &&
 #elseif($p.derivedDefault != "")

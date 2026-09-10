@@ -49,10 +49,12 @@ public class UniqueKeyIntent {
     private String run;
 
     /**
-     * The target date property a {@link #run} term ranges over. Optional: it defaults to the single
-     * {@code date} property this block assigns from {@code now}, and is only needed when the block
-     * assigns more than one - naming it then is what keeps the guard's period and the document's own
-     * date the same period.
+     * The target date property a {@link #run} term ranges over. Optional to AUTHOR: it defaults to the
+     * single {@code date} property this block assigns from {@code now}, and is only written when the
+     * block assigns more than one - naming it then is what keeps the guard's period and the document's
+     * own date the same period. The parser resolves and PINS that single default here during validation
+     * (issue #7229), so a validated model always carries the resolved property and the generator ranges
+     * over exactly the field the parser's type check chose rather than re-deriving it.
      */
     private String of;
 

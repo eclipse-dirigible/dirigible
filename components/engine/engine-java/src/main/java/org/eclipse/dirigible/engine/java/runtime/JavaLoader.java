@@ -236,7 +236,7 @@ public class JavaLoader {
 
         // Build the client bean container for the new generation BEFORE the load pass: every
         // @Component (and the meta-annotated @Controller / @Repository / @Scheduled / @Listener /
-        // @Websocket / @Extension) is instantiated here with constructor + field injection, so the
+        // @Websocket) is instantiated here with constructor + field injection, so the
         // behaviour consumers below just fetch ready instances via ComponentContainer#instanceOf.
         componentContainer.rebuild(nextGeneration.values());
 

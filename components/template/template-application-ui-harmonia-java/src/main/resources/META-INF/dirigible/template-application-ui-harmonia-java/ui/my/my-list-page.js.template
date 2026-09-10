@@ -77,7 +77,7 @@ document.addEventListener('alpine:init', () => {
         this.items = await App.services.api.get(this.apiPath) || [];
         this.state = this.items.length ? 'default' : 'empty';
       } catch (e) {
-        this.error = (e && e.message) || 'Could not load your ${menuLabel}.';
+        this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not load your ${menuLabel}.');
         this.state = 'error';
       }
     },

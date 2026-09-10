@@ -145,6 +145,40 @@ class ModelParameterProcessorTest {
         assertFalse(none.containsKey("dataDefaultValueJsonLiteral"), "a property with no default must leave the key absent");
     }
 
+    /**
+     * The item dialog seeds a new line with the authored default, in the shape the draft holds - and
+     * the seed is resolved here rather than assembled in the template, which used to interpolate the
+     * value unescaped and make the whole generated register a syntax error on an authored apostrophe
+     * (#7207).
+     */
+    @Test
+    void carriesTheAuthoredDefaultAsAnEscapedJavaScriptSeed() {
+        Map<String, Object> possessive = property("Copy", "VARCHAR");
+        possessive.put("dataDefaultValue", "Owner's copy");
+        Map<String, Object> billable = property("Billable", "BOOLEAN");
+        billable.put("widgetType", "CHECKBOX");
+        billable.put("dataDefaultValue", "true");
+        Map<String, Object> rate = property("VatRate", "DECIMAL");
+        rate.put("dataDefaultValue", "20");
+        ModelParameterProcessor.process(model(entity("Line", "Lines", possessive, billable, rate)), parameters());
+
+        assertEquals("'Owner\\'s copy'", possessive.get("dataDefaultValueJsLiteral"));
+        assertEquals("true", billable.get("dataDefaultValueJsLiteral"));
+        assertEquals("20", rate.get("dataDefaultValueJsLiteral"));
+    }
+
+    /**
+     * The key's presence is what the template reads as "this property has a default to seed", so a
+     * property with none must leave it absent rather than null.
+     */
+    @Test
+    void leavesTheJavaScriptSeedAbsentWhereThereIsNothingToSeed() {
+        Map<String, Object> none = property("Name", "VARCHAR");
+        ModelParameterProcessor.process(model(entity("Invoice", "Invoices", none)), parameters());
+
+        assertFalse(none.containsKey("dataDefaultValueJsLiteral"));
+    }
+
     @Test
     void defaultsTheWidgetLabelFromThePropertyName() {
         Map<String, Object> property = property("TaxEventDate", "DATE");

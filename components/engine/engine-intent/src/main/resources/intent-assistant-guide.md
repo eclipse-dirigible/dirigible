@@ -2296,7 +2296,8 @@ is unclassified, Generate reports the aggregate as lifecycle-blind and the total
 
 Everywhere the intent names a status - `transitions[].from` / `setStatus`, a `lifecycle:` edge, a relation's `init:`, a
 `setRelationField` `value:`, `abortOn.status`, a check's `status`/`setStatus`, `immutableWhen`, a
-posting's `event.when`, a report's `filter` - use the **seeded name** instead of the id:
+posting's `event.when`, a report's `filter`, the status condition of a `schedules[].where` row query or
+of a create-from's `items: where:` rule - use the **seeded name** instead of the id:
 
 ```yaml
 transitions:
@@ -2959,6 +2960,28 @@ schedules:
       body: "Your loan is overdue, please return the book."
       # add `attach: print` to carry the row's own rendered document (dunning with the invoice)
 ```
+
+**A condition on the source's own `function: EntityStatus` relation takes the seeded status NAME**,
+resolved to its seed id at parse:
+
+```yaml
+schedules:
+  - name: dunning
+    cron: "0 0 8 * * ?"
+    entity: SalesInvoice
+    where:
+      - { field: Status, op: eq, value: OVERDUE }       # the SalesInvoice EntityStatus relation
+      - { field: dueOn,  op: lt, value: CURRENT_DATE }
+    notify: { to: contactEmail, subject: "Invoice {number} is overdue", attach: print }
+```
+
+This matters most here, since a schedule filter is where a status guard is written most often
+(dunning, staleness sweeps, month-end runs) and an id is **positional**: inserting a status
+mid-nomenclature would silently retarget the query. A name that is not seeded is a generation error,
+and so is a value that is no status at all - never a `.eq("Status", "OVERDUE")` that matches nothing
+for as long as the schedule keeps ticking. The nomenclature must be seeded in THIS model: a
+cross-model source (`model: <uses alias>`) keeps the numeric seed id, as every other cross-model
+status site does.
 
 **A `where` value may be a moment relative to now** - which is what makes the archetypal schedule, a
 **staleness sweep**, expressible at all ("stuck provisioning for 30 minutes", "unanswered for a week",

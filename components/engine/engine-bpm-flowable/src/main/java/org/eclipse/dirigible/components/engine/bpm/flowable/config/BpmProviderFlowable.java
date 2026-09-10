@@ -41,6 +41,7 @@ import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.ProcessEngineConfiguration;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
+import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.history.HistoricProcessInstanceQuery;
 import org.flowable.engine.repository.Deployment;
@@ -675,6 +676,96 @@ public class BpmProviderFlowable implements BpmProvider {
         activityIds.addAll(elementIds(getPendingJobs(processInstance.getId())));
 
         return List.copyOf(activityIds);
+    }
+
+    /**
+     * Where each of the given process instances sits, in a fixed number of statements rather than three
+     * per instance.
+     *
+     * <p>
+     * The evidence is the same as for a single instance - active executions plus the elements of the
+     * pending jobs - gathered in three queries and grouped in memory: one execution query over all the
+     * given ids, and the two job queries over the current tenant, whose rows are only the jobs waiting
+     * to run and are then matched against the ids asked for. Flowable's job queries take a single
+     * process-instance id, so the tenant is the narrowest batch filter available; a listing of a few
+     * hundred instances is what this is for, and it is what the Monitoring shell polls every 30 s
+     * (<a href="https://github.com/eclipse-dirigible/dirigible/issues/7250">#7250</a>).
+     *
+     * <p>
+     * An execution counts only while it is active, matching {@code RuntimeService#getActiveActivityIds}
+     * - the query itself cannot filter on the flag, so an inactive scope execution, the parent of a
+     * subprocess or of a multi-instance body, is dropped here instead of being reported as a second
+     * activity of the instance.
+     *
+     * @param processInstances the already resolved process instances
+     * @return the occupied activity ids per process instance id, active executions first; an instance
+     *         occupying none is absent
+     */
+    public Map<String, List<String>> getProcessInstanceActivityIds(List<ProcessInstance> processInstances) {
+        Set<String> processInstanceIds = processInstances.stream()
+                                                         .map(ProcessInstance::getId)
+                                                         .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (processInstanceIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<String, Set<String>> activityIds = new HashMap<>();
+        activeExecutions(processInstanceIds).forEach(
+                execution -> record(activityIds, processInstanceIds, execution.getProcessInstanceId(), execution.getActivityId()));
+        pendingJobs().forEach(job -> record(activityIds, processInstanceIds, job.getProcessInstanceId(), job.getElementId()));
+
+        return activityIds.entrySet()
+                          .stream()
+                          .collect(Collectors.toMap(Map.Entry::getKey, entry -> List.copyOf(entry.getValue())));
+    }
+
+    private static void record(Map<String, Set<String>> activityIds, Set<String> processInstanceIds, String processInstanceId,
+            String activityId) {
+        if (null == activityId || !processInstanceIds.contains(processInstanceId)) {
+            return;
+        }
+        activityIds.computeIfAbsent(processInstanceId, id -> new LinkedHashSet<>())
+                   .add(activityId);
+    }
+
+    /**
+     * The active child executions of the given process instances. The active flag is not a query
+     * criterion in Flowable, so it is read off the returned rows, which are execution entities; an
+     * implementation that does not expose the flag is taken at face value rather than dropped.
+     *
+     * @param processInstanceIds the process instance ids
+     * @return the active child executions
+     */
+    private List<Execution> activeExecutions(Set<String> processInstanceIds) {
+        List<Execution> executions = processEngine.getRuntimeService()
+                                                  .createExecutionQuery()
+                                                  .processInstanceIds(processInstanceIds)
+                                                  .onlyChildExecutions()
+                                                  .executionTenantId(getTenantId())
+                                                  .list();
+
+        return executions.stream()
+                         .filter(execution -> !(execution instanceof DelegateExecution delegate) || delegate.isActive())
+                         .toList();
+    }
+
+    /**
+     * The jobs the current tenant is waiting on, executable and timer alike - the batch counterpart of
+     * {@link #getPendingJobs(String)}.
+     *
+     * @return the pending jobs
+     */
+    private List<Job> pendingJobs() {
+        ManagementService managementService = processEngine.getManagementService();
+
+        List<Job> pendingJobs = new ArrayList<>(managementService.createJobQuery()
+                                                                 .jobTenantId(getTenantId())
+                                                                 .list());
+        pendingJobs.addAll(managementService.createTimerJobQuery()
+                                            .jobTenantId(getTenantId())
+                                            .list());
+
+        return pendingJobs;
     }
 
     /**

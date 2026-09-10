@@ -187,7 +187,7 @@ document.addEventListener('alpine:init', () => {
 
     // Load a KPI widget's data from the report's generated controller. Returns
     //   { value }               for kind count/value (missing data coalesces to 0); a count over an
-    //                           aggregating report sums its countColumn over the rows,
+    //                           aggregating report reads the server-side SUM of its countColumn,
     //   { rows }                for kind list,
     //   { forbidden: true }     when the report is role-guarded and the user lacks the role
     //                           (the tile should be hidden, not shown as an error),
@@ -213,11 +213,13 @@ document.addEventListener('alpine:init', () => {
         // kind: count (the default) — the number of records the report yields. An aggregating report
         // yields one row per group, so its record count is its count(*) measure SUMMED over the rows;
         // the count endpoint would report the number of groups (dirigible #7102). `countColumn` is
-        // present exactly for such a report, so its absence means one row is one record.
+        // present exactly for such a report, so its absence means one row is one record. The sum is
+        // the SERVER's (dirigible #7161): computing it here meant fetching every group row of the
+        // report - thousands, for one grouped by day or customer - per tile per dashboard load.
         if (w.countColumn) {
-          const rows = await this._fetchJson(it.apiBase + '/search', { conditions });
-          const total = (rows || []).reduce((sum, row) => sum + (Number(row[w.countColumn]) || 0), 0);
-          return { value: total };
+          const r = await this._fetchJson(it.apiBase + '/sum', { column: w.countColumn, conditions });
+          const total = r ? Number(r.sum) : NaN;
+          return { value: Number.isFinite(total) ? total : 0 };
         }
         const r = conditions.length
           ? await this._fetchJson(it.apiBase + '/count', { conditions })

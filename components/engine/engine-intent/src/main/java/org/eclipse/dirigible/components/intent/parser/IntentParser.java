@@ -30,6 +30,7 @@ import org.eclipse.dirigible.components.intent.generator.FileNameSupport;
 import org.eclipse.dirigible.components.intent.generator.NotificationSupport;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
+import org.eclipse.dirigible.components.intent.generator.PostSetSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
@@ -410,6 +411,7 @@ public final class IntentParser {
         validateExpansions(model, issues);
         validateSettlements(model, issues);
         validateResolves(model, entityNames, issues);
+        validatePostSets(model, issues);
         validateIdempotencyGuardOwnership(model, issues);
         validatePermissions(model, issues);
         if (!issues.isEmpty()) {
@@ -933,6 +935,7 @@ public final class IntentParser {
                             + "] (supported: eq/ne/gt/ge/lt/le/like)");
                 }
                 validateScheduleMoment(condition, source, "schedule [" + name + "]", issues);
+                validateWhereStatusValue(condition, source, "schedule [" + name + "]", issues);
             }
             // A schedule performs exactly one per-row action: notify (mail) or generate (create-from).
             boolean hasNotify = schedule.getNotify() != null;
@@ -1254,7 +1257,14 @@ public final class IntentParser {
         if (candidates.size() > 1) {
             issues.add("schedule [" + name + "] generate unique declares run [" + period + "] and this generate assigns more than one date"
                     + " from now (" + String.join(", ", candidates) + ") - name the one the period ranges over with of:");
+            return;
         }
+        // Pin the single resolved date onto `of` so the generator ranges the run period over exactly the
+        // property this type check chose. Parser and generator must not each define "the date assigned
+        // from now" (issue #7229): the generator sees only rendered expressions, and `now` on a
+        // timestamp field renders as the same LocalDate.now() a `date` field does, so a string scan there
+        // counted a field this check excludes and refused a valid generate with a misleading message.
+        entry.setOf(candidates.get(0));
     }
 
     /**
@@ -2021,6 +2031,66 @@ public final class IntentParser {
             issues.add(subject + " where-condition compares the [" + field.getType() + "] field [" + condition.getField()
                     + "] with a moment of the other shape - use "
                     + (fieldShape == ScheduleSupport.Moment.Shape.DATE ? "CURRENT_DATE" : "CURRENT_TIMESTAMP"));
+        }
+    }
+
+    /**
+     * A {@code where} condition on the queried entity's own {@code function: EntityStatus} relation
+     * must carry a status ID.
+     *
+     * <p>
+     * A status may be referenced by its seeded NAME, and that rewrite ({@code StatusSymbolResolver},
+     * issue #7251) runs on the raw tree before this validation - so a name never arrives here: it has
+     * already become the seed id, or been refused as an unknown one. What can still arrive is a value
+     * no status can ever equal (a stage word, a blank, a moment token), which renders as
+     * {@code .eq("Status", "OVERDUE")} into the generated query and then matches nothing for as long as
+     * the schedule keeps ticking. Refusing it here also keeps the invariant checkable independently of
+     * the resolver's site list - the drift that left {@code schedules[].where} behind when the sibling
+     * {@code items: where:} gained the rewrite.
+     *
+     * <p>
+     * Only the status condition is checked: every other condition compares an ordinary column, where a
+     * string literal is just a literal. A cross-model source has no local relations to check against
+     * (its field references are resolved at generation time against the owner's {@code .model}), so it
+     * keeps the numeric-id form the same way every other cross-model status site does.
+     */
+    private static void validateWhereStatusValue(ScheduleConditionIntent condition, EntityIntent source, String subject,
+            List<String> issues) {
+        if (source == null || source.getRelations() == null || condition.getField() == null) {
+            return;
+        }
+        for (RelationIntent relation : source.getRelations()) {
+            if (!relation.isEntityStatus() || relation.getName() == null || !relation.getName()
+                                                                                     .equalsIgnoreCase(condition.getField())) {
+                continue;
+            }
+            if (!isIntegerLiteral(condition.getValue())) {
+                issues.add(subject + " where-condition on the status relation [" + relation.getName() + "] compares it with ["
+                        + condition.getValue() + "], which is not a status - a status is an integer FK, so name the seeded status"
+                        + " (resolved to its id at parse) or give the numeric seed id");
+            }
+            return;
+        }
+    }
+
+    /** Whether a {@code where} value is a whole number - as an id, or as the text of one. */
+    private static boolean isIntegerLiteral(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue() == number.doubleValue();
+        }
+        if (value == null) {
+            return false;
+        }
+        String text = String.valueOf(value)
+                            .trim();
+        if (text.isEmpty()) {
+            return false;
+        }
+        try {
+            Long.parseLong(text);
+            return true;
+        } catch (NumberFormatException ex) {
+            return false;
         }
     }
 
@@ -6278,9 +6348,15 @@ public final class IntentParser {
                 }
             }
             String next = stepArg(step, "next");
-            if (next != null && !next.isBlank() && !isRoutingLiteral(next) && !stepNames.contains(next)) {
-                issues.add(
-                        "process [" + process.getName() + "] step [" + step.getName() + "] `next` references unknown step [" + next + "]");
+            if (next != null && !next.isBlank() && !isRoutingLiteral(next)) {
+                if (next.equals(step.getName())) {
+                    // A step whose `next` is itself emits a self-targeting sequence flow the engine spins on.
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] `next` targets itself - a self-loop that never advances");
+                } else if (!stepNames.contains(next)) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName() + "] `next` references unknown step [" + next
+                            + "]");
+                }
             }
         }
     }
@@ -7178,6 +7254,36 @@ public final class IntentParser {
     }
 
     /**
+     * The value vocabulary of a {@code posts:} {@code set:} entry: a per-item or source copy, a number,
+     * a boolean, {@code null}, or a plain constant. A value that reads as an expression the renderer
+     * cannot compile - a dotted path off anything but {@code item} / {@code source}, or a negation of
+     * anything but a per-item copy - is refused here.
+     *
+     * <p>
+     * It is refused rather than rendered because both other outcomes are silent: passing the text
+     * through emits a bare Java identifier and breaks the compile of the whole generated module
+     * (dirigible #7246), and rendering it as a string constant would put the text of the path into the
+     * ledger cell instead of the value it names. An author who really means the text quotes it.
+     *
+     * @param model the model
+     * @param issues the collected issues
+     */
+    private static void validatePostSets(IntentModel model, List<String> issues) {
+        for (PostIntent post : model.getPosts()) {
+            String subject = "posts [" + post.getName() + "]";
+            for (Map.Entry<String, String> assignment : post.getSet()
+                                                            .entrySet()) {
+                if (PostSetSupport.isUnsupportedExpression(assignment.getValue())) {
+                    issues.add(subject + " set [" + assignment.getKey() + "]: value [" + assignment.getValue()
+                            + "] is not a value this rule can render - write item.<Field>, source.<Field>,"
+                            + " -item.<Field>, a number, or a plain constant; quote it (\"" + assignment.getValue()
+                            + "\") to mean that text.");
+                }
+            }
+        }
+    }
+
+    /**
      * One rule per at-most-once guard: no two event-driven {@code generates:} / {@code posts:} rules
      * may share a target entity AND the back-reference relation their guard queries.
      *
@@ -7462,6 +7568,7 @@ public final class IntentParser {
                         + "], which is not a field or to-one relation of [" + itemSource.getName() + "]");
             }
             validateScheduleMoment(condition, itemSource, subject + " items", issues);
+            validateWhereStatusValue(condition, itemSource, subject + " items", issues);
         }
     }
 

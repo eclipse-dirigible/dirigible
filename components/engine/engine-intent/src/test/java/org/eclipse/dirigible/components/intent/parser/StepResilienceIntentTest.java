@@ -103,6 +103,17 @@ class StepResilienceIntentTest {
         assertTrue(issue.contains("step [createSchema]"), "the message must locate the step: " + issue);
     }
 
+    /**
+     * A step whose {@code next} names itself would emit a self-targeting sequence flow the engine spins
+     * on; it names an existing step, so only a dedicated check catches it (dirigible #7226).
+     */
+    @Test
+    void aNextTargetingItselfIsRejected() {
+        String issue = assertIssue(YAML.replace("onError: recordFailure, next: done", "onError: recordFailure, next: provisionApp"),
+                "`next` targets itself - a self-loop that never advances");
+        assertTrue(issue.contains("step [provisionApp]"), "the message must locate the step: " + issue);
+    }
+
     /** The literal `end` routes the failure to the process end, like a decision branch. */
     @Test
     void onErrorMayRouteToEnd() {

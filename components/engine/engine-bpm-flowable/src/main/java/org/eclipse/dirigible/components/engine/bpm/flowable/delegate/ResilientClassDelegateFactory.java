@@ -21,7 +21,7 @@ import org.flowable.engine.impl.bpmn.parser.FieldDeclaration;
  * Creates {@link ResilientClassDelegate}s for every {@code flowable:class} service task (the shape
  * of Flowable's own {@code DefaultClassDelegateFactory}), so the intent DSL's {@code onError} error
  * routing has its conversion hook on the one path all {@code delegate:} steps run through. Wired
- * into the engine by {@code BpmFlowableConfig} via a {@code DefaultActivityBehaviorFactory}
+ * into the engine by {@code BpmFlowableConfig} via a {@code ResilientActivityBehaviorFactory}
  * carrying this factory.
  */
 public class ResilientClassDelegateFactory implements ClassDelegateFactory {

@@ -812,7 +812,13 @@ class GlueGenerator {
         // emit: no compared properties (every existing post reads as unchanged, the old no-op) and no
         // lifecycle guard around the rewrite.
         context.put("amendableGuard", strOr(item, "amendableGuard", ""));
-        context.put("itemComparedProps", item.get("itemComparedProps") == null ? new ArrayList<>() : item.get("itemComparedProps"));
+        // The compared item cells, each carrying how the write leaves its column. #7188 renamed the
+        // #7163 key `expressionDefault` to `compareOnlyWhenDerived` and the template reads only the new
+        // one, so a .glue generated between the two rendered its CURRENT_DATE-default cells with that
+        // treatment silently dropped - a plain same() reading every redelivery of such a row as an
+        // amendment - until the intent was re-generated (#7234). The former spelling is honoured
+        // wherever the current one is absent, here and in the header assignments normalised below.
+        context.put("itemComparedProps", comparedCells(item.get("itemComparedProps")));
         // Which of the default-aware comparison helpers the handler's own comparison calls, and so
         // which of them the template must emit alongside it. Unbound, they read as undefined and every
         // call to one of the two helpers was emitted without its method - a generated handler that does
@@ -837,11 +843,13 @@ class GlueGenerator {
      * Each entry therefore falls back to exactly what its shape used to emit: the expression read
      * inline at both the comparison and the assignment, no hoisted local, and no default-aware
      * comparison. {@code value} is what both sites read, so the template needs no branch of its own.
+     * The "compare only when derived" flag is read under either of its spellings - see
+     * {@code comparesOnlyWhenDerived} (dirigible #7234).
      *
      * @param raw the declared assignments
      * @return the normalised assignments
      */
-    private static List<Map<String, Object>> headerAssignments(Object raw) {
+    static List<Map<String, Object>> headerAssignments(Object raw) {
         List<Map<String, Object>> assignments = new ArrayList<>();
         for (Map<String, Object> declared : asMaps(raw)) {
             String local = strOr(declared, "local", "");
@@ -853,11 +861,47 @@ class GlueGenerator {
             assignment.put("local", local);
             assignment.put("value", local.isEmpty() ? expr : local);
             assignment.put("derivedDefault", strOr(declared, "derivedDefault", ""));
-            assignment.put("compareOnlyWhenDerived", truthy(declared, "compareOnlyWhenDerived"));
+            assignment.put("compareOnlyWhenDerived", comparesOnlyWhenDerived(declared));
             assignment.put("overwrittenOnSave", truthy(declared, "overwrittenOnSave"));
             assignments.add(assignment);
         }
         return assignments;
+    }
+
+    /**
+     * The compared item properties of a posting, copied, with the "compare only when derived" flag read
+     * under its #7163 spelling {@code expressionDefault} wherever the #7188 spelling
+     * {@code compareOnlyWhenDerived} is absent (dirigible #7234). A cell carrying the current key keeps
+     * it; a cell carrying neither - a .glue written before the amendment half, or a plainly compared
+     * column - is copied as it is, and an absent list binds as an empty one.
+     *
+     * @param raw the descriptor's list of cells, may be absent
+     * @return the cells the template renders
+     */
+    static List<Map<String, Object>> comparedCells(Object raw) {
+        List<Map<String, Object>> cells = new ArrayList<>();
+        for (Map<String, Object> cell : asMaps(raw)) {
+            Map<String, Object> resolved = ModelValues.copy(cell);
+            if (!resolved.containsKey("compareOnlyWhenDerived") && resolved.containsKey("expressionDefault")) {
+                resolved.put("compareOnlyWhenDerived", comparesOnlyWhenDerived(cell));
+            }
+            cells.add(resolved);
+        }
+        return cells;
+    }
+
+    /**
+     * Whether a compared cell's column is filled only when the write leaves it empty, read under the
+     * #7188 spelling {@code compareOnlyWhenDerived} when the cell carries it and under the #7163
+     * spelling {@code expressionDefault} otherwise - the ONE rule both the header assignments and the
+     * item cells are read by, so a .glue generated between the two releases renders the treatment its
+     * intent asked for instead of a plain comparison (dirigible #7234).
+     *
+     * @param cell the compared cell as the descriptor carries it
+     * @return the flag
+     */
+    private static boolean comparesOnlyWhenDerived(Map<String, Object> cell) {
+        return cell.containsKey("compareOnlyWhenDerived") ? truthy(cell, "compareOnlyWhenDerived") : truthy(cell, "expressionDefault");
     }
 
     /**

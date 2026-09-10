@@ -50,6 +50,9 @@ const harmoniaHttp = {
       try { const j = JSON.parse(text); message = j.errorMessage || j.message || text; } catch (_) { /* non-JSON */ }
       const err = new Error(message || (r.status + ' ' + r.statusText));
       err.httpStatus = r.status;
+      // The shape App.services.apiErrors reads: the page shows the server's text only through its
+      // 400/409 refusal gate (#7151, #7263); err.message stays for the AngularJS http shim below.
+      err.errorMessage = message;
       throw err;
     }
     // A success can carry an empty body (204, or a 200 from an action endpoint such as task
@@ -195,7 +198,7 @@ document.addEventListener('alpine:init', () => {
       } catch (e) {
         const failed = window.T ? T('$projectName:${tprefix}.dialogs.errorTitle', 'Submit failed.') : 'Submit failed.';
         this.state = 'error';
-        this.message = (e && e.message) || failed;
+        this.message = App.services.apiErrors.refusalMessageFor(e, failed);
       }
     },
 

@@ -1,9 +1,12 @@
 package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import org.eclipse.dirigible.sdk.db.Database;
 #if($query && $query.contains(":language"))
@@ -45,6 +48,11 @@ public class ${name}Repository {
     private static final Map<String, String> OPERATORS =
             Map.of("EQ", "=", "NE", "<>", "GT", ">", "GTE", ">=", "LT", "<", "LTE", "<=", "LIKE", "LIKE");
 
+    /** The column types {@link #sum(String, Map)} accepts - anything else has no meaningful total. */
+    private static final Set<String> NUMERIC_COLUMN_TYPES =
+            Set.of("TINYINT", "SMALLINT", "INT", "INTEGER", "BIGINT", "DECIMAL", "NUMERIC", "DOUBLE",
+                    "DOUBLE PRECISION", "FLOAT", "REAL");
+
     @SuppressWarnings("unchecked")
     public List<Map<String, Object>> findAll(Integer limit, Integer offset, Map<String, Object> filter) {
         List<Map<String, Object>> parameters = baseParameters(filter);
@@ -80,6 +88,46 @@ public class ${name}Repository {
             return count == null ? 0L : Long.parseLong(count.toString());
         } catch (Throwable t) {
             throw new RuntimeException("Failed to count report ${name}", t);
+        }
+    }
+
+    /**
+     * The SUM of one of the report's own numeric output columns over the (optionally filtered) rows -
+     * one aggregated number in one round trip. A dashboard count tile over an AGGREGATING report reads
+     * its record count this way: the rows are groups, so the count is the {@code count(*)} measure
+     * summed, and computing that in the browser meant fetching every group row of the report per tile
+     * per dashboard load (#7161).
+     *
+     * The column is matched against the report's own aliases (the same allowlist the conditions use)
+     * and must be numeric; anything else is an {@link IllegalArgumentException}, i.e. a client error.
+     * Never {@code null}: a report yielding no rows sums to zero.
+     */
+    @SuppressWarnings("unchecked")
+    public Number sum(String column, Map<String, Object> filter) {
+        String type = column == null ? null : FILTER_COLUMNS.get(column);
+        if (type == null) {
+            throw new IllegalArgumentException("Unknown report column: " + column);
+        }
+        if (!NUMERIC_COLUMN_TYPES.contains(type.toUpperCase(Locale.ROOT))) {
+            throw new IllegalArgumentException("Report column is not numeric: " + column + " [" + type + "]");
+        }
+        List<Map<String, Object>> parameters = baseParameters(filter);
+        String sql = "SELECT SUM(\"" + column + "\") AS \"REPORT_SUM\" FROM (" + filteredQuery(filter, parameters)
+                + ") AS \"REPORT_TOTAL\"";
+        try {
+            String result = Database.queryNamed(sql, Json.stringify(parameters));
+            List<Map<String, Object>> rows = (List<Map<String, Object>>) Json.parse(result, List.class);
+            if (rows.isEmpty()) {
+                return 0L;
+            }
+            Object sum = rows.get(0)
+                             .get("REPORT_SUM");
+            if (sum instanceof Number number) {
+                return number;
+            }
+            return sum == null ? 0L : new BigDecimal(sum.toString());
+        } catch (Throwable t) {
+            throw new RuntimeException("Failed to sum column " + column + " of report ${name}", t);
         }
     }
 
@@ -167,7 +215,7 @@ public class ${name}Repository {
         }
         return language.trim()
                        .split("[-_,;]")[0]
-                       .toLowerCase(java.util.Locale.ROOT);
+                       .toLowerCase(Locale.ROOT);
     }
 
 #end

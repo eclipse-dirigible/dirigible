@@ -129,6 +129,8 @@
         </div>
     </main>
 
+    <!-- The shared refusal gate (application-core): the ONLY path from a REST error body to the banner. -->
+    <script src="/services/web/application-core/shell/js/services/apiError.js"></script>
     <script>
         // Generated metadata: every non-projection, non-report entity of this module with its full
         // column list and its power REST controller (the same API the application pages use).
@@ -217,15 +219,32 @@
                     return this.temporal(value) || String(value);
                 },
 
-                // The REST error body carries the validation reason (server.error.include-message) -
-                // surface it verbatim; an admin wants the raw truth.
+                // The REST error body carries the reason (spring.web.error.include-message). It is
+                // quoted only when the response is a REFUSAL - a 400/409 sentence authored for the
+                // person who pressed the button - through the same shared gate every other generated
+                // surface routes through (#7151, #7263): a 500 carries the raw exception text, and on
+                // the administration surface too that belongs in the server log, not in the banner.
+                // The developer-facing text still goes to the console, one keystroke away.
                 async apiError(res) {
-                    let message = 'HTTP ' + res.status;
+                    let reason = '';
                     try {
                         const body = await res.json();
-                        if (body && (body.message || body.error)) message += ': ' + (body.message || body.error);
+                        if (body) reason = String(body.message || body.error || '');
                     } catch (e) { /* no JSON body */ }
-                    return message;
+                    if (reason) console.error('[admin] HTTP ' + res.status + ': ' + reason);
+                    const err = new Error(App.services.apiErrors.refusalMessageFor(
+                        { httpStatus: res.status, errorMessage: reason },
+                        'HTTP ' + res.status + ' - the server log has the reason.'));
+                    err.shown = true;
+                    return err;
+                },
+
+                // What the banner shows for a caught failure: the text apiError() already cleared, else
+                // the neutral fallback - a transport failure's own message is developer-facing too.
+                banner(e, fallback) {
+                    if (e && e.shown) return e.message;
+                    console.error('[admin]', e);
+                    return fallback;
                 },
 
                 async load() {
@@ -239,11 +258,11 @@
                         // $limit/$offset are the generated controller's paging parameters.
                         const res = await fetch(this.selected.api + '?$limit=' + this.limit + '&$offset=' + this.offset,
                             { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
-                        if (!res.ok) throw new Error(await this.apiError(res));
+                        if (!res.ok) throw await this.apiError(res);
                         this.rows = await res.json();
                     } catch (e) {
                         this.rows = [];
-                        this.error = String(e.message || e);
+                        this.error = this.banner(e, 'Could not load the records.');
                     }
                 },
 
@@ -306,11 +325,11 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(payload)
                         });
-                        if (!res.ok) throw new Error(await this.apiError(res));
+                        if (!res.ok) throw await this.apiError(res);
                         this.editing = false;
                         await this.load();
                     } catch (e) {
-                        this.error = String(e.message || e);
+                        this.error = this.banner(e, 'Could not save the record.');
                     } finally {
                         this.saving = false;
                     }
@@ -323,10 +342,10 @@
                         const res = await fetch(this.selected.api + '/' + encodeURIComponent(row[this.selected.pk]), {
                             method: 'DELETE', credentials: 'same-origin'
                         });
-                        if (!res.ok && res.status !== 204) throw new Error(await this.apiError(res));
+                        if (!res.ok && res.status !== 204) throw await this.apiError(res);
                         await this.load();
                     } catch (e) {
-                        this.error = String(e.message || e);
+                        this.error = this.banner(e, 'Could not delete the record.');
                     }
                 }
             }));

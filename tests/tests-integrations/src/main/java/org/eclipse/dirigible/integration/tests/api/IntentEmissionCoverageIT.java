@@ -45,6 +45,7 @@ import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
+import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -459,6 +460,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # a boolean: a real checkbox on the power form AND on the personal one (#7103)
                   - { name: urgent, type: boolean }
                   - { name: period, type: month }
+                  # a plain date the monthly schedule stamps with `now` - the property its
+                  # `unique: [Person, { run: month }]` key ranges the guard over (#7229/#7106).
+                  # Deliberately alongside `period` (a month field, `now` -> YYYY-MM string): the
+                  # run key must pick THIS field, not the string one, and the guard it compiles into
+                  # is what the publish step below actually javac's.
+                  - { name: filed, type: date }
                   - { name: rate, type: decimal, sensitive: true }
                   - { name: totalCost, type: decimal }
                   # visibleTo: role-scoped on EVERY surface - stripped from the responses and
@@ -1033,8 +1040,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 entity: Person
                 generate:
                   to: Claim
+                  # run: month natural key (#7106) - a re-run in the same month finds the Claim the
+                  # first tick filed instead of minting a duplicate. The guard ranges over `filed`
+                  # (the sole date-typed `now` default), NOT the month-typed `Period` (#7229); the
+                  # emitted .between(...) over a LocalDate column is compiled by the publish below.
+                  unique: [Person, { run: month }]
                   map: { Person: id }
-                  defaults: { note: monthly, Period: now }
+                  defaults: { note: monthly, Period: now, filed: now }
                   children:
                     - to: ClaimLine
                       parent: Claim
@@ -2115,6 +2127,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the report repository must bind each authored parameter, typed from its target field");
         assertTrue(contentOf("gen/claimsbyunit/api/reports/ClaimsByUnitController.java").contains("@QueryParam(\"minTotal\")"),
                 "the report controller must expose each authored parameter as a query parameter");
+        // A dashboard count tile over an AGGREGATING report reads ONE aggregated number: the rows are
+        // groups, so the record count is the count(*) measure SUMMED, and summing it in the browser
+        // meant shipping every group row of the report per tile per dashboard load (dirigible #7161).
+        assertTrue(claimsByUnitRepository.contains("SELECT SUM(\\\"\" + column + \"\\\") AS \\\"REPORT_SUM\\\" FROM ("),
+                "the report repository must aggregate the count column in SQL: " + claimsByUnitRepository);
+        assertTrue(claimsByUnitRepository.contains("NUMERIC_COLUMN_TYPES.contains"),
+                "the summed column must be validated as numeric - a total over a text column is a client error");
+        assertTrue(contentOf("gen/claimsbyunit/api/reports/ClaimsByUnitController.java").contains("@Post(\"/sum\")"),
+                "the report controller must expose the server-side sum the count tile reads");
 
         // kind: statement (#6938): the line classification is a generated .view artifact next to the
         // .report - the selectors and labels live THERE, as data the ViewsSynchronizer provisions,
@@ -2758,6 +2779,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // render the YYYY-MM string - the untyped LocalDate.now() would not even compile.
         assertTrue(job.contains(".Period = java.time.YearMonth.now().toString()"),
                 "a month field's `now` default must render the YYYY-MM string, not LocalDate");
+        // run: month natural key (#7106/#7229): the guard ranges over the month of `filed` - the date
+        // this run stamps - so a re-run in the same month finds the first tick's Claim. The key must
+        // pick the date-typed field, not the month-typed Period, and the .between over a LocalDate
+        // column has to COMPILE, which the publish + client-Java javac below is the first to prove.
+        assertTrue(job.contains(".between(\"Filed\", java.time.LocalDate.now().withDayOfMonth(1),"),
+                "the run: month key must compile a month range over the date the run writes: " + job);
 
         // the dunning fan-out (#7233): every per-row database read - the recipient's relation load, the
         // render language's, the print feeder behind the attachment - runs inside the fail-soft try, so
@@ -2981,6 +3008,32 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFalse(myRosterPage.contains("(e && e.message)"), "the personal document must never surface the developer-facing e.message");
         assertTrue(myRosterDoc.contains(":aria-invalid=\"fieldError === "),
                 "the personal document's header controls must mark the field a rejection named");
+
+        // #7263: the checks above name four files, and the fix they guard missed the admin surface
+        // #7242 listed, the personal/partner list + calendar loads, the standalone report page and the
+        // task form. The rule is a property of EVERY generated page, so it is asserted over every
+        // generated page: nothing under gen/ prints e.message - a 500's raw exception text - and the
+        // shared apiErrors gate is the only path from a REST error body to a banner.
+        List<String> emittedPages = emittedPages("gen");
+        // The walk is load-bearing only if it really saw the pages: pin it to files the checks above read.
+        assertTrue(
+                emittedPages.contains("gen/emission/admin/index.html")
+                        && emittedPages.contains("gen/emission/js/components/pages/my/ClaimMyListPage.js"),
+                "the generated-page walk must cover the admin page and the SPA pages, else the rule below is vacuous: " + emittedPages);
+        List<String> rawMessagePages = emittedPages.stream()
+                                                   .filter(page -> {
+                                                       String content = contentOf(page);
+                                                       return content.contains("(e && e.message)") || content.contains("String(e.message");
+                                                   })
+                                                   .toList();
+        assertTrue(rawMessagePages.isEmpty(),
+                "every generated page must route a failure through apiErrors, never print e.message: " + rawMessagePages);
+        assertTrue(myList.contains("refusalMessageFor(e, 'Could not load your"),
+                "a failed personal list load must show the refusal text or the neutral fallback, never e.message (#7263)");
+        assertTrue(partnerList.contains("refusalMessageFor(e, 'Could not load your"),
+                "a failed partner list load must show the refusal text or the neutral fallback, never e.message (#7263)");
+        assertTrue(myLeaveCalendar.contains("refusalMessageFor(e, 'Could not load your"),
+                "a failed personal calendar load must show the refusal text or the neutral fallback, never e.message (#7263)");
 
         // The app-test manifest carries the personal UI-parity metadata the runner's my flow
         // drives (wave 2): the /my route, the layout family the personal page belongs to, and
@@ -3318,6 +3371,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(adminPage.contains("\"lookup\":{\"url\":"), "a relation column must carry its lookup URL for the combobox");
         assertTrue(adminPage.contains("loadLookups"), "the admin page must resolve relation ids to labels");
         assertTrue(adminPage.contains("\"readonly\":true"), "identity/calculated/audit columns must be marked read-only");
+        // The admin banner quotes the server's text only for a 400/409 refusal, through the shared gate
+        // the page loads for that purpose - a 500's exception text goes to the console, not the screen
+        // (#7151, #7263).
+        assertTrue(adminPage.contains("shell/js/services/apiError.js"), "the admin page must load the shared refusal gate");
+        assertTrue(adminPage.contains("App.services.apiErrors.refusalMessageFor("),
+                "the admin banner must go through the shared refusal gate, never the raw response text");
+        assertFalse(adminPage.contains("String(e.message"), "the admin surface must never print the developer-facing e.message");
         String adminPerspective = contentOf("gen/emission/perspectives/admin/perspective.js");
         assertTrue(adminPerspective.contains("kind: 'ADMIN'"), "the admin perspective must declare the ADMIN kind");
         assertFalse(adminPerspective.contains("groupId"), "an admin perspective must not bake in the shell's navigation group id (#6646)");
@@ -3657,6 +3717,47 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("$", hasSize(0)));
+
+        // The count tile's number, server-side (dirigible #7161). Both claims sit in ONE unit group,
+        // so the report yields a single row: its record count is the count(*) measure SUMMED (2) and
+        // NOT the number of rows (1), which is what the count endpoint reports - the two answers here
+        // differ, so this asserts the tile reads the right one. Only numeric columns total: the
+        // grouping label and an alias the report does not carry are client errors, not 500s.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"column\":\"Count\"}")
+                                                 .when()
+                                                 .post(REPORT_API + "/ClaimsByUnitController/sum")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 // Generic report JSON, so the number is a float here -
+                                                 // the tile formats it through the column's pattern.
+                                                 .body("sum", equalTo(2.0F)));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(REPORT_API + "/ClaimsByUnitController/count")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("count", equalTo(1)));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"column\":\"Unit\"}")
+                                                 .when()
+                                                 .post(REPORT_API + "/ClaimsByUnitController/sum")
+                                                 .then()
+                                                 .statusCode(400));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"column\":\"Nonexistent\"}")
+                                                 .when()
+                                                 .post(REPORT_API + "/ClaimsByUnitController/sum")
+                                                 .then()
+                                                 .statusCode(400));
+        // ... and the tile's `at` pins ride the same per-column conditions the report page filters
+        // with, so a pinned sum narrows to the pinned group.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"column\":\"Count\",\"conditions\":[{\"column\":\"Unit\",\"operator\":\"EQ\",\"value\":\"Nothing\"}]}")
+                                                 .when()
+                                                 .post(REPORT_API + "/ClaimsByUnitController/sum")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("sum", equalTo(0)));
 
         // kind: statement, end to end (#6938): the published .view artifact was provisioned by the
         // ViewsSynchronizer AFTER the tables it reads, and the thin repository query joins it - so
@@ -5908,6 +6009,30 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             existing.setContent(content.getBytes(StandardCharsets.UTF_8));
         } else {
             repository.createResource(path, content.getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    /**
+     * Every generated script and view under {@code folder} (project-relative), as project-relative
+     * paths - the surface a rule about "every generated page" is asserted over, so a page a template
+     * adds later cannot fall outside the check by not being named.
+     */
+    private List<String> emittedPages(String folder) {
+        List<String> pages = new java.util.ArrayList<>();
+        collectPages(repository.getCollection(PROJECT_PATH + "/" + folder), pages);
+        return pages;
+    }
+
+    private void collectPages(ICollection collection, List<String> pages) {
+        for (IResource resource : collection.getResources()) {
+            String name = resource.getName();
+            if (name.endsWith(".js") || name.endsWith(".html")) {
+                pages.add(resource.getPath()
+                                  .substring(PROJECT_PATH.length() + 1));
+            }
+        }
+        for (ICollection child : collection.getCollections()) {
+            collectPages(child, pages);
         }
     }
 

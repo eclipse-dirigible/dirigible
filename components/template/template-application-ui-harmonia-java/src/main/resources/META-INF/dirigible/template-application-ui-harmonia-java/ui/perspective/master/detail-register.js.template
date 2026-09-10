@@ -36,8 +36,11 @@
 ## one-click affordance (Fill Month) books the standard values without the user retyping them.
 ## Emitted in the shape the draft holds: a checkbox takes a real boolean, a numeric column a real
 ## number, and everything else a string - including a DROPDOWN's FK, which the draft keeps stringified
-## so it matches an option's data-value.
-#macro(defaultMeta $property)#if($property.dataDefaultValue && $property.dataDefaultValue != "")#if($property.widgetType == "CHECKBOX"), def: #if($property.dataDefaultValue == "true")true#{else}false#end#elseif($property.widgetType == "DROPDOWN"), def: '${property.dataDefaultValue}'#elseif($property.isNumberType), def: ${property.dataDefaultValue}#{else}, def: '${property.dataDefaultValue}'#end#end#end
+## so it matches an option's data-value. The value itself is resolved in Java (ModelParameterProcessor
+## / JsLiterals) and is present only on a property that has a default, so the shapes live in one place
+## - and an authored value carrying an apostrophe or a backslash is escaped rather than ending the
+## literal it is written into and making this whole register a syntax error (dirigible #7207).
+#macro(defaultMeta $property)#if($property.dataDefaultValueJsLiteral), def: ${property.dataDefaultValueJsLiteral}#end#end
 App.registerDetail('${masterEntity}', {
   entity: '${name}',
   label: '${menuLabel}',
