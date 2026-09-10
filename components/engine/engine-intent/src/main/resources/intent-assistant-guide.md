@@ -1853,8 +1853,9 @@ keys of the offending rows - which of a hundred lines to go and fix is the calle
 
 **A rule that qualifies no row refuses either way.** An invoice with no lines is not the invoice
 that was asked for, and it is the harder failure to notice - it exists and counts as the period's
-billing - so the run answers 400 rather than committing the header. An items block with no `where:`
-keeps exactly the behaviour it had.
+billing - so the run answers 400 rather than committing the header. Either refusal is decided before
+the header is saved, so a refused run spends no document number and leaves no history entry. An
+items block with no `where:` keeps exactly the behaviour it had.
 
 **A `map:` source may hop one relation - and that is how you SNAPSHOT a value.** A value is `map`ped
 rather than reached through a relation when the target must keep what was true at the moment it was
