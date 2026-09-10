@@ -216,6 +216,72 @@ class StatusSymbolIntentTest {
                                          .getFilter());
     }
 
+    /**
+     * The items of a cross-model source ({@code fromUses:}) are seeded in the owner model, so a status
+     * NAME in their source-row rule is left in the numeric-id form for the generator to refuse against
+     * the owner's {@code .model} (dirigible #7225) - and a LOCAL entity that merely shares the item's
+     * name must not lend its own nomenclature to it: that id is positional in the wrong seed list.
+     */
+    @Test
+    void aCrossModelItemSourceIsNotResolvedAgainstASameNamedLocalEntity() {
+        String yaml = """
+                name: delivery-notes
+                uses:
+                  - { model: inventory }
+                entities:
+                  - name: LineStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: GoodsIssueItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: LineStatus, function: EntityStatus, init: 1 }
+                  - name: DeliveryNote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                  - name: DeliveryNoteItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal }
+                    relations:
+                      - { name: DeliveryNote, kind: manyToOne, to: DeliveryNote, composition: true, required: true }
+                generates:
+                  - name: delivery-note-from-goods-issue
+                    from: GoodsIssue
+                    fromUses: inventory
+                    to: DeliveryNote
+                    forEntity: GoodsIssue
+                    map:
+                      Number: number
+                    items:
+                      from: GoodsIssueItem
+                      to: DeliveryNoteItem
+                      where:
+                        - { field: Status, op: eq, value: APPROVED }
+                      map:
+                        Quantity: quantity
+                seeds:
+                  - name: line-statuses
+                    entity: LineStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: APPROVED }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        assertEquals("APPROVED", model.getGenerates()
+                                      .get(0)
+                                      .getItems()
+                                      .getWhere()
+                                      .get(0)
+                                      .getValue(),
+                "the local LineStatus seed id 2 must not be taken for the inventory model's APPROVED");
+    }
+
     private static void assertIssue(String yaml, String expected) {
         IntentValidationException thrown = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
         assertTrue(thrown.getIssues()

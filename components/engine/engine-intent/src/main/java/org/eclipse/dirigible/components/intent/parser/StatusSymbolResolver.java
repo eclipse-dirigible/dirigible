@@ -313,8 +313,20 @@ final class StatusSymbolResolver {
      * symbolic - and on the ITEM row's own nomenclature, not the header's: the rule selects the rows of
      * the source document, so resolving a name against the document's lifecycle would take an id out of
      * the wrong nomenclature and quietly filter on it.
+     *
+     * <p>
+     * A cross-model source ({@code fromUses:}) owns its items too, so their nomenclature is seeded in
+     * that model and unresolvable here - and a LOCAL entity of the same name must not lend its own,
+     * whose ids are positional in the wrong nomenclature. The conditions therefore keep the numeric-id
+     * form every cross-model status site keeps. WHICH of them names the status is known only to the
+     * owner's {@code .model}, so a name there is refused where that model is read: at generation time,
+     * by {@code GlueIntentGenerator} (dirigible #7225) - not left in place to render as a string
+     * compared against the integer status FK.
      */
     private void rewriteGeneratesItemsWhere(Map<?, ?> generate, String subject) {
+        if (text(generate, "fromUses") != null) {
+            return;
+        }
         Map<?, ?> items = asMap(generate.get("items"));
         String itemEntity = items == null ? null : text(items, "from");
         rewriteConditions(items == null ? null : items.get("where"), itemEntity, subject + " items where");
