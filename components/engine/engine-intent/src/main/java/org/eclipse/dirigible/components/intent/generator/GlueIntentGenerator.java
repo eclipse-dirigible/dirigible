@@ -5035,7 +5035,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // same registry-wide-compile mechanism a notify recipient's relation load uses.
             entry.put("crossModel", resolver.crossModel());
             entry.put("targetModel", resolver.targetModel());
-            entry.put("targetProject", resolver.targetProject());
             resolvers.add(entry);
         }
         return resolvers;
@@ -5055,8 +5054,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 return null;
             }
             CrossModelSupport.TargetInfo target = CrossModelSupport.resolve(context, uses, relation.getTo());
-            return new ProcessResolverSupport.CrossModelTarget(target.perspectiveName(), uses.resolveProject(), uses.getModel(),
-                    target.propertyNames(), target.fkType());
+            return new ProcessResolverSupport.CrossModelTarget(target.perspectiveName(), uses.getModel(), target.propertyNames(),
+                    target.fkType());
         };
     }
 

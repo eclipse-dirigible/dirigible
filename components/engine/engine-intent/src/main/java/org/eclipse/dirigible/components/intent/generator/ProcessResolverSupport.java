@@ -95,13 +95,12 @@ public final class ProcessResolverSupport {
      * accessor).
      *
      * @param perspectiveName the target's perspective in the owner model (its gen data subfolder)
-     * @param project the owner project
      * @param modelAlias the owner model alias
      * @param propertyNames the target's PascalCase property names, or null when the owner model was
      *        resolved by naming convention only - the field is then trusted as authored
      * @param keyType the JDBC type of the target's primary key (e.g. {@code INTEGER} / {@code BIGINT})
      */
-    public record CrossModelTarget(String perspectiveName, String project, String modelAlias, Set<String> propertyNames, String keyType) {
+    public record CrossModelTarget(String perspectiveName, String modelAlias, Set<String> propertyNames, String keyType) {
     }
 
     /**
@@ -122,12 +121,10 @@ public final class ProcessResolverSupport {
      * @param crossModel whether the target is owned by another model - then the generated resolver
      *        imports the OWNER's generated Entity/Repository package instead of this project's
      * @param targetModel the owner model alias (empty for a same-model target)
-     * @param targetProject the owner project (empty for a same-model target)
      */
     public record Resolver(String process, String beforeStep, String token, String variable, String handler, String fkProperty,
             String targetEntity, String targetField, String targetPerspective, String targetIdAccessor, String ownerEntity,
-            String ownerPerspective, String ownerKeyProperty, String ownerKeyAccessor, boolean crossModel, String targetModel,
-            String targetProject) {
+            String ownerPerspective, String ownerKeyProperty, String ownerKeyAccessor, boolean crossModel, String targetModel) {
     }
 
     /**
@@ -236,11 +233,11 @@ public final class ProcessResolverSupport {
                 handler, IntentNaming.pascalCase(relationName), relation.getTo(), IntentNaming.pascalCase(fieldName),
                 resolved.perspective(), resolved.idAccessor(), owner.getName(),
                 IntentEntities.resolvePerspective(owner.getName(), compositionParents, settingEntities), IntentEntities.keyFieldName(owner),
-                idAccessor(IntentEntities.primaryKeyOf(owner)), resolved.crossModel(), resolved.model(), resolved.project()));
+                idAccessor(IntentEntities.primaryKeyOf(owner)), resolved.crossModel(), resolved.model()));
     }
 
     /** Where the target's generated Entity/Repository live, and how its key is read off the FK. */
-    private record Target(String perspective, String idAccessor, boolean crossModel, String model, String project) {
+    private record Target(String perspective, String idAccessor, boolean crossModel, String model) {
     }
 
     /**
@@ -258,7 +255,7 @@ public final class ProcessResolverSupport {
             return null;
         }
         return new Target(IntentEntities.resolvePerspective(relation.getTo(), compositionParents, settingEntities),
-                idAccessor(IntentEntities.primaryKeyOf(target)), false, "", "");
+                idAccessor(IntentEntities.primaryKeyOf(target)), false, "");
     }
 
     /**
@@ -272,7 +269,7 @@ public final class ProcessResolverSupport {
         if (target == null) {
             // No lookup (a unit test, the settings scaffold): the naming convention is the target, which
             // is what every other cross-model consumer falls back to when it cannot read the owner model.
-            return new Target(relation.getTo(), "intValue", true, relation.getModel() == null ? "" : relation.getModel(), "");
+            return new Target(relation.getTo(), "intValue", true, relation.getModel() == null ? "" : relation.getModel());
         }
         String pascalField = IntentNaming.pascalCase(fieldName);
         if (target.propertyNames() != null && !target.propertyNames()
@@ -282,7 +279,7 @@ public final class ProcessResolverSupport {
                     + target.modelAlias() + "] - that model declares " + new TreeSet<>(target.propertyNames())));
         }
         return new Target(target.perspectiveName(), "BIGINT".equalsIgnoreCase(target.keyType()) ? "longValue" : "intValue", true,
-                target.modelAlias() == null ? "" : target.modelAlias(), target.project() == null ? "" : target.project());
+                target.modelAlias() == null ? "" : target.modelAlias());
     }
 
     private static RelationIntent toOneRelation(EntityIntent owner, String name) {

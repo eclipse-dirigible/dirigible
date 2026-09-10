@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.generator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -102,7 +103,10 @@ class GlueFormCrossModelHopTest {
         assertEquals("Customer", resolver.get("targetPerspective"));
         assertEquals(Boolean.TRUE, resolver.get("crossModel"));
         assertEquals("customers", resolver.get("targetModel"));
-        assertEquals("customers", resolver.get("targetProject"));
+        // The owner PROJECT is deliberately absent: the generated resolver imports the owner's
+        // Entity/Repository from its generation folder (derived from targetModel) and builds no URL,
+        // so a project name would be a descriptor key nothing downstream reads (dirigible #7227).
+        assertFalse(resolver.containsKey("targetProject"), "the resolver descriptor must carry no unread key, got: " + resolver);
         assertEquals("intValue", resolver.get("targetIdAccessor"));
     }
 
@@ -136,7 +140,7 @@ class GlueFormCrossModelHopTest {
                                                           .get(0);
         assertEquals(Boolean.FALSE, resolver.get("crossModel"));
         assertEquals("", resolver.get("targetModel"), "a local target must leave the model empty so the local gen folder is used");
-        assertEquals("", resolver.get("targetProject"));
+        assertFalse(resolver.containsKey("targetProject"));
     }
 
     /**

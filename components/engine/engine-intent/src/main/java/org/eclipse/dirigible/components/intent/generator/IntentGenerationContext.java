@@ -12,12 +12,17 @@ package org.eclipse.dirigible.components.intent.generator;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IResource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Per-generation call context handed to every {@link IntentTargetGenerator}. Carries the parsed
@@ -36,8 +41,18 @@ import org.eclipse.dirigible.repository.api.IResource;
  * All writes go through {@link #writeModelFile(String, String)}, which records the emitted file
  * names so {@link IntentGenerationService} can scrub files that a previous generation wrote but the
  * current one no longer produces.
+ *
+ * <p>
+ * Every write also journals the state it replaced, so a pass that is REFUSED - a generator raising
+ * {@link org.eclipse.dirigible.components.intent.parser.IntentValidationException} - can be undone
+ * whole by {@link #rollbackWrittenFiles()} (dirigible #7227). Generation runs the generators in
+ * {@code @Order}, so a check placed in a late generator would otherwise leave the earlier ones'
+ * output in the workspace next to the 422: an authoring mistake refused at generation must cost the
+ * developer nothing, exactly as one refused at parse does.
  */
 public final class IntentGenerationContext {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(IntentGenerationContext.class);
 
     /** Repository path of the target project root, e.g. {@code /users/admin/workspace/my-library}. */
     private final String projectRoot;
@@ -82,6 +97,14 @@ public final class IntentGenerationContext {
 
     /** Bare file names written under {@link #projectRoot} during this generation pass. */
     private final Set<String> writtenFileNames = new LinkedHashSet<>();
+
+    /**
+     * What this pass actually CHANGED, keyed by bare file name: the content the file held before the
+     * pass touched it, or {@code null} when the pass created it. Recorded on the first change of each
+     * file only, and never for a write that turned out to be byte-identical (there is nothing to undo)
+     * - so it is exactly the set {@link #rollbackWrittenFiles()} has to put back.
+     */
+    private final Map<String, byte[]> replacedContent = new LinkedHashMap<>();
 
     /**
      * Non-fatal generation issues (e.g. a piece of glue that could not be emitted because a reference
@@ -140,10 +163,13 @@ public final class IntentGenerationContext {
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         IResource existing = repository.getResource(path);
         if (existing.exists()) {
-            if (!Arrays.equals(existing.getContent(), bytes)) {
+            byte[] previous = existing.getContent();
+            if (!Arrays.equals(previous, bytes)) {
+                journal(fileName, previous);
                 existing.setContent(bytes);
             }
         } else {
+            journal(fileName, null);
             repository.createResource(path, bytes);
         }
         writtenFileNames.add(fileName);
@@ -168,9 +194,53 @@ public final class IntentGenerationContext {
         String path = projectRoot + "/" + fileName;
         IResource existing = repository.getResource(path);
         if (!existing.exists()) {
+            journal(fileName, null);
             repository.createResource(path, content.getBytes(StandardCharsets.UTF_8));
         }
         writtenFileNames.add(fileName);
+    }
+
+    /**
+     * Record the state a file held before this pass first changed it - {@code null} meaning it did not
+     * exist. Only the FIRST change of a file is journaled: the rollback has to restore the state the
+     * pass started from, not the one an earlier generator of the same pass left behind.
+     */
+    private void journal(String fileName, byte[] previous) {
+        if (!replacedContent.containsKey(fileName)) {
+            replacedContent.put(fileName, previous);
+        }
+    }
+
+    /**
+     * Undo every change this pass made at the project root: a file it created is removed, a file it
+     * overwrote gets its previous content back. Used when the pass is refused as a whole - a generator
+     * raising {@link org.eclipse.dirigible.components.intent.parser.IntentValidationException} - so the
+     * 422 leaves the workspace exactly as the developer had it (dirigible #7227), rather than the
+     * partial model set the generators before the failing one had already written.
+     *
+     * <p>
+     * A restore that itself fails is logged and the rest still run: the caller is on its way to
+     * reporting the authoring error, and one file that could not be put back must not hide it.
+     */
+    void rollbackWrittenFiles() {
+        if (dryRun || repository == null || projectRoot == null) {
+            return;
+        }
+        for (Map.Entry<String, byte[]> entry : replacedContent.entrySet()) {
+            String path = projectRoot + "/" + entry.getKey();
+            try {
+                if (entry.getValue() == null) {
+                    repository.removeResource(path);
+                } else {
+                    repository.getResource(path)
+                              .setContent(entry.getValue());
+                }
+            } catch (RuntimeException e) {
+                LOGGER.error("Failed to roll back intent output [{}]", LoggedValue.of(path), e);
+            }
+        }
+        replacedContent.clear();
+        writtenFileNames.clear();
     }
 
     /**

@@ -130,6 +130,9 @@ class IntentEngineIT extends IntegrationTest {
     private static final String DEPENDENCY_PROJECT = "quotations";
     private static final String DEPENDENCY_PROJECT_PATH =
             IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/" + DEPENDENCY_PROJECT;
+    /** A third project holding only a hand-written owner {@code .model} - see #7227's test. */
+    private static final String OWNER_PROJECT_PATH = IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/partners";
+
     private static final String DEPENDENCY_GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + DEPENDENCY_PROJECT + "&path=app.intent";
     /**
@@ -4358,6 +4361,87 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("issues", hasItem("entity [A] field [x] has unknown type [nosuchtype]")));
     }
 
+    /**
+     * A GENERATION-time refusal leaves the workspace as it found it (dirigible #7227).
+     *
+     * <p>
+     * The generators run in {@code @Order}, so a check in a late one is reached only after the earlier
+     * ones have written into the project - and the 422 goes straight to the caller, past the
+     * stale-output scrub. The reported case is the cross-model {@code relation.field} check at
+     * {@code @Order(350)}, whose whole justification is that skipping the resolver would leave the BPMN
+     * with a {@code Resolve<...>} service task whose handler nothing generated: the {@code .bpmn} is
+     * written at 300 from the lookup-free resolver convention, which yields that task whether or not
+     * the owner declares the field, so the refusal itself used to leave behind exactly the artefact it
+     * was justified by. Nothing is written now - the state a parse-time refusal leaves.
+     */
+    @Test
+    void a_generation_time_refusal_leaves_no_model_files_behind() {
+        // The owner model has to really exist for the check to be reachable at all: an unresolvable
+        // `uses` is a different refusal, one raised before any owner property list is read. It is
+        // written by hand, in a project of its own, rather than generated from a sibling intent - the
+        // shared dependency project is where the bootstrap test needs a model to be ABSENT, and one
+        // test's owner model is the other test's precondition.
+        repository.createResource(OWNER_PROJECT_PATH + "/partners.model", CROSS_MODEL_OWNER_MODEL.getBytes(StandardCharsets.UTF_8));
+        writeIntent(UNKNOWN_CROSS_MODEL_FIELD_INTENT);
+
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("issues", hasItem(containsString("Mobile"))));
+
+        assertFalse(resource("Send.bpmn").exists(),
+                "the refused pass must leave no .bpmn - the dangling Resolve<...> task is the artefact it exists to prevent");
+        assertFalse(resource("billing.edm").exists(), "nor the .edm an earlier generator had already written");
+        assertFalse(resource("billing.model").exists(), "nor its .model twin");
+        assertFalse(resource("billing.settings").exists(), "nor the settings the pass scaffolded on its way in");
+    }
+
+    /** The owner half as its own project generated it: a Customer with an e-mail and no mobile. */
+    private static final String CROSS_MODEL_OWNER_MODEL = """
+            {
+              "model": {
+                "entities": [
+                  {
+                    "name": "Customer",
+                    "perspectiveName": "Customer",
+                    "dataName": "PARTNERS_CUSTOMER",
+                    "properties": [
+                      { "name": "Id", "dataName": "ID", "dataType": "INTEGER", "dataPrimaryKey": "true" },
+                      { "name": "Name", "dataName": "NAME", "dataType": "VARCHAR" },
+                      { "name": "Email", "dataName": "EMAIL", "dataType": "VARCHAR" }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+    /** A task form showing a cross-model field the owner model does not declare. */
+    private static final String UNKNOWN_CROSS_MODEL_FIELD_INTENT = """
+            name: billing
+            uses:
+              - { model: partners }
+            entities:
+              - name: Invoice
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string, length: 100 }
+                relations:
+                  - { name: Customer, kind: manyToOne, to: Customer, model: partners, required: true }
+            processes:
+              - name: Send
+                trigger: { onCreate: Invoice }
+                steps:
+                  - { name: send, kind: userTask, args: { assignee: clerk, form: SendInvoice } }
+                  - { name: done, kind: end }
+            forms:
+              - name: SendInvoice
+                forEntity: Invoice
+                fields: [number, Customer, Customer.mobile]
+                actions: [send]
+            """;
+
     @Test
     void calculated_field_action_emits_an_imports_backed_callout_in_the_repository() {
         // A field can be computed server-side by a hand-written CalculatedField action instead of a
@@ -5723,6 +5807,9 @@ class IntentEngineIT extends IntegrationTest {
         }
         if (repository.hasCollection(DEPENDENCY_PROJECT_PATH)) {
             repository.removeCollection(DEPENDENCY_PROJECT_PATH);
+        }
+        if (repository.hasCollection(OWNER_PROJECT_PATH)) {
+            repository.removeCollection(OWNER_PROJECT_PATH);
         }
     }
 }
