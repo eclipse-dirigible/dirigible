@@ -384,6 +384,55 @@ class GlueSchedulesTest {
 
     @SuppressWarnings("unchecked")
     @Test
+    void theRunPeriodRangesOverTheDateFieldNotAnotherNowAssignment() {
+        // Issue #7229: parser and generator must not each decide "the date this run writes". The parser
+        // pins the single `date`-typed default it chose; the generator ranges over exactly that. Here a
+        // second default assigns `now` to a `timestamp` field, which renders as the same LocalDate.now()
+        // the `date` field does - so a generator that re-derived the run date by string-matching that
+        // expression counted two candidates and dropped a schedule the parser had accepted.
+        String yaml = """
+                name: purchases
+                entities:
+                  - name: BillTemplate
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                  - name: Supplier
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: PurchaseInvoice
+                    fields:
+                      - { name: id,        type: integer,   primaryKey: true, generated: true }
+                      - { name: date,      type: date }
+                      - { name: createdAt, type: timestamp }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: BillTemplate
+                    generate:
+                      to: PurchaseInvoice
+                      unique: [Supplier, { run: month }]
+                      map:
+                        Supplier: Supplier
+                      defaults:
+                        date: now
+                        createdAt: now
+                """;
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(IntentParser.parse(yaml))
+                                                   .get(0);
+
+        assertEquals(true, s.get("hasGenUnique"));
+        List<Map<String, Object>> unique = (List<Map<String, Object>>) s.get("genUnique");
+        assertEquals(Map.of("property", "Supplier", "expr", "entity.Supplier"), unique.get(0));
+        assertEquals(Map.of("kind", "range", "property", "Date", "lower", "java.time.LocalDate.now().withDayOfMonth(1)", "upper",
+                "java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1).minusDays(1)"), unique.get(1));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
     void aQuarterlyRunPeriodRangesOverTheIsoQuarter() {
         String yaml = """
                 name: purchases

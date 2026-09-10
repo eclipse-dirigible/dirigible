@@ -1257,7 +1257,14 @@ public final class IntentParser {
         if (candidates.size() > 1) {
             issues.add("schedule [" + name + "] generate unique declares run [" + period + "] and this generate assigns more than one date"
                     + " from now (" + String.join(", ", candidates) + ") - name the one the period ranges over with of:");
+            return;
         }
+        // Pin the single resolved date onto `of` so the generator ranges the run period over exactly the
+        // property this type check chose. Parser and generator must not each define "the date assigned
+        // from now" (issue #7229): the generator sees only rendered expressions, and `now` on a
+        // timestamp field renders as the same LocalDate.now() a `date` field does, so a string scan there
+        // counted a field this check excludes and refused a valid generate with a misleading message.
+        entry.setOf(candidates.get(0));
     }
 
     /**
