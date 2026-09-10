@@ -1051,6 +1051,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             if ((${check.guard}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
                 throw new ValidationException("${check.message}");
             }
+#elseif($check.kind == "forbidWhen")
+            // A conditional refusal (intent `checks: forbidWhen`), gated on the status it applies at -
+            // the reject-twin of requiredWhen. A condition term may read one to-one relation away.
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            if (${check.guard}) {
+                throw new ValidationException("${check.message}");
+            }
 #elseif($check.kind == "itemsSumEqual")
             java.math.BigDecimal sum${check.overA} = java.math.BigDecimal.ZERO;
             java.math.BigDecimal sum${check.overB} = java.math.BigDecimal.ZERO;

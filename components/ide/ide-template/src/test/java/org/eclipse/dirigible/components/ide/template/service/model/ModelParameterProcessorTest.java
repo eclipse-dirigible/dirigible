@@ -311,18 +311,25 @@ class ModelParameterProcessorTest {
         Map<String, Object> gated = new LinkedHashMap<>();
         gated.put("kind", "requiredWhen");
         gated.put("status", "4");
+        // A forbidWhen splits by its gate exactly as requiredWhen does: ungated to the row checks,
+        // gated to the document checks.
+        Map<String, Object> refusal = new LinkedHashMap<>();
+        refusal.put("kind", "forbidWhen");
+        Map<String, Object> gatedRefusal = new LinkedHashMap<>();
+        gatedRefusal.put("kind", "forbidWhen");
+        gatedRefusal.put("status", "4");
         Map<String, Object> entity = entity("Invoice", "Invoices", property("Total", "DECIMAL"));
-        entity.put("checks", List.of(row, guard, document, conditional, gated));
+        entity.put("checks", List.of(row, guard, document, conditional, gated, refusal, gatedRefusal));
 
         ModelParameterProcessor.process(model(entity), parameters());
 
-        // An ungated requiredWhen holds on every user write, so it joins the row checks the REST
-        // surfaces enforce; one naming a status is the repository's, like every other gated check.
-        assertEquals(2, ModelValues.asList(entity.get("rowChecks"))
+        // An ungated requiredWhen / forbidWhen holds on every user write, so it joins the row checks the
+        // REST surfaces enforce; one naming a status is the repository's, like every other gated check.
+        assertEquals(3, ModelValues.asList(entity.get("rowChecks"))
                                    .size());
         assertEquals(1, ModelValues.asList(entity.get("guardChecks"))
                                    .size());
-        assertEquals(2, ModelValues.asList(entity.get("documentChecks"))
+        assertEquals(3, ModelValues.asList(entity.get("documentChecks"))
                                    .size());
     }
 

@@ -187,6 +187,12 @@ final class StatusSymbolResolver {
                 String subject = "entity [" + entityName + "] check [" + text(check, "kind") + "]";
                 putResolved(check, "status", status, subject + " status");
                 putResolved(check, "setStatus", status, subject + " setStatus");
+                // A forbidWhen condition may test a value one to-one relation away (its one reach beyond
+                // requiredWhen, dirigible #7275), including that relation target's STATUS - seeded on the
+                // target, not on this entity - so its name resolves against the TARGET's nomenclature.
+                // Run first: it leaves the resolved term with a numeric right-hand side, which the
+                // record-local rewrite below then passes over.
+                rewriteRelationWhen(entityName, check, subject + " when");
                 // A requiredWhen condition may be about the status itself ("required once ISSUED"), so
                 // it resolves like every other guard - the terms about other properties pass through.
                 rewriteWhen(check, statusRelation, status, subject + " when");
@@ -544,6 +550,58 @@ final class StatusSymbolResolver {
         } else if (value instanceof String expression) {
             put(owner, "when", rewriteExpression(expression, statusRelation, target, subject));
         }
+    }
+
+    /**
+     * One comparison of a {@code forbidWhen} condition that reaches across a relation:
+     * {@code <Relation>.<Status> == <NAME>}. Only the bare-word right-hand side is a candidate - a
+     * numeric id is already resolved, and a quoted string is an ordinary value.
+     */
+    private static final Pattern RELATION_TERM = Pattern.compile("\\s*([A-Za-z_]\\w*)\\.([A-Za-z_]\\w*)\\s*(==|!=)\\s*([A-Za-z_]\\w*)\\s*");
+
+    /**
+     * Resolve a status named in a {@code forbidWhen} condition that tests a one-hop
+     * {@code Relation.field} (dirigible #7275) - against the RELATION TARGET's nomenclature, since the
+     * target's status is seeded on the target and the record-local {@link #rewriteWhen} would look it
+     * up in the wrong (this entity's) nomenclature. A term whose field is not the target's status
+     * relation, or whose right-hand side is not a bare word, is left as authored.
+     */
+    @SuppressWarnings("unchecked")
+    private void rewriteRelationWhen(String entityName, Map<?, ?> check, String subject) {
+        Object value = check.get("when");
+        if (value instanceof List<?> list) {
+            List<Object> mutable = (List<Object>) list;
+            for (int i = 0; i < mutable.size(); i++) {
+                if (mutable.get(i) instanceof String term) {
+                    mutable.set(i, rewriteRelationTerm(entityName, term, subject));
+                }
+            }
+        } else if (value instanceof String term) {
+            put(check, "when", rewriteRelationTerm(entityName, term, subject));
+        }
+    }
+
+    private String rewriteRelationTerm(String entityName, String term, String subject) {
+        Matcher matcher = RELATION_TERM.matcher(term);
+        if (!matcher.matches()) {
+            return term; // a bare-property term, or a numeric / quoted right-hand side: nothing to do here
+        }
+        Map<?, ?> relation = toOneRelation(entityName, matcher.group(1));
+        if (relation == null) {
+            return term; // not a relation of this entity - the parser reports the unresolved path
+        }
+        String targetEntity = text(relation, "to");
+        String targetStatus = statusRelationName(targetEntity);
+        if (targetStatus == null || !targetStatus.equalsIgnoreCase(matcher.group(2))) {
+            // Not the target's status (an ordinary value), or the target is owned by another model and
+            // its nomenclature is not readable here - left as authored (a cross-model status name is then
+            // refused by the parser, which asks for the numeric seed id).
+            return term;
+        }
+        // The status is seeded on the TARGET, so its name resolves against the target's own nomenclature
+        // (the `to:` of the target's `function: EntityStatus` relation), not this entity's.
+        Integer id = resolveSymbol(matcher.group(4), statusOf(targetEntity), subject);
+        return id == null ? term : matcher.group(1) + "." + matcher.group(2) + " " + matcher.group(3) + " " + id;
     }
 
     /**

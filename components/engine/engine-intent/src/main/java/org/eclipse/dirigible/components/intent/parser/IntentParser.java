@@ -4791,6 +4791,10 @@ public final class IntentParser {
             validateRequiredWhen(entity, check, byName, subject, issues);
             return;
         }
+        if ("forbidWhen".equals(kind)) {
+            validateForbidWhen(entity, check, byName, subject, issues);
+            return;
+        }
         if ("exactlyOne".equals(kind)) {
             if (check.getFields() == null || check.getFields()
                                                   .size() < 2) {
@@ -4850,7 +4854,100 @@ public final class IntentParser {
             }
             return;
         }
-        issues.add(subject + " has unknown kind - expected exactlyOne, compare, requiredWhen, guard, itemsSumEqual or itemsMin");
+        issues.add(
+                subject + " has unknown kind - expected exactlyOne, compare, requiredWhen, forbidWhen, guard, itemsSumEqual or itemsMin");
+    }
+
+    /**
+     * A {@code forbidWhen} check: the reject-twin of {@code requiredWhen} (dirigible #7275). It rejects
+     * a write while its condition holds - "a payment allocation cannot be added to an already PAID
+     * invoice" - which no other kind could express: {@code requiredWhen} requires a value, {@code
+     * immutableWhen} blocks EDITING an existing record and reads the record's OWN status, and a
+     * composition child has no status of its own. It carries no value, only the condition and the
+     * message.
+     *
+     * <p>
+     * Its one reach beyond {@code requiredWhen} is that a condition term may name a one-hop
+     * {@code Relation.field} - walked with the same {@link ResolvePathSupport} resolver
+     * {@code requiredWhen}'s {@code field:} uses, so a child can test its parent's status and a
+     * cross-model to-one reads too. Everything else mirrors {@code requiredWhen}: the {@code status}
+     * gate is optional (no gate = every user write, a gate = the repository at that status), the
+     * condition is the closed equality vocabulary of {@link CheckSupport}, and a status name resolves
+     * to its seed id.
+     */
+    private static void validateForbidWhen(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
+            String subject, List<String> issues) {
+        if (check.getWhen() == null) {
+            issues.add(subject + " requires `when`: the condition under which the write is rejected, e.g."
+                    + " `when: \"SalesInvoice.Status == PAID\"`");
+        } else {
+            List<String> terms = CheckSupport.terms(check.getWhen());
+            if (terms.isEmpty()) {
+                issues.add(subject + " when must not be an empty list");
+            }
+            for (String term : terms) {
+                validateForbidWhenTerm(entity, byName, term, subject, issues);
+            }
+        }
+        if (check.getStatus() != null && entityStatusRelationOf(entity) == null) {
+            issues.add(subject + " carries a `status` gate but [" + entity.getName()
+                    + "] declares no `function: EntityStatus` relation to read it from");
+        }
+    }
+
+    /**
+     * One comparison of a {@code forbidWhen} condition. A bare property is read off the record and is
+     * validated exactly as a {@code requiredWhen} term. A one-hop {@code Relation.field} - the one
+     * added reach - is walked with the shared resolver: it must resolve, stay a single hop (v1), and,
+     * when its terminal type is known here, be a guardable type the literal is a value of. A
+     * cross-model terminal's type is not known at parse time (the owner model is not loaded) and is
+     * trusted, as every other cross-model reference is.
+     */
+    private static void validateForbidWhenTerm(EntityIntent entity, java.util.Map<String, EntityIntent> byName, String term, String subject,
+            List<String> issues) {
+        CheckSupport.Comparison comparison = CheckSupport.parse(term);
+        if (comparison == null) {
+            issues.add(subject + " when [" + term + "] must be `<Property|Relation.field> ==|!= <literal>` - a number, a status name,"
+                    + " a quoted string or a bare word");
+            return;
+        }
+        String property = comparison.property();
+        if (!ResolvePathSupport.isPath(property)) {
+            // A record-local property: identical to a requiredWhen condition, read off the row.
+            validateRequiredWhenTerm(entity, byName, term, subject, issues);
+            return;
+        }
+        // The condition grammar (CheckSupport.TERM) admits at most one relation segment, so a longer
+        // walk never parses - the v1 one-hop scope is enforced by the grammar, not re-checked here.
+        ResolvePathSupport.Path path = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null)
+                                                         .resolve(property);
+        if (!path.resolved()) {
+            issues.add(subject + " when " + path.failure());
+            return;
+        }
+        String type = path.relationTerminal() ? "integer" : path.terminalType();
+        if (type == null) {
+            // A cross-model terminal's type is not known here (its owner model is not loaded). A numeric
+            // or quoted literal is unambiguous; a bare word is refused, because a cross-model status name
+            // cannot be resolved to its seed id and would silently compare as a string.
+            String literal = comparison.literal();
+            boolean unambiguous = literal.startsWith("'") || literal.startsWith("\"") || literal.matches("-?\\d+") || "true".equals(literal)
+                    || "false".equals(literal);
+            if (!unambiguous) {
+                issues.add(subject + " when [" + term + "] compares a value across a cross-model relation with the bare word [" + literal
+                        + "] - a cross-model reference must use a numeric seed id or a quoted string");
+            }
+            return;
+        }
+        if (!path.relationTerminal() && !CheckSupport.GUARD_TYPES.contains(type)) {
+            issues.add(subject + " when [" + term + "] compares [" + property + "], which is a [" + type
+                    + "] - a condition compares a string, an integer or a boolean, the types an equality is exact on");
+            return;
+        }
+        if (CheckSupport.javaLiteral(type, comparison.literal()) == null) {
+            issues.add(subject + " when [" + term + "] compares [" + property + "], a [" + type + "], with [" + comparison.literal()
+                    + "], which is not a value of that type");
+        }
     }
 
     /**

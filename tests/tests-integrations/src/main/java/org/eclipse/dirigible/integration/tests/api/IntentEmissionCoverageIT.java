@@ -73,28 +73,29 @@ import ch.qos.logback.classic.Level;
  * declared {@code locksWithMaster: false} keeps its writes), {@code immutableInPeriod} (the same
  * 409 keyed on a period register's status instead - a record booked into an open period stops being
  * writable when the period around it closes, a create into or a move into a closed one is refused,
- * and a date no period covers stays writable), {@code checks} (exactlyOne / requiredWhen / itemsMin
- * / itemsSumEqual - including that a document gate counts the document's LINES and not a sibling
- * composition child such as its printed copy, and that a requiredWhen reaches its value through a
- * relation and lands in the repository or in every controller depending on whether it names a gate
- * status), {@code hierarchy}/{@code leafOnly}, {@code multilingual} (the read-time overlay on an
- * entity read, and its SQL counterpart on a report grouping by that nomenclature - the two must
- * agree on the same value in the same language), seed rows carrying a RELATION column, aggregate
- * totals, first-class {@code number:} stamping from an authored {@code .numbers} series
- * declaration, {@code transitions} (the guarded on-demand status flip: allowed-status 200,
- * wrong-status/guard 409), {@code lifecycle} (the declarative state machine: the graph walked
- * through its transitions, an unmodeled flip and a create filed mid-lifecycle both refused through
- * the plain REST surface no transition guard covers), {@code postings} with {@code reverses} (post
- * on a transition; red-storno reversal on void - negated amounts, storno link, fail-soft), the
- * {@code notify} block with {@code attach: print} (send the document itself by e-mail - on a
- * transition and on a process step; the fail-soft contract), {@code calculatedActionOnCreate} on a
- * to-one RELATION (the FK resolved server-side by a hand-written {@code custom/} action: assigned
- * in the repository, and at runtime both defaulted when omitted and left alone when the caller
- * supplied one), the event-driven {@code generates} (posting the source mints the whole document
- * with nobody clicking, and a click afterwards returns that same document - the at-most-once
- * back-reference guard), and the personal (my) surface
- * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
- * fields).
+ * and a date no period covers stays writable), {@code checks} (exactlyOne / requiredWhen /
+ * forbidWhen / itemsMin / itemsSumEqual - including that a document gate counts the document's
+ * LINES and not a sibling composition child such as its printed copy, that a requiredWhen reaches
+ * its value through a relation and lands in the repository or in every controller depending on
+ * whether it names a gate status, and that a forbidWhen - the reject-twin - reads a value one hop
+ * away on the PARENT to refuse a write on the child), {@code hierarchy}/{@code leafOnly},
+ * {@code multilingual} (the read-time overlay on an entity read, and its SQL counterpart on a
+ * report grouping by that nomenclature - the two must agree on the same value in the same
+ * language), seed rows carrying a RELATION column, aggregate totals, first-class {@code number:}
+ * stamping from an authored {@code .numbers} series declaration, {@code transitions} (the guarded
+ * on-demand status flip: allowed-status 200, wrong-status/guard 409), {@code lifecycle} (the
+ * declarative state machine: the graph walked through its transitions, an unmodeled flip and a
+ * create filed mid-lifecycle both refused through the plain REST surface no transition guard
+ * covers), {@code postings} with {@code reverses} (post on a transition; red-storno reversal on
+ * void - negated amounts, storno link, fail-soft), the {@code notify} block with
+ * {@code attach: print} (send the document itself by e-mail - on a transition and on a process
+ * step; the fail-soft contract), {@code calculatedActionOnCreate} on a to-one RELATION (the FK
+ * resolved server-side by a hand-written {@code custom/} action: assigned in the repository, and at
+ * runtime both defaulted when omitted and left alone when the caller supplied one), the
+ * event-driven {@code generates} (posting the source mints the whole document with nobody clicking,
+ * and a click afterwards returns that same document - the at-most-once back-reference guard), and
+ * the personal (my) surface ({@code identity}/{@code personal}/{@code sensitive}: scoped reads,
+ * forced owner, stripped fields).
  */
 @Tag("slow")
 class IntentEmissionCoverageIT extends IntegrationTest {
@@ -313,6 +314,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - name: EntryLine
                 checks:
                   - { kind: exactlyOne, fields: [debit, credit], message: "Exactly one of debit/credit" }
+                  # forbidWhen (#7275), the reject-twin of requiredWhen over a one-hop relation: a line
+                  # cannot be added to or edited on an Entry that is already POSTED. The condition reads
+                  # the value one hop away on the PARENT (Entry.Status), and POSTED resolves against the
+                  # parent's nomenclature (EntryStatus), not the line's own. Ungated, so every controller.
+                  - { kind: forbidWhen, when: "Entry.Status == POSTED",
+                      message: "Cannot change the lines of a posted entry" }
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: debit,  type: decimal }
@@ -2028,6 +2035,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String lineController = contentOf("gen/emission/api/entry/EntryLineController.java");
         assertTrue(lineController.contains("Exactly one of debit/credit"),
                 "checks: exactlyOne must emit its authored message into the row-level REST validation");
+        // forbidWhen (#7275), the reject-twin of requiredWhen: an ungated condition is a row check, so it
+        // lands in the controller's validate(); its one reach beyond requiredWhen is that a term reads a
+        // value one hop away, so the child loads its PARENT Entry by FK and compares the parent's status
+        // FK to the seed id the parent's nomenclature resolves POSTED to (2).
+        assertTrue(
+                lineController.contains("Cannot change the lines of a posted entry")
+                        && lineController.contains("EntryRepository().findById(hop0Fk)")
+                        && lineController.contains("java.util.Objects.equals((hop0 == null ? null : hop0.Status), 2)"),
+                "checks: forbidWhen must load the parent hop and reject the write while the parent's status holds, got: " + lineController);
+        assertFalse(contentOf("gen/emission/data/entry/EntryLineRepository.java").contains("Cannot change the lines of a posted entry"),
+                "an ungated forbidWhen is a row check, not the repository's - a gate it does not carry cannot be tested there");
         // #6695: the master's immutability reaches its LINES. A child declares no immutability of its
         // own, yet its writes recompute the master's totals - so without this the lock had an
         // unguarded back door through the child's controller, which the UI never offers but REST did.

@@ -223,10 +223,10 @@ final class ModelParameterProcessor {
                 rowChecks.add(check);
             } else if ("guard".equals(kind)) {
                 guardChecks.add(check);
-            } else if ("requiredWhen".equals(kind)) {
-                // A conditionally required value is row-level unless it names the status it is needed
-                // at: without a gate it must hold on every user write, with one it is the repository's
-                // business, like every other gated check.
+            } else if ("requiredWhen".equals(kind) || "forbidWhen".equals(kind)) {
+                // A conditionally required value, or its reject-twin a conditional refusal, is row-level
+                // unless it names the status it applies at: without a gate it must hold on every user
+                // write, with one it is the repository's business, like every other gated check.
                 (str(check, "status") == null || str(check, "status").isEmpty() ? rowChecks : documentChecks).add(check);
             } else {
                 documentChecks.add(check);

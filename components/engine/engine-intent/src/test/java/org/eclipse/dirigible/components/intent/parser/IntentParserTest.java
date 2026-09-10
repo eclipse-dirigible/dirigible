@@ -980,6 +980,89 @@ class IntentParserTest {
     }
 
     @Test
+    void conditionalRefusalsParseAndValidate() {
+        String yaml = """
+                name: sales
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 7, name: PAID }
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: forbidWhen, when: "reference == 'LOCKED'", status: PAID,
+                          message: "A locked invoice cannot be re-sent" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: reference, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: DRAFT }
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: SalesInvoiceCustomerPayment
+                    checks:
+                      - { kind: forbidWhen, when: "SalesInvoice.Status == PAID",
+                          message: "Cannot add a payment to a fully paid invoice" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, required: true, composition: true }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        // The condition tests the parent's status one hop away - the reject-twin's one added reach - and
+        // the PAID name resolves against the PARENT's nomenclature (InvoiceStatus), not the child's.
+        assertEquals("SalesInvoice.Status == 7", model.getEntities()
+                                                      .get(3)
+                                                      .getChecks()
+                                                      .get(0)
+                                                      .getWhen());
+
+        // A status the parent's nomenclature does not seed is refused, naming the numeric fallback.
+        String unknownStatus = yaml.replace("SalesInvoice.Status == PAID", "SalesInvoice.Status == SETTLED");
+        assertForbidWhenIssue(unknownStatus, "not a seeded status of [InvoiceStatus]");
+
+        // The value is one hop only in v1 - the condition grammar admits a single relation segment, so a
+        // longer walk does not even parse as a condition.
+        String twoHops = yaml.replace("SalesInvoice.Status == PAID", "SalesInvoice.Customer.name == 'x'");
+        assertForbidWhenIssue(twoHops, "must be `<Property|Relation.field> ==|!= <literal>`");
+
+        // A relation field the target does not declare does not resolve.
+        String unknownField = yaml.replace("SalesInvoice.Status == PAID", "SalesInvoice.Total == 7");
+        assertForbidWhenIssue(unknownField, "has no field or to-one relation [Total]");
+
+        // A condition the generator cannot compile would forbid every write, so it is a parse error.
+        String malformed = yaml.replace("reference == 'LOCKED'", "reference is locked");
+        assertForbidWhenIssue(malformed, "must be `<Property|Relation.field> ==|!= <literal>`");
+
+        // The condition is mandatory - a forbidWhen with no `when` forbids nothing or everything.
+        String noWhen = yaml.replace("when: \"reference == 'LOCKED'\", ", "");
+        assertForbidWhenIssue(noWhen, "requires `when`");
+
+        // A gate needs a status relation to read it from.
+        String gatedNoStatus = yaml.replace("when: \"SalesInvoice.Status == PAID\",", "when: \"amount == 0\", status: 1,");
+        assertForbidWhenIssue(gatedNoStatus, "declares no `function: EntityStatus` relation");
+    }
+
+    private static void assertForbidWhenIssue(String yaml, String expected) {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(expected)),
+                "expected an issue containing [" + expected + "], got: " + ex.getIssues());
+    }
+
+    @Test
     void hierarchyAndLeafOnlyParse() {
         String yaml = """
                 name: ledger

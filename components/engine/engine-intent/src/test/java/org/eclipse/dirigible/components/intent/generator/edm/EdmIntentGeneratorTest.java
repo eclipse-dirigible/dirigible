@@ -1255,6 +1255,74 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * The reject-twin of {@code requiredWhen} (dirigible #7275): a {@code forbidWhen} carries only the
+     * condition compiled to a Java boolean, and - its one reach beyond {@code requiredWhen} - a
+     * condition term may test a value one to-one relation away, whose hop the reader must load rides
+     * along as {@code pathLoads} exactly as a conditional requirement's VALUE hop does. A gated one
+     * carries the status property; an ungated one holds on every user write.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void conditionalRefusalsEmitTheirGuardAndTheHopsTheConditionReadsThrough() {
+        String yaml = """
+                name: sales
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 7, name: PAID }
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: forbidWhen, when: "reference == 'LOCKED'", status: PAID,
+                          message: "A locked invoice cannot be re-sent" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: reference, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: DRAFT }
+                  - name: SalesInvoiceCustomerPayment
+                    checks:
+                      - { kind: forbidWhen, when: "SalesInvoice.Status == PAID",
+                          message: "Cannot add a payment to a fully paid invoice" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, required: true, composition: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+
+        // The child's condition reads its parent's status one hop away: the guard compares the loaded
+        // hop's EntityStatus FK to the PAID seed id, and the hop rides along as a pathLoad.
+        Map<String, Object> overHop =
+                ((List<Map<String, Object>>) entityByName(entities(model), "SalesInvoiceCustomerPayment").get("checks")).get(0);
+        assertEquals("java.util.Objects.equals((hop0 == null ? null : hop0.Status), 7)", overHop.get("guard"));
+        assertNull(overHop.get("valueExpression")); // forbidWhen carries only the condition
+        List<Map<String, Object>> loads = (List<Map<String, Object>>) overHop.get("pathLoads");
+        assertEquals("hop0", loads.get(0)
+                                  .get("local"));
+        assertEquals("entity.SalesInvoice", loads.get(0)
+                                                 .get("sourceExpression"));
+        assertEquals("SalesInvoice", loads.get(0)
+                                          .get("entity"));
+        assertNull(overHop.get("status")); // ungated: holds on every user write
+
+        // A record-local, gated forbidWhen renders against the field's own type and carries the gate.
+        Map<String, Object> gated = ((List<Map<String, Object>>) entityByName(entities(model), "SalesInvoice").get("checks")).get(0);
+        assertEquals("java.util.Objects.equals(entity.Reference, \"LOCKED\")", gated.get("guard"));
+        assertNull(gated.get("pathLoads"));
+        assertEquals("7", gated.get("status"));
+        assertEquals("Status", gated.get("statusProperty"));
+    }
+
+    /**
      * A {@code compare} check reaches the REST templates as the two PascalCased properties plus the
      * Java comparison operator and the family flag - the template must not re-derive either, and the
      * flag is what decides between {@code compareTo} (temporals) and a {@code BigDecimal} comparison

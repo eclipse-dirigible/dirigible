@@ -36,12 +36,15 @@ import java.util.regex.Pattern;
 public final class CheckSupport {
 
     /**
-     * One comparison of a condition: a property of the record against a literal - a number, a quoted
-     * string, a bare word (a status name is already its seed id here, resolved before the typed
-     * mapping) or a boolean.
+     * One comparison of a condition: a property against a literal - a number, a quoted string, a bare
+     * word (a status name is already its seed id here, resolved before the typed mapping) or a boolean.
+     * The property is the record's own field, or - for a {@code forbidWhen} condition, the one kind
+     * that reads across a relation (dirigible #7275) - a one-hop {@code Relation.field}; a
+     * {@code requiredWhen} condition still refuses a dotted property at term validation, so its grammar
+     * is unchanged.
      */
     public static final Pattern TERM =
-            Pattern.compile("\\s*(\\w+)\\s*(==|!=)\\s*('[^']*'|\"[^\"]*\"|-?\\d+|[A-Za-z_][A-Za-z0-9_\\-]*)\\s*");
+            Pattern.compile("\\s*(\\w+(?:\\.\\w+)?)\\s*(==|!=)\\s*('[^']*'|\"[^\"]*\"|-?\\d+|[A-Za-z_][A-Za-z0-9_\\-]*)\\s*");
 
     /** The field types a condition may compare - those with an exact, type-safe equality. */
     public static final Set<String> GUARD_TYPES = Set.of("string", "text", "integer", "int", "long", "boolean");

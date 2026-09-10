@@ -93,6 +93,14 @@ public final class ResolvePathSupport {
         public boolean resolved() {
             return failure == null;
         }
+
+        /**
+         * @return whether the terminal segment is a to-one relation - its foreign key is then the value
+         *         compared (an EntityStatus FK against a seed id), rather than a plain field's value
+         */
+        public boolean relationTerminal() {
+            return RELATION_TERMINAL.equals(terminalType);
+        }
     }
 
     /**

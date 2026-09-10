@@ -629,6 +629,19 @@ public class ${name}MyController {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.message}");
             }
         }
+#elseif($check.kind == "forbidWhen")
+        // Row-level check (intent `checks: forbidWhen`): reject the write while the condition holds - the
+        // reject-twin of requiredWhen. Ungated, so it holds on every user write; a condition term may
+        // read one to-one relation away, whose record is loaded first.
+        {
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            if (${check.guard}) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.message}");
+            }
+        }
 #elseif($check.kind == "compare")
 ## Two values of the SAME row, compared (intent `checks: compare`). A comparison is about two values
 ## that exist, so an absent operand is not a violation - requiredness is its own declaration. Numbers

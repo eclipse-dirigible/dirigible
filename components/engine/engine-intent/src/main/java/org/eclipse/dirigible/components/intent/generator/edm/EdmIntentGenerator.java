@@ -2204,30 +2204,30 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     continue; // the parser already reported it
                 }
                 checkMap.put("guard", guard);
-                List<Map<String, Object>> pathLoads = new ArrayList<>();
-                for (ResolvePathSupport.Hop hop : walker.hops()) {
-                    Map<String, Object> load = new LinkedHashMap<>();
-                    load.put("local", hop.local());
-                    load.put("sourceExpression", hop.sourceExpression());
-                    load.put("entity", hop.entity());
-                    load.put("perspective", hop.perspective());
-                    load.put("crossModel", hop.crossModel());
-                    load.put("targetModel", hop.targetModel());
-                    pathLoads.add(load);
-                }
-                if (!pathLoads.isEmpty()) {
-                    checkMap.put("pathLoads", pathLoads);
-                }
+                emitPathLoads(walker, checkMap);
                 // The gate is optional here: without one the rule holds on every user write (the REST
                 // surfaces enforce it, like exactlyOne), with one it is enforced by the repository when
                 // the record is persisted carrying that status - the moment the value is finally needed.
-                if (check.getStatus() != null) {
-                    RelationIntent gate = entityStatusRelation(entity);
-                    if (gate == null) {
-                        continue; // the parser already reported it
-                    }
-                    checkMap.put("status", String.valueOf(check.getStatus()));
-                    checkMap.put("statusProperty", IntentNaming.pascalCase(gate.getName()));
+                if (!emitCheckGate(entity, check, checkMap)) {
+                    continue; // the parser already reported it
+                }
+                checkMaps.add(checkMap);
+                continue;
+            }
+            if ("forbidWhen".equals(check.getKind())) {
+                // The reject-twin of requiredWhen (#7275): reject the write while the condition holds,
+                // ANDed like requiredWhen. Its one reach beyond requiredWhen is that a condition term may
+                // name a one-hop Relation.field - resolved through the same walker, whose hops (a child
+                // loading its parent) ride along as pathLoads. It carries no value, only the condition.
+                ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
+                String guard = forbidWhenGuard(entity, byName, walker, check.getWhen());
+                if (guard == null) {
+                    continue; // the parser already reported it
+                }
+                checkMap.put("guard", guard);
+                emitPathLoads(walker, checkMap);
+                if (!emitCheckGate(entity, check, checkMap)) {
+                    continue; // the parser already reported it
                 }
                 checkMaps.add(checkMap);
                 continue;
@@ -2366,6 +2366,110 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     CheckSupport.comparison("entity." + IntentNaming.pascalCase(comparison.property()), comparison.equal(), literal));
         }
         return conditions.isEmpty() ? null : String.join(" && ", conditions);
+    }
+
+    /**
+     * Compiles a {@code forbidWhen} condition into the Java boolean the generated write-guard tests -
+     * the reject-twin of {@link #requiredWhenGuard}. Each term is a record-local property (rendered
+     * exactly as in {@code requiredWhen}) or a one-hop {@code Relation.field} resolved through
+     * {@code walker}, whose hops the caller then emits as {@code pathLoads} so the reader loads the
+     * related record first. A term's literal is rendered against the terminal's declared type - an
+     * EntityStatus FK against its integer seed id, a plain field against its own type; a cross-model
+     * terminal's type is not known here, so it is inferred from the literal's shape (a status name
+     * against it is refused at parse).
+     *
+     * @return the Java expression, or {@code null} when a term does not compile (the parser has already
+     *         reported it, and a condition degrading to {@code true} would forbid every write)
+     */
+    private static String forbidWhenGuard(EntityIntent entity, Map<String, EntityIntent> byName, ResolvePathSupport.Walker walker,
+            Object when) {
+        List<String> conditions = new ArrayList<>();
+        for (String term : CheckSupport.terms(when)) {
+            CheckSupport.Comparison comparison = CheckSupport.parse(term);
+            if (comparison == null) {
+                return null;
+            }
+            String access;
+            String type;
+            if (ResolvePathSupport.isPath(comparison.property())) {
+                ResolvePathSupport.Path path = walker.resolve(comparison.property());
+                if (!path.resolved()) {
+                    return null;
+                }
+                access = path.expression();
+                type = path.relationTerminal() ? "integer" : path.terminalType();
+                if (type == null) {
+                    // A cross-model terminal's type is not known here; trust the literal's shape - the
+                    // parser has already refused a bare word (a status name it cannot resolve), so what
+                    // reaches here is a numeric id, a boolean, or a quoted string.
+                    String value = comparison.literal();
+                    if (value != null && value.matches("-?\\d+")) {
+                        type = "integer";
+                    } else if ("true".equals(value) || "false".equals(value)) {
+                        type = "boolean";
+                    } else {
+                        type = "string";
+                    }
+                }
+            } else {
+                FieldIntent field = fieldOf(entity, comparison.property());
+                RelationIntent relation = field == null ? toOneOf(entity, comparison.property()) : null;
+                if (field == null && relation == null) {
+                    return null;
+                }
+                type = field != null ? field.getType() : relationKeyType(relation, byName);
+                access = "entity." + IntentNaming.pascalCase(comparison.property());
+            }
+            String literal = CheckSupport.javaLiteral(type, comparison.literal());
+            if (literal == null) {
+                return null;
+            }
+            conditions.add(CheckSupport.comparison(access, comparison.equal(), literal));
+        }
+        return conditions.isEmpty() ? null : String.join(" && ", conditions);
+    }
+
+    /**
+     * Emits the hops a check's condition (or value) reads through as its {@code pathLoads} - the
+     * related records the generated reader must load before the guard can evaluate. Shared by
+     * {@code requiredWhen} and {@code forbidWhen}; nothing is emitted for a purely record-local check.
+     */
+    private static void emitPathLoads(ResolvePathSupport.Walker walker, Map<String, Object> checkMap) {
+        List<Map<String, Object>> pathLoads = new ArrayList<>();
+        for (ResolvePathSupport.Hop hop : walker.hops()) {
+            Map<String, Object> load = new LinkedHashMap<>();
+            load.put("local", hop.local());
+            load.put("sourceExpression", hop.sourceExpression());
+            load.put("entity", hop.entity());
+            load.put("perspective", hop.perspective());
+            load.put("crossModel", hop.crossModel());
+            load.put("targetModel", hop.targetModel());
+            pathLoads.add(load);
+        }
+        if (!pathLoads.isEmpty()) {
+            checkMap.put("pathLoads", pathLoads);
+        }
+    }
+
+    /**
+     * Emits the optional {@code status} gate the {@code requiredWhen} / {@code forbidWhen} kinds share:
+     * without one the rule holds on every user write, with one it is the repository's business at that
+     * status. Returns {@code false} when a gate is declared but the entity has no {@code function:
+     * EntityStatus} relation to read it from (the parser has already reported it), so the caller skips
+     * the check.
+     */
+    private static boolean emitCheckGate(EntityIntent entity, org.eclipse.dirigible.components.intent.model.CheckIntent check,
+            Map<String, Object> checkMap) {
+        if (check.getStatus() == null) {
+            return true;
+        }
+        RelationIntent gate = entityStatusRelation(entity);
+        if (gate == null) {
+            return false;
+        }
+        checkMap.put("status", String.valueOf(check.getStatus()));
+        checkMap.put("statusProperty", IntentNaming.pascalCase(gate.getName()));
+        return true;
     }
 
     /** The entity's to-one relation of that name, or {@code null}. */
