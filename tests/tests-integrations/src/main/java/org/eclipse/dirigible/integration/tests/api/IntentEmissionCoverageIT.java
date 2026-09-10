@@ -1949,9 +1949,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(
                 docController.contains("A posted document must name its counterparty")
                         && docController.contains("PartyRepository().findById(hop0Fk)")
-                        && docController.contains("java.util.Objects.equals(entity.Status, 2)"),
+                        && docController.contains("(entity.Status != null && entity.Status.longValue() == 2L)"),
                 "an ungated requiredWhen must be enforced on every REST write, with the status NAME resolved to its seed id, got: "
                         + docController);
+        // A guard on a TO-ONE is compared NUMERICALLY, not with a boxed equality (#7237): the FK
+        // column is typed from the target's key, and a cross-model target's key is only readable from
+        // the owner's .model, where a long is as legal as an integer - Objects.equals(Long, 2) never
+        // holds, so the boxed form would switch the rule off while looking authored. That the guard
+        // actually fires is asserted over REST in assertRuntimeEnforcement.
+        assertFalse(docController.contains("java.util.Objects.equals(entity.Status, 2)"),
+                "a to-one guard must not be a boxed equality against an int literal, got: " + docController);
         assertFalse(contentOf("gen/emission/data/doc/DocRepository.java").contains("A posted document must name its counterparty"),
                 "an ungated check is not the repository's - a gate it does not carry cannot be tested there");
 
@@ -4509,6 +4516,38 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             assertTrue(amount instanceof Number && Math.abs(((Number) amount).doubleValue() - 250.0) < 0.001,
                     "a refused line write must leave the locked document's total untouched, got: " + amount);
         });
+
+        // checks: requiredWhen guarded on a TO-ONE (#7237) - the guard must actually FIRE. The
+        // condition is `Status == POSTED`, and the status FK is compared numerically because its Java
+        // width is not knowable at generation (a cross-model target's key is typed by the owner's
+        // .model, where a long is as legal as an integer). A boxed Objects.equals(Long, 2) never
+        // holds, so the rule would look authored and enforce nothing - which is exactly what a
+        // generated-source assertion alone cannot tell apart from a working guard.
+        AtomicInteger toOneGuarded = new AtomicInteger();
+        restAssuredExecutor.execute(() -> toOneGuarded.set(given().contentType("application/json")
+                                                                  .body("{\"Date\":\"2026-01-18\",\"Amount\":10,\"Party\":1}")
+                                                                  .when()
+                                                                  .post(API + "/doc/DocController")
+                                                                  .then()
+                                                                  .statusCode(200)
+                                                                  .extract()
+                                                                  .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + toOneGuarded.get()
+                                                         + ",\"Date\":\"2026-01-18\",\"Amount\":10,\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/doc/DocController/" + toOneGuarded.get())
+                                                 .then()
+                                                 .statusCode(400));
+        // ...and the same move WITH a counterparty is accepted, so the guard is a condition and not a
+        // plain `required` nobody authored.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + toOneGuarded.get()
+                                                         + ",\"Date\":\"2026-01-18\",\"Amount\":10,\"Status\":2,\"Party\":1}")
+                                                 .when()
+                                                 .put(API + "/doc/DocController/" + toOneGuarded.get())
+                                                 .then()
+                                                 .statusCode(200));
 
         // postings: posting a Doc creates the balanced Entry (async handler - poll)...
         AtomicInteger doc = new AtomicInteger();

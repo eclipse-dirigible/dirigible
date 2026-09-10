@@ -1255,6 +1255,43 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * A guard on a TO-ONE is compared numerically, not with a boxed equality (#7237). The foreign-key
+     * column is typed from the target's key, and for a cross-model target that key is only readable
+     * from the owner's {@code .model}, where a {@code long} is as legal as an {@code integer} - an
+     * {@code Objects.equals(Long, 1)} never holds, so the boxed form would switch the rule off while
+     * looking authored. The condition's other half, a guard on the record's OWN integer field, keeps
+     * the exact boxed equality: its width is declared.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aGuardOnAToOneIsComparedNumericallyBecauseItsKeyWidthIsNotKnownHere() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: requiredWhen, field: reference, when: ["Status == 4", "sentMethod != 1"],
+                          message: "A sent invoice needs a reference" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: sentMethod, type: integer }
+                      - { name: reference, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "SalesInvoice").get("checks");
+        assertEquals("(entity.Status != null && entity.Status.longValue() == 4L)" + " && !java.util.Objects.equals(entity.SentMethod, 1)",
+                checks.get(0)
+                      .get("guard"));
+    }
+
+    /**
      * A {@code compare} check reaches the REST templates as the two PascalCased properties plus the
      * Java comparison operator and the family flag - the template must not re-derive either, and the
      * flag is what decides between {@code compareTo} (temporals) and a {@code BigDecimal} comparison
