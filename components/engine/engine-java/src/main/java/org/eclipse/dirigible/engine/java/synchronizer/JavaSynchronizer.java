@@ -292,17 +292,28 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
                 file.setLifecycle(ArtefactLifecycle.CREATED);
                 file.setError(null);
                 javaFileService.save(file);
-                clearCompilationProblems(file.getLocation());
+                String warning = result.wiringWarnings()
+                                       .get(fqn);
+                if (warning != null) {
+                    // Compiled and wired, but breaks a container rule (today: a bean that is also a
+                    // JavaDelegate). The artefact stays CREATED - it works - yet the entry lands in the
+                    // Problems view at publish, in front of the developer who wrote the annotation,
+                    // rather than only in a WARN whoever runs the process later may or may not read.
+                    recordCompilationProblems(file.getLocation(), List.of(), warning);
+                } else {
+                    clearCompilationProblems(file.getLocation());
+                }
             }
         }
         return true;
     }
 
     /**
-     * Project a file's compile failure onto the Problems view: replace its previous compilation
-     * problems (so resolved errors disappear), then add one entry per structured diagnostic at its
-     * line/column - or a single entry with the formatted message when no positioned diagnostic is
-     * available (e.g. a read failure or a class that compiled but failed to load).
+     * Project a file's compile failure - or a wiring error/warning - onto the Problems view: replace
+     * its previous compilation problems (so resolved ones disappear), then add one entry per structured
+     * diagnostic at its line/column - or a single entry with the formatted message when no positioned
+     * diagnostic is available (e.g. a read failure, a class that compiled but failed to load, or a bean
+     * that broke a container rule).
      */
     private void recordCompilationProblems(String location, List<CompileDiagnostic> diagnostics, String message) {
         try {
