@@ -102,6 +102,14 @@ public final class Process {
     /**
      * Delivers a message event with payload variables to all process instances waiting on a matching
      * intermediate-message catch event. The execution is resumed transactionally.
+     *
+     * @param processInstanceId the instance to correlate the message on
+     * @param messageName the message name declared by the catch event
+     * @param variables the variables to deliver with the message
+     * @throws IllegalArgumentException the expected miss - the instance has ended, is outside the
+     *         current tenant, or is not waiting on a message with this name. Any other runtime
+     *         exception is a real fault (a database or Flowable failure, a permission), so a caller
+     *         that treats the miss as a no-op must still report the rest.
      */
     public static void correlateMessageEvent(String processInstanceId, String messageName, Map<String, Object> variables) {
         BpmFacade.correlateMessageEvent(processInstanceId, messageName, variables);
