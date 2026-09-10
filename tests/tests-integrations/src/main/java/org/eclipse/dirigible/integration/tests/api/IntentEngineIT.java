@@ -1574,8 +1574,15 @@ class IntentEngineIT extends IntegrationTest {
                 wait.contains("ProcessStamps.idFor(carrier.ProcessIds, \"CaseHandling\")")
                         && wait.contains("Process.correlateMessageEvent(instance, \"CaseHandlingAwaitReply\""),
                 "the listener should correlate the catch event's message on THIS process's stamped instance (#6862)");
-        assertTrue(wait.contains("catch (RuntimeException"),
-                "correlation must be fail-soft - an instance not parked on the message is a no-op");
+        // Fail-soft, but not blind (#7230): only the platform's IllegalArgumentException - not parked,
+        // or already ended - is the expected no-op; every other failure leaves an instance that IS
+        // parked here parked forever, and is logged with its throwable.
+        assertTrue(wait.contains("catch (IllegalArgumentException notParked)") && wait.contains("LOG.debug("),
+                "the not-parked miss should be caught by its own type, not by a blanket RuntimeException");
+        assertTrue(wait.contains("catch (RuntimeException failed)") && wait.contains("LOG.warn(\"Could not resume")
+                && wait.contains("failed);"), "any other correlation failure should be logged with the throwable");
+        assertFalse(wait.contains("catch (RuntimeException notParked)"),
+                "the empty catch that treated every failure as not-parked should be gone");
         String loader = codeOf("gen/events/services/LoadCaseHandlingWorkExpire.java");
         assertTrue(loader.contains("class LoadCaseHandlingWorkExpire implements JavaDelegate"),
                 "the expire date loader should be a Flowable JavaDelegate");
@@ -1940,7 +1947,14 @@ class IntentEngineIT extends IntegrationTest {
                 abort.contains("ProcessStamps.idFor(entity.ProcessIds, \"OrderApproval\")")
                         && abort.contains("Process.correlateMessageEvent(instance, \"OrderApprovalAbort\""),
                 "the abort listener should abort ITS OWN instance, not whichever flow stamped the record last (#6862)");
-        assertTrue(abort.contains("catch (RuntimeException"), "correlation must be fail-soft");
+        // Fail-soft, but not blind (#7230): the not-in-scope miss is typed and quiet, anything else is
+        // a flow still running over a record whose status says it is over - logged with its throwable.
+        assertTrue(abort.contains("catch (IllegalArgumentException notAborting)") && abort.contains("LOG.debug("),
+                "the not-in-abort-scope miss should be caught by its own type, not by a blanket RuntimeException");
+        assertTrue(abort.contains("catch (RuntimeException failed)") && abort.contains("LOG.warn(\"Could not abort")
+                && abort.contains("failed);"), "any other correlation failure should be logged with the throwable");
+        assertFalse(abort.contains("catch (RuntimeException notAborting)"),
+                "the empty catch that treated every failure as not-aborting should be gone");
     }
 
     @Test

@@ -310,9 +310,17 @@ public class BpmProviderFlowable implements BpmProvider {
     /**
      * Correlates a message event to the process instance.
      *
+     * The instance not being subscribed to the message is an ordinary outcome for a caller that reacts
+     * to an event the instance may or may not be waiting for - it is reported with the same
+     * {@link IllegalArgumentException} the validator raises for an instance that has already ended, so
+     * that a caller can tell that expected miss apart from a real fault (a broken engine, a wrong
+     * tenant) instead of reading it out of a NullPointerException (#7230).
+     *
      * @param processInstanceId the process instance id
      * @param messageName the name of the event
      * @param variables the variables to be passed with the event
+     * @throws IllegalArgumentException if the instance is not running, is not visible to the current
+     *         tenant, or is not waiting on a message event with this name
      */
     public void correlateMessageEvent(String processInstanceId, String messageName, Map<String, Object> variables) {
         flowableArtefactsValidator.validateProcessInstanceId(processInstanceId);
@@ -324,6 +332,11 @@ public class BpmProviderFlowable implements BpmProvider {
                                             .processInstanceId(processInstanceId)
                                             .executionTenantId(getTenantId())
                                             .singleResult();
+        if (execution == null) {
+            throw new IllegalArgumentException(
+                    "Process instance with id [" + processInstanceId + "] is not waiting on a message event named [" + messageName
+                            + "] - it has no such subscription, or it does not belong to current tenant.");
+        }
 
         runtimeService.messageEventReceived(messageName, execution.getId(), variables);
     }

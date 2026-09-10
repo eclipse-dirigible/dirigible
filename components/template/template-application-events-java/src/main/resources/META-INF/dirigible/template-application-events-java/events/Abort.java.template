@@ -22,7 +22,9 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
  * ProcessIds stamp the trigger listener writes back for THIS process - not the record's single
  * ProcessId, which holds whichever process started last and would abort a stranger's instance once a
  * record is the subject of several flows. Fail-soft: no stamp, no matching parked instance, or an
- * instance already past the abort scope is a no-op, never an error.
+ * instance already past the abort scope is a no-op, never an error - but an abort that fails for any
+ * other reason leaves a flow running over a record whose status says it is over, so it is logged with
+ * its cause rather than swallowed (dirigible #7230).
  *
  * Self-describing MessageHandler (strong-interface style): the destination/kind come from the
  * interface, not an annotation; @Component makes it a managed bean.
@@ -63,9 +65,17 @@ public class ${process}Abort implements MessageHandler {
         }
         try {
             Process.correlateMessageEvent(instance, "${messageName}", java.util.Map.of());
-        } catch (RuntimeException notAborting) {
-            // The instance is not in the abort scope (already ended or never reached it) - a no-op by
-            // the fail-soft glue convention, never an error.
+        } catch (IllegalArgumentException notAborting) {
+            // The one expected miss: the instance is not in the abort scope - already ended, or never
+            // reached the subscription - which the platform reports with exactly this type. A no-op by
+            // the fail-soft glue convention.
+            LOG.debug("${process} instance [{}] was not in the abort scope of \"${messageName}\" when its ${entity} transitioned",
+                    instance, notAborting);
+        } catch (RuntimeException failed) {
+            // Anything else - the abort did not happen, so a flow the record's status says is over is
+            // still running, with its pending user tasks still in someone's inbox. Fail-soft, but never
+            // silent (dirigible #7230).
+            LOG.warn("Could not abort ${process} instance [{}] after its ${entity} transitioned - it is still running", instance, failed);
         }
     }
 
