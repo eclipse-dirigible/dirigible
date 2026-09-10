@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
@@ -117,6 +118,14 @@ public class FormIntentGenerator implements IntentTargetGenerator {
      * colouring uses so the two stay consistent.
      */
     private static final Pattern TERMINAL_STATUS = Pattern.compile("(cancel|reject|declin|void|fail|overdue|insufficient|exhaust)");
+
+    /**
+     * A trigger {@code when} guard that pins one status: {@code <status relation> == <seed id>} (the
+     * symbolic name is already resolved to the id by {@code StatusSymbolResolver}). Only {@code ==} -
+     * that is the single comparison the generated listener's guard enforces
+     * ({@code NotificationSupport.guard}), and an inequality names no entry status anyway.
+     */
+    private static final Pattern STATUS_EQUALITY = Pattern.compile("\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*==\\s*(-?\\d+)\\s*");
 
     @Override
     public String name() {
@@ -315,11 +324,11 @@ public class FormIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The statuses the flow this form belongs to WALKS, by their seeded names: the entry status
-     * ({@code init:} on the entity's status relation) plus every status a step of the owning process
-     * writes ({@code setRelationField: <status relation>} + {@code value:}). Empty when nothing is
-     * known - the form is not a step of any process that writes a status on this entity - which the
-     * caller reads as "no filter", keeping the whole non-terminal nomenclature.
+     * The statuses the flow this form belongs to WALKS, by their seeded names: the status the flow
+     * ENTERS at (see {@link #entryStatus(ProcessIntent, RelationIntent)}) plus every status a step of
+     * the owning process writes ({@code setRelationField: <status relation>} + {@code value:}). Empty
+     * when nothing is known - the form is not a step of any process that writes a status on this entity
+     * - which the caller reads as "no filter", keeping the whole non-terminal nomenclature.
      *
      * <p>
      * The owning process is the one whose {@code userTask} references the form AND whose trigger entity
@@ -338,11 +347,13 @@ public class FormIntentGenerator implements IntentTargetGenerator {
             return Set.of();
         }
         Set<Integer> walked = new HashSet<>();
+        Set<Integer> entries = new HashSet<>();
         for (ProcessIntent process : model.getProcesses()) {
             if (!referencesForm(process, formName) || !entity.getName()
                                                              .equals(TriggerSupport.triggerEntity(process))) {
                 continue;
             }
+            boolean writesStatus = false;
             for (StepIntent step : process.getSteps()) {
                 Map<String, Object> args = step.getArgs();
                 Object relation = args == null ? null : args.get("setRelationField");
@@ -353,16 +364,21 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                 Integer target = statusId(args.get("value"));
                 if (target != null) {
                     walked.add(target);
+                    writesStatus = true;
                 }
+            }
+            if (!writesStatus) {
+                continue; // this process says nothing about the walk, so neither does where it starts
+            }
+            Integer entry = entryStatus(process, statusRel);
+            if (entry != null) {
+                entries.add(entry);
             }
         }
         if (walked.isEmpty()) {
             return Set.of(); // the flow writes no status - it says nothing about the walk
         }
-        Integer init = statusId(statusRel.getInit());
-        if (init != null) {
-            walked.add(init); // the status the document stands at when the flow starts - its first step
-        }
+        walked.addAll(entries);
         Set<String> names = new HashSet<>();
         for (Map.Entry<Integer, String> seeded : LifecycleStages.seededStatuses(model, statusRel.getTo())
                                                                 .entrySet()) {
@@ -371,6 +387,63 @@ public class FormIntentGenerator implements IntentTargetGenerator {
             }
         }
         return names;
+    }
+
+    /**
+     * The status the flow STANDS AT when it starts - its first step, when that is knowable from the
+     * process's own {@code trigger}:
+     * <ul>
+     * <li>a status the trigger's {@code when} guard pins with an equality ({@code Status == ISSUED},
+     * already resolved to the seed id by the parser) - the record cannot enter the flow at any other
+     * status, whichever lifecycle event carries it in;</li>
+     * <li>otherwise the relation's {@code init:} for an {@code onCreate} trigger - the status a freshly
+     * created record stands at;</li>
+     * <li>otherwise {@code null}. A bare {@code onUpdate} / {@code onTransition} flow starts wherever
+     * the record happens to be, and the honest stepper is the one that claims no entry step at all.
+     * </li>
+     * </ul>
+     * Reading {@code init:} for every trigger was the {@code #7085} defect one notch smaller (issue
+     * #7239): a settlement flow triggered {@code onUpdate: Invoice} {@code when: "Status == ISSUED"}
+     * showed DRAFT as its step 1 - a status it never walks - and omitted ISSUED, the one it enters at.
+     *
+     * @param process the owning process
+     * @param statusRel the entity's {@code function: EntityStatus} relation
+     * @return the entry status id, or {@code null} when the trigger does not say
+     */
+    private static Integer entryStatus(ProcessIntent process, RelationIntent statusRel) {
+        Integer guarded = guardedStatus(TriggerSupport.triggerWhen(process), statusRel);
+        if (guarded != null) {
+            return guarded;
+        }
+        return "onCreate".equals(TriggerSupport.triggerKind(process)) ? statusId(statusRel.getInit()) : null;
+    }
+
+    /**
+     * The status a {@code when} guard pins to a single value: {@code <status relation> == <id>}. The
+     * guard may be a list of comparisons - their implicit AND (dirigible #6957) - and any term may be
+     * the status one. An inequality pins nothing (it names the statuses the flow does NOT enter at),
+     * and neither does a comparison on any other field.
+     *
+     * @param when the trigger's {@code when} - a comparison string, a list of them, or {@code null}
+     * @param statusRel the entity's {@code function: EntityStatus} relation
+     * @return the status id the guard pins, or {@code null}
+     */
+    private static Integer guardedStatus(Object when, RelationIntent statusRel) {
+        if (when instanceof List<?> terms) {
+            for (Object term : terms) {
+                Integer status = guardedStatus(term, statusRel);
+                if (status != null) {
+                    return status;
+                }
+            }
+            return null;
+        }
+        if (when == null || statusRel.getName() == null) {
+            return null;
+        }
+        Matcher matcher = STATUS_EQUALITY.matcher(String.valueOf(when));
+        return matcher.matches() && statusRel.getName()
+                                             .equalsIgnoreCase(matcher.group(1)) ? statusId(matcher.group(2)) : null;
     }
 
     /** Whether any {@code userTask} of the process opens this form. */
