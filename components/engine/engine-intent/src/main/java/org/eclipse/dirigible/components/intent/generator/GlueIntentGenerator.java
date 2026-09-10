@@ -4668,31 +4668,27 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * current period exists. That is what makes a re-run on the 14th find what the 1st created, and it
      * is why no hidden period column and no run ledger were introduced.
      *
-     * @param entry the {@code { run: <period> }} entry, with an optional {@code of:} naming the date
+     * @param entry the {@code { run: <period> }} entry, its {@code of:} carrying the date the parser
+     *        resolved and pinned (issue #7229) - authored, or the single {@code date} default it chose
      * @param byProperty the rendered assignment expression per target property
-     * @return the term, or null when the date it would range over is absent or ambiguous (the parser
-     *         reports both; a generation reached by another route drops the schedule rather than
-     *         emitting a guard over the wrong column)
+     * @return the term, or null when {@code of:} is unpinned (an unvalidated model reached by another
+     *         route) or names a property this generate does not assign - either way the schedule is
+     *         dropped rather than a guard emitted over the wrong column
      */
     private static Map<String, Object> runTerm(UniqueKeyIntent entry, Map<String, String> byProperty) {
-        String property = null;
-        if (entry.getOf() != null && !entry.getOf()
-                                           .isBlank()) {
-            String named = IntentNaming.pascalCase(entry.getOf());
-            property = TODAY.equals(byProperty.get(named)) ? named : null;
-        } else {
-            // The date the run writes is the assignment that renders as today - a `month` / `week`
-            // field's `now` renders as its own string shape and is keyed on as an ordinary property.
-            for (Map.Entry<String, String> assignment : byProperty.entrySet()) {
-                if (TODAY.equals(assignment.getValue())) {
-                    if (property != null) {
-                        return null;
-                    }
-                    property = assignment.getKey();
-                }
-            }
+        // The date the run writes is the property the parser PINNED onto `of` (issue #7229): the single
+        // `date` field this block assigns from `now`, chosen by a type check. Reusing that one resolution
+        // is what keeps the two layers from each defining "the date assigned from now" - this method sees
+        // only rendered expressions, and `now` on a timestamp field renders as the same LocalDate.now() a
+        // `date` field does, so the string scan this replaced counted a field the parser's check excludes.
+        // An `of` that is blank means an unvalidated model reached here by another route; drop the guard
+        // rather than range it over a guessed column.
+        if (entry.getOf() == null || entry.getOf()
+                                          .isBlank()) {
+            return null;
         }
-        if (property == null) {
+        String property = IntentNaming.pascalCase(entry.getOf());
+        if (byProperty.get(property) == null) {
             return null;
         }
         String period = entry.getRun()

@@ -458,6 +458,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # a boolean: a real checkbox on the power form AND on the personal one (#7103)
                   - { name: urgent, type: boolean }
                   - { name: period, type: month }
+                  # a plain date the monthly schedule stamps with `now` - the property its
+                  # `unique: [Person, { run: month }]` key ranges the guard over (#7229/#7106).
+                  # Deliberately alongside `period` (a month field, `now` -> YYYY-MM string): the
+                  # run key must pick THIS field, not the string one, and the guard it compiles into
+                  # is what the publish step below actually javac's.
+                  - { name: filed, type: date }
                   - { name: rate, type: decimal, sensitive: true }
                   - { name: totalCost, type: decimal }
                   # visibleTo: role-scoped on EVERY surface - stripped from the responses and
@@ -1024,8 +1030,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 entity: Person
                 generate:
                   to: Claim
+                  # run: month natural key (#7106) - a re-run in the same month finds the Claim the
+                  # first tick filed instead of minting a duplicate. The guard ranges over `filed`
+                  # (the sole date-typed `now` default), NOT the month-typed `Period` (#7229); the
+                  # emitted .between(...) over a LocalDate column is compiled by the publish below.
+                  unique: [Person, { run: month }]
                   map: { Person: id }
-                  defaults: { note: monthly, Period: now }
+                  defaults: { note: monthly, Period: now, filed: now }
                   children:
                     - to: ClaimLine
                       parent: Claim
@@ -2730,6 +2741,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // render the YYYY-MM string - the untyped LocalDate.now() would not even compile.
         assertTrue(job.contains(".Period = java.time.YearMonth.now().toString()"),
                 "a month field's `now` default must render the YYYY-MM string, not LocalDate");
+        // run: month natural key (#7106/#7229): the guard ranges over the month of `filed` - the date
+        // this run stamps - so a re-run in the same month finds the first tick's Claim. The key must
+        // pick the date-typed field, not the month-typed Period, and the .between over a LocalDate
+        // column has to COMPILE, which the publish + client-Java javac below is the first to prove.
+        assertTrue(job.contains(".between(\"Filed\", java.time.LocalDate.now().withDayOfMonth(1),"),
+                "the run: month key must compile a month range over the date the run writes: " + job);
 
         // month widget: the YYYY-MM field renders the Harmonia month picker on BOTH writable
         // surfaces - the power form and the personal form (my-shell parity).
