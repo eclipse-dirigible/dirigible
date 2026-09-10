@@ -26,7 +26,9 @@ import org.junit.jupiter.api.Test;
  * current-status variable ({@code statusVar}). A status the flow never writes is not a step of it
  * (issue #7085), a terminal (cancel/void/…) status is excluded, translation seeds are ignored, a
  * flow that writes no status at all falls back to the whole non-terminal nomenclature, and a
- * non-task form gets no steps.
+ * non-task form gets no steps. The first step is the status the flow ENTERS at, read from its
+ * trigger - the relation's {@code init:} for an {@code onCreate}, the status a {@code when} guard
+ * pins for an {@code onUpdate}/{@code onTransition}, and none at all for a bare one (issue #7239).
  */
 class FormStepIndicatorTest {
 
@@ -138,7 +140,7 @@ class FormStepIndicatorTest {
                           - { name: cancel, kind: serviceTask, args: { setRelationField: Status, value: 8, next: end } }
                           - { name: end, kind: end }
                       - name: InvoiceSettlement
-                        trigger: { onUpdate: Invoice }
+                        trigger: { onUpdate: Invoice, when: "Status == ISSUED" }
                         steps:
                           - { name: record, kind: userTask, args: { assignee: cashier, form: RecordPayment } }
                           - { name: settledDecision, kind: decision, args: { if: "action == 'settle'", then: paid, else: partial } }
@@ -188,9 +190,44 @@ class FormStepIndicatorTest {
         IntentModel model = IntentParser.parse(BILLING_YAML);
         Map<String, Map<String, Object>> forms = FormIntentGenerator.buildFormsForTest(model);
 
-        // The settlement flow walks the two statuses IT writes - the approval's are not steps of it.
+        // The settlement flow walks the two statuses IT writes - the approval's are not steps of it -
+        // and it ENTERS at the status its trigger guard pins (ISSUED), not at the relation's `init:`
+        // DRAFT, which is where an onCreate flow starts and a document under settlement has long left
+        // (issue #7239).
         Map<String, Object> meta = (Map<String, Object>) forms.get("RecordPayment")
                                                               .get("metadata");
-        assertEquals(List.of(Map.of("label", "DRAFT"), Map.of("label", "PARTIAL"), Map.of("label", "PAID")), meta.get("steps"));
+        assertEquals(List.of(Map.of("label", "ISSUED"), Map.of("label", "PARTIAL"), Map.of("label", "PAID")), meta.get("steps"));
+    }
+
+    /**
+     * A flow that is not started by a creation and whose trigger pins no status enters wherever the
+     * record happens to stand: it has no first step to claim, and the stepper says only what the flow
+     * writes rather than inventing DRAFT.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void aBareOnUpdateFlowClaimsNoEntryStep() {
+        IntentModel model = IntentParser.parse(BILLING_YAML.replace(", when: \"Status == ISSUED\"", ""));
+        Map<String, Map<String, Object>> forms = FormIntentGenerator.buildFormsForTest(model);
+
+        Map<String, Object> meta = (Map<String, Object>) forms.get("RecordPayment")
+                                                              .get("metadata");
+        assertEquals(List.of(Map.of("label", "PARTIAL"), Map.of("label", "PAID")), meta.get("steps"));
+    }
+
+    /**
+     * An {@code onTransition} flow reads its entry status from the guard exactly as an {@code onUpdate}
+     * one does - the status axis is where a {@code when: "Status == ..."} guard is the norm rather than
+     * the exception.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void anOnTransitionFlowEntersAtTheGuardedStatus() {
+        IntentModel model = IntentParser.parse(BILLING_YAML.replace("onUpdate: Invoice", "onTransition: Invoice"));
+        Map<String, Map<String, Object>> forms = FormIntentGenerator.buildFormsForTest(model);
+
+        Map<String, Object> meta = (Map<String, Object>) forms.get("RecordPayment")
+                                                              .get("metadata");
+        assertEquals(List.of(Map.of("label", "ISSUED"), Map.of("label", "PARTIAL"), Map.of("label", "PAID")), meta.get("steps"));
     }
 }
