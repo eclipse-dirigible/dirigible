@@ -2296,8 +2296,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Compiles a {@code requiredWhen} condition into the Java boolean the generated reader tests -
-     * every comparison rendered against its property's DECLARED type, and ANDed.
+     * Compiles a {@code requiredWhen} condition into the Java boolean the generated reader tests.
+     *
+     * <p>
+     * The compiler is {@link CheckSupport#condition}, shared with the {@code event.when} guard of the
+     * declarative glue lists (issue #7289): one grammar, one type rule and one rendering, so a guard
+     * cannot mean one thing on a check and another on a listener.
      *
      * @param entity the entity carrying the check
      * @param byName the local entities by name (a to-one's key type comes from its target)
@@ -2307,62 +2311,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      *         the value unconditionally required)
      */
     private static String requiredWhenGuard(EntityIntent entity, Map<String, EntityIntent> byName, Object when) {
-        List<String> conditions = new ArrayList<>();
-        for (String term : CheckSupport.terms(when)) {
-            CheckSupport.Comparison comparison = CheckSupport.parse(term);
-            if (comparison == null) {
-                return null;
-            }
-            FieldIntent field = fieldOf(entity, comparison.property());
-            RelationIntent relation = field == null ? toOneOf(entity, comparison.property()) : null;
-            if (field == null && relation == null) {
-                return null;
-            }
-            String type = CheckSupport.guardType(field != null ? field.getType() : relationKeyType(relation, byName));
-            // A to-one's foreign key is a whole number of a width this generator cannot know: the
-            // column is typed from the TARGET's key, and a cross-model target's key lives in the
-            // owner's .model, where `long` is as legal as `integer`. Objects.equals(Long, Integer)
-            // never holds, so such a guard is compared numerically - a boxed equality would switch the
-            // rule off while looking authored (#7237). A field's own width is declared, so it keeps
-            // the exact boxed equality.
-            boolean numericKey = field == null && CheckSupport.NUMERIC_GUARD_TYPES.contains(type);
-            String literal = CheckSupport.javaLiteral(numericKey ? "long" : type, comparison.literal());
-            if (literal == null) {
-                return null;
-            }
-            String access = "entity." + IntentNaming.pascalCase(comparison.property());
-            conditions.add(numericKey ? CheckSupport.numericComparison(access, comparison.equal(), literal)
-                    : CheckSupport.comparison(access, comparison.equal(), literal));
-        }
-        return conditions.isEmpty() ? null : String.join(" && ", conditions);
-    }
-
-    /** The entity's to-one relation of that name, or {@code null}. */
-    private static RelationIntent toOneOf(EntityIntent entity, String name) {
-        for (RelationIntent relation : entity.getRelations()) {
-            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
-            if (toOne && name != null && name.equals(relation.getName())) {
-                return relation;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * The declared type of a to-one relation's foreign key - the target's primary-key type, falling
-     * back to the whole number intent keys always are when the target is owned by another model. The
-     * width of that number is not knowable from here, so a guard on a to-one is rendered numerically
-     * rather than as a boxed equality - see {@link CheckSupport#numericComparison}.
-     */
-    private static String relationKeyType(RelationIntent relation, Map<String, EntityIntent> byName) {
-        EntityIntent target = relation.getTo() == null ? null : byName.get(relation.getTo());
-        if (target != null) {
-            FieldIntent key = primaryKeyOf(target);
-            if (key != null && key.getType() != null) {
-                return key.getType();
-            }
-        }
-        return "integer";
+        return CheckSupport.condition(entity, byName, when);
     }
 
     /**

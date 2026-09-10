@@ -19,6 +19,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
+import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
 
 /**
  * Resolves a status referenced by its <b>seeded name</b> to the seed id, everywhere the intent
@@ -56,6 +57,10 @@ final class StatusSymbolResolver {
 
     private static final Pattern INTEGER = Pattern.compile("-?\\d+");
 
+    /** The declarative glue lists carrying an {@code event.when} guard, to the subject naming one. */
+    private static final List<Map.Entry<String, String>> GLUE_LISTS = List.of(Map.entry("notifications", "notification"),
+            Map.entry("integrations", "integration"), Map.entry("outbound", "outbound"));
+
     /** Entity name to its raw node. */
     private final Map<String, Map<?, ?>> entities = new LinkedHashMap<>();
 
@@ -85,6 +90,7 @@ final class StatusSymbolResolver {
         resolver.rewritePostings(root);
         resolver.rewriteGenerates(root);
         resolver.rewriteSchedules(root);
+        resolver.rewriteGlue(root);
         resolver.rewriteResolves(root);
         resolver.rewriteReports(root);
         if (!resolver.issues.isEmpty()) {
@@ -355,6 +361,74 @@ final class StatusSymbolResolver {
             }
             rewriteConditions(schedule.get("where"), text(schedule, "entity"), "schedule [" + text(schedule, "name") + "] where");
         }
+    }
+
+    /**
+     * The {@code event.when} guard of the three declarative glue lists - {@code notifications},
+     * {@code integrations} and {@code outbound} (issue #7289) - on the nomenclature of the entity the
+     * bound event is about.
+     *
+     * <p>
+     * These bind the same event axis a posting and an event-driven create-from bind, whose
+     * {@code event.when} has been symbolic since #6711, and the natural authoring of the construct is
+     * the status one: "mail the customer when the invoice reaches ISSUED", "forward the record once it
+     * is APPROVED". Left unresolved the name reached the generated listener as a string compared
+     * against the integer status FK ({@code Objects.equals(entity.Status, "ISSUED")}) - never true, so
+     * the mail never went out and the departure never left, with parse, generation, compile and publish
+     * all green.
+     *
+     * <p>
+     * The event entity is always LOCAL here (the axis takes no {@code model:}, and the parser refuses
+     * an unknown entity), so the nomenclature is this file's: a guard about anything else passes
+     * through untouched, exactly as at every other guard site.
+     */
+    private void rewriteGlue(Map<?, ?> root) {
+        for (Map.Entry<String, String> list : GLUE_LISTS) {
+            for (Object node : asList(root.get(list.getKey()))) {
+                Map<?, ?> entry = asMap(node);
+                Map<?, ?> event = asMap(entry == null ? null : entry.get("event"));
+                if (event == null || event.get("when") == null) {
+                    continue;
+                }
+                String entity = glueEventEntityOf(root, event);
+                rewriteWhen(event, statusRelationName(entity), statusOf(entity),
+                        list.getValue() + " [" + text(entry, "name") + "] event when");
+            }
+        }
+    }
+
+    /**
+     * The entity the bound event is about: the one a lifecycle binding names, or - for a process step
+     * binding, which names a step rather than a record - the trigger entity of that process, the record
+     * the step event is delivered about.
+     *
+     * <p>
+     * This runs on the RAW tree, before the typed mapping, so the kinds are spelled out rather than
+     * read off {@code EventBinding}; keep them in step with it. A kind missing here is silent in the
+     * usual way: the event entity does not resolve, so a status NAME in that guard cannot be looked up
+     * and the model is refused with a message about the nomenclature rather than about the binding.
+     */
+    private static String glueEventEntityOf(Map<?, ?> root, Map<?, ?> event) {
+        for (String kind : List.of("onCreate", "onUpdate", "onDelete", "onTransition", "onPhase", "onNotifyFailed")) {
+            String entity = text(event, kind);
+            if (entity != null) {
+                return entity;
+            }
+        }
+        for (String kind : List.of(StepEventSupport.ON_STEP_REACHED, StepEventSupport.ON_STEP_COMPLETED)) {
+            Map<?, ?> binding = asMap(event.get(kind));
+            String processName = binding == null ? null : text(binding, "process");
+            if (processName == null) {
+                continue;
+            }
+            for (Object node : asList(root.get("processes"))) {
+                Map<?, ?> process = asMap(node);
+                if (process != null && processName.equals(text(process, "name"))) {
+                    return triggerEntityOf(process);
+                }
+            }
+        }
+        return null;
     }
 
     /**

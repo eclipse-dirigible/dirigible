@@ -62,6 +62,12 @@ class StatusSymbolIntentTest {
                 source: Invoice
                 filter: "Status != VOIDED"
                 measures: ["sum(paid)"]
+            notifications:
+              - name: issued-mail
+                event: { onUpdate: Invoice, when: "Status == ISSUED" }
+                to: ops@example.com
+                subject: "Invoice {number} issued"
+                body: "The invoice has been issued."
             schedules:
               - name: dunning
                 cron: "0 0 8 * * ?"
@@ -121,6 +127,23 @@ class StatusSymbolIntentTest {
                                               .get(0)
                                               .getValue()),
                 "schedule where status");
+        assertEquals("Status == 3", String.valueOf(model.getNotifications()
+                                                        .get(0)
+                                                        .getEvent()
+                                                        .get("when")),
+                "notification event when");
+    }
+
+    /**
+     * The {@code event.when} of the three declarative glue lists (issue #7289) - the guard that
+     * qualifies the moment a mail goes out, a record is forwarded or a departure leaves. Left
+     * unresolved, the name reached the generated listener as a string compared with the integer status
+     * FK, so the guard could never hold and the message was never sent.
+     */
+    @Test
+    void anUnknownStatusNameInAGlueEventGuardIsRejected() {
+        assertIssue(YAML.replace("event: { onUpdate: Invoice, when: \"Status == ISSUED\" }",
+                "event: { onUpdate: Invoice, when: \"Status == ISUED\" }"), "not a seeded status of [InvoiceStatus]");
     }
 
     /**

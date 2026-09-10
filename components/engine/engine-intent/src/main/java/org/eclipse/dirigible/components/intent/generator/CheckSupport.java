@@ -12,9 +12,14 @@ package org.eclipse.dirigible.components.intent.generator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.eclipse.dirigible.components.intent.model.EntityIntent;
+import org.eclipse.dirigible.components.intent.model.FieldIntent;
+import org.eclipse.dirigible.components.intent.model.RelationIntent;
 
 /**
  * The condition of a {@code checks: requiredWhen} entry - the grammar the parser refuses on and the
@@ -172,6 +177,121 @@ public final class CheckSupport {
     public static String numericComparison(String access, boolean equal, String javaLiteral) {
         String equals = "(" + access + " != null && " + access + ".longValue() == " + javaLiteral + ")";
         return equal ? equals : "!" + equals;
+    }
+
+    /**
+     * Compiles a whole condition - one comparison or the ANDed list - into the Java boolean a generated
+     * reader tests, every comparison rendered against its property's DECLARED type.
+     *
+     * <p>
+     * This is the one renderer of a typed guard: the {@code requiredWhen} check it was written for and
+     * the {@code event.when} of the declarative glue lists (issue #7289) share it, so the grammar the
+     * parser refuses on, the type rule and the Java emitted for it cannot drift into three answers.
+     *
+     * <p>
+     * A to-one's foreign key is a whole number of a width this class cannot know - the column is typed
+     * from the TARGET's key, and a cross-model target's key lives in the owner's {@code .model}, where
+     * {@code long} is as legal as {@code integer} - so such a comparison is rendered numerically:
+     * {@code Objects.equals(Long, Integer)} never holds, and a boxed equality would switch the guard
+     * off while looking authored (#7237). A field's own width is declared, so it keeps the exact boxed
+     * equality.
+     *
+     * @param entity the entity the condition is read off
+     * @param byName the local entities by name (a to-one's key type comes from its target)
+     * @param when the authored condition - a comparison, a list of them, or {@code null}
+     * @return the Java expression, or {@code null} when there is no condition or a comparison does not
+     *         compile (the parser reports it; a condition silently degraded to {@code true} is the
+     *         failure both call sites exist to refuse)
+     */
+    public static String condition(EntityIntent entity, Map<String, EntityIntent> byName, Object when) {
+        if (entity == null) {
+            return null;
+        }
+        List<String> conditions = new ArrayList<>();
+        for (String term : terms(when)) {
+            Comparison comparison = parse(term);
+            if (comparison == null) {
+                return null;
+            }
+            FieldIntent field = field(entity, comparison.property());
+            RelationIntent relation = field == null ? toOne(entity, comparison.property()) : null;
+            if (field == null && relation == null) {
+                return null;
+            }
+            String type = guardType(field != null ? field.getType() : relationKeyType(relation, byName));
+            boolean numericKey = field == null && NUMERIC_GUARD_TYPES.contains(type);
+            String literal = javaLiteral(numericKey ? "long" : type, comparison.literal());
+            if (literal == null) {
+                return null;
+            }
+            String access = "entity." + IntentNaming.pascalCase(comparison.property());
+            conditions.add(
+                    numericKey ? numericComparison(access, comparison.equal(), literal) : comparison(access, comparison.equal(), literal));
+        }
+        return conditions.isEmpty() ? null : String.join(" && ", conditions);
+    }
+
+    /**
+     * The entity's field of that name, matched case-insensitively - the guard renders the property
+     * through {@link IntentNaming#pascalCase}, so the case an author wrote it in never reaches the
+     * generated code and must not decide whether the guard is understood at all.
+     *
+     * @param entity the entity the condition is read off
+     * @param name the authored property name
+     * @return the field, or {@code null}
+     */
+    public static FieldIntent field(EntityIntent entity, String name) {
+        if (entity == null || entity.getFields() == null || name == null) {
+            return null;
+        }
+        for (FieldIntent field : entity.getFields()) {
+            if (name.equalsIgnoreCase(field.getName())) {
+                return field;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The entity's to-one relation of that name, matched case-insensitively - its foreign key is a
+     * property of the record exactly as a field is, and the status guard is the reason a condition may
+     * name one at all.
+     *
+     * @param entity the entity the condition is read off
+     * @param name the authored property name
+     * @return the relation, or {@code null}
+     */
+    public static RelationIntent toOne(EntityIntent entity, String name) {
+        if (entity == null || entity.getRelations() == null || name == null) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && name.equalsIgnoreCase(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The declared type of a to-one relation's foreign key - the target's primary-key type, falling
+     * back to the whole number intent keys always are when the target is owned by another model.
+     *
+     * @param relation the to-one relation
+     * @param byName the local entities by name
+     * @return the declared type of the foreign key
+     */
+    public static String relationKeyType(RelationIntent relation, Map<String, EntityIntent> byName) {
+        EntityIntent target = relation == null || relation.getTo() == null || byName == null ? null : byName.get(relation.getTo());
+        if (target != null && target.getFields() != null) {
+            for (FieldIntent field : target.getFields()) {
+                if (field.isPrimaryKey() && field.getType() != null) {
+                    return field.getType();
+                }
+            }
+        }
+        return "integer";
     }
 
     /**

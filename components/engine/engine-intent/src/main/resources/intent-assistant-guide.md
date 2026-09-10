@@ -2296,8 +2296,9 @@ is unclassified, Generate reports the aggregate as lifecycle-blind and the total
 
 Everywhere the intent names a status - `transitions[].from` / `setStatus`, a `lifecycle:` edge, a relation's `init:`, a
 `setRelationField` `value:`, `abortOn.status`, a check's `status`/`setStatus`, `immutableWhen`, a
-posting's `event.when`, a report's `filter`, the status condition of a `schedules[].where` row query or
-of a create-from's `items: where:` rule - use the **seeded name** instead of the id:
+posting's `event.when`, the `event.when` of a `notifications` / `integrations` / `outbound` entry, a
+report's `filter`, the status condition of a `schedules[].where` row query or of a create-from's
+`items: where:` rule - use the **seeded name** instead of the id:
 
 ```yaml
 transitions:
@@ -3329,9 +3330,24 @@ The step record is published **after commit** and is not transactional with the 
 of the axis is at-least-once: a redelivery re-notifies, re-forwards, or (under `mode: append`) appends a
 second row.
 
-Every axis binding also takes an optional **`when:` guard** inside the `event:` map - a single
-comparison against a direct field of the record (`when: "channel != internal"`), which decides per
-record whether the reaction runs at all.
+Every axis binding also takes an optional **`when:` guard** inside the `event:` map, which decides per
+record whether the reaction runs at all. It is one `<Property> ==|!= <literal>` comparison over the
+event record's own properties - a field or a to-one's key - or a LIST of them, meaning their AND:
+
+```yaml
+notifications:
+  - name: issued-mail
+    event: { onUpdate: SalesInvoice, when: "Status == ISSUED" }   # the seeded status name, not the id
+```
+
+A status is named here exactly as at every other guard site: the name is resolved to its seed id at
+parse and the comparison is rendered against the status FK's declared type, so `Status == ISSUED`
+holds. A guard that does not parse - `Status = ISSUED`, `status == 'ISSUED' and channel == 'mail'` -
+is **refused at parse**, and so is one naming a property the record does not carry or comparing it
+with a literal of the wrong type (only strings, integers, booleans and a to-one's key are guardable;
+a decimal or a date is compared for equality by nobody who means it). It is not degraded to `true`:
+a guard that silently switches itself off fires the reaction on EVERY event, which is a guard nobody
+authored.
 
 ### which writes are observable (what a reaction can actually see)
 
