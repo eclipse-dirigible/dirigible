@@ -210,84 +210,92 @@ public class ${className}Job implements JobHandler {
                 LOG.error("Schedule ${name}: could not generate ${genToEntity} from ${entity} [{}]", entity.${attachKeyProperty}, ex);
             }
 #else
-#foreach($load in $relationLoads)
-            ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
-#end
-#if($usesRecordUrl == "true")
-            // {recordUrl} - the deep link to the row this message is about. The ROUTE is composed HERE,
-            // in the layer that knows the generated application's URL layout; the intent layer
-            // contributes only the entity and its key, which is what keeps it path-agnostic.
-            String recordUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
-                    + "/services/web/${projectName}/gen/${genFolderName}/index.html#/${recordUrlEntity}/" + entity.${recordUrlKeyProperty}
-                    + "/edit";
-#end
-#if($usesInboxUrl == "true")
-            // {inboxUrl} - the deep link to the recipient's process Inbox.
-            String inboxUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
-                    + "/services/web/${projectName}/gen/${genFolderName}/index.html#/inbox";
-#end
-            String to = ${toExpression};
-            if (to == null || to.isBlank()) {
-                // A row with nobody to mail is a legitimate no-op, but it is COUNTED: "matched 40,
-                // mailed 12" is the line that says a query is wider than the addresses behind it.
-                skipped++;
-                continue;
-            }
-            String subject = ${subjectExpression};
-            String body = ${bodyExpression};
-            Map part = new HashMap();
-            part.put("type", "text");
-            part.put("contentType", "text/plain");
-            part.put("text", body);
-            List<Map> parts = new java.util.ArrayList<>();
-            parts.add(part);
-#if($attach == "print")
-            // attach: print - render THIS row's own print template to PDF server-side (the generated
-            // feeder assembles the { document, items } payload) and attach it, so a periodic notice
-            // carries the document itself (a reminder with the invoice, not just about it).
-#if($attachLanguageFkProperty != "")
-            ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
-                    : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
-#end
-            Map document = new HashMap();
-            document.put("type", "attachment");
-            document.put("contentType", "application/pdf");
-            document.put("fileName", ${attachFileNameExpression});
-            document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
-                    new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
-            parts.add(document);
-#elseif($attach == "report")
-            // attach: { report, bind } - run the declared report scoped to THIS recipient and attach the
-            // rendered PDF. The bindings ARE the report's parameters, which is what makes the rows this
-            // recipient's own: a customer statement is a period of rows, not one record's document.
-#if($attachLanguageFkProperty != "")
-            ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
-                    : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
-#end
-            Map<String, Object> reportFilter = new HashMap<>();
-#foreach($binding in $attachReportBindings)
-            reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));
-#end
-            Map<String, Object> reportData = new HashMap<>();
-            // The bound values double as the rendered header, so the PDF states which slice it is - a
-            // table of rows never does.
-            reportData.put("document", reportFilter);
-            reportData.put("items", new gen.${attachReportGenFolder}.data.${attachReportPerspective}.${attachReport}Repository()
-                    .findAll(null, null, reportFilter));
-            Map document = new HashMap();
-            document.put("type", "attachment");
-            document.put("contentType", "application/pdf");
-            document.put("fileName", ${attachFileNameExpression});
-            document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", ${attachLanguageExpression},
-                    org.eclipse.dirigible.sdk.utils.Json.stringify(reportData)));
-            parts.add(document);
-#end
-            String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
             // FAIL-SOFT PER ROW. A schedule tick is a batch - a dunning run mails every overdue
             // invoice - and one unreachable mailbox used to abort the whole loop, so every row after it
             // was silently never mailed and the next tick started over from the top. Each row is now
             // attempted, counted and logged with its own key, and the tick reports the totals.
+            // The try opens HERE, before the row's relation loads and the attachment render (#7233):
+            // those read the database too - a foreign key at a row a concurrent delete removed, a
+            // connection blip, a print template that fails to render for ONE document - and a throw
+            // from any of them left the loop exactly as an unreachable mailbox once did, with the rows
+            // after it never mailed and no summary line saying so. One bad row costs one `failed`. The
+            // recipient is declared outside the try so the row's failure line can still name it; null
+            // there says the row failed before one was resolved.
+            String to = null;
             try {
+#foreach($load in $relationLoads)
+                ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
+#end
+#if($usesRecordUrl == "true")
+                // {recordUrl} - the deep link to the row this message is about. The ROUTE is composed HERE,
+                // in the layer that knows the generated application's URL layout; the intent layer
+                // contributes only the entity and its key, which is what keeps it path-agnostic.
+                String recordUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
+                        + "/services/web/${projectName}/gen/${genFolderName}/index.html#/${recordUrlEntity}/" + entity.${recordUrlKeyProperty}
+                        + "/edit";
+#end
+#if($usesInboxUrl == "true")
+                // {inboxUrl} - the deep link to the recipient's process Inbox.
+                String inboxUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
+                        + "/services/web/${projectName}/gen/${genFolderName}/index.html#/inbox";
+#end
+                to = ${toExpression};
+                if (to == null || to.isBlank()) {
+                    // A row with nobody to mail is a legitimate no-op, but it is COUNTED: "matched 40,
+                    // mailed 12" is the line that says a query is wider than the addresses behind it.
+                    skipped++;
+                    continue;
+                }
+                String subject = ${subjectExpression};
+                String body = ${bodyExpression};
+                Map part = new HashMap();
+                part.put("type", "text");
+                part.put("contentType", "text/plain");
+                part.put("text", body);
+                List<Map> parts = new java.util.ArrayList<>();
+                parts.add(part);
+#if($attach == "print")
+                // attach: print - render THIS row's own print template to PDF server-side (the generated
+                // feeder assembles the { document, items } payload) and attach it, so a periodic notice
+                // carries the document itself (a reminder with the invoice, not just about it).
+#if($attachLanguageFkProperty != "")
+                ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                        : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+#end
+                Map document = new HashMap();
+                document.put("type", "attachment");
+                document.put("contentType", "application/pdf");
+                document.put("fileName", ${attachFileNameExpression});
+                document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
+                        new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
+                parts.add(document);
+#elseif($attach == "report")
+                // attach: { report, bind } - run the declared report scoped to THIS recipient and attach the
+                // rendered PDF. The bindings ARE the report's parameters, which is what makes the rows this
+                // recipient's own: a customer statement is a period of rows, not one record's document.
+#if($attachLanguageFkProperty != "")
+                ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                        : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+#end
+                Map<String, Object> reportFilter = new HashMap<>();
+#foreach($binding in $attachReportBindings)
+                reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));
+#end
+                Map<String, Object> reportData = new HashMap<>();
+                // The bound values double as the rendered header, so the PDF states which slice it is - a
+                // table of rows never does.
+                reportData.put("document", reportFilter);
+                reportData.put("items", new gen.${attachReportGenFolder}.data.${attachReportPerspective}.${attachReport}Repository()
+                        .findAll(null, null, reportFilter));
+                Map document = new HashMap();
+                document.put("type", "attachment");
+                document.put("contentType", "application/pdf");
+                document.put("fileName", ${attachFileNameExpression});
+                document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", ${attachLanguageExpression},
+                        org.eclipse.dirigible.sdk.utils.Json.stringify(reportData)));
+                parts.add(document);
+#end
+                String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
                 Mail.send(from, new String[] {to}, new String[0], new String[0], subject, parts);
                 sent++;
 #if($notifyOutcomeProperty != "")

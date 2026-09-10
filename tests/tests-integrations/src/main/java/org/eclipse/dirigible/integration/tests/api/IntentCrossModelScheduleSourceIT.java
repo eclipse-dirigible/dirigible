@@ -297,7 +297,8 @@ class IntentCrossModelScheduleSourceIT extends IntegrationTest {
         String job = contentOf(CONSUMER, "gen/events/xmconsumer/MonthlyCustomerStatementsJob.java");
         assertTrue(job.contains("import gen.xmsource.data.customer.CustomerEntity;"), "the mailed row is the OWNER's entity: " + job);
         assertTrue(job.contains("new CustomerRepository().findAll("), "the rows come from the owner's repository: " + job);
-        assertTrue(job.contains("String to = entity.Email;"), "the recipient is a field of the cross-model row: " + job);
+        // The recipient local is declared ahead of the row's fail-soft try (#7233) and assigned inside it.
+        assertTrue(job.contains("to = entity.Email;"), "the recipient is a field of the cross-model row: " + job);
         assertTrue(job.contains("reportFilter.put(\"customer\", reportValue(entity.Name));"),
                 "the report parameter is bound from the row, so the PDF is this customer's: " + job);
         assertTrue(job.contains("CustomerStatementRepository"), "the attached report is the CONSUMER's own: " + job);

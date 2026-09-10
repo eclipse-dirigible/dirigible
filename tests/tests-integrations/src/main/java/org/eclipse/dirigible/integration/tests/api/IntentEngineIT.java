@@ -2363,6 +2363,94 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void a_scheduled_notification_keeps_its_row_loads_and_attachment_render_inside_the_fail_soft_try() {
+        // Issue #7233: #7023 made each row's SEND fail-soft, but the per-row try enclosed only Mail.send.
+        // The row's one-hop relation loads, the render language's load and the attachment render all ran
+        // BEFORE it, and every one of them reads the database - so a foreign key at a row a concurrent
+        // delete removed, or a print template that fails for ONE document, still aborted the whole
+        // dunning run: every later matching row silently never mailed, no summary logged. The generate
+        // branch was fixed for exactly this in #7178; this is its twin.
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: name,   type: string }
+                      - { name: email,  type: string }
+                      - { name: locale, type: string, length: 5 }
+                  - name: Invoice
+                    function: Document
+                    fields:
+                      - { name: id,              type: integer, primaryKey: true, generated: true }
+                      - { name: dueDate,         type: date }
+                      - { name: reminderOutcome, type: string, length: 128 }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: InvoiceItem
+                    function: DocumentItem
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                schedules:
+                  - name: overdue-reminders
+                    cron: "0 0 8 * * ?"
+                    entity: Invoice
+                    where:
+                      - { field: dueDate, op: lt, value: CURRENT_DATE }
+                    notify:
+                      to: Customer.email
+                      subject: "Invoice {id} is overdue"
+                      body: "Dear {Customer.name}, invoice {id} is still unpaid - it is attached."
+                      attach: print
+                      languageFrom: Customer.locale
+                      outcome: reminderOutcome
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "billing.glue");
+
+        String job = codeOf("gen/events/billing/OverdueRemindersJob.java");
+        int loop = job.indexOf("for (InvoiceEntity entity : rows) {");
+        int recipient = job.indexOf("String to = null;", loop);
+        int tryOpens = job.indexOf("try {", loop);
+        int load = job.indexOf("new CustomerRepository().findById(entity.Customer)");
+        int language = job.indexOf("attachLanguageSource =");
+        int render = job.indexOf("Print.render(\"Invoice\",");
+        int send = job.indexOf("Mail.send(");
+        int catches = job.indexOf("} catch (Exception ex) {");
+        assertTrue(loop > 0 && recipient > 0 && tryOpens > 0 && load > 0 && language > 0 && render > 0 && send > 0 && catches > 0,
+                "got: " + job);
+        // The ordering is the whole fix: the try must open before the first per-row database read.
+        assertTrue(tryOpens < load, "the recipient's one-hop relation load runs inside the fail-soft try");
+        assertTrue(load < language && language < render, "the render language's load and the attachment render follow it, in the same try");
+        assertTrue(render < send && send < catches, "render, then send, then the row's catch - one try encloses all of them");
+        int nextTry = job.indexOf("try {", tryOpens + 1);
+        assertTrue(nextTry < 0 || nextTry > catches, "one try encloses the whole row - no second try wraps only the send");
+        // The recipient local is declared ahead of the try, so the row's failure line can still name it.
+        assertTrue(recipient < tryOpens, "the recipient is declared outside the try the failure line reads it from");
+        assertTrue(job.contains("could not mail Invoice [{}] at [{}]\", entity.Id, to, ex"),
+                "a row that failed on a load or the render is logged with its own key and recipient");
+        // A row with nobody to mail is still a `continue` - it leaves the try, not the loop - and is
+        // still counted rather than failed.
+        int skipped = job.indexOf("skipped++;");
+        assertTrue(tryOpens < skipped && skipped < send, "a row with no recipient is still skipped from inside the try");
+        // Both outcome stamps survive: `sent` inside the try, `failed: <reason>` from the catch - so a row
+        // that failed on a load or the render is stamped on the record exactly as a bounced mailbox is.
+        int stampSent = job.indexOf("stampNotifyOutcome(entity.Id, null);");
+        int stampFailed = job.indexOf("stampNotifyOutcome(entity.Id, ex);");
+        assertTrue(send < stampSent && stampSent < catches && catches < stampFailed,
+                "both delivery outcomes are still stamped, got: " + job);
+        assertTrue(job.contains("mailed [{}] of [{}] matching Invoice row(s), no recipient [{}], failed [{}]"),
+                "the tick's summary still reports the totals");
+    }
+
+    @Test
     void a_recurring_template_schedule_keys_on_the_period_of_the_run() {
         // Issue #7106: the recurring-template family had no key to declare. A monthly bill generated
         // from a standing BillTemplate is a plain document with a `date` - no period column to name -

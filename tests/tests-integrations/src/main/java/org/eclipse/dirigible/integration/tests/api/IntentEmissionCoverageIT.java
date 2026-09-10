@@ -1033,6 +1033,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                       dayField: day
                       defaults: { amount: 8 }
 
+              # the dunning run: a notify fan-out whose per-row relation loads (the recipient, the
+              # render language) and attachment render sit INSIDE the fail-soft try (#7233). It never
+              # fires here (the 1st at 05:00); it is in this fixture to be COMPILED at publish - the
+              # engine IT pins the ordering over emitted text, this one proves the moved block builds.
+              - name: overdue-bills
+                cron: "0 0 5 1 * *"
+                entity: Bill
+                notify:
+                  to: Person.email
+                  subject: "Reminder: bill {note}"
+                  body: "Dear {Person.name}, your bill is still open: {recordUrl}"
+                  attach: print
+                  languageFrom: Person.locale
+                  outcome: sendOutcome
+
             processes:
               # assignee: personal - the confirm task lands in exactly the owner's Inbox (the IT
               # runs as admin, mapped by the Person seed below).
@@ -2730,6 +2745,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // render the YYYY-MM string - the untyped LocalDate.now() would not even compile.
         assertTrue(job.contains(".Period = java.time.YearMonth.now().toString()"),
                 "a month field's `now` default must render the YYYY-MM string, not LocalDate");
+
+        // the dunning fan-out (#7233): every per-row database read - the recipient's relation load, the
+        // render language's, the print feeder behind the attachment - runs inside the fail-soft try, so
+        // one bad row costs one `failed` instead of the tick. The fixture is here to be COMPILED at
+        // publish (the loads became locals of the try block); the ordering is pinned once more, on a
+        // real document.
+        String dunning = contentOf("gen/events/emission/OverdueBillsJob.java");
+        int dunningTry = dunning.indexOf("try {", dunning.indexOf("for (BillEntity entity : rows) {"));
+        int dunningLoad = dunning.indexOf("PersonRepository().findById(entity.Person)");
+        int dunningRender = dunning.indexOf("Print.render(\"Bill\",");
+        int dunningCatch = dunning.indexOf("} catch (Exception ex) {");
+        assertTrue(dunningTry > 0 && dunningTry < dunningLoad && dunningLoad < dunningRender && dunningRender < dunningCatch,
+                "the row's loads and the attachment render must run inside the fail-soft try: " + dunning);
 
         // month widget: the YYYY-MM field renders the Harmonia month picker on BOTH writable
         // surfaces - the power form and the personal form (my-shell parity).
