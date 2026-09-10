@@ -3520,6 +3520,10 @@ class IntentEngineIT extends IntegrationTest {
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
                       - { name: quantity, type: decimal, precision: 18, scale: 3 }
+                      - { name: factor, type: decimal, precision: 18, scale: 2 }
+                      - { name: sequence, type: long }
+                      - { name: direction, type: integer }
+                      - { name: ledger, type: string, length: 20 }
                     relations:
                       - { name: Product, kind: manyToOne, to: Product }
                       - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue }
@@ -3539,6 +3543,10 @@ class IntentEngineIT extends IntegrationTest {
                     set:
                       Product: item.Product
                       Quantity: "-item.Quantity"
+                      Factor: -1.5
+                      Sequence: 7
+                      Direction: 2
+                      Ledger: issued
                   - name: goodsIssueNote
                     forEntity: GoodsIssue
                     event: create
@@ -3573,6 +3581,14 @@ class IntentEngineIT extends IntegrationTest {
         assertEquals(save, post.lastIndexOf("targetRepository.save(row)"),
                 "there must be exactly ONE save site - a second one outside the block would write rows unprotected");
         assertFalse(post.contains("${"), "the post template must render every placeholder");
+        // #7287: a constant is rendered for the TARGET COLUMN's Java type. A decimal column is a
+        // BigDecimal and a long one a Long in the generated entity, so the bare `-1.5` / `7` this used
+        // to emit did not compile - and neither did a bare identifier for the text.
+        assertTrue(post.contains("row.Factor = new java.math.BigDecimal(\"-1.5\");"),
+                "a decimal column takes a BigDecimal, not a bare double literal: " + post);
+        assertTrue(post.contains("row.Sequence = 7L;"), "a long column takes a long literal, not a bare int: " + post);
+        assertTrue(post.contains("row.Direction = 2;"), "an integer column keeps the bare integer: " + post);
+        assertTrue(post.contains("row.Ledger = \"issued\";"), "a text column takes an escaped string literal: " + post);
 
         // The single-row mode (no forEach) writes one row through one repository call - a transaction on
         // its own, so it needs no unit of work and must not pretend to open one.
