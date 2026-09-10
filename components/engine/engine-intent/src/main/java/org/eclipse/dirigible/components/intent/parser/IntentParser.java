@@ -4764,9 +4764,13 @@ public final class IntentParser {
                     + entity.getName() + "] - the condition is read off the record itself");
             return;
         }
-        String type = field != null ? field.getType() : relationKeyType(relation, byName);
+        // Normalised before anything looks at it: a field without a `type:` is a string here as it is
+        // everywhere else in the parser, and `Integer` is the `integer` the rest of the DSL accepts.
+        // The raw value also must not reach GUARD_TYPES.contains, which throws on a null.
+        String declared = field != null ? field.getType() : relationKeyType(relation, byName);
+        String type = CheckSupport.guardType(declared);
         if (field != null && !CheckSupport.GUARD_TYPES.contains(type)) {
-            issues.add(subject + " when [" + term + "] compares [" + comparison.property() + "], which is a [" + type
+            issues.add(subject + " when [" + term + "] compares [" + comparison.property() + "], which is a [" + declared
                     + "] field - a condition compares a string, an integer or a boolean, the types an equality is exact on");
             return;
         }
@@ -4791,8 +4795,11 @@ public final class IntentParser {
 
     /**
      * The declared type of a to-one relation's foreign key - the target's primary-key type. A
-     * cross-model target's model is not loaded here, and intent primary keys are integers, so that is
-     * what an unresolvable target falls back to.
+     * cross-model target's model is not loaded here, and intent primary keys are whole numbers, so that
+     * is what an unresolvable target falls back to. The WIDTH of that number is not knowable here (the
+     * owner's {@code .model} may type its key {@code long}), which is why the generator renders a
+     * to-one's guard as a numeric comparison rather than a boxed equality - see
+     * {@link CheckSupport#numericComparison}.
      */
     private static String relationKeyType(RelationIntent relation, java.util.Map<String, EntityIntent> byName) {
         EntityIntent target = relation.getTo() == null ? null : byName.get(relation.getTo());
