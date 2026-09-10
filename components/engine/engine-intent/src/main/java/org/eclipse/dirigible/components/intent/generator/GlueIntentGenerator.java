@@ -4119,6 +4119,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                             + schedule.getModel() + "] source - the schedule was NOT generated");
                     continue;
                 }
+                // The row query's status condition on a cross-model source (#7288): the source's
+                // nomenclature is seeded in the owner model, so the parser's resolver left the query
+                // alone - and which condition even names the status is known only here, off the owner
+                // .model's DOCUMENT_STATUS widget. A NAME left in it would render as a string compared
+                // against the integer status FK, a query that matches nothing on every tick. Refused
+                // the way every cross-model status site is: by seed id only.
+                ScheduleConditionIntent namedStatus = crossModelStatusName(schedule.getWhere(), sourceTarget);
+                if (namedStatus != null) {
+                    throw new IntentValidationException(List.of("schedule [" + schedule.getName()
+                            + "] where-condition on the status relation [" + sourceTarget.statusProperty() + "] names the status ["
+                            + namedStatus.getValue() + "] of [" + entity + "], which belongs to model [" + schedule.getModel()
+                            + "] and is seeded there - a cross-model status must be referenced by its numeric seed id"));
+                }
             }
 
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -4348,8 +4361,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * mapping and action shape).
      */
     static List<Map<String, Object>> buildSchedulesForTest(IntentModel model) {
+        return buildSchedulesForTest(model, null);
+    }
+
+    /**
+     * Test hook: build the {@code schedules} glue collection against a context, so what the generation
+     * reads off a cross-model source's owner {@code .model} - its perspective, its key, and which of
+     * its properties is the status relation - is the real fact rather than a naming-convention default.
+     */
+    static List<Map<String, Object>> buildSchedulesForTest(IntentModel model, IntentGenerationContext context) {
         return buildSchedules(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
-                null);
+                context);
     }
 
     /**
@@ -4620,12 +4642,33 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * of a unit test), in which case nothing here can tell which condition is the status one.
      */
     private static ScheduleConditionIntent crossModelItemStatusName(GeneratesItemsIntent items, CrossModelSupport.TargetInfo itemSource) {
-        if (items == null || !items.hasWhere() || itemSource == null || itemSource.statusProperty() == null) {
+        return items == null || !items.hasWhere() ? null : crossModelStatusName(items.getWhere(), itemSource);
+    }
+
+    /**
+     * The condition of a cross-model row query that compares the owner's status relation with a NAME
+     * rather than a seed id, or null when there is none - no condition names the status, the one that
+     * does gives the id, or the owner model declares no status relation (or was not resolvable, the
+     * convention fallback of a unit test), in which case nothing here can tell which condition is the
+     * status one.
+     *
+     * <p>
+     * Shared by the two sites whose {@code { field, op, value }} triples run against a row this model
+     * does not own, and whose status names the parser's resolver therefore had to leave alone: a
+     * create-from's items rule (#7225) and a schedule's {@code where} (#7288).
+     *
+     * @param conditions the authored conditions
+     * @param target the owner's resolved facts
+     * @return the offending condition, or null
+     */
+    private static ScheduleConditionIntent crossModelStatusName(List<ScheduleConditionIntent> conditions,
+            CrossModelSupport.TargetInfo target) {
+        if (conditions == null || target == null || target.statusProperty() == null) {
             return null;
         }
-        for (ScheduleConditionIntent condition : items.getWhere()) {
+        for (ScheduleConditionIntent condition : conditions) {
             if (condition.getField() != null && condition.getField()
-                                                         .equalsIgnoreCase(itemSource.statusProperty())
+                                                         .equalsIgnoreCase(target.statusProperty())
                     && !isSeedId(condition.getValue())) {
                 return condition;
             }

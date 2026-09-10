@@ -2050,9 +2050,12 @@ public final class IntentParser {
      *
      * <p>
      * Only the status condition is checked: every other condition compares an ordinary column, where a
-     * string literal is just a literal. A cross-model source has no local relations to check against
-     * (its field references are resolved at generation time against the owner's {@code .model}), so it
-     * keeps the numeric-id form the same way every other cross-model status site does.
+     * string literal is just a literal. A cross-model source has no local relations to check against -
+     * neither its nomenclature nor even WHICH of the conditions names its status is knowable here - so
+     * it keeps the numeric-id form the same way every other cross-model status site does, and a name
+     * written there is refused where the owner's {@code .model} is in hand: at generation time, by
+     * {@code GlueIntentGenerator} (issue #7288), rather than left to render as a string compared
+     * against the integer status FK.
      */
     private static void validateWhereStatusValue(ScheduleConditionIntent condition, EntityIntent source, String subject,
             List<String> issues) {
