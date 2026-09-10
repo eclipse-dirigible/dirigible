@@ -113,6 +113,72 @@ class ModelParameterProcessorTest {
         assertFalse(generatedKey.containsKey("dataDefaultValueJavaLiteral"));
     }
 
+    /**
+     * The .schema declares the same default as the column's DB DEFAULT, in a JSON string - so the
+     * parameter graph carries it escaped for one too, as authored (the value reaches the DDL verbatim
+     * by design) and quotes included. It used to be interpolated unescaped, and an authored quote left
+     * the whole schema artefact unparseable, so the synchronizer created no table for ANY entity of the
+     * project (#7206).
+     */
+    @Test
+    void carriesTheAuthoredDefaultAsAnEscapedJsonLiteralToo() {
+        Map<String, Object> quoted = property("Size", "VARCHAR");
+        quoted.put("dataDefaultValue", "6\" \\ wide");
+        Map<String, Object> status = property("Status", "VARCHAR");
+        status.put("dataDefaultValue", "'DRAFT'");
+        Map<String, Object> issued = property("Issued", "DATE");
+        issued.put("dataDefaultValue", "CURRENT_DATE");
+        // The database assigns the generated key, so it carries no Java literal - but the schema still
+        // declares whatever was authored on it.
+        Map<String, Object> generatedKey = property("Id", "INTEGER");
+        generatedKey.put("dataPrimaryKey", "true");
+        generatedKey.put("dataAutoIncrement", "true");
+        generatedKey.put("dataDefaultValue", "1");
+        Map<String, Object> none = property("Name", "VARCHAR");
+        ModelParameterProcessor.process(model(entity("Line", "Lines", quoted, status, issued, generatedKey, none)), parameters());
+
+        assertEquals("\"6\\\" \\\\ wide\"", quoted.get("dataDefaultValueJsonLiteral"));
+        assertEquals("\"'DRAFT'\"", status.get("dataDefaultValueJsonLiteral"),
+                "the SQL quotes are the DDL's, so the schema keeps the value as authored");
+        assertEquals("\"CURRENT_DATE\"", issued.get("dataDefaultValueJsonLiteral"));
+        assertEquals("\"1\"", generatedKey.get("dataDefaultValueJsonLiteral"));
+        assertFalse(none.containsKey("dataDefaultValueJsonLiteral"), "a property with no default must leave the key absent");
+    }
+
+    /**
+     * The item dialog seeds a new line with the authored default, in the shape the draft holds - and
+     * the seed is resolved here rather than assembled in the template, which used to interpolate the
+     * value unescaped and make the whole generated register a syntax error on an authored apostrophe
+     * (#7207).
+     */
+    @Test
+    void carriesTheAuthoredDefaultAsAnEscapedJavaScriptSeed() {
+        Map<String, Object> possessive = property("Copy", "VARCHAR");
+        possessive.put("dataDefaultValue", "Owner's copy");
+        Map<String, Object> billable = property("Billable", "BOOLEAN");
+        billable.put("widgetType", "CHECKBOX");
+        billable.put("dataDefaultValue", "true");
+        Map<String, Object> rate = property("VatRate", "DECIMAL");
+        rate.put("dataDefaultValue", "20");
+        ModelParameterProcessor.process(model(entity("Line", "Lines", possessive, billable, rate)), parameters());
+
+        assertEquals("'Owner\\'s copy'", possessive.get("dataDefaultValueJsLiteral"));
+        assertEquals("true", billable.get("dataDefaultValueJsLiteral"));
+        assertEquals("20", rate.get("dataDefaultValueJsLiteral"));
+    }
+
+    /**
+     * The key's presence is what the template reads as "this property has a default to seed", so a
+     * property with none must leave it absent rather than null.
+     */
+    @Test
+    void leavesTheJavaScriptSeedAbsentWhereThereIsNothingToSeed() {
+        Map<String, Object> none = property("Name", "VARCHAR");
+        ModelParameterProcessor.process(model(entity("Invoice", "Invoices", none)), parameters());
+
+        assertFalse(none.containsKey("dataDefaultValueJsLiteral"));
+    }
+
     @Test
     void defaultsTheWidgetLabelFromThePropertyName() {
         Map<String, Object> property = property("TaxEventDate", "DATE");
@@ -292,6 +358,53 @@ class ModelParameterProcessorTest {
                                    .size());
         assertEquals(2, ModelValues.asList(entity.get("documentChecks"))
                                    .size());
+    }
+
+    @Test
+    void carriesEveryAuthoredMessageAsAnEscapedJavaLiteralToo() {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("kind", "compare");
+        row.put("message", "A \"due\" date is never before the invoice date");
+        Map<String, Object> guard = new LinkedHashMap<>();
+        guard.put("kind", "guard");
+        guard.put("message", "Insufficient balance in C:\\ledger");
+        Map<String, Object> document = new LinkedHashMap<>();
+        document.put("kind", "itemsMin");
+        document.put("message", "An invoice needs at least one \"line\"");
+        Map<String, Object> unique = new LinkedHashMap<>();
+        unique.put("name", "INVOICE_\"NUMBER\"");
+        unique.put("message", "This \"number\" is already registered");
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Total", "DECIMAL"));
+        entity.put("checks", List.of(row, guard, document));
+        entity.put("uniqueConstraints", List.of(unique));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        // The raw value stays for the surfaces that render it as text; only the Java sites read the
+        // twin, whose quote is escaped rather than ending the literal it is written into (#7241).
+        assertEquals("A \"due\" date is never before the invoice date", row.get("message"));
+        assertEquals("A \\\"due\\\" date is never before the invoice date", row.get("messageJavaLiteral"));
+        assertEquals("Insufficient balance in C:\\\\ledger", guard.get("messageJavaLiteral"));
+        assertEquals("An invoice needs at least one \\\"line\\\"", document.get("messageJavaLiteral"));
+        assertEquals("This \\\"number\\\" is already registered", unique.get("messageJavaLiteral"));
+        assertEquals("INVOICE_\\\"NUMBER\\\"", unique.get("nameJavaLiteral"));
+    }
+
+    @Test
+    void leavesTheMessageLiteralAbsentWhereNoMessageIsAuthored() {
+        Map<String, Object> check = new LinkedHashMap<>();
+        check.put("kind", "exactlyOne");
+        Map<String, Object> unique = new LinkedHashMap<>();
+        unique.put("name", "INVOICE_NUMBER");
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Total", "DECIMAL"));
+        entity.put("checks", List.of(check));
+        entity.put("uniqueConstraints", List.of(unique));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertFalse(check.containsKey("messageJavaLiteral"));
+        assertFalse(unique.containsKey("messageJavaLiteral"));
+        assertEquals("INVOICE_NUMBER", unique.get("nameJavaLiteral"));
     }
 
     @Test

@@ -44,6 +44,7 @@ import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
+import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -218,7 +219,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 history: true
                 immutableWhen: "Status == 2"
                 checks:
-                  - { kind: itemsMin, count: 1, status: 2, message: "Entry needs at least one line" }
+                  - { kind: itemsMin, count: 1, status: 2, message: 'An entry needs at least one "line"' }
                   - { kind: itemsSumEqual, over: [debit, credit], status: 2, message: "Debits must equal credits" }
                   # requiredWhen (#7094), gated + over a relation hop: the value lives on the related
                   # account, so the generated repository loads it by FK before it can read it, and the
@@ -227,7 +228,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                       message: "An audited entry must be booked against a named account" }
                   # Two values of the SAME row, related (#7095) - one temporal pair and one numeric,
                   # the two comparison families the generated code emits differently.
-                  - { kind: compare, field: due,  op: ge, than: date,  message: "Due cannot be before the entry date" }
+                  - { kind: compare, field: due,  op: ge, than: date,  message: 'A "due" date is never before the entry date' }
                   - { kind: compare, field: paid, op: le, than: debit, message: "Paid cannot exceed the debit total" }
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
@@ -293,7 +294,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # answered with the authored message rather than a server error.
               - name: PartyCode
                 unique:
-                  - { fields: [party, code], message: "This code is already registered for the party" }
+                  - { fields: [party, code], message: 'This "code" is already registered for the party' }
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: code, type: string, required: true, length: 50 }
@@ -804,7 +805,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - kind: guard
                     aggregate: ledgerTotal
                     minimum: 0
-                    message: Insufficient balance
+                    message: 'Insufficient "balance"'
                     enabledBy: EMISSION_BLOCK_NEGATIVE_LEDGER
               - name: LedgerTotal
                 fields:
@@ -1032,6 +1033,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                       forEach: { days: workingDays }
                       dayField: day
                       defaults: { amount: 8 }
+
+              # the dunning run: a notify fan-out whose per-row relation loads (the recipient, the
+              # render language) and attachment render sit INSIDE the fail-soft try (#7233). It never
+              # fires here (the 1st at 05:00); it is in this fixture to be COMPILED at publish - the
+              # engine IT pins the ordering over emitted text, this one proves the moved block builds.
+              - name: overdue-bills
+                cron: "0 0 5 1 * *"
+                entity: Bill
+                notify:
+                  to: Person.email
+                  subject: "Reminder: bill {note}"
+                  body: "Dear {Person.name}, your bill is still open: {recordUrl}"
+                  attach: print
+                  languageFrom: Person.locale
+                  outcome: sendOutcome
 
             processes:
               # assignee: personal - the confirm task lands in exactly the owner's Inbox (the IT
@@ -1452,7 +1468,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   to: BillLine
                   where:
                     - { field: amount, op: gt, value: 0 }
-                  refuse: "Stay night carries no amount"
+                  refuse: 'Stay night carries no "amount"'
                   map:
                     Amount: amount
                 defaults:
@@ -1827,7 +1843,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(
                 entryController.contains("if (entity.Due != null && entity.Date != null")
                         && entryController.contains("!(entity.Due.compareTo(entity.Date) >= 0)")
-                        && entryController.contains("Due cannot be before the entry date"),
+                        && entryController.contains("A \\\"due\\\" date is never before the entry date"),
                 "checks: compare over two dates must emit a compareTo comparison in the REST controller, got: " + entryController);
         assertTrue(entryController.contains(
                 "!(new java.math.BigDecimal(entity.Paid.toString()).compareTo(new java.math.BigDecimal(entity.Debit.toString())) <= 0)"),
@@ -1940,8 +1956,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "an ungated check is not the repository's - a gate it does not carry cannot be tested there");
 
         String entryRepository = contentOf("gen/emission/data/entry/EntryRepository.java");
-        assertTrue(entryRepository.contains("Entry needs at least one line"),
-                "checks: itemsMin must emit its authored message into the repository gate");
+        assertTrue(entryRepository.contains("An entry needs at least one \\\"line\\\""),
+                "checks: itemsMin must emit its authored message into the repository gate, escaped for the literal it lands in");
         assertTrue(entryRepository.contains("Debits must equal credits"),
                 "checks: itemsSumEqual must emit its authored message into the repository gate");
         // A value required only under a condition (#7094). The rule reaches the value THROUGH the
@@ -2050,7 +2066,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // layer dropped it.
         assertTrue(schema.contains("\"PartyCode_Party_Code\""), "the composite business key must be emitted into the schema: " + schema);
         String partyCodeController = contentOf("gen/emission/api/partycode/PartyCodeController.java");
-        assertTrue(partyCodeController.contains("This code is already registered for the party"),
+        assertTrue(partyCodeController.contains("This \\\"code\\\" is already registered for the party"),
                 "the generated controller must carry the authored conflict message");
         assertTrue(schema.contains("EMISSION_UNIT_LANG"), "multilingual must emit the _LANG translation table into the schema");
         // manyToMany: the link entity is an ordinary entity from parse time on, so it must reach the
@@ -2087,6 +2103,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the report repository must bind each authored parameter, typed from its target field");
         assertTrue(contentOf("gen/claimsbyunit/api/reports/ClaimsByUnitController.java").contains("@QueryParam(\"minTotal\")"),
                 "the report controller must expose each authored parameter as a query parameter");
+        // A dashboard count tile over an AGGREGATING report reads ONE aggregated number: the rows are
+        // groups, so the record count is the count(*) measure SUMMED, and summing it in the browser
+        // meant shipping every group row of the report per tile per dashboard load (dirigible #7161).
+        assertTrue(claimsByUnitRepository.contains("SELECT SUM(\\\"\" + column + \"\\\") AS \\\"REPORT_SUM\\\" FROM ("),
+                "the report repository must aggregate the count column in SQL: " + claimsByUnitRepository);
+        assertTrue(claimsByUnitRepository.contains("NUMERIC_COLUMN_TYPES.contains"),
+                "the summed column must be validated as numeric - a total over a text column is a client error");
+        assertTrue(contentOf("gen/claimsbyunit/api/reports/ClaimsByUnitController.java").contains("@Post(\"/sum\")"),
+                "the report controller must expose the server-side sum the count tile reads");
 
         // kind: statement (#6938): the line classification is a generated .view artifact next to the
         // .report - the selectors and labels live THERE, as data the ViewsSynchronizer provisions,
@@ -2320,7 +2345,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // both PERSIST the row and mark it instead of throwing.
         assertTrue(ledgerRepository.contains("Criteria.create().eq(\"Person\", entity.Person).eq(\"Unit\", entity.Unit)"),
                 "a guard must recompute its aggregate over the incoming row's full key-tuple");
-        assertTrue(ledgerRepository.contains("throw new ValidationException(\"Insufficient balance\")"),
+        // ...and only for a row that HAS a full key-tuple. Criteria.eq is null-safe (#7134), so a null
+        // key no longer matches nothing - it matches the null group, a pool of tuple-less rows that the
+        // aggregate handler ignores by contract and materialises no target row for (#7180).
+        assertTrue(ledgerRepository.contains("boolean guardKeyed = entity.Person != null && entity.Unit != null;"),
+                "a guard must test every grouping key for null before it recomputes: " + ledgerRepository);
+        assertTrue(ledgerRepository.contains("boolean guardWithin = true;") && ledgerRepository.contains("if (guardKeyed) {"),
+                "a row belonging to no key-tuple must pass the guard untouched - no throw, no marker, no forced status");
+        assertTrue(ledgerRepository.contains("throw new ValidationException(\"Insufficient \\\"balance\\\"\")"),
                 "outcome block must fail the write with the authored message");
         assertTrue(ledgerRepository.contains("Configurations.get(\"EMISSION_BLOCK_NEGATIVE_LEDGER\""),
                 "enabledBy must wrap the guard in a config gate, so a tenant can turn it off");
@@ -2724,6 +2756,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(job.contains(".Period = java.time.YearMonth.now().toString()"),
                 "a month field's `now` default must render the YYYY-MM string, not LocalDate");
 
+        // the dunning fan-out (#7233): every per-row database read - the recipient's relation load, the
+        // render language's, the print feeder behind the attachment - runs inside the fail-soft try, so
+        // one bad row costs one `failed` instead of the tick. The fixture is here to be COMPILED at
+        // publish (the loads became locals of the try block); the ordering is pinned once more, on a
+        // real document.
+        String dunning = contentOf("gen/events/emission/OverdueBillsJob.java");
+        int dunningTry = dunning.indexOf("try {", dunning.indexOf("for (BillEntity entity : rows) {"));
+        int dunningLoad = dunning.indexOf("PersonRepository().findById(entity.Person)");
+        int dunningRender = dunning.indexOf("Print.render(\"Bill\",");
+        int dunningCatch = dunning.indexOf("} catch (Exception ex) {");
+        assertTrue(dunningTry > 0 && dunningTry < dunningLoad && dunningLoad < dunningRender && dunningRender < dunningCatch,
+                "the row's loads and the attachment render must run inside the fail-soft try: " + dunning);
+
         // month widget: the YYYY-MM field renders the Harmonia month picker on BOTH writable
         // surfaces - the power form and the personal form (my-shell parity).
         assertTrue(contentOf("gen/emission/views/Claim/Claim-form.html").contains("x-h-month-picker"),
@@ -2900,6 +2945,65 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the personal line dialog must show its error INSIDE the dialog - the items-pane banner sits behind it");
         assertTrue(myRosterPage.contains("applyItemError") && myRosterPage.contains("namedProperty"),
                 "a refused personal line must be mapped onto the property the server named, not printed raw");
+
+        // #7242: #7151/#7152 reached the shared apiErrors helper and the line dialogs only - the
+        // personal/partner form save and the document HEADER save still printed the raw developer-
+        // facing e.message and marked no field. Mirror baseFormPage.applyApiError on both surfaces:
+        // namedProperty -> fieldError, messageWithLabels, else the refusal text, else the neutral
+        // fallback - and route the load/delete paths through the same safe refusalMessageFor helper.
+        assertTrue(myFormPage.contains("applyApiError") && myFormPage.contains("namedProperty"),
+                "the personal form save must map a named rejection onto its property, not print e.message");
+        assertTrue(myFormPage.contains("refusalMessageFor"),
+                "the personal form's load/delete paths must go through the safe refusal helper, not e.message");
+        assertFalse(myFormPage.contains("(e && e.message)"), "the personal form must never surface the developer-facing e.message");
+        assertTrue(myForm.contains(":aria-invalid=\"fieldError === "),
+                "the personal form's header controls must mark the field a rejection named");
+
+        String partnerForm = contentOf("gen/emission/views/partner/PartnerTicket-form.html");
+        String partnerFormPage = contentOf("gen/emission/js/components/pages/partner/PartnerTicketPartnerFormPage.js");
+        assertTrue(partnerFormPage.contains("applyApiError") && partnerFormPage.contains("namedProperty"),
+                "the partner form save must map a named rejection onto its property, not print e.message");
+        assertTrue(partnerFormPage.contains("refusalMessageFor"),
+                "the partner form's load/delete paths must go through the safe refusal helper, not e.message");
+        assertFalse(partnerFormPage.contains("(e && e.message)"), "the partner form must never surface the developer-facing e.message");
+        assertTrue(partnerForm.contains(":aria-invalid=\"fieldError === "),
+                "the partner form's header controls must mark the field a rejection named");
+
+        // The document HEADER save gets the identical treatment - the my-document class is the one
+        // #7242 was filed reviewing (the line dialog got it in #7152, the header did not).
+        assertTrue(myRosterPage.contains("applyApiError") && myRosterPage.contains("namedProperty"),
+                "the personal document's header save must map a named rejection onto its property");
+        assertTrue(myRosterPage.contains("refusalMessageFor"),
+                "the personal document's load/delete/items paths must go through the safe refusal helper");
+        assertFalse(myRosterPage.contains("(e && e.message)"), "the personal document must never surface the developer-facing e.message");
+        assertTrue(myRosterDoc.contains(":aria-invalid=\"fieldError === "),
+                "the personal document's header controls must mark the field a rejection named");
+
+        // #7263: the checks above name four files, and the fix they guard missed the admin surface
+        // #7242 listed, the personal/partner list + calendar loads, the standalone report page and the
+        // task form. The rule is a property of EVERY generated page, so it is asserted over every
+        // generated page: nothing under gen/ prints e.message - a 500's raw exception text - and the
+        // shared apiErrors gate is the only path from a REST error body to a banner.
+        List<String> emittedPages = emittedPages("gen");
+        // The walk is load-bearing only if it really saw the pages: pin it to files the checks above read.
+        assertTrue(
+                emittedPages.contains("gen/emission/admin/index.html")
+                        && emittedPages.contains("gen/emission/js/components/pages/my/ClaimMyListPage.js"),
+                "the generated-page walk must cover the admin page and the SPA pages, else the rule below is vacuous: " + emittedPages);
+        List<String> rawMessagePages = emittedPages.stream()
+                                                   .filter(page -> {
+                                                       String content = contentOf(page);
+                                                       return content.contains("(e && e.message)") || content.contains("String(e.message");
+                                                   })
+                                                   .toList();
+        assertTrue(rawMessagePages.isEmpty(),
+                "every generated page must route a failure through apiErrors, never print e.message: " + rawMessagePages);
+        assertTrue(myList.contains("refusalMessageFor(e, 'Could not load your"),
+                "a failed personal list load must show the refusal text or the neutral fallback, never e.message (#7263)");
+        assertTrue(partnerList.contains("refusalMessageFor(e, 'Could not load your"),
+                "a failed partner list load must show the refusal text or the neutral fallback, never e.message (#7263)");
+        assertTrue(myLeaveCalendar.contains("refusalMessageFor(e, 'Could not load your"),
+                "a failed personal calendar load must show the refusal text or the neutral fallback, never e.message (#7263)");
 
         // The app-test manifest carries the personal UI-parity metadata the runner's my flow
         // drives (wave 2): the /my route, the layout family the personal page belongs to, and
@@ -3237,6 +3341,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(adminPage.contains("\"lookup\":{\"url\":"), "a relation column must carry its lookup URL for the combobox");
         assertTrue(adminPage.contains("loadLookups"), "the admin page must resolve relation ids to labels");
         assertTrue(adminPage.contains("\"readonly\":true"), "identity/calculated/audit columns must be marked read-only");
+        // The admin banner quotes the server's text only for a 400/409 refusal, through the shared gate
+        // the page loads for that purpose - a 500's exception text goes to the console, not the screen
+        // (#7151, #7263).
+        assertTrue(adminPage.contains("shell/js/services/apiError.js"), "the admin page must load the shared refusal gate");
+        assertTrue(adminPage.contains("App.services.apiErrors.refusalMessageFor("),
+                "the admin banner must go through the shared refusal gate, never the raw response text");
+        assertFalse(adminPage.contains("String(e.message"), "the admin surface must never print the developer-facing e.message");
         String adminPerspective = contentOf("gen/emission/perspectives/admin/perspective.js");
         assertTrue(adminPerspective.contains("kind: 'ADMIN'"), "the admin perspective must declare the ADMIN kind");
         assertFalse(adminPerspective.contains("groupId"), "an admin perspective must not bake in the shell's navigation group id (#6646)");
@@ -3311,7 +3422,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // The other reading: the refusal names the rows, so the caller knows which of a hundred lines
         // to go and fix - the whole question they have.
         String checkedBillFromStay = contentOf("gen/events/emission/CheckedBillFromStayGenerate.java");
-        assertTrue(checkedBillFromStay.contains("\"Stay night carries no amount (StayNight \" + unqualified + \")\""),
+        assertTrue(checkedBillFromStay.contains("\"Stay night carries no \\\"amount\\\" (StayNight \" + unqualified + \")\""),
                 "refuse: must throw the authored message carrying the keys of the offending rows");
 
         // generates on the step axis + mode: append (#6800): the listener binds the step-scoped topic
@@ -3566,6 +3677,47 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("$", hasSize(0)));
+
+        // The count tile's number, server-side (dirigible #7161). Both claims sit in ONE unit group,
+        // so the report yields a single row: its record count is the count(*) measure SUMMED (2) and
+        // NOT the number of rows (1), which is what the count endpoint reports - the two answers here
+        // differ, so this asserts the tile reads the right one. Only numeric columns total: the
+        // grouping label and an alias the report does not carry are client errors, not 500s.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"column\":\"Count\"}")
+                                                 .when()
+                                                 .post(REPORT_API + "/ClaimsByUnitController/sum")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 // Generic report JSON, so the number is a float here -
+                                                 // the tile formats it through the column's pattern.
+                                                 .body("sum", equalTo(2.0F)));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(REPORT_API + "/ClaimsByUnitController/count")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("count", equalTo(1)));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"column\":\"Unit\"}")
+                                                 .when()
+                                                 .post(REPORT_API + "/ClaimsByUnitController/sum")
+                                                 .then()
+                                                 .statusCode(400));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"column\":\"Nonexistent\"}")
+                                                 .when()
+                                                 .post(REPORT_API + "/ClaimsByUnitController/sum")
+                                                 .then()
+                                                 .statusCode(400));
+        // ... and the tile's `at` pins ride the same per-column conditions the report page filters
+        // with, so a pinned sum narrows to the pinned group.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"column\":\"Count\",\"conditions\":[{\"column\":\"Unit\",\"operator\":\"EQ\",\"value\":\"Nothing\"}]}")
+                                                 .when()
+                                                 .post(REPORT_API + "/ClaimsByUnitController/sum")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("sum", equalTo(0)));
 
         // kind: statement, end to end (#6938): the published .view artifact was provisioned by the
         // ViewsSynchronizer AFTER the tables it reads, and the thin repository query joins it - so
@@ -3880,7 +4032,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/entry/EntryController")
                                                  .then()
                                                  .statusCode(400)
-                                                 .body("message", containsString("Due cannot be before the entry date")));
+                                                 .body("message", containsString("A \"due\" date is never before the entry date")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Date\":\"2026-01-15\",\"Due\":\"2026-01-15\",\"Account\":2}")
                                                  .when()
@@ -4898,7 +5050,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post("/services/java/" + PROJECT + "/gen/events/emission/CheckedBillFromStayGenerate/run")
                                                  .then()
                                                  .statusCode(400)
-                                                 .body(containsString("Stay night carries no amount")));
+                                                 .body("message", containsString("Stay night carries no \"amount\"")));
 
         // No rule qualifies a row, so the document would have no lines at all - refused, not committed.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -5765,6 +5917,30 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             existing.setContent(content.getBytes(StandardCharsets.UTF_8));
         } else {
             repository.createResource(path, content.getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    /**
+     * Every generated script and view under {@code folder} (project-relative), as project-relative
+     * paths - the surface a rule about "every generated page" is asserted over, so a page a template
+     * adds later cannot fall outside the check by not being named.
+     */
+    private List<String> emittedPages(String folder) {
+        List<String> pages = new java.util.ArrayList<>();
+        collectPages(repository.getCollection(PROJECT_PATH + "/" + folder), pages);
+        return pages;
+    }
+
+    private void collectPages(ICollection collection, List<String> pages) {
+        for (IResource resource : collection.getResources()) {
+            String name = resource.getName();
+            if (name.endsWith(".js") || name.endsWith(".html")) {
+                pages.add(resource.getPath()
+                                  .substring(PROJECT_PATH.length() + 1));
+            }
+        }
+        for (ICollection child : collection.getCollections()) {
+            collectPages(child, pages);
         }
     }
 

@@ -123,6 +123,7 @@ final class ModelParameterProcessor {
         }
         entity.put("referencedProjections", new ArrayList<>());
         splitChecks(entity, parameters);
+        resolveUniqueConstraintLiterals(entity);
         resolveDataOrder(entity);
 
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
@@ -218,6 +219,7 @@ final class ModelParameterProcessor {
         List<Object> documentChecks = new ArrayList<>();
         for (Map<String, Object> check : checks) {
             String kind = str(check, "kind");
+            resolveMessageLiteral(check);
             resolveCheckPathLoads(check, parameters);
             if ("exactlyOne".equals(kind) || "compare".equals(kind)) {
                 rowChecks.add(check);
@@ -235,6 +237,47 @@ final class ModelParameterProcessor {
         entity.put("rowChecks", rowChecks);
         entity.put("guardChecks", guardChecks);
         entity.put("documentChecks", documentChecks);
+    }
+
+    /**
+     * Derives the escaped twin of an authored message, for the templates that write it into a Java
+     * string literal.
+     *
+     * <p>
+     * A check's, a guard's or a unique key's message is prose an author writes - and the very messages
+     * the DSL's own examples suggest quote a field name ({@code A "due" date is never before the
+     * invoice date}). Interpolated verbatim, that quote ends the literal it is written into and fails
+     * the compile of every generated class of the module, not just the one carrying the message (#7241,
+     * the sibling of #7154). The raw value is left in place for the surfaces that render it as text;
+     * only the Java sites read the twin.
+     *
+     * <p>
+     * A holder carrying no message is left untouched rather than given an empty twin, as the default
+     * value literal is: the key's absence is what a template reads.
+     *
+     * @param holder the check or unique constraint
+     */
+    private static void resolveMessageLiteral(Map<String, Object> holder) {
+        String message = str(holder, "message");
+        if (message != null) {
+            holder.put("messageJavaLiteral", JavaLiterals.escape(message));
+        }
+    }
+
+    /**
+     * Derives the escaped twins of a unique key's authored name and message, both of which the REST
+     * controllers write into Java string literals when they translate a constraint violation.
+     *
+     * @param entity the entity
+     */
+    private static void resolveUniqueConstraintLiterals(Map<String, Object> entity) {
+        for (Map<String, Object> constraint : asMaps(entity.get("uniqueConstraints"))) {
+            resolveMessageLiteral(constraint);
+            String name = str(constraint, "name");
+            if (name != null) {
+                constraint.put("nameJavaLiteral", JavaLiterals.escape(name));
+            }
+        }
     }
 
     /**
@@ -352,9 +395,12 @@ final class ModelParameterProcessor {
             property.put("widgetIsMajor", Boolean.FALSE);
         }
 
-        resolveDefaultValueLiteral(property);
+        resolveDefaultValueLiterals(property);
 
         resolveWidgetLengths(property, entity, dataType);
+        // After the widget flags: the seed is emitted in the shape the draft holds, and a numeric
+        // column is what decides between a real number and a string.
+        resolveDefaultValueJsLiteral(property);
         property.put("inputRule", strOr(property, "widgetPattern", ""));
         collectMasterProperties(property, entity);
         collectReferencedProjections(property, entity, entities);
@@ -363,29 +409,67 @@ final class ModelParameterProcessor {
     }
 
     /**
-     * Derives the authored default as a Java expression, for the properties whose default the generated
-     * repository can apply itself.
+     * Derives the authored default as the literals the generated artefacts write it into.
      *
      * <p>
-     * The default is also the column's DB DEFAULT, but the database supplies it at INSERT - which is
-     * after the create-time calculations have already run in Java and read a null (#7104), so the
-     * repository assigns it first. The expression is resolved here rather than assembled in the
-     * template, so an authored value carrying a quote or a backslash is escaped instead of ending the
-     * literal it is written into and failing the compile of the whole generated module (#7154).
+     * The value is a piece of authored text that ends up inside a Java string literal (the repository
+     * assigning the default) and inside a JSON string (the {@code .schema} declaring the column
+     * DEFAULT). Interpolated verbatim by a template, a value carrying a quote or a backslash ended the
+     * literal it was being written into and took the whole artefact with it - a failed compile of the
+     * generated module (#7154), an unparseable schema for which the synchronizer then created no table
+     * at all (#7206). Resolving the literals here keeps the worst case at one mis-valued field.
      *
      * <p>
-     * A key with no expression is left absent rather than null: a template reads the key's presence as
-     * "this property has a default to apply".
+     * The JSON literal is the value as authored, because the schema's DEFAULT reaches the DDL verbatim
+     * by design - a malformed default is the author's broken SQL, and only escaped so that it cannot
+     * break anything but its own column. The Java expression is of the property's own type and exists
+     * only where a literal can stand in for the default at all.
+     *
+     * <p>
+     * A key with no value is left absent rather than null: a template reads the key's presence as "this
+     * property has a default".
      *
      * @param property the property
      */
-    private static void resolveDefaultValueLiteral(Map<String, Object> property) {
+    private static void resolveDefaultValueLiterals(Map<String, Object> property) {
+        String defaultValue = str(property, "dataDefaultValue");
+        if (defaultValue == null || defaultValue.isEmpty()) {
+            return;
+        }
+        property.put("dataDefaultValueJsonLiteral", JsonLiterals.stringLiteral(defaultValue));
+
+        // The generated key is the database's to assign, so its default is never applied in Java - the
+        // schema, which only declares what was authored, keeps carrying it.
         if (Boolean.TRUE.equals(property.get("dataPrimaryKey")) || Boolean.TRUE.equals(property.get("dataAutoIncrement"))) {
             return;
         }
-        String expression = JavaLiterals.defaultValueExpression(str(property, "dataTypeJavaClass"), str(property, "dataDefaultValue"));
+        String expression = JavaLiterals.defaultValueExpression(str(property, "dataTypeJavaClass"), defaultValue);
         if (expression != null) {
             property.put("dataDefaultValueJavaLiteral", expression);
+        }
+    }
+
+    /**
+     * Derives the authored default as the JavaScript value the item dialog seeds a new line with.
+     *
+     * <p>
+     * The column already carries this value as a DB DEFAULT and the repository applies it on create
+     * (#7104); seeding the dialog is what makes it visible and editable before the row is posted. The
+     * seed is resolved here rather than assembled in the template, so an authored value carrying an
+     * apostrophe or a backslash is escaped instead of ending the literal it is written into and making
+     * the whole generated register a syntax error - which fails the page, not the one field (#7207).
+     *
+     * <p>
+     * A key with no expression is left absent rather than null: a template reads the key's presence as
+     * "this property has a default to seed".
+     *
+     * @param property the property
+     */
+    private static void resolveDefaultValueJsLiteral(Map<String, Object> property) {
+        String expression = JsLiterals.defaultValueExpression(str(property, "widgetType"),
+                Boolean.TRUE.equals(property.get("isNumberType")), str(property, "dataDefaultValue"));
+        if (expression != null) {
+            property.put("dataDefaultValueJsLiteral", expression);
         }
     }
 

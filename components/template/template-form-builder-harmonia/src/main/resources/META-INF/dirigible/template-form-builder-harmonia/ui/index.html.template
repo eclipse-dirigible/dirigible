@@ -311,6 +311,8 @@
     <!-- The single shared value formatter (dates/numbers). Self-contained + dependency-free, so it loads
          by absolute URL even in the standalone task-form iframe where the shell assets are absent. -->
     <script src="/services/web/application-core/shell/js/services/format.js"></script>
+    <!-- The shared refusal gate: a submit failure reaches the page only through App.services.apiErrors (#7263). -->
+    <script src="/services/web/application-core/shell/js/services/apiError.js"></script>
     <!-- i18n: the shared shell translator (window.T + the Alpine i18n store), which serves the labels,
          the status steps and the submit messages from this form's own catalog. This page is standalone
          (no SPA shell / app.js), so the catalog namespace is bootstrapped inline: i18n.js reads

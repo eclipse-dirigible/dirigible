@@ -7,6 +7,7 @@ Provides behavioral guidelines to reduce common LLM coding mistakes and guidance
 The guidance is split by topic into `.claude/docs/` and imported below (each file carries its own headings). Edit the topic files, not this index; add a new topic as a new file plus an import line here.
 
 @.claude/docs/behavioral-guidelines.md
+@.claude/docs/take-this-workflow.md
 @.claude/docs/project-build-run.md
 @.claude/docs/repository-layout.md
 @.claude/docs/synchronizer-model.md

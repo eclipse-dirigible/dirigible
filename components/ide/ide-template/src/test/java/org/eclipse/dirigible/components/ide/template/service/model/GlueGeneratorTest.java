@@ -75,6 +75,42 @@ class GlueGeneratorTest {
         assertThat(GlueGenerator.comparedCells("not a list")).isEmpty();
     }
 
+    /**
+     * The header assignments are normalised by their own pass (#7256), which reads the flag through the
+     * same rule - a header written between #7163 and #7188 keeps its treatment too.
+     */
+    @Test
+    void aHeaderAssignmentReadsTheFlagUnderItsFormerSpellingToo() {
+        Map<String, Object> declared = new LinkedHashMap<>();
+        declared.put("targetProp", "ValueDate");
+        declared.put("expr", "source.IssueDate");
+        declared.put("local", "header1");
+        declared.put("expressionDefault", Boolean.TRUE);
+
+        List<Map<String, Object>> assignments = GlueGenerator.headerAssignments(List.of(declared));
+
+        assertThat(assignments).hasSize(1);
+        assertThat(assignments.get(0)).containsEntry("compareOnlyWhenDerived", Boolean.TRUE)
+                                      .containsEntry("value", "header1")
+                                      .containsEntry("hoisted", Boolean.TRUE);
+    }
+
+    /** A header written by the current generator carries the current key, and that key decides. */
+    @Test
+    void aHeaderAssignmentCarryingTheCurrentSpellingIgnoresTheFormerOne() {
+        Map<String, Object> declared = new LinkedHashMap<>();
+        declared.put("targetProp", "Reason");
+        declared.put("expr", "source.Reason");
+        declared.put("compareOnlyWhenDerived", Boolean.FALSE);
+        declared.put("expressionDefault", Boolean.TRUE);
+
+        List<Map<String, Object>> assignments = GlueGenerator.headerAssignments(List.of(declared));
+
+        assertThat(assignments.get(0)).containsEntry("compareOnlyWhenDerived", Boolean.FALSE)
+                                      .containsEntry("value", "source.Reason")
+                                      .containsEntry("hoisted", Boolean.FALSE);
+    }
+
     private static Map<String, Object> cell(String name) {
         Map<String, Object> cell = new LinkedHashMap<>();
         cell.put("name", name);

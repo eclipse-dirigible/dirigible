@@ -18,10 +18,16 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
+import org.eclipse.dirigible.components.data.structures.domain.Table;
+import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
+import org.eclipse.dirigible.components.data.structures.synchronizer.SchemasSynchronizer;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -32,6 +38,9 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 
 /**
  * End-to-end test for the intent editor services: {@code POST /services/ide/intent/parse} (the
@@ -449,6 +458,12 @@ class IntentEngineIT extends IntegrationTest {
 
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
+
+    /**
+     * Reads a generated .schema back exactly as the runtime does, to assert what it creates from it.
+     */
+    @Autowired
+    private SchemasSynchronizer schemasSynchronizer;
 
     @Test
     void parse_returns_the_full_model() {
@@ -2348,6 +2363,94 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void a_scheduled_notification_keeps_its_row_loads_and_attachment_render_inside_the_fail_soft_try() {
+        // Issue #7233: #7023 made each row's SEND fail-soft, but the per-row try enclosed only Mail.send.
+        // The row's one-hop relation loads, the render language's load and the attachment render all ran
+        // BEFORE it, and every one of them reads the database - so a foreign key at a row a concurrent
+        // delete removed, or a print template that fails for ONE document, still aborted the whole
+        // dunning run: every later matching row silently never mailed, no summary logged. The generate
+        // branch was fixed for exactly this in #7178; this is its twin.
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: name,   type: string }
+                      - { name: email,  type: string }
+                      - { name: locale, type: string, length: 5 }
+                  - name: Invoice
+                    function: Document
+                    fields:
+                      - { name: id,              type: integer, primaryKey: true, generated: true }
+                      - { name: dueDate,         type: date }
+                      - { name: reminderOutcome, type: string, length: 128 }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: InvoiceItem
+                    function: DocumentItem
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                schedules:
+                  - name: overdue-reminders
+                    cron: "0 0 8 * * ?"
+                    entity: Invoice
+                    where:
+                      - { field: dueDate, op: lt, value: CURRENT_DATE }
+                    notify:
+                      to: Customer.email
+                      subject: "Invoice {id} is overdue"
+                      body: "Dear {Customer.name}, invoice {id} is still unpaid - it is attached."
+                      attach: print
+                      languageFrom: Customer.locale
+                      outcome: reminderOutcome
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "billing.glue");
+
+        String job = codeOf("gen/events/billing/OverdueRemindersJob.java");
+        int loop = job.indexOf("for (InvoiceEntity entity : rows) {");
+        int recipient = job.indexOf("String to = null;", loop);
+        int tryOpens = job.indexOf("try {", loop);
+        int load = job.indexOf("new CustomerRepository().findById(entity.Customer)");
+        int language = job.indexOf("attachLanguageSource =");
+        int render = job.indexOf("Print.render(\"Invoice\",");
+        int send = job.indexOf("Mail.send(");
+        int catches = job.indexOf("} catch (Exception ex) {");
+        assertTrue(loop > 0 && recipient > 0 && tryOpens > 0 && load > 0 && language > 0 && render > 0 && send > 0 && catches > 0,
+                "got: " + job);
+        // The ordering is the whole fix: the try must open before the first per-row database read.
+        assertTrue(tryOpens < load, "the recipient's one-hop relation load runs inside the fail-soft try");
+        assertTrue(load < language && language < render, "the render language's load and the attachment render follow it, in the same try");
+        assertTrue(render < send && send < catches, "render, then send, then the row's catch - one try encloses all of them");
+        int nextTry = job.indexOf("try {", tryOpens + 1);
+        assertTrue(nextTry < 0 || nextTry > catches, "one try encloses the whole row - no second try wraps only the send");
+        // The recipient local is declared ahead of the try, so the row's failure line can still name it.
+        assertTrue(recipient < tryOpens, "the recipient is declared outside the try the failure line reads it from");
+        assertTrue(job.contains("could not mail Invoice [{}] at [{}]\", entity.Id, to, ex"),
+                "a row that failed on a load or the render is logged with its own key and recipient");
+        // A row with nobody to mail is still a `continue` - it leaves the try, not the loop - and is
+        // still counted rather than failed.
+        int skipped = job.indexOf("skipped++;");
+        assertTrue(tryOpens < skipped && skipped < send, "a row with no recipient is still skipped from inside the try");
+        // Both outcome stamps survive: `sent` inside the try, `failed: <reason>` from the catch - so a row
+        // that failed on a load or the render is stamped on the record exactly as a bounced mailbox is.
+        int stampSent = job.indexOf("stampNotifyOutcome(entity.Id, null);");
+        int stampFailed = job.indexOf("stampNotifyOutcome(entity.Id, ex);");
+        assertTrue(send < stampSent && stampSent < catches && catches < stampFailed,
+                "both delivery outcomes are still stamped, got: " + job);
+        assertTrue(job.contains("mailed [{}] of [{}] matching Invoice row(s), no recipient [{}], failed [{}]"),
+                "the tick's summary still reports the totals");
+    }
+
+    @Test
     void a_recurring_template_schedule_keys_on_the_period_of_the_run() {
         // Issue #7106: the recurring-template family had no key to declare. A monthly bill generated
         // from a standing BillTemplate is a plain document with a `date` - no period column to name -
@@ -3064,6 +3167,53 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void an_authored_default_is_escaped_into_the_item_dialog_seed() {
+        // #7207: the seed for a new line was interpolated into a JavaScript string literal verbatim,
+        // so an authored apostrophe ended the literal and the whole register was a syntax error - the
+        // page failed to load entirely, rather than one field mis-seeding. Sibling of #7154, which
+        // fixed the same interpolation one language over (the repository's Java literal).
+        writeIntent("""
+                name: registers
+                entities:
+                  - name: Ticket
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: issued, type: date }
+                    relations:
+                      - { name: lines, kind: oneToMany, to: TicketLine }
+
+                  - name: TicketLine
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: copy,     type: string,  length: 40, defaultValue: "Owner's copy" }
+                      - { name: path,     type: string,  length: 40, defaultValue: 'C:\\tmp' }
+                      - { name: quantity, type: integer, defaultValue: 1 }
+                      - { name: billable, type: boolean, defaultValue: true }
+                      - { name: stage,    type: string,  length: 20, defaultValue: DRAFT }
+                    relations:
+                      - { name: ticket, kind: manyToOne, to: Ticket, composition: true }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "registers.model");
+        String detailRegister = contentOf("gen/registers/js/components/pages/Ticket/TicketLine.detail.js");
+
+        // The seed keeps the shape the draft holds - a checkbox a real boolean, a numeric column a
+        // real number, everything else a string...
+        assertTrue(detailRegister.contains(", def: true"), "a boolean default must seed a real boolean, got: " + detailRegister);
+        assertTrue(detailRegister.contains(", def: 1"), "a numeric default must seed a real number, got: " + detailRegister);
+        assertTrue(detailRegister.contains(", def: 'DRAFT'"), "a string default must seed a quoted string, got: " + detailRegister);
+        // ...and a value carrying the apostrophe that delimits it is escaped into the literal instead
+        // of ending it.
+        assertTrue(detailRegister.contains(", def: 'Owner\\'s copy'"),
+                "a default carrying the apostrophe that delimits the seed must be escaped into it, got: " + detailRegister);
+        assertTrue(detailRegister.contains(", def: 'C:\\\\tmp'"),
+                "a default carrying a backslash must be escaped into the seed, got: " + detailRegister);
+    }
+
+    @Test
     void report_widget_generates_the_kpi_block_and_replaces_entity_tiles() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()
@@ -3331,6 +3481,104 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(posting.indexOf("itemsRepository.save(item)") > unitOfWork, "the derived lines are written inside the unit of work");
         // The Ledger carries no status lifecycle, so there is nothing to act on and nothing to guard.
         assertFalse(posting.contains("was NOT rewritten"), "a target with no status lifecycle is always rewritable");
+    }
+
+    @Test
+    void posts_writes_every_row_of_one_source_event_in_one_transaction() {
+        // #7179: the FLAT per-item mode (posts:, no header document) had the same multi-write shape as
+        // the posting rewrite and no unit of work - one save per row, one transaction each. A row the
+        // repository refused left the rows before it durable, and the guard here is coarser than the
+        // posting's: it asks whether ANY row back-references this source, so the partial set read as a
+        // finished post and no redelivery ever wrote the rest. The half-post was PERMANENT. The rows
+        // are derived first and written together, so the guard sees a whole post or nothing.
+        String yaml = """
+                name: poststest
+                entities:
+                  - name: GoodsIssueStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: Product
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: GoodsIssue
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 40 }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: GoodsIssueStatus, function: EntityStatus, init: 1 }
+                  - name: GoodsIssueItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, precision: 18, scale: 3 }
+                    relations:
+                      - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue, composition: true, required: true }
+                      - { name: Product, kind: manyToOne, to: Product }
+                  - name: StockMovement
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, precision: 18, scale: 3 }
+                    relations:
+                      - { name: Product, kind: manyToOne, to: Product }
+                      - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue }
+                  - name: StockNote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 100 }
+                    relations:
+                      - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue }
+                posts:
+                  - name: goodsIssueLedger
+                    forEntity: GoodsIssue
+                    event: 2
+                    forEach: items
+                    into: StockMovement
+                    idempotentBy: GoodsIssue
+                    set:
+                      Product: item.Product
+                      Quantity: "-item.Quantity"
+                  - name: goodsIssueNote
+                    forEntity: GoodsIssue
+                    event: create
+                    into: StockNote
+                    idempotentBy: GoodsIssue
+                    set:
+                      Note: source.Number
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        String glue = contentOf("poststest.glue");
+        assertTrue(glue.contains("\"posts\""), "the .glue should carry the posts collection");
+        assertTrue(glue.contains("GoodsIssueLedger"), "the post className should be carried in the glue");
+
+        generateFromModel("template-application-events-java/template/template.js", "poststest.glue");
+        String post = codeOf("gen/events/poststest/GoodsIssueLedgerPost.java");
+        assertTrue(post.contains("implements MessageHandler"), "the post is a self-describing message handler");
+        assertTrue(post.contains("-transitioned"), "a status-triggered post listens on the source's -transitioned channel");
+        assertTrue(post.contains("Criteria.create().eq(\"GoodsIssue\", source.Id)"), "the guard asks the back-reference on the target");
+        // Asserted by POSITION, since a save left inside the derivation loop would still "mention
+        // UnitOfWork": every row is mapped in memory first, and the ONE save site sits inside the block.
+        int derived = post.indexOf("rows.add(row)");
+        int unitOfWork = post.indexOf("UnitOfWork.run(() -> {");
+        int save = post.indexOf("targetRepository.save(row)");
+        assertTrue(derived > 0, "the rows must be derived into a list before anything is written");
+        assertTrue(unitOfWork > derived, "the unit of work must open after the derivation, not around the reads");
+        assertTrue(save > unitOfWork, "every row must be saved inside the unit of work");
+        assertEquals(save, post.lastIndexOf("targetRepository.save(row)"),
+                "there must be exactly ONE save site - a second one outside the block would write rows unprotected");
+        assertFalse(post.contains("${"), "the post template must render every placeholder");
+
+        // The single-row mode (no forEach) writes one row through one repository call - a transaction on
+        // its own, so it needs no unit of work and must not pretend to open one.
+        String single = codeOf("gen/events/poststest/GoodsIssueNotePost.java");
+        assertTrue(single.contains("targetRepository.save(row)"), "the single-row post writes its one row");
+        assertFalse(single.contains("UnitOfWork"), "one repository call is already one transaction");
     }
 
     @Test
@@ -3921,6 +4169,47 @@ class IntentEngineIT extends IntegrationTest {
         // user deliberately cleared stays cleared through update().
         assertEquals(1, occurrencesOf(repository, "entity.VatRate = new java.math.BigDecimal(\"20\")"),
                 "the default must be applied on create only, never re-applied by update(): " + repository);
+    }
+
+    @Test
+    void an_authored_default_carrying_a_quote_keeps_the_schema_parseable() {
+        // #7206: the .schema wrote the authored default into a JSON string verbatim, so an authored inch
+        // mark ended that string and left the whole artefact unparseable - the synchronizer then created
+        // NO table for any entity of the project, not just the one column's. The sibling of #7154 in the
+        // other literal syntax the same value reaches.
+        writeIntent("""
+                name: sizing
+                entities:
+                  - name: Panel
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: size,  type: string, length: 20, defaultValue: '6" \\ wide' }
+                      - { name: stage, type: string, length: 20, defaultValue: DRAFT }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-schema/template/template.js", "sizing.model");
+        String schema = contentOf("gen/sizing/schema/" + PROJECT + ".schema");
+
+        try {
+            assertNotNull(new Gson().fromJson(schema, JsonObject.class));
+        } catch (RuntimeException e) {
+            throw new AssertionError("the emitted schema must be valid JSON: " + schema, e);
+        }
+        // And the DEFAULT the synchronizer reads back is the value as authored - escaping it keeps the
+        // artefact parseable without changing what the column defaults to. A quote in it remains the
+        // author's broken SQL, on that one column.
+        Table table = schemasSynchronizer.parseSchema("/sizing-it/application.schema", schema)
+                                         .getTables()
+                                         .get(0);
+        Map<String, String> defaults = new LinkedHashMap<>();
+        for (TableColumn column : table.getColumns()) {
+            defaults.put(column.getName(), column.getDefaultValue());
+        }
+        assertTrue(defaults.containsValue("6\" \\ wide"), "the authored default must reach the schema intact: " + defaults);
+        assertTrue(defaults.containsValue("DRAFT"), "an ordinary default must be unchanged: " + defaults);
     }
 
     @Test

@@ -14,9 +14,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.IntStream;
 
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
@@ -51,6 +57,9 @@ import org.junit.jupiter.api.Test;
 class BpmProviderFlowableActiveActivitiesTest {
 
     private static final String TENANT_ID = "active-activities-tenant";
+
+    /** A database of this test's own; the statement count is read back over the same one. */
+    private static final String JDBC_URL = "jdbc:h2:mem:active-activities-test";
 
     private static final String DOOMED_PROCESS = "parked-step";
     private static final String DOOMED_STEP = "doomedStep";
@@ -112,7 +121,7 @@ class BpmProviderFlowableActiveActivitiesTest {
         StandaloneInMemProcessEngineConfiguration configuration = new StandaloneInMemProcessEngineConfiguration();
         // A database of this test's own: another engine test in the same surefire JVM keeps its
         // in-memory one alive past the class that built it.
-        configuration.setJdbcUrl("jdbc:h2:mem:active-activities-test;DB_CLOSE_DELAY=1000");
+        configuration.setJdbcUrl(JDBC_URL + ";DB_CLOSE_DELAY=-1");
         engine = configuration.buildProcessEngine();
 
         deploy(DOOMED_PROCESS, DOOMED_PROCESS_XML.formatted(DOOMED_PROCESS, DOOMED_STEP, DoomedDelegate.class.getName(), RETRY_CYCLE,
@@ -179,6 +188,79 @@ class BpmProviderFlowableActiveActivitiesTest {
         assertStatus(instance, WAITING_STEP, 1, 0);
     }
 
+    @Test
+    void aListingIsResolvedForEveryInstanceAtOnce() {
+        ProcessInstance parked = start(DOOMED_PROCESS);
+        failNextAttempt(parked);
+        ProcessInstance untried = start(DOOMED_PROCESS);
+        ProcessInstance waiting = start(WAITING_PROCESS);
+
+        Map<String, List<String>> activityIds = bpmProvider.getProcessInstanceActivityIds(List.of(parked, untried, waiting));
+
+        assertEquals(List.of(DOOMED_STEP), activityIds.get(parked.getId()), "a parked step is named by its timer job alone");
+        assertEquals(List.of(DOOMED_STEP), activityIds.get(untried.getId()), "an untried step is active and job-bearing - named once");
+        assertEquals(List.of(WAITING_STEP), activityIds.get(waiting.getId()), "a wait state is named by its active execution");
+    }
+
+    @Test
+    void anInstanceOutsideTheListingIsNotReported() {
+        ProcessInstance listed = start(WAITING_PROCESS);
+        // Job-bearing, and the batch reads the jobs of the whole tenant: the instance ids asked for
+        // are what narrows the answer.
+        start(DOOMED_PROCESS);
+
+        Map<String, List<String>> activityIds = bpmProvider.getProcessInstanceActivityIds(List.of(listed));
+
+        assertEquals(Set.of(listed.getId()), activityIds.keySet(), "only the listed instance may be answered for");
+    }
+
+    @Test
+    void anEmptyListingAsksTheEngineNothing() {
+        assertEquals(Map.of(), bpmProvider.getProcessInstanceActivityIds(List.of()));
+    }
+
+    /**
+     * The point of the batch. Resolved one by one this costs three queries per instance, and the
+     * Monitoring shell polls the listing unbounded every 30 s
+     * (<a href="https://github.com/eclipse-dirigible/dirigible/issues/7250">#7250</a>).
+     */
+    @Test
+    void theQueryCountDoesNotGrowWithTheListing() throws SQLException {
+        List<ProcessInstance> few = start(WAITING_PROCESS, 2);
+        List<ProcessInstance> many = start(WAITING_PROCESS, 8);
+
+        long forFew = queriesResolving(few);
+        long forMany = queriesResolving(many);
+
+        assertEquals(forFew, forMany, "resolving four times as many instances must not cost a query more");
+        assertEquals(3, forMany, "one execution query and the two job queries");
+    }
+
+    /**
+     * The queries H2 runs while the given instances are resolved; the commits around them are not what
+     * grows with the listing.
+     */
+    private static long queriesResolving(List<ProcessInstance> instances) throws SQLException {
+        try (Connection connection = DriverManager.getConnection(JDBC_URL, "sa", ""); Statement statement = connection.createStatement()) {
+            // Switching collection on discards whatever was collected before.
+            statement.execute("SET QUERY_STATISTICS TRUE");
+            try {
+                bpmProvider.getProcessInstanceActivityIds(instances);
+
+                return countQueries(statement);
+            } finally {
+                statement.execute("SET QUERY_STATISTICS FALSE");
+            }
+        }
+    }
+
+    private static long countQueries(Statement statement) throws SQLException {
+        try (ResultSet result = statement.executeQuery(
+                "SELECT SUM(EXECUTION_COUNT) FROM INFORMATION_SCHEMA.QUERY_STATISTICS WHERE SQL_STATEMENT LIKE 'SELECT%'")) {
+            return result.next() ? result.getLong(1) : 0;
+        }
+    }
+
     private static void assertStatus(ProcessInstance instance, String activityId, int positive, int negative) {
         Map<String, ActivityStatusData> statuses = bpmProvider.getProcessInstanceActiveActivityIds(instance.getId());
 
@@ -235,6 +317,12 @@ class BpmProviderFlowableActiveActivitiesTest {
     private static ProcessInstance start(String processKey) {
         return engine.getRuntimeService()
                      .startProcessInstanceByKeyAndTenantId(processKey, null, Map.of(), TENANT_ID);
+    }
+
+    private static List<ProcessInstance> start(String processKey, int count) {
+        return IntStream.range(0, count)
+                        .mapToObj(each -> start(processKey))
+                        .toList();
     }
 
     private static void deploy(String processKey, String xml) {

@@ -236,11 +236,16 @@ class PersonalSurfaceCreateValidationTemplateIT {
         return property;
     }
 
-    /** intent `checks: exactlyOne` - a row-level refusal, the same one the power surface applies. */
+    /**
+     * intent `checks: exactlyOne` - a row-level refusal, the same one the power surface applies. The
+     * escaped twin is the key the surfaces read at the Java site (#7241); the raw message stays for the
+     * surfaces that render it as text.
+     */
     private static Map<String, Object> rowCheck() {
         Map<String, Object> check = new LinkedHashMap<>();
         check.put("fields", List.of("FromDate", "Note"));
         check.put("message", "exactly one of FromDate / Note must be set");
+        check.put("messageJavaLiteral", "exactly one of FromDate / Note must be set");
         return check;
     }
 }

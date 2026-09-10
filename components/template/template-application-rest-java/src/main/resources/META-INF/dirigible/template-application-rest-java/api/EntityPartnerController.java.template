@@ -582,7 +582,7 @@ public class ${name}PartnerController {
 #end
             Object requiredValue = ${check.valueExpression};
             if ((${check.guard}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.message}");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
             }
         }
 #elseif($check.kind == "compare")
@@ -596,7 +596,7 @@ public class ${name}PartnerController {
 #else
                 && !(entity.${check.field}.compareTo(entity.${check.than}) ${check.op} 0)) {
 #end
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.message}");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
         }
 #else
         // Row-level check (intent `checks: exactlyOne`).
@@ -608,7 +608,7 @@ public class ${name}PartnerController {
             }
 #end
             if (assigned != 1) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.message}");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
             }
         }
 #end
@@ -702,7 +702,7 @@ public class ${name}PartnerController {
                                                                                    .thenComparing(java.util.Comparator.naturalOrder()));
 #if($uniqueConstraints)
 #foreach($uniqueConstraint in $uniqueConstraints)
-        messages.put("${uniqueConstraint.name}".toUpperCase(Locale.ROOT), "${uniqueConstraint.message}");
+        messages.put("${uniqueConstraint.nameJavaLiteral}".toUpperCase(Locale.ROOT), "${uniqueConstraint.messageJavaLiteral}");
 #end
 #end
 #foreach($property in $properties)

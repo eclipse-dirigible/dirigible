@@ -104,6 +104,13 @@ class UniqueFieldConflictControllerTemplateIT {
             "ERROR: duplicate key value violates unique constraint \"vacations_public_holiday_pkey\"\n"
                     + "  Detail: Key (PUBLIC_HOLIDAY_ID)=(5) already exists.";
 
+    /**
+     * The authored message of the composite key, quoting the field it is about - the shape the DSL's
+     * own examples suggest, and the one that ends the Java literal it lands in unless the twin the
+     * processor derives is what the template writes (#7241).
+     */
+    private static final String COMPOSITE_KEY_MESSAGE = "This \"day\" is already a holiday of the company";
+
     private final VelocityGenerationEngine velocityGenerationEngine = new VelocityGenerationEngine();
 
     @Test
@@ -220,7 +227,7 @@ class UniqueFieldConflictControllerTemplateIT {
         context.put("properties", List.of(primaryKey(), column("Company", "PUBLIC_HOLIDAY_COMPANY"), column("Day", "PUBLIC_HOLIDAY_DAY")));
         context.put("uniqueConstraints", List.of(compositeKey()));
 
-        assertEquals("This day is already a holiday of the company",
+        assertEquals(COMPOSITE_KEY_MESSAGE,
                 mapping(context).answerFor("duplicate key value violates unique constraint \"PublicHoliday_Company_Day\"",
                         UNIQUE_VIOLATION),
                 "the authored message must still be the answer for the constraint the model named");
@@ -462,12 +469,19 @@ class UniqueFieldConflictControllerTemplateIT {
         return parameters;
     }
 
-    /** The shape {@code EdmIntentGenerator} puts on a composite {@code unique:} declaration. */
+    /**
+     * The shape {@code EdmIntentGenerator} plus {@code ModelParameterProcessor} put on a composite
+     * {@code unique:} declaration. The message carries a quote on purpose: the name and the message are
+     * both written into Java string literals, so only the escaped twins the processor derives (#7241)
+     * leave the mapping compilable - and this test compiles what it renders.
+     */
     private static Map<String, Object> compositeKey() {
         Map<String, Object> constraint = new LinkedHashMap<>();
         constraint.put("name", "PublicHoliday_Company_Day");
+        constraint.put("nameJavaLiteral", "PublicHoliday_Company_Day");
         constraint.put("columns", List.of(Map.of("name", "PUBLIC_HOLIDAY_COMPANY"), Map.of("name", "PUBLIC_HOLIDAY_DAY")));
-        constraint.put("message", "This day is already a holiday of the company");
+        constraint.put("message", COMPOSITE_KEY_MESSAGE);
+        constraint.put("messageJavaLiteral", COMPOSITE_KEY_MESSAGE.replace("\"", "\\\""));
         return constraint;
     }
 

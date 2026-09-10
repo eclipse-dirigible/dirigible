@@ -43,8 +43,8 @@ import org.springframework.core.annotation.AnnotatedElementUtils;
  * eagerly instantiates singletons with recursive <em>constructor injection</em> (plus
  * {@code @Inject} field injection and {@code @PostConstruct} callbacks), detecting construction
  * cycles. The behaviour consumers ({@code @Controller}, {@code @Scheduled}, {@code @Listener},
- * {@code @Websocket}, {@code @Extension}) then fetch the ready instances via
- * {@link #instanceOf(Class)} rather than instantiating client classes themselves.
+ * {@code @Websocket}) then fetch the ready instances via {@link #instanceOf(Class)} rather than
+ * instantiating client classes themselves.
  *
  * <p>
  * Implements {@link ClientBeanFactory} and publishes itself into {@link ClientBeansHolder} so the
@@ -435,6 +435,11 @@ public class ComponentContainer implements ClientBeanFactory {
      */
     @Override
     public <T> Optional<T> createUnmanaged(Class<T> type) {
+        if (isBean(type)) {
+            LOGGER.warn(
+                    "[{}] is a JavaDelegate annotated @Component. A JavaDelegate must NOT be a @Component: Flowable instantiates the delegate itself, so the annotation additionally builds a container-managed singleton the engine never runs — a stray candidate for every List<JavaDelegate> injection. Remove @Component from the delegate.",
+                    type.getName());
+        }
         BeanDefinition definition = new BeanDefinition(type.getName(), type);
         if (!declaresInjectionPoint(definition)) {
             // Nothing to wire: the caller's own no-arg instantiation is equivalent, so it stays on it

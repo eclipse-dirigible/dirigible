@@ -42,9 +42,9 @@ import io.opentelemetry.context.Scope;
  * value is the fully-qualified class name of a client class implementing {@link JavaDelegate}. The
  * class is resolved through the currently-installed {@link ClientClassLoader} (managed by
  * {@link ClientClassLoaderHolder}), instantiated afresh on every execution - through the client
- * bean container when it declares an injection point (constructor or {@code @Inject} field), else
- * via its public no-arg constructor - and invoked with the engine-provided
- * {@link DelegateExecution}.
+ * bean container when it declares an injection point (constructor, {@code @Inject} field or
+ * {@code @PostConstruct} method), else via its public no-arg constructor - and invoked with the
+ * engine-provided {@link DelegateExecution}.
  *
  * <p>
  * For the alternative {@code flowable:class="..."} approach, see the classloader configured on the
@@ -205,8 +205,8 @@ public class DirigibleJavaCallDelegate implements JavaDelegate {
             return (JavaDelegate) handlerClass.getDeclaredConstructor()
                                               .newInstance();
         } catch (ReflectiveOperationException e) {
-            throw new BpmnRuntimeException("Failed to instantiate client Java class [" + fqn
-                    + "]. A public no-arg constructor is required, or declare the collaborators it injects as @Component.", e);
+            throw new BpmnRuntimeException(
+                    "Failed to instantiate client Java class [" + fqn + "]. A public no-arg constructor is required.", e);
         }
     }
 

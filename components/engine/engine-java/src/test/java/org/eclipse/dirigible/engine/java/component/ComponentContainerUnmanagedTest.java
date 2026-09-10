@@ -21,7 +21,12 @@ import java.util.List;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.component.Inject;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 
@@ -135,8 +140,11 @@ class ComponentContainerUnmanagedTest {
 
     @Test
     void an_unsatisfied_dependency_is_refused_and_is_not_a_rebuild_error() {
-        ComponentContainer container = TestComponentContainers.of();
+        // A real rebuild that registered a bean, so wiringErrors() reflects an actual generation and
+        // the "not a rebuild error" assertion below is load-bearing rather than trivially empty.
+        ComponentContainer container = TestComponentContainers.of(EnglishGreeter.class);
 
+        // The delegate needs RateProvider, which this container does not know: an unsatisfied dependency.
         BeanContainerException exception =
                 assertThrows(BeanContainerException.class, () -> container.createUnmanaged(ConstructorDelegate.class));
 
@@ -171,6 +179,29 @@ class ComponentContainerUnmanagedTest {
                                                .orElseThrow();
 
         assertEquals(GermanGreeter.class, delegate.germanGreeter.getClass());
+    }
+
+    @Test
+    void a_delegate_annotated_component_is_warned_about_because_the_rule_is_otherwise_unobservable() {
+        Logger logger = (Logger) LoggerFactory.getLogger(ComponentContainer.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            ComponentContainer container = TestComponentContainers.of(RateProvider.class, ComponentDelegate.class);
+
+            container.createUnmanaged(ComponentDelegate.class)
+                     .orElseThrow();
+
+            assertTrue(appender.list.stream()
+                                    .anyMatch(event -> event.getLevel() == Level.WARN && event.getFormattedMessage()
+                                                                                              .contains(ComponentDelegate.class.getName())
+                                            && event.getFormattedMessage()
+                                                    .contains("must NOT be a @Component")),
+                    () -> "expected a WARN naming the delegate and the rule, got: " + appender.list);
+        } finally {
+            logger.detachAppender(appender);
+        }
     }
 
     // --- fixtures (not @Component: a delegate is never a bean) ------------------------------------
@@ -240,5 +271,15 @@ class ComponentContainerUnmanagedTest {
     static class NameHintedDelegate {
         @Inject
         Greeter germanGreeter;
+    }
+
+    /** The mistake the rule forbids: a delegate annotated {@code @Component}. */
+    @Component
+    static class ComponentDelegate {
+        final RateProvider rates;
+
+        ComponentDelegate(RateProvider rates) {
+            this.rates = rates;
+        }
     }
 }

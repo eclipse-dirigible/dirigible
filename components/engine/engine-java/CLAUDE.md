@@ -147,6 +147,42 @@ instantiate client classes.
   `offlineDurableSubscriberTimeout` (7 days, set in `MessagingConfig`) — the consumer cannot
   unsubscribe on its own, because `onClassUnloaded` fires for a *replaced* class as well as a deleted
   one, and a class deleted while the server was down is never reported at all.
+- **A subscription (or a job registration) that could not be established is retried on a JVM-local
+  timer.** `JavaConsumersReconciler` calls `JavaClassConsumer.reconcile()` on every consumer every
+  `DIRIGIBLE_JAVA_RECONCILE_INTERVAL_SECONDS` (30), and `ListenerClassConsumer` /
+  `ScheduledClassConsumer` implement it by re-attempting what is still not open. Before that, a
+  subscription that lost the boot race against the embedded broker's `vm://localhost` transport was
+  never retried at all and the handler stayed silent for the life of the process — a topic discards
+  what it delivers to nobody, so an intent app's `onCreate` trigger wrote the row and started nothing
+  while every controller answered 200 (#7217). Neither of the two triggers the consumers relied on
+  ever arrives on a steady instance: a generation is rebuilt only on publish, and the
+  `TenantPostProvisioningStep` runs only when `TenantsProvisioner` actually provisioned a tenant
+  (`if (!tenants.isEmpty())` over `findByStatus(INITIAL)`). Three things about the shape:
+  **it is a timer of its own, not Quartz and not Spring's `@Scheduled`** — a `SystemJob` fires once
+  cluster-wide (`isClustered=true`) and this state is per-JVM, while Spring's scheduling pool is a
+  single thread shared with `AccessVerifier` and `TscWatcherService` that an unreachable `failover:`
+  broker would block indefinitely; **`subscribe` catches `RuntimeException` as well as `JMSException`**,
+  because `ActiveMQConnectionArtifactsFactory` reports a broker that is not accepting by wrapping the
+  `JMSException` in an `IllegalStateException` — uncaught, it escaped the per-tenant fan-out, skipped
+  every tenant behind the failing one and leaked whatever had already opened; and **a pass re-checks
+  registration identity** (`registrations.get(fqn) != registration`) before subscribing, because a
+  republish can swap the registration mid-pass and connections opened for the superseded one could
+  never be closed. Log volume is bounded on purpose: WARN on a subscription's first failure, DEBUG on
+  the repeats, plus one WARN summary per incomplete pass — a permanently refused subscription (every
+  node of a deployment derives the same durable id, so the second one to attach is turned away for
+  good) would otherwise emit a line per tenant per tick forever.
+- **A retry pass touches only what is still missing, on both sides.** Each consumer records the
+  `(declaration, tenant)` pairs that landed — `Registration.isSubscribed` / `isRegistered` — and a
+  pass skips them. The bound matters most on the scheduled side, because a registration there is a
+  *write*: `ScheduledClassConsumer` used to re-run `jobService.save` (`saveAndFlush`) +
+  `jobsManager.scheduleJob` + an INFO line for every job of every loaded class in every tenant on
+  every tick while any ONE job's registration was failing, so N x T row writes and reschedules every
+  30 s from every node of the cluster onto the same shared `DIRIGIBLE_JOBS` rows, burying the single
+  WARN that was the actual fault (#7265). A class **reload** still re-registers everything the class
+  declares: a fresh `Registration` records nothing as landed, which is what lets a changed cron reach
+  the row. The per-tenant work also sits in a `try` **inside** the `executeForEachTenant` body, since
+  that helper propagates the first throw — without it one tenant's refusal leaves every tenant behind
+  it untouched and forces the ones in front of it to be redone by the retry.
 - `WebsocketClassConsumer` + `JavaWebsocketRegistry` — websockets; `WebsocketProcessor`
   (`engine-websockets`) calls `JavaWebsocketRegistry.dispatch(...)` reflectively (keeps that module free
   of an `engine-java` dependency).
@@ -287,7 +323,10 @@ browser-IDE developer sees what's wrong without reading the server log.
   `ControllerClassConsumer*Test`,
   `ControllerInvoker*Test`, `ControllerRouterTest`, `JavaLoaderTest`; (`data-store-java`)
   `JavaEntityToHbmMapperTest`, `EntityBeanMapperTest`, `CriteriaTest`.
-- HTTP ITs (extend `IntegrationTest`, no Selenide): `JavaEngineIT` (handler lifecycle), `JavaComponentIT`
+- HTTP ITs (extend `IntegrationTest`, no Selenide): `JavaEngineIT` (handler lifecycle),
+  `JavaListenerSubscriptionRetryIT` (a refused subscription reaches its handler once the timer retries
+  it - the refusal injected as the `IllegalStateException` the connection factory really throws, scoped
+  to that one listener's durable id), `JavaComponentIT`
   (constructor + collection injection, and a `@Component` `JavaHandler`), `JavaDelegateInjectionIT`
   (both BPMN delegate paths injected, the unsatisfiable one failing the step and not the deployment,
   and a recompiled collaborator reaching the cached delegate), `JavaNoMixingIT` (the

@@ -84,6 +84,7 @@ final class StatusSymbolResolver {
         resolver.rewriteProcesses(root);
         resolver.rewritePostings(root);
         resolver.rewriteGenerates(root);
+        resolver.rewriteSchedules(root);
         resolver.rewriteResolves(root);
         resolver.rewriteReports(root);
         if (!resolver.issues.isEmpty()) {
@@ -312,26 +313,58 @@ final class StatusSymbolResolver {
      * symbolic - and on the ITEM row's own nomenclature, not the header's: the rule selects the rows of
      * the source document, so resolving a name against the document's lifecycle would take an id out of
      * the wrong nomenclature and quietly filter on it.
-     *
-     * <p>
-     * Only the condition whose {@code field} names that {@code function: EntityStatus} relation is a
-     * candidate at all, exactly as a register lookup's static filter is: every other condition compares
-     * an ordinary column, whose string value ({@code op: like} on a name) is just a value and would be
-     * reported as an unknown status.
      */
     private void rewriteGeneratesItemsWhere(Map<?, ?> generate, String subject) {
         Map<?, ?> items = asMap(generate.get("items"));
         String itemEntity = items == null ? null : text(items, "from");
-        String statusRelation = statusRelationName(itemEntity);
+        rewriteConditions(items == null ? null : items.get("where"), itemEntity, subject + " items where");
+    }
+
+    /**
+     * The row query of a cron schedule (issue #7251) - the same {@code { field, op, value }} triples an
+     * items rule carries, and the site a status guard is written at most often: a dunning run, a
+     * staleness sweep, a month-end generation all start by naming the status the row must stand in.
+     * Left unresolved, the name reached the generated job as a string compared against the integer
+     * status FK ({@code .eq("Status", "OVERDUE")}), so the query matched nothing forever and the
+     * schedule ticked on doing nothing - the silent failure naming a status exists to remove (#6645).
+     *
+     * <p>
+     * Same-model source only. A cross-model source ({@code model: <uses alias>}) is not in this file's
+     * {@code entities}, so neither its nomenclature nor even WHICH of the conditions names its status
+     * is knowable here - its {@code where} field references are validated at generation time against
+     * the owner's {@code .model} - and it therefore keeps the numeric-id form, exactly as every other
+     * cross-model status site does.
+     */
+    private void rewriteSchedules(Map<?, ?> root) {
+        for (Object node : asList(root.get("schedules"))) {
+            Map<?, ?> schedule = asMap(node);
+            if (schedule == null || text(schedule, "model") != null) {
+                continue;
+            }
+            rewriteConditions(schedule.get("where"), text(schedule, "entity"), "schedule [" + text(schedule, "name") + "] where");
+        }
+    }
+
+    /**
+     * Resolve the one condition of a {@code { field, op, value }} where list whose {@code field} names
+     * the queried entity's {@code function: EntityStatus} relation, on that entity's own nomenclature.
+     *
+     * <p>
+     * Only that condition is a candidate at all, exactly as a register lookup's static filter is: every
+     * other condition compares an ordinary column, whose string value (an {@code op: like} on a name)
+     * is just a value and would be reported as an unknown status.
+     */
+    private void rewriteConditions(Object where, String entityName, String subject) {
+        String statusRelation = statusRelationName(entityName);
         if (statusRelation == null) {
             return;
         }
-        Target itemStatus = statusOf(itemEntity);
-        for (Object node : asList(items.get("where"))) {
+        Target status = statusOf(entityName);
+        for (Object node : asList(where)) {
             Map<?, ?> condition = asMap(node);
             String field = condition == null ? null : text(condition, "field");
             if (field != null && lower(field).equals(lower(statusRelation))) {
-                putResolved(condition, "value", itemStatus, subject + " items where [" + field + "]");
+                putResolved(condition, "value", status, subject + " [" + field + "]");
             }
         }
     }
