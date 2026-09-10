@@ -7530,7 +7530,10 @@ public final class IntentParser {
      * shape the compared field can carry. What is checked additionally is the {@code field} itself:
      * unlike a schedule's query, whose source may be a cross-model row or an {@code audit:} column this
      * model cannot see, an items rule reads a LOCAL row being cloned, so a name it does not declare
-     * could only ever be a condition the database rejects on the first click.
+     * could only ever be a condition the database rejects on the first click. The items of a
+     * cross-model source ({@code fromUses:}) are the exception: they live in the owner model, so their
+     * fields - and the status condition, which there may only give the seed id (#7225) - are checked at
+     * generation time against the owner's {@code .model}.
      *
      * <p>
      * {@code refuse:} requires the rule: without conditions no row is ever unqualified, so the message

@@ -1067,15 +1067,27 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 // document's perspective. (The TARGET item stays on toPerspective: a create-from
                 // always writes into the target document's own composition-item table.)
                 // A cross-model source's items are owned by the same foreign model as the source.
-                e.put("fromItemPerspective", crossModelSource ? CrossModelSupport.resolve(context, fromUses, items.getFrom())
-                                                                                 .perspectiveName()
+                CrossModelSupport.TargetInfo itemSource =
+                        crossModelSource ? CrossModelSupport.resolve(context, fromUses, items.getFrom()) : null;
+                // The source-row rule's status condition on a cross-model item (#7225): the item's
+                // nomenclature is seeded in the owner model, so the parser's resolver left the rule
+                // alone - and which condition even names the status is known only here, off the owner
+                // .model's DOCUMENT_STATUS widget. A NAME left in it would render as a string compared
+                // against the integer status FK, a rule that matches nothing on every click. Refused
+                // the way every cross-model status site is: by seed id only.
+                ScheduleConditionIntent namedStatus = crossModelItemStatusName(items, itemSource);
+                if (namedStatus != null) {
+                    throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(List.of("generates [" + g.getName()
+                            + "] items where-condition on the status relation [" + itemSource.statusProperty() + "] names the status ["
+                            + namedStatus.getValue() + "] of [" + items.getFrom() + "], which belongs to model [" + g.getFromUses()
+                            + "] and is seeded there - a cross-model status must be referenced by its numeric seed id"));
+                }
+                e.put("fromItemPerspective", itemSource != null ? itemSource.perspectiveName()
                         : IntentEntities.resolvePerspective(items.getFrom(), compositionParents, model));
                 // The source line's own key, so a line the target refuses is reported with the row it came
                 // from ("... from EmployeeTimesheet [7]") instead of the target property alone - which of a
                 // hundred lines is missing a value is the whole question the caller has (#7069).
-                e.put("fromItemPk", crossModelSource ? CrossModelSupport.resolve(context, fromUses, items.getFrom())
-                                                                        .keyField()
-                        : IntentEntities.keyFieldName(byName.get(items.getFrom())));
+                e.put("fromItemPk", itemSource != null ? itemSource.keyField() : IntentEntities.keyFieldName(byName.get(items.getFrom())));
                 // A document child's FK back to its master is, by convention, the master entity's name.
                 e.put("srcFkProperty", IntentNaming.pascalCase(g.getFrom()));
                 e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
@@ -4601,6 +4613,43 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * the log AND as a generate-response issue, so the drop is not silent at the API level (dirigible
      * #6360). The generation itself still succeeds - the issue is a warning, not a 422.
      */
+    /**
+     * The condition of a cross-model items rule that compares the item's status relation with a NAME
+     * rather than a seed id (#7225), or null when there is none - no rule, a rule that gives the id, or
+     * an owner model that declares no status relation (or was not resolvable, the convention fallback
+     * of a unit test), in which case nothing here can tell which condition is the status one.
+     */
+    private static ScheduleConditionIntent crossModelItemStatusName(GeneratesItemsIntent items, CrossModelSupport.TargetInfo itemSource) {
+        if (items == null || !items.hasWhere() || itemSource == null || itemSource.statusProperty() == null) {
+            return null;
+        }
+        for (ScheduleConditionIntent condition : items.getWhere()) {
+            if (condition.getField() != null && condition.getField()
+                                                         .equalsIgnoreCase(itemSource.statusProperty())
+                    && !isSeedId(condition.getValue())) {
+                return condition;
+            }
+        }
+        return null;
+    }
+
+    /** Whether a where value is a whole number - as an id, or as the text of one. */
+    private static boolean isSeedId(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue() == number.doubleValue();
+        }
+        if (value == null) {
+            return false;
+        }
+        try {
+            Long.parseLong(String.valueOf(value)
+                                 .trim());
+            return true;
+        } catch (NumberFormatException ex) {
+            return false;
+        }
+    }
+
     private static void reportDroppedGlue(IntentGenerationContext context, String message) {
         LOGGER.warn(LoggedValue.of(message));
         if (context != null) {
