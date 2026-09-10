@@ -789,7 +789,7 @@ class GlueGenerator {
         copy(context, item, "name", "className", "isCreate", "sourcePerspective", "sourceEntity", "sourceKeyField", "guardProperty",
                 "guardValue", "targetEntity", "targetPk", "itemsEntity", "itemsFk", "backRefProperty", "stornoProperty",
                 "stornoFilterProperty", "hasRule", "ruleEntity", "ruleMatchProperty", "ruleMatchValueJava", "usedRuleColumns",
-                "conditionalRuleGuards", "headerAssignments", "itemRows");
+                "conditionalRuleGuards", "itemRows");
         // The bound axis (issue #6929): the channel the handler subscribes to, and the sentence its
         // header comment describes it in. Both are absent from a .glue written before the enrichment
         // phase existed, and a bare reference would render as its own literal - so each falls back to
@@ -809,7 +809,14 @@ class GlueGenerator {
         // emit: no compared properties (every existing post reads as unchanged, the old no-op) and no
         // lifecycle guard around the rewrite.
         context.put("amendableGuard", strOr(item, "amendableGuard", ""));
-        context.put("itemComparedProps", item.get("itemComparedProps") == null ? new ArrayList<>() : item.get("itemComparedProps"));
+        // The compared cells - the header assignments and the item properties - each carrying how the
+        // write leaves its column. #7188 renamed the #7163 key `expressionDefault` to
+        // `compareOnlyWhenDerived` and the template reads only the new one, so a .glue generated between
+        // the two rendered its CURRENT_DATE-default cells with that treatment silently dropped - a plain
+        // same() reading every redelivery of such a row as an amendment - until the intent was
+        // re-generated (#7234). The former spelling is honoured wherever the current one is absent.
+        context.put("headerAssignments", comparedCells(item.get("headerAssignments")));
+        context.put("itemComparedProps", comparedCells(item.get("itemComparedProps")));
         // Which of the default-aware comparison helpers the handler's own comparison calls, and so
         // which of them the template must emit alongside it. Unbound, they read as undefined and every
         // call to one of the two helpers was emitted without its method - a generated handler that does
@@ -817,6 +824,29 @@ class GlueGenerator {
         // before the amendment half carries neither key and needs neither helper.
         context.put("comparesAgainstDefaults", truthy(item, "comparesAgainstDefaults"));
         context.put("comparesUnlessDerivedIsEmpty", truthy(item, "comparesUnlessDerivedIsEmpty"));
+    }
+
+    /**
+     * The compared cells of a posting - its header assignments or its item properties - copied, with
+     * the "compare only when derived" flag read under its #7163 spelling {@code expressionDefault}
+     * wherever the #7188 spelling {@code compareOnlyWhenDerived} is absent (dirigible #7234). A cell
+     * carrying the current key keeps it; a cell carrying neither - a .glue written before the amendment
+     * half, or a plainly compared column - is copied as it is, and an absent list binds as an empty
+     * one.
+     *
+     * @param raw the descriptor's list of cells, may be absent
+     * @return the cells the template renders
+     */
+    static List<Map<String, Object>> comparedCells(Object raw) {
+        List<Map<String, Object>> cells = new ArrayList<>();
+        for (Map<String, Object> cell : asMaps(raw)) {
+            Map<String, Object> resolved = ModelValues.copy(cell);
+            if (!resolved.containsKey("compareOnlyWhenDerived") && resolved.containsKey("expressionDefault")) {
+                resolved.put("compareOnlyWhenDerived", resolved.get("expressionDefault"));
+            }
+            cells.add(resolved);
+        }
+        return cells;
     }
 
     /**

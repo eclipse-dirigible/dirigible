@@ -915,55 +915,16 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Document masters: each entity that is the composition parent of a child whose name ends in
-     * {@code Item} maps to that child (the line-items entity). Iterated in entity-declaration order so
-     * the first {@code *Item} child wins deterministically when a master has several. Such a master
-     * renders with the document (header-items) layout instead of master-detail.
+     * Document masters: each entity that is the composition parent of a line-items child (explicit
+     * {@code function: DocumentItem}, the legacy {@code *Item} naming, or the sole child of a
+     * {@code function: Document} master) maps to that child. Such a master renders with the document
+     * (header-items) layout instead of master-detail. The rule itself lives in
+     * {@link IntentEntities#documentMasters}: the glue generator has to know which header columns the
+     * generated repository resums, and it must answer that through the SAME rule this layout - and so
+     * the DAO's {@code documentMaster} - is emitted by (dirigible #7234).
      */
     private static Map<String, String> documentMasters(List<EntityIntent> entities, Map<String, String> compositionParents) {
-        Map<String, String> masters = new LinkedHashMap<>();
-        // 1. A composition child that is the document's line-items - explicit `function: DocumentItem`,
-        // or the legacy `*Item` naming - makes its composition parent a document master.
-        for (EntityIntent entity : entities) {
-            String child = entity.getName();
-            if (child == null) {
-                continue;
-            }
-            String parent = compositionParents.get(child);
-            if (parent == null) {
-                continue;
-            }
-            if ((entity.isDocumentItem() || child.endsWith("Item")) && !masters.containsKey(parent)) {
-                masters.put(parent, child);
-            }
-        }
-        // 2. `function: Document` on a master whose single composition child is neither flagged nor
-        // `*Item`-named: the sole child is the items (the author declared the document intent).
-        for (EntityIntent entity : entities) {
-            String name = entity.getName();
-            if (name == null || !entity.isDocument() || masters.containsKey(name)) {
-                continue;
-            }
-            String sole = soleCompositionChild(entities, compositionParents, name);
-            if (sole != null) {
-                masters.put(name, sole);
-            }
-        }
-        return masters;
-    }
-
-    /** The single composition child of {@code master}, or {@code null} when it has zero or several. */
-    private static String soleCompositionChild(List<EntityIntent> entities, Map<String, String> compositionParents, String master) {
-        String only = null;
-        for (EntityIntent entity : entities) {
-            if (entity.getName() != null && master.equals(compositionParents.get(entity.getName()))) {
-                if (only != null) {
-                    return null; // ambiguous - more than one composition child
-                }
-                only = entity.getName();
-            }
-        }
-        return only;
+        return IntentEntities.documentMasters(entities, compositionParents);
     }
 
     /**

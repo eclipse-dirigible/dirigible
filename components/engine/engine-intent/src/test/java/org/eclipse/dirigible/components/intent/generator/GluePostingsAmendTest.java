@@ -270,6 +270,98 @@ class GluePostingsAmendTest {
     }
 
     @Test
+    void aMappedAggregateHeaderColumnTheWriteResumsIsNotCompared() {
+        // #7234: the created document is a document master, so its save() and update() both end in
+        // recalculate(), which sets every `aggregate: true` header column the lines also declare to the
+        // SUM over the lines - the value a map: derives from the source never stays in the column. Left
+        // in the comparison it was #7177's defect by a fourth fill the classification did not know: the
+        // item sum the write stored against the source value the map computed, differing by a rounding,
+        // a sign convention or a partially posted line set, so every redelivery rewrote the post.
+        Map<String, Object> posting =
+                postingOf(yaml(WITH_STATUS).replace("      - { name: reason, type: string, length: 400 }",
+                        "      - { name: reason, type: string, length: 400 }\n"
+                                + "      - { name: total, type: decimal, precision: 18, scale: 2, aggregate: true }")
+                                           .replace("      - { name: credit, type: decimal, precision: 18, scale: 2, defaultValue: 0 }",
+                                                   "      - { name: credit, type: decimal, precision: 18, scale: 2, defaultValue: 0 }\n"
+                                                           + "      - { name: total, type: decimal, precision: 18, scale: 2 }")
+                                           .replace("map: { reason: \"Invoice {id}\" }", "map: { reason: \"Invoice {id}\", total: net }"));
+        assertEquals(Boolean.TRUE, headerAssignment(posting, "Total").get("overwrittenOnSave"));
+        assertEquals(Boolean.FALSE, headerAssignment(posting, "Reason").get("overwrittenOnSave"));
+    }
+
+    @Test
+    void aMappedAggregateHeaderColumnTheLinesDoNotCarryIsNotComparedEither() {
+        // Not resummed - recalculate() sums only the aggregates the lines also declare - and still not
+        // the map's to keep: update() preserves EVERY aggregate column from the stored row (the
+        // lost-update family's user-update edition), and update() is how a rewrite re-applies the
+        // header. The mapped value survives the create and is discarded by every rewrite, so after one
+        // legitimate amendment the compared cell mismatched forever (#7234).
+        Map<String, Object> posting =
+                postingOf(yaml(WITH_STATUS).replace("      - { name: reason, type: string, length: 400 }",
+                        "      - { name: reason, type: string, length: 400 }\n"
+                                + "      - { name: total, type: decimal, precision: 18, scale: 2, aggregate: true }")
+                                           .replace("map: { reason: \"Invoice {id}\" }", "map: { reason: \"Invoice {id}\", total: net }"));
+        assertEquals(Boolean.TRUE, headerAssignment(posting, "Total").get("overwrittenOnSave"));
+    }
+
+    @Test
+    void aMappedHeaderColumnTheWriteRecomputesOnUpdateIsNotCompared() {
+        // The rewrite path's own calculation (#7234): the create stores the mapped value, the first
+        // rewrite recomputes the column from the entity's other columns, and from then on the compared
+        // cell can never match the map again.
+        Map<String, Object> posting = postingOf(yaml(WITH_STATUS).replace("      - { name: reason, type: string, length: 400 }",
+                "      - { name: reason, type: string, length: 400, calculatedOnUpdate: \"'automatic'\" }"));
+        assertEquals(Boolean.TRUE, headerAssignment(posting, "Reason").get("overwrittenOnSave"));
+    }
+
+    @Test
+    void aMappedReadOnlyHeaderColumnIsNotCompared() {
+        // The same preservation, by the other half of the DAO's rule: a system-owned (readOnly) column
+        // survives a full-row update from the stored row, so a rewrite discards what the map derives.
+        Map<String, Object> posting = postingOf(yaml(WITH_STATUS).replace("      - { name: reason, type: string, length: 400 }",
+                "      - { name: reason, type: string, length: 400, readOnly: true }"));
+        assertEquals(Boolean.TRUE, headerAssignment(posting, "Reason").get("overwrittenOnSave"));
+    }
+
+    @Test
+    void theRewritePathFillsDoNotApplyToTheLines() {
+        // A line is never rewritten in place: a rewrite deletes the stored rows and saves the derived
+        // ones, so only the create-time fills reach it - an update-time calculation, a preserved
+        // (aggregate / readOnly) column and the resum of a document master, which the lines are not,
+        // all leave a line cell compared exactly as it stands.
+        Map<String, Object> posting =
+                postingOf(yaml(WITH_STATUS).replace("      - { name: credit, type: decimal, precision: 18, scale: 2, defaultValue: 0 }",
+                        "      - { name: credit, type: decimal, precision: 18, scale: 2, defaultValue: 0 }\n"
+                                + "      - { name: signed, type: decimal, precision: 18, scale: 2, calculatedOnUpdate: \"Debit - Credit\","
+                                + " aggregate: true, readOnly: true }")
+                                           .replace("- { Account: rule(revenueAccount), credit: \"Net\" }",
+                                                   "- { Account: rule(revenueAccount), credit: \"Net\"," + " signed: \"-Net\" }"));
+        assertEquals(Boolean.FALSE, comparedProperty(posting, "Signed").get("overwrittenOnSave"));
+        assertEquals(Boolean.FALSE, comparedProperty(posting, "Signed").get("compareOnlyWhenDerived"));
+    }
+
+    @Test
+    void anAggregateOfAMasterThePipelineDoesNotTreatAsADocumentIsStillNotCompared() {
+        // The resum is resolved through the rule the document layout is emitted by, not through the
+        // broader items resolution a posting reads its lines through: a sole composition child that is
+        // neither `*Item`-named nor flagged leaves its master on the master-detail layout, where nothing
+        // resums - but update() still preserves the aggregate, so the column stays out of the
+        // comparison, for the rewrite-path reason rather than the resum one.
+        Map<String, Object> posting = postingOf(yaml(WITH_STATUS).replace("JournalEntryItem", "JournalEntryLine")
+                                                                 .replace("      - { name: reason, type: string, length: 400 }",
+                                                                         "      - { name: reason, type: string, length: 400 }\n"
+                                                                                 + "      - { name: total, type: decimal, precision: 18, scale: 2, aggregate: true }")
+                                                                 .replace(
+                                                                         "      - { name: credit, type: decimal, precision: 18, scale: 2, defaultValue: 0 }",
+                                                                         "      - { name: credit, type: decimal, precision: 18, scale: 2, defaultValue: 0 }\n"
+                                                                                 + "      - { name: total, type: decimal, precision: 18, scale: 2 }")
+                                                                 .replace("map: { reason: \"Invoice {id}\" }",
+                                                                         "map: { reason: \"Invoice {id}\", total: net }"));
+        assertEquals("JournalEntryLine", posting.get("itemsEntity"));
+        assertEquals(Boolean.TRUE, headerAssignment(posting, "Total").get("overwrittenOnSave"));
+    }
+
+    @Test
     void aTargetCarryingAStatusIsRewritableOnlyWhileItStillHoldsTheStatusItWasCreatedIn() {
         assertEquals("target.Status != null && target.Status == 1", posting(WITH_STATUS).get("amendableGuard"));
     }
