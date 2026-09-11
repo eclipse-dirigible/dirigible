@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.eclipse.dirigible.engine.java.runtime.ClientBeanFactory;
 import org.eclipse.dirigible.engine.java.runtime.ClientBeansHolder;
@@ -62,6 +63,9 @@ public class ComponentContainer implements ClientBeanFactory {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ComponentContainer.class);
 
+    /** Flowable's delegate interface, referenced by name — see {@link #isJavaDelegate(Class)}. */
+    private static final String FLOWABLE_JAVA_DELEGATE = "org.flowable.engine.delegate.JavaDelegate";
+
     /** Definitions of the live generation, in registration order. */
     private volatile List<BeanDefinition> definitions = List.of();
 
@@ -73,6 +77,16 @@ public class ComponentContainer implements ClientBeanFactory {
 
     /** client class FQN → wiring error from the last rebuild (so the synchronizer can surface it). */
     private volatile Map<String, String> wiringErrors = Map.of();
+
+    /** client class FQN → wiring warning from the last rebuild (surfaced, but not a failure). */
+    private volatile Map<String, String> wiringWarnings = Map.of();
+
+    /**
+     * Classes already warned about on the {@link #createUnmanaged(Class)} path in this generation, so
+     * the same fact is stated once and then only at DEBUG. Cleared by {@link #rebuild(Collection)}: a
+     * republish is a new generation, and the developer who just changed the class should hear it again.
+     */
+    private final Set<String> reportedUnmanagedBeans = ConcurrentHashMap.newKeySet();
 
     public ComponentContainer(ClientBeansHolder holder) {
         holder.swap(this);
@@ -91,6 +105,19 @@ public class ComponentContainer implements ClientBeanFactory {
     }
 
     /**
+     * Wiring <em>warnings</em> from the last {@link #rebuild(Collection)} keyed by client class FQN —
+     * today exactly one: a bean that is also a Flowable {@code JavaDelegate}. The class still works, so
+     * this is deliberately not a {@link #wiringErrors() wiring error} (the artefact stays healthy); it
+     * is surfaced on the Problems view at publish because that is where the developer who annotated the
+     * class looks, whereas the execution-time WARN only reaches whoever happens to run the process.
+     *
+     * @return an immutable FQN → message map (empty if the last rebuild had nothing to warn about)
+     */
+    public Map<String, String> wiringWarnings() {
+        return wiringWarnings;
+    }
+
+    /**
      * Re-create the whole client bean set for a new generation. Builds and instantiates the new beans
      * first, publishes them atomically, then tears down the previous generation (so reads transition
      * cleanly old → new). Per-bean failures are logged and skipped — one bad bean never aborts the
@@ -105,6 +132,7 @@ public class ComponentContainer implements ClientBeanFactory {
         Map<String, BeanDefinition> byName = new LinkedHashMap<>();
         List<BeanDefinition> ordered = new ArrayList<>();
         Map<String, String> errors = new LinkedHashMap<>();
+        Map<String, String> warnings = new LinkedHashMap<>();
         ClassLoader loader = null;
         for (LoadedClass info : loaded) {
             if (info == null) {
@@ -115,6 +143,14 @@ public class ComponentContainer implements ClientBeanFactory {
                 continue;
             }
             loader = info.loader();
+            if (isJavaDelegate(type)) {
+                // The bean is still registered - the annotation is the mistake, not the class - so this
+                // rebuild behaves exactly as it did before the check existed, and the only new effect is
+                // the Problems entry the synchronizer projects from wiringWarnings().
+                String message = componentOnDelegateMessage(type.getName());
+                LOGGER.warn(message);
+                warnings.put(type.getName(), message);
+            }
             try {
                 String name = beanName(type);
                 BeanDefinition existing = byName.get(name);
@@ -173,6 +209,8 @@ public class ComponentContainer implements ClientBeanFactory {
         this.singletons = java.util.Collections.unmodifiableMap(snapshot);
         this.instancesByType = java.util.Collections.unmodifiableMap(byType);
         this.wiringErrors = Map.copyOf(errors);
+        this.wiringWarnings = Map.copyOf(warnings);
+        reportedUnmanagedBeans.clear();
 
         destroy(previousDefinitions, previousSingletons);
         LOGGER.info("Client bean container rebuilt: {} bean(s).", snapshot.size());
@@ -436,9 +474,17 @@ public class ComponentContainer implements ClientBeanFactory {
     @Override
     public <T> Optional<T> createUnmanaged(Class<T> type) {
         if (isBean(type)) {
-            LOGGER.warn(
-                    "[{}] is a JavaDelegate annotated @Component. A JavaDelegate must NOT be a @Component: Flowable instantiates the delegate itself, so the annotation additionally builds a container-managed singleton the engine never runs — a stray candidate for every List<JavaDelegate> injection. Remove @Component from the delegate.",
-                    type.getName());
+            // Once per class per generation, then DEBUG: on the ${JavaTask} path a fresh delegate is
+            // wired for every execution, so an unconditional WARN would restate the same fact on every
+            // tick of a step that runs all day. The publish-time entry in wiringWarnings() is the one a
+            // developer is meant to read; this line only serves whoever is already reading the log.
+            if (reportedUnmanagedBeans.add(type.getName())) {
+                LOGGER.warn(componentOnUnmanagedMessage(type.getName()));
+            } else if (LOGGER.isDebugEnabled()) {
+                // Guarded because this runs per step execution: with DEBUG off, the suppressed repeat
+                // must not even build its message.
+                LOGGER.debug(componentOnUnmanagedMessage(type.getName()));
+            }
         }
         BeanDefinition definition = new BeanDefinition(type.getName(), type);
         if (!declaresInjectionPoint(definition)) {
@@ -470,6 +516,44 @@ public class ComponentContainer implements ClientBeanFactory {
 
     private static boolean isBean(Class<?> type) {
         return AnnotatedElementUtils.hasAnnotation(type, Component.class);
+    }
+
+    /**
+     * Whether {@code type} is a Flowable {@code JavaDelegate}, matched by interface <em>name</em>:
+     * {@code engine-java} cannot see the Flowable type ({@code engine-bpm-flowable} depends on this
+     * module, not the other way round), which is also why the {@link #createUnmanaged(Class)} check is
+     * the broader {@code isBean}.
+     */
+    private static boolean isJavaDelegate(Class<?> type) {
+        for (Class<?> current = type; current != null && current != Object.class; current = current.getSuperclass()) {
+            for (Class<?> implemented : current.getInterfaces()) {
+                if (FLOWABLE_JAVA_DELEGATE.equals(implemented.getName()) || isJavaDelegate(implemented)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** The publish-time wording: the rebuild knows the bean is a delegate, so it says so. */
+    private static String componentOnDelegateMessage(String className) {
+        return "[" + className + "] implements " + FLOWABLE_JAVA_DELEGATE + " and is annotated @Component. A JavaDelegate"
+                + " must NOT be a @Component: Flowable instantiates the delegate itself, so the annotation additionally builds"
+                + " a container-managed singleton the engine never runs — a stray candidate for every List<JavaDelegate>"
+                + " injection. Remove @Component from the delegate.";
+    }
+
+    /**
+     * The execution-time wording. It says {@code instantiated outside the container} rather than
+     * {@code JavaDelegate}, because the detection here is {@code isBean} on whatever class the caller
+     * asked to wire unmanaged - true of a delegate today, but the message must not claim more than it
+     * actually checked.
+     */
+    private static String componentOnUnmanagedMessage(String className) {
+        return "[" + className + "] is annotated @Component but is instantiated outside the container (which is what a"
+                + " JavaDelegate is: Flowable instantiates it itself). Such a class must NOT be a @Component: the annotation"
+                + " additionally builds a container-managed singleton nothing ever runs — a stray candidate for every"
+                + " collection injection point of its type. Remove @Component from it.";
     }
 
     private static String beanName(Class<?> type) {

@@ -114,6 +114,19 @@ One Spring-singleton container, rebuilt per `ClientClassLoader` generation.
   Ambiguity **refuses** rather than guessing, which is stricter than `Beans.get(SomeInterface.class)`
   (that answers empty and falls through to the platform context, surfacing as "no such bean").
   Unit coverage: `ComponentContainerUnmanagedTest`; end-to-end: `JavaDelegateInjectionIT`.
+- **"A `JavaDelegate` must NOT be a `@Component`" is checked at publish, not per execution** (#7291).
+  `rebuild` flags a bean that implements `org.flowable.engine.delegate.JavaDelegate` — matched by
+  interface **name**, since `engine-java` cannot see the Flowable type — as a `wiringWarnings()` entry,
+  which `JavaSynchronizer` projects onto the Problems view while leaving the artefact `CREATED` (the
+  bean works; the annotation is the mistake). `createUnmanaged` still WARNs, because a delegate can
+  reach it from an AOT module the synchronizer never saw, but **once per class per generation and then
+  at DEBUG**: the `${JavaTask}` path wires a fresh delegate for every execution, so an unconditional
+  WARN restated the same fact on every tick of a step that runs all day. The suppression set is cleared
+  by `rebuild`, so a republish says it again. Its message says "instantiated outside the container"
+  rather than "is a JavaDelegate", because the check there is `isBean` on whatever class the caller
+  asked to wire — it must not claim more than it looked at. Coverage:
+  `ComponentContainerDelegateRuleTest` (with a name-only `org.flowable.engine.delegate.JavaDelegate`
+  stand-in under `src/test/java`, which is how the by-name match is testable without the dependency).
 
 ## Behaviour consumers (`JavaClassConsumer` SPI)
 
@@ -248,6 +261,9 @@ through `ClientBeanFactory.createUnmanaged` (see the container section):
   new generation.
 - **`${JavaTask}` + a `handler` field** — `DirigibleJavaCallDelegate`, fresh per execution.
 
+A delegate annotated `@Component` is reported at **publish** as a Problems entry on its source
+(`ComponentContainer.wiringWarnings()`), not as a WARN per step execution — see the container section.
+
 Three properties worth keeping: a delegate stays **lazy** (nothing is built at publish, so an
 unsatisfiable dependency is a *step* failure routed by the step's `retry:` / `onError:`, never a
 publish-time wiring error); a class declaring **no injection point is built exactly as before**; and
@@ -305,6 +321,13 @@ construction cycle, duplicate bean name, throwing constructor) are projected ont
 view and mark the `JavaFile` artefact `FAILED` (see `JavaSynchronizer.recordCompilationProblems` and
 `ComponentContainer.wiringErrors()` carried on `RebuildResult`). Don't regress this — it's how a
 browser-IDE developer sees what's wrong without reading the server log.
+
+**Bean-wiring warnings** (`ComponentContainer.wiringWarnings()`, also on `RebuildResult`) take the same
+route to the Problems view but leave the artefact `CREATED`: the class compiled and wired, it just
+breaks a container rule. Today there is one — a bean that is also a `JavaDelegate` (#7291). Reach for a
+warning rather than an error whenever the code still runs correctly enough that failing the artefact
+would be a lie; reach for the Problems view rather than a log line whenever the audience is the
+developer who wrote the line, not the operator who happened to run the process.
 
 ## Conventions / gotchas
 
