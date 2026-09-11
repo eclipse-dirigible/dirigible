@@ -1033,7 +1033,7 @@
             <dependency>
                 <groupId>org.webjars.npm</groupId>
                 <artifactId>ag-grid-community__csv-export</artifactId>
-                <version>27.1.0</version>
+                <version>27.3.0</version>
             </dependency>
             <dependency>
                 <groupId>org.webjars.npm</groupId>
