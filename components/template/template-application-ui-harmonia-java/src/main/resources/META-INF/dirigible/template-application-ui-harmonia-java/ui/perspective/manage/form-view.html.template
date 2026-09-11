@@ -282,10 +282,10 @@
     <div class="vbox gap-4 w-full"
          x-show="(isEdit || isPreview) && detailDefs.length && state !== 'loading' && state !== 'load-failure'">
       <template x-for="d in detailDefs" :key="d.entity + ':' + id">
-        <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id)" x-h-card>
+        <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id, form)" x-h-card>
           <div x-h-card-header>
             <h3 x-h-card-title x-text="d.label"></h3>
-            <div x-h-card-action x-show="(!isPreview || def.locksWithMaster === false) && !def.files">
+            <div x-h-card-action x-show="(!isPreview || def.locksWithMaster === false) && !def.files && !isForbidden()">
               <button type="button" x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" x-h-lucide data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
             </div>
           </div>
@@ -375,9 +375,9 @@
                         <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" x-h-lucide data-lucide="ellipsis"></i></button>
                         <ul x-h-menu data-align="bottom-end">
                           <li x-h-menu-item @click="previewRow(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
-                          <li x-h-menu-item @click="editRow(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
-                          <li x-h-menu-separator></li>
-                          <li x-h-menu-item data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
+                          <li x-h-menu-item x-show="!isForbidden()" @click="editRow(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
+                          <li x-h-menu-separator x-show="!isForbidden()"></li>
+                          <li x-h-menu-item x-show="!isForbidden()" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
                         </ul>
                       </td>
                     </tr>

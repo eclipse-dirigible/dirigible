@@ -73,6 +73,13 @@ App.registerDetail('${masterEntity}', {
   // not see and drops those. Declared here so a child WITHOUT any costs no request at all.
   restrictedFields: true,
 #end
+#if($forbidWhenGuards && $forbidWhenGuards.size() > 0)
+  // A forbidWhen over this child's master (intent `checks: forbidWhen`, dirigible #7275): the shared
+  // detailPanel hides Add / row edit / delete while the condition holds against the master it already
+  // holds - the server still rejects the write on every path (the 400 / ValidationException), this only
+  // stops offering a click it would refuse. One entry per forbidWhen; each is a list of ANDed terms.
+  forbidWhen: [#foreach($guard in $forbidWhenGuards)[#foreach($t in $guard){ property: '${t.property}', equal: ${t.equal}, value: '${t.value}' }, #end], #end],
+#end
   columns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.name != $masterEntityId)

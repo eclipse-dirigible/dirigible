@@ -1051,6 +1051,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             if ((${check.guard}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
                 throw new ValidationException("${check.messageJavaLiteral}");
             }
+#elseif($check.kind == "forbidWhen")
+            // The reject-twin of requiredWhen (intent `checks: forbidWhen`), gated on the status at
+            // which the write is refused - a child may test its parent one hop away (loaded by FK
+            // first). On the synchronous #7014/#7063 path, so the refusal reaches the person who acted.
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            if (${check.guard}) {
+                throw new ValidationException("${check.message}");
+            }
 #elseif($check.kind == "itemsSumEqual")
             java.math.BigDecimal sum${check.overA} = java.math.BigDecimal.ZERO;
             java.math.BigDecimal sum${check.overB} = java.math.BigDecimal.ZERO;
