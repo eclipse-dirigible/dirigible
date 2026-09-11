@@ -22,7 +22,9 @@ import org.junit.jupiter.api.Test;
  * {@code {error}} placeholder a {@code setField} on the error route reads. The parser must reject a
  * malformed retry cycle, a dangling error route, resilience on a service-task shape it does not
  * apply to, resilience on a fan-out send (which never fails, so neither key could fire), and an
- * {@code {error}} nothing would ever populate.
+ * {@code {error}} nothing would ever populate. Also the routing self-loops that spin a
+ * wait-state-free flow: a step's {@code next} and a decision's {@code then}/{@code else} naming
+ * their own step.
  */
 class StepResilienceIntentTest {
 
@@ -112,6 +114,43 @@ class StepResilienceIntentTest {
         String issue = assertIssue(YAML.replace("onError: recordFailure, next: done", "onError: recordFailure, next: provisionApp"),
                 "`next` targets itself - a self-loop that never advances");
         assertTrue(issue.contains("step [provisionApp]"), "the message must locate the step: " + issue);
+    }
+
+    /**
+     * The same spin one key over: an exclusive gateway has no wait state, so a decision branching back
+     * to itself emits a self-targeting sequence flow Flowable spins on. It names an existing step, so
+     * only a dedicated check catches it (dirigible #7292).
+     */
+    @Test
+    void aDecisionThenTargetingItselfIsRejected() {
+        String issue = assertIssue(withDecision("rated", "settle"), "`then` targets itself - a self-loop that never advances");
+        assertTrue(issue.contains("decision [rated]"), "the message must locate the decision: " + issue);
+    }
+
+    @Test
+    void aDecisionElseTargetingItselfIsRejected() {
+        String issue = assertIssue(withDecision("settle", "rated"), "`else` targets itself - a self-loop that never advances");
+        assertTrue(issue.contains("decision [rated]"), "the message must locate the decision: " + issue);
+    }
+
+    /**
+     * A branch back through a wait state is a legitimate cycle - only the direct self-edge is refused.
+     */
+    @Test
+    void aDecisionBranchingBackThroughAWaitStateIsAccepted() {
+        assertDoesNotThrow(() -> IntentParser.parse(withDecision("reconsider", "settle")));
+    }
+
+    /** The showcase plus a decision whose two branches take the given targets. */
+    private static String withDecision(String thenTarget, String elseTarget) {
+        return YAML + """
+                  - name: Review
+                    trigger: { onCreate: TenantApplication }
+                    steps:
+                      - { name: reconsider, kind: userTask, args: { assignee: owner, next: rated } }
+                      - { name: rated,      kind: decision, args: { if: "id > 0", then: %s, else: %s } }
+                      - { name: settle,     kind: serviceTask, args: { setField: failureMessage, value: settled, next: end } }
+                """.formatted(thenTarget, elseTarget);
     }
 
     /** The literal `end` routes the failure to the process end, like a decision branch. */

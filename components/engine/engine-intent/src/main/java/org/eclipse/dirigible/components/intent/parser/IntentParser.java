@@ -6855,9 +6855,9 @@ public final class IntentParser {
 
     /**
      * Decision steps must declare {@code if} and {@code then}; {@code then} and the optional
-     * {@code else} must reference a declared step of the same process (or the literal {@code end}).
-     * Without this check a typo silently produces BPMN that Flowable rejects on the next
-     * synchronization cycle.
+     * {@code else} must reference a declared step of the same process (or the literal {@code end}), and
+     * neither may name the decision itself. Without this check a typo silently produces BPMN that
+     * Flowable rejects on the next synchronization cycle.
      */
     private static void validateDecisionTargets(ProcessIntent process, List<String> issues) {
         Set<String> stepNames = new HashSet<>();
@@ -6886,7 +6886,16 @@ public final class IntentParser {
 
     private static void checkDecisionTarget(ProcessIntent process, StepIntent step, String arg, String target, Set<String> stepNames,
             List<String> issues) {
-        if (!isRoutingLiteral(target) && !stepNames.contains(target)) {
+        if (isRoutingLiteral(target)) {
+            return;
+        }
+        if (target.equals(step.getName())) {
+            // An exclusive gateway has no wait state, so a branch back to the gateway emits a
+            // self-targeting sequence flow the engine spins on - the `next: <self>` spin one key over
+            // (dirigible #7226 / #7292). A cycle THROUGH a wait state stays legal.
+            issues.add("process [" + process.getName() + "] decision [" + step.getName() + "] `" + arg
+                    + "` targets itself - a self-loop that never advances");
+        } else if (!stepNames.contains(target)) {
             issues.add("process [" + process.getName() + "] decision [" + step.getName() + "] `" + arg + "` references unknown step ["
                     + target + "]");
         }
