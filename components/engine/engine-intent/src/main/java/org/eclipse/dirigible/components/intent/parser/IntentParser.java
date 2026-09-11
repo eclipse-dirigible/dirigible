@@ -4835,6 +4835,85 @@ public final class IntentParser {
         }
     }
 
+    /**
+     * A {@code forbidWhen} check: the reject-twin of {@code requiredWhen} (dirigible #7275). It rejects
+     * the write while its condition holds, carrying no {@code field}/value - only the condition and the
+     * message. Its one reach beyond {@code requiredWhen} is that a {@code when} term may name a one-hop
+     * {@code Relation.field}, so a composition child can refuse a write based on its parent's state (a
+     * payment allocation cannot be added to an already PAID invoice). The {@code status} gate is
+     * optional and routes enforcement exactly as {@code requiredWhen}'s does: without one, every user
+     * write; with one, the repository at that status.
+     */
+    private static void validateForbidWhen(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
+            String subject, List<String> issues) {
+        if (check.getField() != null && !check.getField()
+                                              .isBlank()) {
+            issues.add(subject + " carries a `field` - a forbidWhen rejects a write on its condition alone and reads no value");
+        }
+        if (check.getMessage() == null || check.getMessage()
+                                               .isBlank()) {
+            issues.add(subject + " requires `message`: the reason the write is refused, shown to the user");
+        }
+        if (check.getWhen() == null) {
+            issues.add(subject + " requires `when`: the condition under which the write is refused, e.g."
+                    + " `when: \"SalesInvoice.Status == PAID\"`");
+        } else {
+            List<String> terms = CheckSupport.terms(check.getWhen());
+            if (terms.isEmpty()) {
+                issues.add(subject + " when must not be an empty list");
+            }
+            for (String term : terms) {
+                validateForbidWhenTerm(entity, byName, term, subject, issues);
+            }
+        }
+        if (check.getStatus() != null && entityStatusRelationOf(entity) == null) {
+            issues.add(subject + " carries a `status` gate but [" + entity.getName()
+                    + "] declares no `function: EntityStatus` relation to read it from");
+        }
+    }
+
+    /**
+     * One comparison of a {@code forbidWhen} condition: the property is the record's own field / to-one
+     * OR a one-hop {@code Relation.field}, walked with the same resolver every other path uses (a
+     * cross-model to-one may be the last hop). The literal must be a value of the compared type - a
+     * to-one is compared by its foreign key, an integer, so a status name has been resolved to its seed
+     * id by now; a comparison the generator could not compile would switch the rule off while looking
+     * authored, the silent failure this module refuses everywhere.
+     */
+    private static void validateForbidWhenTerm(EntityIntent entity, java.util.Map<String, EntityIntent> byName, String term, String subject,
+            List<String> issues) {
+        CheckSupport.Comparison comparison = CheckSupport.parse(term);
+        if (comparison == null) {
+            issues.add(subject + " when [" + term + "] must be `<Property> ==|!= <literal>` or `<Relation>.<field> ==|!= <literal>`"
+                    + " - a number, a status name, a quoted string or a bare word");
+            return;
+        }
+        ResolvePathSupport.Path path = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null)
+                                                         .resolve(comparison.property());
+        if (!path.resolved()) {
+            issues.add(subject + " when " + path.failure());
+            return;
+        }
+        String terminal = path.terminalType();
+        if (terminal == null) {
+            return; // a cross-model terminal's type is not known here - trusted, as a cross-model value is
+        }
+        // A to-one terminal is compared by its foreign key, an integer (a status id); a field terminal by
+        // its own declared type, normalised the same way the record-local guard is
+        // (CheckSupport.guardType).
+        String declared = ResolvePathSupport.RELATION_TERMINAL.equals(terminal) ? "integer" : terminal;
+        String type = CheckSupport.guardType(declared);
+        if (!CheckSupport.GUARD_TYPES.contains(type)) {
+            issues.add(subject + " when [" + term + "] compares [" + comparison.property() + "], a [" + declared
+                    + "] - a condition compares a string, an integer or a boolean, the types an equality is exact on");
+            return;
+        }
+        if (CheckSupport.javaLiteral(type, comparison.literal()) == null) {
+            issues.add(subject + " when [" + term + "] compares [" + comparison.property() + "], a [" + type + "], with ["
+                    + comparison.literal() + "], which is not a value of that type");
+        }
+    }
+
     /** The entity's {@code function: EntityStatus} relation, or {@code null}. */
     private static RelationIntent entityStatusRelationOf(EntityIntent entity) {
         if (entity.getRelations() != null) {
@@ -4888,6 +4967,10 @@ public final class IntentParser {
         }
         if ("requiredWhen".equals(kind)) {
             validateRequiredWhen(entity, check, byName, subject, issues);
+            return;
+        }
+        if ("forbidWhen".equals(kind)) {
+            validateForbidWhen(entity, check, byName, subject, issues);
             return;
         }
         if ("exactlyOne".equals(kind)) {
@@ -4949,7 +5032,8 @@ public final class IntentParser {
             }
             return;
         }
-        issues.add(subject + " has unknown kind - expected exactlyOne, compare, requiredWhen, guard, itemsSumEqual or itemsMin");
+        issues.add(
+                subject + " has unknown kind - expected exactlyOne, compare, requiredWhen, forbidWhen, guard, itemsSumEqual or itemsMin");
     }
 
     /**

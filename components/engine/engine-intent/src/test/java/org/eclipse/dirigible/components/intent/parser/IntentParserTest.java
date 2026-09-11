@@ -1007,6 +1007,79 @@ class IntentParserTest {
     }
 
     @Test
+    void conditionalRefusalsParseAndValidate() {
+        String yaml = """
+                name: sales
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 7, name: PAID }
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: DRAFT }
+                  - name: SalesInvoiceCustomerPayment
+                    checks:
+                      - { kind: forbidWhen, when: "SalesInvoice.Status == PAID",
+                          message: "Cannot add a payment to a fully paid invoice" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, required: true, composition: true }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        org.eclipse.dirigible.components.intent.model.CheckIntent check = model.getEntities()
+                                                                               .get(2)
+                                                                               .getChecks()
+                                                                               .get(0);
+        assertEquals("forbidWhen", check.getKind());
+        // The status NAME one hop away resolves against the RELATION TARGET's nomenclature (PAID -> 7).
+        assertEquals("SalesInvoice.Status == 7", String.valueOf(check.getWhen()));
+
+        // A forbidWhen carries the condition alone - no value to read.
+        String withField = yaml.replace("when: \"SalesInvoice.Status == PAID\",", "field: amount, when: \"SalesInvoice.Status == PAID\",");
+        assertForbidIssue(withField, "carries a `field`");
+
+        // The message is the whole point - it is what the user is told when the write is refused.
+        String noMessage = yaml.replace("""
+                message: "Cannot add a payment to a fully paid invoice" }""", "}");
+        assertForbidIssue(noMessage, "requires `message`");
+
+        // A misspelt status is a generation error, never a silently-never-matching guard.
+        assertForbidIssue(yaml.replace("== PAID", "== PAYED"), "not a seeded status");
+
+        // The one-hop relation must exist - the walker refuses a path that names nothing readable.
+        assertForbidIssue(yaml.replace("SalesInvoice.Status ==", "Invoice.Status =="), "has no to-one relation [Invoice]");
+
+        // requiredWhen's grammar is unchanged: its condition stays record-local, so a dotted
+        // `Relation.field`
+        // term is not one of its own fields/to-ones and is refused (only a forbidWhen walks a hop). An
+        // integer literal here, so the status resolver leaves the term alone and the parser is what refuses
+        // it.
+        String requiredDotted = yaml.replace("kind: forbidWhen, when: \"SalesInvoice.Status == PAID\",",
+                "kind: requiredWhen, field: amount, when: \"SalesInvoice.Amount == 5\",");
+        assertForbidIssue(requiredDotted, "is not a field or to-one relation of [SalesInvoiceCustomerPayment]");
+    }
+
+    private static void assertForbidIssue(String yaml, String expected) {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(expected)),
+                "expected an issue containing [" + expected + "], got: " + ex.getIssues());
+    }
+
+    @Test
     void hierarchyAndLeafOnlyParse() {
         String yaml = """
                 name: ledger

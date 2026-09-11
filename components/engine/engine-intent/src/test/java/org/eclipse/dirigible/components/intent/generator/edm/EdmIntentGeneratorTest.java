@@ -1292,6 +1292,73 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * A {@code forbidWhen} (dirigible #7275) emits its condition as the Java boolean the reject tests,
+     * the hop its one-hop term reads through (a child loading its parent by FK), no value expression,
+     * and - when every term reads the composition master - the UI descriptor the detail panel hides the
+     * child's affordance by.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void forbidWhenEmitsItsConditionTheHopsItReadsThroughAndTheMasterGuard() {
+        String yaml = """
+                name: sales
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 7, name: PAID }
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: DRAFT }
+                  - name: SalesInvoiceCustomerPayment
+                    checks:
+                      - { kind: forbidWhen, when: "SalesInvoice.Status == PAID",
+                          message: "Cannot add a payment to a fully paid invoice" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, required: true, composition: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        List<Map<String, Object>> checks =
+                (List<Map<String, Object>>) entityByName(entities(model), "SalesInvoiceCustomerPayment").get("checks");
+        assertEquals(1, checks.size());
+        Map<String, Object> check = checks.get(0);
+        // The parent's status is loaded by FK and compared to the resolved seed id; there is no value.
+        assertEquals("java.util.Objects.equals((hop0 == null ? null : hop0.Status), 7)", check.get("guard"));
+        assertNull(check.get("valueExpression"));
+        List<Map<String, Object>> loads = (List<Map<String, Object>>) check.get("pathLoads");
+        assertEquals("hop0", loads.get(0)
+                                  .get("local"));
+        assertEquals("entity.SalesInvoice", loads.get(0)
+                                                 .get("sourceExpression"));
+        assertEquals("SalesInvoice", loads.get(0)
+                                          .get("entity"));
+        // Ungated, so it holds on every user write (the controller), carrying no status.
+        assertNull(check.get("status"));
+        // The UI half: the term reads the composition master, so the panel gets a { property, ==, value }
+        // it evaluates against the master record it already holds.
+        List<Map<String, Object>> masterGuard = (List<Map<String, Object>>) check.get("masterGuard");
+        assertEquals(1, masterGuard.size());
+        assertEquals("Status", masterGuard.get(0)
+                                          .get("property"));
+        assertEquals(true, masterGuard.get(0)
+                                      .get("equal"));
+        assertEquals("7", masterGuard.get(0)
+                                     .get("value"));
+    }
+
+    /**
      * A {@code compare} check reaches the REST templates as the two PascalCased properties plus the
      * Java comparison operator and the family flag - the template must not re-derive either, and the
      * flag is what decides between {@code compareTo} (temporals) and a {@code BigDecimal} comparison
