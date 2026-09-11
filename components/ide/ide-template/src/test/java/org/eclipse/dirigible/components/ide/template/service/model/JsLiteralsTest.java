@@ -59,6 +59,8 @@ class JsLiteralsTest {
         assertEquals("true", JsLiterals.defaultValueExpression("CHECKBOX", false, "TRUE"));
         assertEquals("true", JsLiterals.defaultValueExpression("CHECKBOX", false, "1"));
         assertEquals("false", JsLiterals.defaultValueExpression("CHECKBOX", false, "false"));
+        assertEquals("true", JsLiterals.defaultValueExpression("CHECKBOX", false, "'true'"));
+        assertEquals("false", JsLiterals.defaultValueExpression("CHECKBOX", false, "'false'"));
         assertEquals("20.00", JsLiterals.defaultValueExpression("TEXTBOX", true, "20.00"));
         assertEquals("'DRAFT'", JsLiterals.defaultValueExpression("TEXTBOX", false, "DRAFT"));
         // A dropdown's FK stays a string even though it reads as a number, so it matches an option's

@@ -28,11 +28,17 @@ final class AuthoredDefaults {
     /**
      * Whether an authored boolean default reads as true.
      *
+     * <p>
+     * Read through {@link #unquote(String)}, so the SQL-quoted shape a working DB DEFAULT needs
+     * ({@code 'true'}) reads as the bare one - and reads the same way in every generated language,
+     * which is this class's whole reason to exist.
+     *
      * @param defaultValue the authored default
      * @return true when it does
      */
     static boolean readsAsTrue(String defaultValue) {
-        return "true".equals(defaultValue) || "TRUE".equals(defaultValue) || "1".equals(defaultValue);
+        String value = unquote(defaultValue);
+        return "true".equals(value) || "TRUE".equals(value) || "1".equals(value);
     }
 
     /**

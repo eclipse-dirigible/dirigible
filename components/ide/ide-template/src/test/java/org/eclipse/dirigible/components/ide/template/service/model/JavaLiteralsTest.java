@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Tests the Java literals a model value is written into a generated source as.
@@ -50,36 +52,58 @@ class JavaLiteralsTest {
     }
 
     /**
-     * A numeric default is parsed from its authored text rather than inlined, so an author's "8.0" on
-     * an integer column fails that one create instead of failing the whole generated build.
+     * A numeric default is parsed from its authored text rather than inlined as a numeric literal -
+     * which keeps BigDecimal exact and needs no per-type suffix.
      */
     @Test
     void parsesANumericDefaultFromItsAuthoredText() {
-        assertEquals("new java.math.BigDecimal(\"20.00\")", JavaLiterals.defaultValueExpression("java.math.BigDecimal", "20.00"));
-        assertEquals("Double.valueOf(\"1.5\")", JavaLiterals.defaultValueExpression("Double", "1.5"));
-        assertEquals("Float.valueOf(\"1.5\")", JavaLiterals.defaultValueExpression("Float", "1.5"));
-        assertEquals("Long.valueOf(\"7\")", JavaLiterals.defaultValueExpression("Long", "7"));
-        assertEquals("Integer.valueOf(\"7\")", JavaLiterals.defaultValueExpression("Integer", "7"));
-        assertEquals("Short.valueOf(\"7\")", JavaLiterals.defaultValueExpression("Short", "7"));
-        assertEquals("Integer.valueOf(\"8.0\")", JavaLiterals.defaultValueExpression("Integer", "8.0"));
+        assertEquals("new java.math.BigDecimal(\"20.00\")", JavaLiterals.defaultValueExpression("java.math.BigDecimal", "20.00", "E.P"));
+        assertEquals("Double.valueOf(\"1.5\")", JavaLiterals.defaultValueExpression("Double", "1.5", "E.P"));
+        assertEquals("Float.valueOf(\"1.5\")", JavaLiterals.defaultValueExpression("Float", "1.5", "E.P"));
+        assertEquals("Long.valueOf(\"7\")", JavaLiterals.defaultValueExpression("Long", "7", "E.P"));
+        assertEquals("Integer.valueOf(\"7\")", JavaLiterals.defaultValueExpression("Integer", "7", "E.P"));
+        assertEquals("Short.valueOf(\"7\")", JavaLiterals.defaultValueExpression("Short", "7", "E.P"));
+        assertEquals("Integer.valueOf(\"-7\")", JavaLiterals.defaultValueExpression("Integer", "-7", "E.P"));
     }
 
     /**
-     * A numeric default is the one place a malformed value cannot even be escaped into something that
-     * parses - so it must still compile, and fail at that one create.
+     * The defect: the SQL-quoted shape was read in the String arm only, so an integer column's
+     * {@code '20'} seeded 20 in the item dialog and emitted {@code Integer.valueOf("'20'")} in the
+     * repository - a NumberFormatException on every create that relied on the default (#7293).
      */
     @Test
-    void escapesAMalformedNumericDefaultTooRatherThanBreakingTheCompile() {
-        assertEquals("Integer.valueOf(\"7\\\"\")", JavaLiterals.defaultValueExpression("Integer", "7\""));
+    void readsANumericDefaultInEitherAuthoringShape() {
+        assertEquals("Integer.valueOf(\"20\")", JavaLiterals.defaultValueExpression("Integer", "'20'", "E.P"));
+        assertEquals("Long.valueOf(\"20\")", JavaLiterals.defaultValueExpression("Long", "'20'", "E.P"));
+        assertEquals("new java.math.BigDecimal(\"20.00\")", JavaLiterals.defaultValueExpression("java.math.BigDecimal", "'20.00'", "E.P"));
+    }
+
+    /**
+     * A text the property's own factory cannot read is refused while the author is generating, naming
+     * the property - it used to compile into an expression that threw on every create of that entity.
+     */
+    @Test
+    void refusesANumericDefaultThatIsNotAValueOfItsType() {
+        IllegalArgumentException refusal =
+                assertThrows(IllegalArgumentException.class, () -> JavaLiterals.defaultValueExpression("Integer", "8.0", "Order.Lines"));
+        assertTrue(refusal.getMessage()
+                          .contains("Order.Lines"),
+                "the refusal must name the property, got: " + refusal.getMessage());
+        assertThrows(IllegalArgumentException.class, () -> JavaLiterals.defaultValueExpression("Integer", "7\"", "E.P"));
+        assertThrows(IllegalArgumentException.class, () -> JavaLiterals.defaultValueExpression("Integer", "N/A", "E.P"));
+        assertThrows(IllegalArgumentException.class, () -> JavaLiterals.defaultValueExpression("java.math.BigDecimal", "1 or 2", "E.P"));
+        assertThrows(IllegalArgumentException.class, () -> JavaLiterals.defaultValueExpression("Long", "nextval('s')", "E.P"));
     }
 
     @Test
     void readsABooleanDefaultInEveryAuthoredShape() {
-        assertEquals("Boolean.TRUE", JavaLiterals.defaultValueExpression("Boolean", "true"));
-        assertEquals("Boolean.TRUE", JavaLiterals.defaultValueExpression("Boolean", "TRUE"));
-        assertEquals("Boolean.TRUE", JavaLiterals.defaultValueExpression("Boolean", "1"));
-        assertEquals("Boolean.FALSE", JavaLiterals.defaultValueExpression("Boolean", "false"));
-        assertEquals("Boolean.FALSE", JavaLiterals.defaultValueExpression("Boolean", "0"));
+        assertEquals("Boolean.TRUE", JavaLiterals.defaultValueExpression("Boolean", "true", "E.P"));
+        assertEquals("Boolean.TRUE", JavaLiterals.defaultValueExpression("Boolean", "TRUE", "E.P"));
+        assertEquals("Boolean.TRUE", JavaLiterals.defaultValueExpression("Boolean", "1", "E.P"));
+        assertEquals("Boolean.FALSE", JavaLiterals.defaultValueExpression("Boolean", "false", "E.P"));
+        assertEquals("Boolean.FALSE", JavaLiterals.defaultValueExpression("Boolean", "0", "E.P"));
+        assertEquals("Boolean.TRUE", JavaLiterals.defaultValueExpression("Boolean", "'true'", "E.P"));
+        assertEquals("Boolean.FALSE", JavaLiterals.defaultValueExpression("Boolean", "'false'", "E.P"));
     }
 
     /**
@@ -88,24 +112,24 @@ class JavaLiteralsTest {
      */
     @Test
     void readsAStringDefaultInEitherAuthoringShape() {
-        assertEquals("\"DRAFT\"", JavaLiterals.defaultValueExpression("String", "DRAFT"));
-        assertEquals("\"DRAFT\"", JavaLiterals.defaultValueExpression("String", "'DRAFT'"));
-        assertEquals("\"'\"", JavaLiterals.defaultValueExpression("String", "'"));
-        assertEquals("\"6\\\"\"", JavaLiterals.defaultValueExpression("String", "6\""));
-        assertEquals("\"6\\\"\"", JavaLiterals.defaultValueExpression("String", "'6\"'"));
+        assertEquals("\"DRAFT\"", JavaLiterals.defaultValueExpression("String", "DRAFT", "E.P"));
+        assertEquals("\"DRAFT\"", JavaLiterals.defaultValueExpression("String", "'DRAFT'", "E.P"));
+        assertEquals("\"'\"", JavaLiterals.defaultValueExpression("String", "'", "E.P"));
+        assertEquals("\"6\\\"\"", JavaLiterals.defaultValueExpression("String", "6\"", "E.P"));
+        assertEquals("\"6\\\"\"", JavaLiterals.defaultValueExpression("String", "'6\"'", "E.P"));
     }
 
     @Test
     void hasNoExpressionForATypeWhoseDefaultIsASqlExpression() {
-        assertNull(JavaLiterals.defaultValueExpression("java.time.LocalDate", "CURRENT_DATE"));
-        assertNull(JavaLiterals.defaultValueExpression("java.time.Instant", "now()"));
-        assertNull(JavaLiterals.defaultValueExpression("byte[]", "x"));
+        assertNull(JavaLiterals.defaultValueExpression("java.time.LocalDate", "CURRENT_DATE", "E.P"));
+        assertNull(JavaLiterals.defaultValueExpression("java.time.Instant", "now()", "E.P"));
+        assertNull(JavaLiterals.defaultValueExpression("byte[]", "x", "E.P"));
     }
 
     @Test
     void hasNoExpressionWithoutADefault() {
-        assertNull(JavaLiterals.defaultValueExpression("String", null));
-        assertNull(JavaLiterals.defaultValueExpression("String", ""));
-        assertNull(JavaLiterals.defaultValueExpression(null, "DRAFT"));
+        assertNull(JavaLiterals.defaultValueExpression("String", null, "E.P"));
+        assertNull(JavaLiterals.defaultValueExpression("String", "", "E.P"));
+        assertNull(JavaLiterals.defaultValueExpression(null, "DRAFT", "E.P"));
     }
 }
