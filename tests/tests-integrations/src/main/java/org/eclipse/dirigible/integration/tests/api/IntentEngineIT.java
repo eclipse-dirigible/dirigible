@@ -2451,6 +2451,74 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void an_event_notification_keeps_its_relation_loads_and_attachment_render_inside_the_fail_soft_try() {
+        // Issue #7290 (the single-record twin of #7233/#7278): the per-row try above covers a
+        // SCHEDULE's notify branch. A notifications: entry (one record, no loop) had the identical gap
+        // - only Mail.send sat inside the try, so a relation load or a broken .print template
+        // propagated straight out of onMessage with NO stamp: the broker redelivers forever and the
+        // record's outcome stays empty, exactly the silent state #7023 introduced the stamp to remove.
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: name,   type: string }
+                      - { name: email,  type: string }
+                      - { name: locale, type: string, length: 5 }
+                  - name: Invoice
+                    function: Document
+                    fields:
+                      - { name: id,              type: integer, primaryKey: true, generated: true }
+                      - { name: dueDate,         type: date }
+                      - { name: reminderOutcome, type: string, length: 128 }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: InvoiceItem
+                    function: DocumentItem
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                notifications:
+                  - name: invoiceIssued
+                    event: { onCreate: Invoice }
+                    to: Customer.email
+                    subject: "Invoice {id} issued"
+                    body: "Dear {Customer.name}, your invoice is attached."
+                    attach: print
+                    languageFrom: Customer.locale
+                    outcome: reminderOutcome
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "billing.glue");
+
+        String notification = codeOf("gen/events/billing/InvoiceIssuedNotification.java");
+        int method = notification.indexOf("public void onMessage(String message) {");
+        int tryOpens = notification.indexOf("try {", method);
+        int load = notification.indexOf("new CustomerRepository().findById(entity.Customer)");
+        int render = notification.indexOf("Print.render(\"Invoice\",");
+        int send = notification.indexOf("Mail.send(");
+        int catches = notification.indexOf("} catch (Exception ex) {");
+        assertTrue(method > 0 && tryOpens > 0 && load > 0 && render > 0 && send > 0 && catches > 0, "got: " + notification);
+        // The ordering is the whole fix: the try must open before the relation load.
+        assertTrue(tryOpens < load, "the recipient's one-hop relation load runs inside the fail-soft try");
+        assertTrue(load < render, "the attachment render follows the load, in the same try");
+        assertTrue(render < send && send < catches, "render, then send, then the catch - one try encloses both");
+        // Both outcome stamps survive: `sent` inside the try, `failed: <reason>` from the catch - so a
+        // relation load or render failure is stamped on the record exactly as a bounced mailbox is.
+        int stampSent = notification.indexOf("stampNotifyOutcome(entity.Id, null);");
+        int stampFailed = notification.indexOf("stampNotifyOutcome(entity.Id, ex);");
+        assertTrue(send < stampSent && stampSent < catches && catches < stampFailed,
+                "both delivery outcomes are still stamped, got: " + notification);
+    }
+
+    @Test
     void a_recurring_template_schedule_keys_on_the_period_of_the_run() {
         // Issue #7106: the recurring-template family had no key to declare. A monthly bill generated
         // from a standing BillTemplate is a plain document with a `date` - no period column to name -
