@@ -38,6 +38,13 @@ public class JavaSourceCompiler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(JavaSourceCompiler.class);
 
+    /**
+     * Upper bound on the salvage rounds of {@link #compileBatch(List)}. Each round removes at least one
+     * unit, so the fixpoint is reached in as many rounds as the dependency chain is deep - two or three
+     * in practice. The bound only stops a pathological batch from compiling once per unit.
+     */
+    private static final int MAX_COMPILE_ROUNDS = 5;
+
     private final ClassPathIndex classPathIndex;
 
     /** Test-only convenience: uses an empty classpath index (relies on {@code java.class.path}). */
@@ -94,19 +101,118 @@ public class JavaSourceCompiler {
     }
 
     /**
-     * Compile multiple sources together so cross-file references resolve. The compiler is invoked once;
-     * per-source diagnostics are sorted into {@link BatchResult#failures()}, successful bytecode into
-     * {@link BatchResult#bytecode()}.
+     * Compile multiple sources together so cross-file references resolve, keeping the output of the
+     * units that do compile.
      *
      * <p>
-     * Note: {@code javac} may still produce class files for units that don't depend on a broken unit.
-     * If a single unit fails its own type-check, only that unit is reported as failed; the others
-     * remain in {@link BatchResult#bytecode()}.
+     * {@code javac} stops before code generation as soon as the batch holds an error, so a single
+     * unresolvable import emits <b>no bytecode at all</b> - including for units with no error of their
+     * own and no relation to the broken one. This method therefore compiles in rounds: a round that
+     * leaves such collateral units drops the ones {@code javac} attributed an error to and compiles the
+     * remainder again, until nothing more can be salvaged. A unit that genuinely depends on a dropped
+     * one fails the next round with its own {@code cannot find symbol} diagnostic and is dropped in
+     * turn, so the outcome is the maximal compilable subset plus a per-unit reason for every unit left
+     * out of it.
+     *
+     * <p>
+     * A batch that compiles cleanly runs exactly one {@code javac} task, as before; the extra rounds
+     * are paid only on the error path and are bounded by {@link #MAX_COMPILE_ROUNDS}.
      */
     public BatchResult compileBatch(List<SourceUnit> units) {
         if (units.isEmpty()) {
             return new BatchResult(Map.of(), Map.of(), Map.of());
         }
+
+        List<SourceUnit> remaining = new ArrayList<>(units);
+        Map<String, String> failures = new LinkedHashMap<>();
+        Map<String, List<CompileDiagnostic>> diagnostics = new LinkedHashMap<>();
+        Map<String, byte[]> bytecode;
+        int round = 1;
+
+        while (true) {
+            Attempt attempt = compileOnce(remaining);
+            bytecode = attempt.bytecode();
+            Set<String> rejected = attempt.rejected();
+
+            // Collateral damage: a unit reported as failed although javac had nothing to say about it -
+            // it simply never reached code generation. Dropping the units javac DID reject and
+            // compiling the rest is what recovers their output.
+            boolean salvageable = attempt.failures()
+                                         .size() > rejected.size()
+                    && !rejected.isEmpty() && rejected.size() < remaining.size();
+
+            if (!salvageable) {
+                collect(failures, diagnostics, attempt, attempt.failures()
+                                                               .keySet());
+                break;
+            }
+            if (round >= MAX_COMPILE_ROUNDS) {
+                LOGGER.warn("Giving up on salvaging the batch after [{}] compile rounds - [{}] unit(s) still without output",
+                        MAX_COMPILE_ROUNDS, attempt.failures()
+                                                   .size());
+                collect(failures, diagnostics, attempt, attempt.failures()
+                                                               .keySet());
+                break;
+            }
+
+            collect(failures, diagnostics, attempt, rejected);
+            remaining.removeIf(unit -> rejected.contains(unit.fqn()));
+            round++;
+        }
+
+        if (failures.isEmpty()) {
+            // INFO, not DEBUG: the batch runs only when the source set changed, and after a
+            // mid-publish failure this line is the ONLY visible evidence that the next cycle
+            // recovered - at DEBUG the stale failure ERROR stays the log's last word and a
+            // green system diagnoses as dead.
+            LOGGER.info("Compiled batch: [{}] units, [{}] class file(s), no failures", units.size(), bytecode.size());
+        } else if (round == 1) {
+            LOGGER.error("Compiled batch: [{}] units, [{}] class file(s); [{}] unit(s) failed to compile: {}", units.size(),
+                    bytecode.size(), failures.size(), failures.keySet());
+        } else {
+            LOGGER.error("Compiled batch: [{}] units, [{}] class file(s) over [{}] compile rounds; [{}] unit(s) failed to compile: {}",
+                    units.size(), bytecode.size(), round, failures.size(), failures.keySet());
+        }
+
+        return new BatchResult(bytecode, Collections.unmodifiableMap(failures), Collections.unmodifiableMap(diagnostics));
+    }
+
+    /**
+     * Carry the given units' failure message and structured diagnostics over from one round's attempt
+     * into the batch-wide outcome. A unit is recorded by the round that rejected it, so its message is
+     * the one javac produced while the unit was still in the batch.
+     */
+    private static void collect(Map<String, String> failures, Map<String, List<CompileDiagnostic>> diagnostics, Attempt attempt,
+            Set<String> fqns) {
+        for (String fqn : fqns) {
+            String message = attempt.failures()
+                                    .get(fqn);
+            if (message != null) {
+                failures.put(fqn, message);
+            }
+            List<CompileDiagnostic> unitDiagnostics = attempt.diagnostics()
+                                                             .get(fqn);
+            if (unitDiagnostics != null) {
+                diagnostics.put(fqn, unitDiagnostics);
+            }
+        }
+    }
+
+    /**
+     * The outcome of one {@code javac} task.
+     *
+     * @param bytecode compiled binary class name to bytecode
+     * @param failures per top-level FQN, a single formatted failure message
+     * @param diagnostics per top-level FQN, the structured diagnostics behind that failure
+     * @param rejected the FQNs {@code javac} attributed at least one error to - as opposed to the ones
+     *        that merely produced no class file because the task stopped before code generation
+     */
+    private record Attempt(Map<String, byte[]> bytecode, Map<String, String> failures, Map<String, List<CompileDiagnostic>> diagnostics,
+            Set<String> rejected) {
+    }
+
+    /** Runs a single {@code javac} task over the given units. */
+    private Attempt compileOnce(List<SourceUnit> units) {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         if (compiler == null) {
             throw new JavaCompilationException("System Java compiler is not available. " + "Ensure the runtime is a JDK, not a JRE.");
@@ -134,24 +240,12 @@ public class JavaSourceCompiler {
 
             // Log every diagnostic javac emitted — including warnings and any error that can't be
             // attributed to a specific source unit (classpath / option errors carry no source) — so
-            // no compilation error is lost between here and the per-FQN bucketing below.
+            // no compilation error is lost between here and the per-FQN bucketing below. A rejected
+            // unit is dropped from the next round, so no diagnostic is logged twice.
             logDiagnostics(diagnostics);
 
             Buckets buckets = bucketDiagnostics(units, bytecode, diagnostics);
-            Map<String, String> failures = buckets.failures();
-
-            if (failures.isEmpty()) {
-                // INFO, not DEBUG: the batch runs only when the source set changed, and after a
-                // mid-publish failure this line is the ONLY visible evidence that the next cycle
-                // recovered - at DEBUG the stale failure ERROR stays the log's last word and a
-                // green system diagnoses as dead.
-                LOGGER.info("Compiled batch: [{}] units, [{}] class file(s), no failures", units.size(), bytecode.size());
-            } else {
-                LOGGER.error("Compiled batch: [{}] units, [{}] class file(s); [{}] unit(s) failed to compile: {}", units.size(),
-                        bytecode.size(), failures.size(), failures.keySet());
-            }
-
-            return new BatchResult(bytecode, failures, buckets.diagnostics());
+            return new Attempt(bytecode, buckets.failures(), buckets.diagnostics(), buckets.rejected());
 
         } catch (Exception e) {
             throw new JavaCompilationException("Batch compilation failed: " + e.getMessage(), e);
@@ -181,9 +275,11 @@ public class JavaSourceCompiler {
      * Build a {@code Map<FQN, message>} of compilation failures keyed by the source's top-level FQN. A
      * unit is considered failed if it produced no class file <em>or</em> if any error-level diagnostic
      * in the batch references its source file (by simple-name match — javac doesn't give us back the
-     * original {@code JavaFileObject} we passed in for every diagnostic).
+     * original {@code JavaFileObject} we passed in for every diagnostic). The second group is reported
+     * separately as {@code rejected}: those are the units javac actually refused, and dropping exactly
+     * them is what lets the next round compile the units that only lost their output.
      */
-    private record Buckets(Map<String, String> failures, Map<String, List<CompileDiagnostic>> diagnostics) {
+    private record Buckets(Map<String, String> failures, Map<String, List<CompileDiagnostic>> diagnostics, Set<String> rejected) {
     }
 
     private static Buckets bucketDiagnostics(List<SourceUnit> units, Map<String, byte[]> bytecode,
@@ -223,6 +319,7 @@ public class JavaSourceCompiler {
 
         Map<String, String> failures = new HashMap<>();
         Map<String, List<CompileDiagnostic>> structured = new HashMap<>();
+        Set<String> rejected = new HashSet<>();
         for (SourceUnit u : units) {
             String fqn = u.fqn();
             boolean hasBytecode = bytecode.containsKey(fqn);
@@ -230,6 +327,7 @@ public class JavaSourceCompiler {
             if (!errs.isEmpty()) {
                 failures.put(fqn, formatDiagnostics(fqn, errs));
                 structured.put(fqn, toCompileDiagnostics(errs));
+                rejected.add(fqn);
             } else if (!hasBytecode) {
                 // No class file and no error we could attribute to this unit: surface the orphan
                 // diagnostics (e.g. a classpath error with no source) when there are any, else a
@@ -243,7 +341,8 @@ public class JavaSourceCompiler {
                 }
             }
         }
-        return new Buckets(Collections.unmodifiableMap(failures), Collections.unmodifiableMap(structured));
+        return new Buckets(Collections.unmodifiableMap(failures), Collections.unmodifiableMap(structured),
+                Collections.unmodifiableSet(rejected));
     }
 
     private static List<CompileDiagnostic> toCompileDiagnostics(List<Diagnostic<? extends JavaFileObject>> diags) {

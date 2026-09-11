@@ -12,11 +12,18 @@ package org.eclipse.dirigible.components.intent.generator;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
+import org.eclipse.dirigible.repository.api.IRepository;
+import org.eclipse.dirigible.repository.api.IResource;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -212,5 +219,145 @@ class GlueGeneratesItemsWhereTest {
         assertTrue(failure.getMessage()
                           .contains("non-temporal"),
                 "the failure must name the shape mismatch: " + failure.getMessage());
+    }
+
+    /**
+     * A delivery note generated from another model's goods issue, its lines from the issue's lines -
+     * the cross-model SOURCE shape ({@code fromUses:}), whose items are owned by the owner model too.
+     */
+    private static final String CROSS_MODEL_YAML = """
+            name: delivery-notes
+            uses:
+              - { model: inventory }
+            entities:
+              - name: DeliveryNote
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string, documentTitle: true }
+              - name: DeliveryNoteItem
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: quantity, type: decimal }
+                relations:
+                  - { name: DeliveryNote, kind: manyToOne, to: DeliveryNote, composition: true, required: true }
+            generates:
+              - name: delivery-note-from-goods-issue
+                from: GoodsIssue
+                fromUses: inventory
+                to: DeliveryNote
+                forEntity: GoodsIssue
+                map:
+                  Number: number
+                items:
+                  from: GoodsIssueItem
+                  to: DeliveryNoteItem
+                  where:
+                    - { field: Status, op: eq, value: APPROVED }
+                  map:
+                    Quantity: quantity
+            """;
+
+    /**
+     * The owner model as the inventory project generated it: the item's status FK is the property the
+     * edm generator gave the {@code DOCUMENT_STATUS} widget, which is how a consumer learns WHICH
+     * property is the status one.
+     */
+    private static final String OWNER_MODEL = """
+            {
+              "model": {
+                "entities": [
+                  {
+                    "name": "GoodsIssue",
+                    "perspectiveName": "GoodsIssue",
+                    "dataName": "INVENTORY_GOODSISSUE",
+                    "properties": [
+                      { "name": "Id", "dataName": "ID", "dataType": "INTEGER", "dataPrimaryKey": "true" },
+                      { "name": "Number", "dataName": "NUMBER", "dataType": "VARCHAR" }
+                    ]
+                  },
+                  {
+                    "name": "GoodsIssueItem",
+                    "perspectiveName": "GoodsIssue",
+                    "dataName": "INVENTORY_GOODSISSUEITEM",
+                    "properties": [
+                      { "name": "Id", "dataName": "ID", "dataType": "INTEGER", "dataPrimaryKey": "true" },
+                      { "name": "Quantity", "dataName": "QUANTITY", "dataType": "DECIMAL" },
+                      { "name": "GoodsIssue", "dataName": "GOODSISSUE_ID", "dataType": "INTEGER",
+                        "relationshipType": "COMPOSITION", "relationshipEntityName": "GoodsIssue", "widgetType": "DROPDOWN" },
+                      { "name": "Status", "dataName": "STATUS_ID", "dataType": "INTEGER",
+                        "relationshipEntityName": "GoodsIssueItemStatus", "widgetType": "DOCUMENT_STATUS" }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+    /**
+     * A cross-model item's nomenclature is seeded in the owner model, so a status NAME in its rule
+     * cannot resolve - and used to be left in place, rendering as a string compared against the integer
+     * status FK: a rule that matched nothing on every click, with no diagnostic (dirigible #7225). It
+     * is refused the way every other cross-model status site is - by seed id only - at the one point
+     * the owner {@code .model} tells which condition names the status.
+     */
+    @Test
+    void aStatusNameOnACrossModelItemSourceIsRefused() {
+        IntentGenerationContext context = contextWithOwnerModel(IntentParser.parse(CROSS_MODEL_YAML));
+
+        IntentValidationException failure =
+                assertThrows(IntentValidationException.class, () -> GlueIntentGenerator.buildGeneratesForTest(context.getModel(), context));
+
+        assertTrue(failure.getIssues()
+                          .stream()
+                          .anyMatch(issue -> issue.contains("[Status]") && issue.contains("[APPROVED]") && issue.contains("[inventory]")
+                                  && issue.contains("numeric seed id")),
+                "the refusal must name the relation, the name and the owner model: " + failure.getIssues());
+    }
+
+    /** The seed id is the cross-model form, and it renders exactly as a local rule does. */
+    @Test
+    void aStatusSeedIdOnACrossModelItemSourceRenders() {
+        IntentGenerationContext context =
+                contextWithOwnerModel(IntentParser.parse(CROSS_MODEL_YAML.replace("value: APPROVED", "value: 3")));
+
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(context.getModel(), context)
+                                                   .get(0);
+
+        assertEquals(true, g.get("crossModelSource"));
+        assertEquals(true, g.get("hasItems"));
+        assertEquals(".eq(\"Status\", 3)", g.get("itemWhere"));
+        // Read off the owner model, not guessed from the item's name.
+        assertEquals("GoodsIssue", g.get("fromItemPerspective"));
+        assertEquals("Id", g.get("fromItemPk"));
+    }
+
+    /**
+     * Only the status condition is subject to the rule: the other conditions compare ordinary columns,
+     * where a string is just a value.
+     */
+    @Test
+    void aStringOnAnOrdinaryCrossModelItemColumnIsNotAStatus() {
+        IntentGenerationContext context = contextWithOwnerModel(IntentParser.parse(
+                CROSS_MODEL_YAML.replace("- { field: Status, op: eq, value: APPROVED }", "- { field: quantity, op: gt, value: 0 }")));
+
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(context.getModel(), context)
+                                                   .get(0);
+
+        assertEquals(".gt(\"Quantity\", 0)", g.get("itemWhere"));
+    }
+
+    /**
+     * A context whose repository serves {@link #OWNER_MODEL} as the sibling inventory project's model.
+     */
+    private static IntentGenerationContext contextWithOwnerModel(IntentModel model) {
+        IRepository repository = mock(IRepository.class);
+        IResource missing = mock(IResource.class);
+        when(missing.exists()).thenReturn(false);
+        IResource owner = mock(IResource.class);
+        when(owner.exists()).thenReturn(true);
+        when(owner.getContent()).thenReturn(OWNER_MODEL.getBytes(StandardCharsets.UTF_8));
+        when(repository.getResource(anyString())).thenReturn(missing);
+        when(repository.getResource("/users/admin/workspace/inventory/inventory.model")).thenReturn(owner);
+        return TestContexts.context(model, repository, "/users/admin/workspace/delivery-notes", "app");
     }
 }

@@ -110,6 +110,31 @@ class JavaEngineIT extends IntegrationTest {
     }
 
     @Test
+    void a_source_with_a_dangling_import_does_not_take_the_working_ones_down_with_it() {
+        // javac emits no class file for ANY unit of a batch that holds an error, so one unresolvable
+        // import used to leave the whole client codebase without bytecode - and on a first publish
+        // there is no last-good generation to fall back on, which is how an instance ended up
+        // answering 404 from every generated controller with its sources all present (#7192).
+        String danglingPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/dangling/Dangling.java";
+        String dangling = """
+                package dangling;
+                import com.example.absent.Missing;
+                public class Dangling {
+                    public Missing get() {
+                        return null;
+                    }
+                }
+                """;
+        repository.createResource(danglingPath, dangling.getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
+        writeAndSync(handlerSource("v1"));
+
+        assertEndpointReturns(200, "hello from v1");
+
+        repository.removeResource(danglingPath);
+        synchronizationProcessor.forceProcessSynchronizers();
+    }
+
+    @Test
     void a_multi_kilobyte_escaped_string_literal_does_not_stop_synchronization() {
         // The source shape of a generated report repository: one single-line SQL constant carrying a
         // few thousand escaped identifier quotes. Parsing it used to overflow the stack, and the

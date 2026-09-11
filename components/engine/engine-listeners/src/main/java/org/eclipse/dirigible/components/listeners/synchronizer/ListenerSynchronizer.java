@@ -196,8 +196,12 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
                         getService().save(listener);
                         callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                     } catch (Exception e) {
+                        // FAILED, not CREATED: nothing started, and only FAILED keeps the listener
+                        // eligible for the START phase of this pass and of every later one (#7248).
+                        // Returning false hands it to the in-pass topological retry as well.
                         callback.addError(e.getMessage());
-                        callback.registerState(this, wrapper, ArtefactLifecycle.CREATED, e);
+                        callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
+                        return false;
                     }
                 }
                 break;
@@ -235,20 +239,27 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
                 }
                 break;
             case START:
-                if (ArtefactLifecycle.FAILED.equals(listener.getLifecycle())) {
-                    String message = "Cannot start a Listener in a failing state: " + listener.getKey();
-                    callback.addError(message);
-                    callback.registerState(this, wrapper, ArtefactLifecycle.FATAL, message);
-                    return true;
-                }
-                if (listener.getRunning() == null || !listener.getRunning()) {
+                // A FAILED listener is retried, never promoted to FATAL (#7248). A subscription fails
+                // for reasons that heal later - the embedded broker still taking its store lease at
+                // boot, the handler published on a later pass - and FATAL stripped the artefact from
+                // every later pass, so a topic subscription lost to a boot race stayed lost, with
+                // every message to that destination discarded, until the file's bytes changed.
+                // Gated on FAILED as well as on running: the artefact completes once per tenant on one
+                // shared object, and only the lifecycle is reset between tenants - so the first tenant
+                // to subscribe flips running and would otherwise skip every tenant after it. The
+                // manager is idempotent per tenant, so a tenant already subscribed is a no-op.
+                if (ArtefactLifecycle.FAILED.equals(listener.getLifecycle()) || listener.getRunning() == null || !listener.getRunning()) {
                     try {
                         listenersManager.startListener(listener);
                         listener.setRunning(true);
                         getService().save(listener);
+                        if (ArtefactLifecycle.FAILED.equals(listener.getLifecycle())) {
+                            callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
+                        }
                     } catch (Exception e) {
                         callback.addError(e.getMessage());
                         callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
+                        return false;
                     }
                 }
                 break;

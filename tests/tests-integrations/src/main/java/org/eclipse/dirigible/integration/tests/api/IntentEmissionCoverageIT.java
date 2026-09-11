@@ -33,6 +33,7 @@ import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -755,13 +756,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # DocumentItem child), it has a counterparty to mail one hop away (Person.email) and an
               # EntityStatus for the SendBill transition to flip - so a notify block with
               # `attach: print` is authored on a transition AND on a process step (below).
+              #
+              # number + history: what a REFUSED create-from must leave untouched (#7224). Bill is the
+              # target of both rule-carrying create-froms below, and its repository allocates the
+              # document number and records the History create entry outside the unit of work - so a
+              # rule that refused AFTER the header's save burned a number of the gap-free series and
+              # left a trail row for a document that never existed, once per click.
               - name: Bill
                 function: Document
+                history: true
                 # SENT (status 2) freezes the document: the assertions below add the line write that
                 # would otherwise rewrite the totals the sent PDF was rendered from (#6695).
                 immutableWhen: "Status == 2"
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string,  length: 100, number: { series: Emission Bill, stampOn: create } }
                   - { name: note,   type: string,  length: 200 }
                   - { name: amount, type: decimal, aggregate: true }
                   # expression-calculated from the aggregate: the document-totals recompute must
@@ -1655,12 +1664,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     @Autowired
     private DataSourcesManager dataSourcesManager;
 
+    /** The Bill series' prefix - the series a refused create-from must not advance (#7224). */
+    private static final String BILL_NUMBER_PREFIX = "EB-";
+
     /**
      * The module's series declaration - AUTHORED next to app.intent (like .roles), never generated; the
      * .numbers synchronizer provisions it per tenant at publish. Prefix ER- in a total width of 8 →
-     * {@code ER-00001}.
+     * {@code ER-00001}; the Bill series is shaped the same way, {@code EB-00001}.
      */
-    private static final String NUMBERS_JSON = "{\"series\": [{\"name\": \"Emission Receipt\", \"prefix\": \"ER-\", \"size\": 8}]}";
+    private static final String NUMBERS_JSON = "{\"series\": [{\"name\": \"Emission Receipt\", \"prefix\": \"ER-\", \"size\": 8},"
+            + " {\"name\": \"Emission Bill\", \"prefix\": \"" + BILL_NUMBER_PREFIX + "\", \"size\": 8}]}";
 
     /**
      * The hand-written half of a calculated action: the contract is that the developer authors the
@@ -1960,9 +1973,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(
                 docController.contains("A posted document must name its counterparty")
                         && docController.contains("PartyRepository().findById(hop0Fk)")
-                        && docController.contains("java.util.Objects.equals(entity.Status, 2)"),
+                        && docController.contains("(entity.Status != null && entity.Status.longValue() == 2L)"),
                 "an ungated requiredWhen must be enforced on every REST write, with the status NAME resolved to its seed id, got: "
                         + docController);
+        // A guard on a TO-ONE is compared NUMERICALLY, not with a boxed equality (#7237): the FK
+        // column is typed from the target's key, and a cross-model target's key is only readable from
+        // the owner's .model, where a long is as legal as an integer - Objects.equals(Long, 2) never
+        // holds, so the boxed form would switch the rule off while looking authored. That the guard
+        // actually fires is asserted over REST in assertRuntimeEnforcement.
+        assertFalse(docController.contains("java.util.Objects.equals(entity.Status, 2)"),
+                "a to-one guard must not be a boxed equality against an int literal, got: " + docController);
         assertFalse(contentOf("gen/emission/data/doc/DocRepository.java").contains("A posted document must name its counterparty"),
                 "an ungated check is not the repository's - a gate it does not carry cannot be tested there");
 
@@ -2564,11 +2584,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the wait listener must correlate the message on its own process's stamped instance");
         assertTrue(waitHandler.contains("new RfqRepository().findById(entity.Rfq)"),
                 "the wait listener must resolve the parked record through the via back-reference");
-        // ...and a correlation that does NOT happen is never silent (#7230). Only the not-parked miss -
-        // the platform's IllegalArgumentException - is the expected no-op; every other failure leaves an
-        // instance that IS parked on this wait parked forever, and is logged with its throwable.
-        assertTrue(waitHandler.contains("catch (IllegalArgumentException notParked)") && waitHandler.contains("LOG.debug("),
-                "the not-parked miss must be caught by its own type, not by a blanket RuntimeException");
+        // ...and a correlation that does NOT happen is never silent (#7230). Only the not-parked case -
+        // the platform's IllegalArgumentException - is the expected no-op; anything else leaves the
+        // instance waiting on a step nobody will resume, and is logged with its throwable.
+        assertTrue(
+                waitHandler.contains("catch (IllegalArgumentException notParked)") && waitHandler.contains("LOG.debug(")
+                        && waitHandler.contains("notParked);"),
+                "the not-parked miss must be caught by its own type and logged with the throwable");
         assertTrue(waitHandler.contains("catch (RuntimeException failed)") && waitHandler.contains("LOG.warn(\"Could not resume")
                 && waitHandler.contains("failed);"), "any other correlation failure must be logged with the throwable");
         assertFalse(waitHandler.contains("catch (RuntimeException notParked)"),
@@ -2664,12 +2686,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         && abortHandler.contains("ProcessStamps.idFor(entity.ProcessIds, \"ApprovalFlow\")")
                         && abortHandler.contains("Process.correlateMessageEvent(instance, \"ApprovalFlowAbort\""),
                 "the abort listener must match the status on -transitioned and abort ITS OWN instance, not whichever flow stamped last");
-        // ...and an abort that does NOT happen is never silent either (#7230): the not-in-scope miss is
-        // typed and quiet, anything else leaves a flow running over a record whose status says it is over.
-        assertTrue(abortHandler.contains("catch (IllegalArgumentException notAborting)") && abortHandler.contains("LOG.debug("),
-                "the not-in-abort-scope miss must be caught by its own type, not by a blanket RuntimeException");
+        // ...and an abort that does NOT happen is never silent (#7230), on the same recipe: the
+        // not-in-scope miss by its own type at debug, every other failure at warn with its throwable -
+        // an instance that should have been cancelled otherwise keeps running with nothing in the log.
+        assertTrue(
+                abortHandler.contains("catch (IllegalArgumentException notAborting)") && abortHandler.contains("LOG.debug(")
+                        && abortHandler.contains("notAborting);"),
+                "the not-in-abort-scope miss must be caught by its own type and logged with the throwable");
         assertTrue(abortHandler.contains("catch (RuntimeException failed)") && abortHandler.contains("LOG.warn(\"Could not abort")
-                && abortHandler.contains("failed);"), "any other correlation failure must be logged with the throwable");
+                && abortHandler.contains("failed);"), "any other abort failure must be logged with the throwable");
         assertFalse(abortHandler.contains("catch (RuntimeException notAborting)"),
                 "the empty catch that treated every failure as not-aborting must be gone");
         // ...and the row's DELETE retires the flow too (#7074): a listener on -deleted for every
@@ -3458,6 +3483,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String checkedBillFromStay = contentOf("gen/events/emission/CheckedBillFromStayGenerate.java");
         assertTrue(checkedBillFromStay.contains("\"Stay night carries no \\\"amount\\\" (StayNight \" + unqualified + \")\""),
                 "refuse: must throw the authored message carrying the keys of the offending rows");
+        // ...and both refusals are decided BEFORE the header is saved (#7224). The target's save
+        // allocates the document number and records the History create entry outside the unit of
+        // work, so a refusal fired after it took the header back and left a spent number and a trail
+        // row for a document that never existed - once per click.
+        int billHeaderSave = billFromStay.indexOf("BillRepository().save(target)");
+        assertTrue(billHeaderSave > 0 && billFromStay.indexOf("would have no lines") < billHeaderSave,
+                "the source-row rule must refuse before the header is saved, got: " + billFromStay);
+        int checkedBillHeaderSave = checkedBillFromStay.indexOf("BillRepository().save(target)");
+        assertTrue(checkedBillHeaderSave > 0 && checkedBillFromStay.indexOf("Stay night carries no \\\"amount\\\"") < checkedBillHeaderSave,
+                "refuse: must fire before the header is saved, got: " + checkedBillFromStay);
 
         // generates on the step axis + mode: append (#6800): the listener binds the step-scoped topic
         // the generated emitter publishes the trigger entity on (NOT a lifecycle topic), and the
@@ -4544,6 +4579,38 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                     "a refused line write must leave the locked document's total untouched, got: " + amount);
         });
 
+        // checks: requiredWhen guarded on a TO-ONE (#7237) - the guard must actually FIRE. The
+        // condition is `Status == POSTED`, and the status FK is compared numerically because its Java
+        // width is not knowable at generation (a cross-model target's key is typed by the owner's
+        // .model, where a long is as legal as an integer). A boxed Objects.equals(Long, 2) never
+        // holds, so the rule would look authored and enforce nothing - which is exactly what a
+        // generated-source assertion alone cannot tell apart from a working guard.
+        AtomicInteger toOneGuarded = new AtomicInteger();
+        restAssuredExecutor.execute(() -> toOneGuarded.set(given().contentType("application/json")
+                                                                  .body("{\"Date\":\"2026-01-18\",\"Amount\":10,\"Party\":1}")
+                                                                  .when()
+                                                                  .post(API + "/doc/DocController")
+                                                                  .then()
+                                                                  .statusCode(200)
+                                                                  .extract()
+                                                                  .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + toOneGuarded.get()
+                                                         + ",\"Date\":\"2026-01-18\",\"Amount\":10,\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/doc/DocController/" + toOneGuarded.get())
+                                                 .then()
+                                                 .statusCode(400));
+        // ...and the same move WITH a counterparty is accepted, so the guard is a condition and not a
+        // plain `required` nobody authored.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + toOneGuarded.get()
+                                                         + ",\"Date\":\"2026-01-18\",\"Amount\":10,\"Status\":2,\"Party\":1}")
+                                                 .when()
+                                                 .put(API + "/doc/DocController/" + toOneGuarded.get())
+                                                 .then()
+                                                 .statusCode(200));
+
         // postings: posting a Doc creates the balanced Entry (async handler - poll)...
         AtomicInteger doc = new AtomicInteger();
         restAssuredExecutor.execute(() -> doc.set(given().contentType("application/json")
@@ -5059,22 +5126,34 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // The skip reading: the bill carries the three past nights and not the future one.
         AtomicInteger bill = new AtomicInteger();
-        restAssuredExecutor.execute(() -> bill.set(io.restassured.path.json.JsonPath.from(given().contentType("application/json")
-                                                                                                 .body("{\"id\":" + mixed + "}")
-                                                                                                 .when()
-                                                                                                 .post("/services/java/" + PROJECT
-                                                                                                         + "/gen/events/emission/BillFromStayGenerate/run")
-                                                                                                 .then()
-                                                                                                 .statusCode(200)
-                                                                                                 .extract()
-                                                                                                 .asString())
-                                                                                    .getInt("Id")));
+        AtomicReference<String> billNumber = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> {
+            io.restassured.path.json.JsonPath created = io.restassured.path.json.JsonPath.from(given().contentType("application/json")
+                                                                                                      .body("{\"id\":" + mixed + "}")
+                                                                                                      .when()
+                                                                                                      .post("/services/java/" + PROJECT
+                                                                                                              + "/gen/events/emission/BillFromStayGenerate/run")
+                                                                                                      .then()
+                                                                                                      .statusCode(200)
+                                                                                                      .extract()
+                                                                                                      .asString());
+            bill.set(created.getInt("Id"));
+            billNumber.set(created.getString("Number"));
+        });
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(API + "/bill/BillLineController?Bill=" + bill.get())
                                                  .then()
                                                  .statusCode(200)
                                                  .body("$", hasSize(3)),
                 30);
+
+        // A refused run must cost NOTHING (#7224). The Bill's save allocates its document number and
+        // records its History create entry outside the unit of work - by design, so concurrent creates
+        // never serialize on the counter - which the rollback of a refusal fired AFTER the save could
+        // not undo: every refused click spent a number of a gap-free series and left the trail of a
+        // document that never existed. The trail is read as CREATE rows only, because the BillFlow
+        // process the bill above started writes its ProcessId back on its own time.
+        long billsRecorded = billHistoryCreates();
 
         // The refusal reading: every night fails the amount rule, so the run stops with the authored
         // message rather than leaving them out - and it names the rows to go and fix.
@@ -5094,6 +5173,46 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(400)
                                                  .body(containsString("would have no lines")));
+
+        assertEquals(billsRecorded, billHistoryCreates(), "a refused create-from must leave no history entry - its document never existed");
+        // ...nor a spent number: the next Bill minted takes the number right after the one above. A
+        // click create-from keeps no at-most-once guard, so the same stay is simply billed again.
+        AtomicReference<String> nextNumber = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> nextNumber.set(io.restassured.path.json.JsonPath.from(given().contentType("application/json")
+                                                                                                       .body("{\"id\":" + mixed + "}")
+                                                                                                       .when()
+                                                                                                       .post("/services/java/" + PROJECT
+                                                                                                               + "/gen/events/emission/BillFromStayGenerate/run")
+                                                                                                       .then()
+                                                                                                       .statusCode(200)
+                                                                                                       .extract()
+                                                                                                       .asString())
+                                                                                          .getString("Number")));
+        assertEquals(nextBillNumber(billNumber.get()), nextNumber.get(),
+                "a refused create-from must not spend a document number - the next Bill minted must take the very next one");
+    }
+
+    /** The number the Bill series hands out right after the given one: same prefix, same width. */
+    private static String nextBillNumber(String number) {
+        String digits = number.substring(BILL_NUMBER_PREFIX.length());
+        return BILL_NUMBER_PREFIX + String.format("%0" + digits.length() + "d", Integer.parseInt(digits) + 1);
+    }
+
+    /**
+     * How many Bill creates the history trail has recorded. A CREATE writes one row per tracked
+     * property, so the count moves by a whole record's worth at a time - what matters here is that a
+     * refused run moves it by nothing.
+     */
+    private long billHistoryCreates() {
+        try (Connection connection = dataSourcesManager.getDefaultDataSource()
+                                                       .getConnection();
+                Statement statement = connection.createStatement();
+                ResultSet count = statement.executeQuery("SELECT COUNT(*) FROM \"EMISSION_BILL_HISTORY\" WHERE \"Operation\" = 'CREATE'")) {
+            assertTrue(count.next(), "the Bill history table must be readable");
+            return count.getLong(1);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to count the Bill history's create rows", ex);
+        }
     }
 
     /** A stay whose nights the {@code nights} expansion spreads the given total across. */

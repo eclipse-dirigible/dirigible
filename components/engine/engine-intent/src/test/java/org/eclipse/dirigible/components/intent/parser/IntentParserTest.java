@@ -977,6 +977,33 @@ class IntentParserTest {
                                   .stream()
                                   .anyMatch(i -> i.contains("is not a field or to-one relation of [SalesInvoice]")),
                 "expected an unknown-property issue, got: " + unknownProperty.getIssues());
+
+        // A field declared without a `type:` is a string here as it is everywhere else in the DSL -
+        // the guard is legal, and the type must not reach the immutable set's contains() as a null,
+        // which throws and answered a 500 for a legal intent (#7237).
+        String typeless = yaml.replace("- { name: kind, type: string }", "- { name: kind }");
+        assertEquals(2, IntentParser.parse(typeless)
+                                    .getEntities()
+                                    .get(2)
+                                    .getChecks()
+                                    .size());
+
+        // A type is matched case-insensitively: `Integer` is the declaration the rest of the parser
+        // lower-cases, so a guard on it is not "a [Integer] field" the condition cannot compare.
+        String spelled = yaml.replace("- { name: sentMethod, type: integer }", "- { name: sentMethod, type: Integer }");
+        assertEquals(2, IntentParser.parse(spelled)
+                                    .getEntities()
+                                    .get(2)
+                                    .getChecks()
+                                    .size());
+
+        // A type without an exact equality is still refused, and named as authored.
+        String inexact = yaml.replace("- { name: sentMethod, type: integer }", "- { name: sentMethod, type: decimal }");
+        IntentValidationException notGuardable = assertThrows(IntentValidationException.class, () -> IntentParser.parse(inexact));
+        assertTrue(notGuardable.getIssues()
+                               .stream()
+                               .anyMatch(i -> i.contains("which is a [decimal] field")),
+                "expected a guardable-type issue, got: " + notGuardable.getIssues());
     }
 
     @Test

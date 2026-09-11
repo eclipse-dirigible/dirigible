@@ -46,7 +46,30 @@ public final class CheckSupport {
     /** The field types a condition may compare - those with an exact, type-safe equality. */
     public static final Set<String> GUARD_TYPES = Set.of("string", "text", "integer", "int", "long", "boolean");
 
+    /**
+     * The guardable types whose values are whole numbers. They are guardable at any width, so a
+     * comparison against one is rendered numerically rather than as a boxed equality - see
+     * {@link #numericComparison}.
+     */
+    public static final Set<String> NUMERIC_GUARD_TYPES = Set.of("integer", "int", "long");
+
     private CheckSupport() {}
+
+    /**
+     * The type a comparison is rendered against: the declared type normalised. A field without a
+     * {@code type:} is a string, as it is everywhere else in the DSL, and a type is matched
+     * case-insensitively, because {@code Integer} and {@code integer} are the same declaration to the
+     * rest of the parser. Neither is an authoring mistake, and neither may reach a
+     * {@link java.util.Set#of} lookup raw - {@code Set.of(...).contains(null)} throws.
+     *
+     * @param type the declared type, or {@code null}
+     * @return the normalised type
+     */
+    public static String guardType(String type) {
+        return type == null || type.isBlank() ? "string"
+                : type.trim()
+                      .toLowerCase(Locale.ROOT);
+    }
 
     /**
      * One parsed comparison.
@@ -127,6 +150,27 @@ public final class CheckSupport {
      */
     public static String comparison(String access, boolean equal, String javaLiteral) {
         String equals = "java.util.Objects.equals(" + access + ", " + javaLiteral + ")";
+        return equal ? equals : "!" + equals;
+    }
+
+    /**
+     * Renders one comparison of a whole-number property as a NUMERIC comparison rather than a boxed
+     * equality - the form a comparison whose Java width is not known here must take.
+     *
+     * <p>
+     * A to-one's guard is such a property: the foreign-key column is typed from the TARGET's key, and
+     * when the target belongs to another model that key is only readable from the owner's
+     * {@code .model} - where a {@code long} is as legal as an {@code integer}. An
+     * {@code Objects.equals(Long, Integer)} never holds, so the boxed form would switch the rule off
+     * while looking authored, which is the failure this whole check exists to refuse.
+     *
+     * @param access the Java expression reading the property
+     * @param equal whether the comparison is {@code ==}
+     * @param javaLiteral the Java literal from {@link #javaLiteral}, rendered as a {@code long}
+     * @return the expression
+     */
+    public static String numericComparison(String access, boolean equal, String javaLiteral) {
+        String equals = "(" + access + " != null && " + access + ".longValue() == " + javaLiteral + ")";
         return equal ? equals : "!" + equals;
     }
 

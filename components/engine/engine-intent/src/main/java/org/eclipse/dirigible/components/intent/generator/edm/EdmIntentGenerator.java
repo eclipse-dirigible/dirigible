@@ -2318,13 +2318,21 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (field == null && relation == null) {
                 return null;
             }
-            String type = field != null ? field.getType() : relationKeyType(relation, byName);
-            String literal = CheckSupport.javaLiteral(type, comparison.literal());
+            String type = CheckSupport.guardType(field != null ? field.getType() : relationKeyType(relation, byName));
+            // A to-one's foreign key is a whole number of a width this generator cannot know: the
+            // column is typed from the TARGET's key, and a cross-model target's key lives in the
+            // owner's .model, where `long` is as legal as `integer`. Objects.equals(Long, Integer)
+            // never holds, so such a guard is compared numerically - a boxed equality would switch the
+            // rule off while looking authored (#7237). A field's own width is declared, so it keeps
+            // the exact boxed equality.
+            boolean numericKey = field == null && CheckSupport.NUMERIC_GUARD_TYPES.contains(type);
+            String literal = CheckSupport.javaLiteral(numericKey ? "long" : type, comparison.literal());
             if (literal == null) {
                 return null;
             }
-            conditions.add(
-                    CheckSupport.comparison("entity." + IntentNaming.pascalCase(comparison.property()), comparison.equal(), literal));
+            String access = "entity." + IntentNaming.pascalCase(comparison.property());
+            conditions.add(numericKey ? CheckSupport.numericComparison(access, comparison.equal(), literal)
+                    : CheckSupport.comparison(access, comparison.equal(), literal));
         }
         return conditions.isEmpty() ? null : String.join(" && ", conditions);
     }
@@ -2342,7 +2350,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
 
     /**
      * The declared type of a to-one relation's foreign key - the target's primary-key type, falling
-     * back to the integer intent keys always are when the target is owned by another model.
+     * back to the whole number intent keys always are when the target is owned by another model. The
+     * width of that number is not knowable from here, so a guard on a to-one is rendered numerically
+     * rather than as a boxed equality - see {@link CheckSupport#numericComparison}.
      */
     private static String relationKeyType(RelationIntent relation, Map<String, EntityIntent> byName) {
         EntityIntent target = relation.getTo() == null ? null : byName.get(relation.getTo());
