@@ -39,6 +39,14 @@ import org.springframework.stereotype.Component;
  * {@code .intent} file itself, code files, and the {@code gen/} / {@code custom/} subfolders (only
  * direct child resources are considered). Removing a process / form / report / seed from the intent
  * therefore removes its model file on the next Generate instead of leaving a stale artefact around.
+ *
+ * <p>
+ * A pass that is REFUSED writes nothing: an {@link IntentValidationException} out of any generator
+ * rolls back what the earlier ones already wrote before it leaves as a 422 (dirigible #7227). The
+ * generators run in {@code @Order}, so without that a check placed in a late generator would leave
+ * a half-generated model set in the workspace - e.g. the {@code .edm}/{@code .model} and a
+ * {@code .bpmn} carrying a {@code Resolve<...>} service task whose handler the refused glue pass
+ * never generated. Refusing at generation must cost the developer no more than refusing at parse.
  */
 @Component
 public class IntentGenerationService {
@@ -144,6 +152,12 @@ public class IntentGenerationService {
             } catch (IntentValidationException e) {
                 // A fatal authoring error the developer must fix (e.g. an unresolvable cross-model
                 // dependency) - surface it to the caller (-> 422), do NOT isolate it like a generator bug.
+                // The pass is refused AS A WHOLE (dirigible #7227): the generators run in @Order, so a
+                // check in a later one would otherwise leave the earlier ones' output behind - a
+                // half-generated model set next to the 422, and nothing scrubs it (the scrub below is
+                // never reached). Undo this pass's writes so the workspace is exactly what it was, the
+                // way a parse-time refusal leaves it.
+                context.rollbackWrittenFiles();
                 throw e;
             } catch (RuntimeException e) {
                 LOGGER.error("Intent generator [{}] failed for project [{}]", generator.name(), LoggedValue.of(projectName), e);
