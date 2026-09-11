@@ -16,8 +16,9 @@
     <span x-show="state.summary" x-cloak x-h-badge :data-variant="state.summary && state.summary.started ? 'positive' : 'negative'"
           x-text="state.summary ? state.summary.brokerName : ''"></span>
     <div x-h-toolbar-spacer></div>
-    <button x-h-button data-variant="outline" data-size="sm" @click="state.load()" :data-loading="state.loading">
-      <i role="img" x-h-lucide data-lucide="refresh-cw"></i>
+    <button x-h-button data-variant="outline" data-size="sm" @click="state.load()" :disabled="state.loading">
+      <template x-if="state.loading"><span x-h-spinner class="size-4"></span></template>
+      <svg role="presentation" x-h-lucide data-lucide="refresh-cw" x-show="!state.loading"></svg>
       <span x-text="T('monitoring:overview.refresh', 'Refresh')"></span>
     </button>
   </div>
@@ -38,7 +39,7 @@
                x-text="T('monitoring:messaging.noQueues', 'No queues.')"></div>
           <table x-h-table x-show="state.queues.length">
             <thead x-h-table-header>
-              <tr>
+              <tr x-h-table-row>
                 <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colName', 'Name')"></th>
                 <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colPending', 'Pending')"></th>
                 <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colConsumers', 'Consumers')"></th>
@@ -67,7 +68,7 @@
           <h2 class="text-sm font-semibold" x-text="T('monitoring:messaging.topics', 'Topics')"></h2>
           <table x-h-table>
             <thead x-h-table-header>
-              <tr>
+              <tr x-h-table-row>
                 <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colName', 'Name')"></th>
                 <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colConsumers', 'Consumers')"></th>
                 <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colEnqueued', 'Enqueued')"></th>
@@ -96,7 +97,7 @@
           <span x-h-toolbar-title class="shrink-0" x-text="state.selectedQueue"></span>
           <div x-h-toolbar-spacer></div>
           <button x-h-button data-variant="transparent" data-size="icon-sm" @click="state.clearSelection()"
-                  aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+                  aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
         <div class="flex-1 min-h-0 overflow-auto p-3 vbox gap-3">
           <div x-show="state.messagesLoading" x-cloak><div x-h-spinner></div></div>
@@ -114,7 +115,7 @@
                 </div>
               </div>
               <div x-h-card-content>
-                <pre class="font-mono text-xs whitespace-pre-wrap break-all" x-text="shorten(message.body)"></pre>
+                <pre class="font-mono text-xs whitespace-pre-wrap wrap-anywhere" x-text="shorten(message.body)"></pre>
                 <p x-show="message.bodyTruncated" x-h-text.muted class="text-xs"
                    x-text="T('monitoring:messaging.truncated', 'The payload is truncated.')"></p>
               </div>

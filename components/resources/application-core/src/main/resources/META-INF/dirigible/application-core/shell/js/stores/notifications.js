@@ -45,27 +45,41 @@ document.addEventListener('alpine:init', () => {
     },
 
     /**
+     * Harmonia's `$notifications` magic, handed over by the page's root component (see
+     * attachToaster). It is the public toast API and it lives on an Alpine component scope, which a
+     * store never has - so the shell attaches it once at init, the way the Harmonia example apps do.
+     */
+    _toaster: null,
+
+    /**
+     * Attach the `$notifications` magic of the component that renders the toast overlay (the shared
+     * shell, the builder). Until a page attaches one, announce() only records the bell entry.
+     */
+    attachToaster(notifications) {
+      this._toaster = notifications && typeof notifications.add === 'function' ? notifications : null;
+    },
+
+    /**
      * Record the entry in the bell AND show it as a transient toast. Use this for the OUTCOME of
      * something the user just did; plain add() stays for background arrivals (a new task) that must
      * not interrupt.
      *
-     * The toast overlay is Harmonia's (`_h_notifications`, driven by the `toast` template in the
-     * shell's index.html). Missing overlay / missing template is not a reason to lose the message:
-     * the bell entry is written first, so the worst case is the pre-#7073 behaviour rather than a
-     * broken page.
+     * The toast renders through the `toast` template every shell declares in its
+     * x-h-notification-overlay. A missing toaster / overlay / template is not a reason to lose the
+     * message: the bell entry is written first, so the worst case is the pre-#7073 behaviour rather
+     * than a broken page.
      */
     announce(n) {
       n = n || {};
       this.add(n);
+      if (!this._toaster) return;
       const variant = n.variant || 'information';
       const text = [n.title, n.description].filter(Boolean).join(' - ');
       try {
-        const toasts = window.Alpine && Alpine.store('_h_notifications');
-        if (!toasts || typeof toasts.push !== 'function') return;
         // A refusal has to be READ; a success only has to be seen. Same reason the variant is
         // carried through: the overlay template picks the icon from it.
         const timeout = (variant === 'negative' || variant === 'warning') ? 12000 : 5000;
-        toasts.push(undefined, 'toast', 'top-right', timeout, { message: text, variant });
+        this._toaster.add({ template: 'toast', position: 'top-right', timeout, data: { message: text, variant } });
       } catch (e) {
         console.warn('notifications: could not raise the toast for "' + text + '"', e);
       }

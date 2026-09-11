@@ -24,20 +24,15 @@ html, body { height: 100%; margin: 0; }
 }
 
 /*
- * Cap Harmonia dialogs to the viewport and scroll their body.
- * Harmonia's x-h-dialog is centred (top/left 50% + translate) with no max-height and
- * no internal overflow, so a tall form dialog - e.g. the document line-item editor with
- * many fields - grows past the screen and its header and Save/Cancel footer bleed off the
- * top and bottom edges, unreachable. Capping the dialog and letting the content region
- * (x-h-dialog-content) scroll keeps the header and footer pinned and on screen. Keyed on
- * Harmonia's stable data-slot so it applies to every dialog on every shell.
+ * Cap Harmonia dialogs to the viewport.
+ * A non-fullscreen x-h-dialog is centred (top/left 50% + translate) with no max-height of
+ * its own, so a tall form dialog - e.g. the document line-item editor with many fields -
+ * would grow past the screen and push its header and Save/Cancel footer off the top and
+ * bottom edges, unreachable. The cap keeps them on screen; the body scrolls because
+ * x-h-dialog-content is the dialog's one scrolling region (Harmonia gives it
+ * flex-1 min-h-0 overflow-y-auto itself). Keyed on Harmonia's stable data-slot so it
+ * applies to every dialog on every shell.
  */
 [data-slot="dialog"] {
   max-height: calc(100vh - 2rem);
-}
-
-[data-slot="dialog"] [x-h-dialog-content] {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
 }

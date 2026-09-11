@@ -42,6 +42,9 @@ document.addEventListener('alpine:init', () => {
 
     init() {
       this.navLabels = window.__harmoniaNav || {};
+      // The toast overlay is rendered by this component, so it lends its $notifications magic to
+      // the shared store - a store has no component scope of its own to reach the magic from.
+      Alpine.store('notifications').attachToaster(this.$notifications);
       try { this.embedded = new URLSearchParams(window.location.search).has('embedded'); } catch (e) { /* no URL */ }
       if (this.embedded) this.hiddenPanels.left = true;
       const getPath = () => {

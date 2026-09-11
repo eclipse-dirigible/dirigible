@@ -13,41 +13,44 @@
      every other view routed into #app (_dashboard/_inbox/_documents/_reports) and the per-project
      settings view. -->
 <div class="vbox size-full">
-<div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
+<div x-h-split class="flex-1" data-orientation="horizontal" data-variant="border">
   <div x-h-split-panel data-size="25%" data-min="200">
     <div class="vbox gap-2 p-3">
       <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.configAll', 'Configuration and nomenclature across all applications.')"></span>
-      <!-- Region & Language: a built-in settings entry (not from an app) - the platform-wide
-           data-language preference. Selecting it renders the local detail page on the right. -->
-      <button x-h-button data-variant="outline" class="justify-start"
-              :data-state="isSettingActive({ id: 'region-language' }) ? 'selected' : ''"
-              @click="selectSetting({ id: 'region-language' })">
-        <i role="img" x-h-lucide data-lucide="globe"></i>
-        <span x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
-      </button>
-      <!-- Tenant Configuration: a built-in settings entry (not from an app) - the predefined,
-           per-tenant-overridable properties (branding). Selecting it renders the local detail on the right. -->
-      <button x-h-button data-variant="outline" class="justify-start"
-              :data-state="isSettingActive({ id: 'tenant-configuration' }) ? 'selected' : ''"
-              @click="selectSetting({ id: 'tenant-configuration' })">
-        <i role="img" x-h-lucide data-lucide="sliders-horizontal"></i>
-        <span x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></span>
-      </button>
-      <!-- Document Numbering: a built-in settings entry - the per-tenant document-number counters
-           (engine-numbering). Selecting it renders the local detail on the right. -->
-      <button x-h-button data-variant="outline" class="justify-start"
-              :data-state="isSettingActive({ id: 'document-numbering' }) ? 'selected' : ''"
-              @click="selectSetting({ id: 'document-numbering' })">
-        <i role="img" x-h-lucide data-lucide="hash"></i>
-        <span x-text="T('application-core:shell.settings.numbering', 'Document Numbering')"></span>
-      </button>
-      <template x-for="item in visibleSettingsItems()" :key="item.id">
-        <button x-h-button data-variant="outline" class="justify-start"
-                :data-state="isSettingActive(item) ? 'selected' : ''" @click="selectSetting(item)">
-          <i role="img" x-h-lucide data-lucide="settings"></i>
-          <span x-text="item.tkey ? T(item.tkey, item.label) : item.label"></span>
-        </button>
-      </template>
+      <ul x-h-list :aria-label="T('application-core:shell.settings.title', 'Settings')">
+        <!-- Region & Language: a built-in settings entry (not from an app) - the platform-wide
+             data-language preference. Selecting it renders the local detail page on the right. -->
+        <li x-h-list-item>
+          <button x-h-list-item-button :aria-current="isSettingActive({ id: 'region-language' })" @click="selectSetting({ id: 'region-language' })">
+            <svg role="presentation" x-h-lucide data-lucide="globe"></svg>
+            <span x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
+          </button>
+        </li>
+        <!-- Tenant Configuration: a built-in settings entry (not from an app) - the predefined,
+             per-tenant-overridable properties (branding). Selecting it renders the local detail on the right. -->
+        <li x-h-list-item>
+          <button x-h-list-item-button :aria-current="isSettingActive({ id: 'tenant-configuration' })" @click="selectSetting({ id: 'tenant-configuration' })">
+            <svg role="presentation" x-h-lucide data-lucide="sliders-horizontal"></svg>
+            <span x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></span>
+          </button>
+        </li>
+        <!-- Document Numbering: a built-in settings entry - the per-tenant document-number counters
+             (engine-numbering). Selecting it renders the local detail on the right. -->
+        <li x-h-list-item>
+          <button x-h-list-item-button :aria-current="isSettingActive({ id: 'document-numbering' })" @click="selectSetting({ id: 'document-numbering' })">
+            <svg role="presentation" x-h-lucide data-lucide="hash"></svg>
+            <span x-text="T('application-core:shell.settings.numbering', 'Document Numbering')"></span>
+          </button>
+        </li>
+        <template x-for="item in visibleSettingsItems()" :key="item.id">
+          <li x-h-list-item>
+            <button x-h-list-item-button :aria-current="isSettingActive(item)" @click="selectSetting(item)">
+              <svg role="presentation" x-h-lucide data-lucide="settings"></svg>
+              <span x-text="item.tkey ? T(item.tkey, item.label) : item.label"></span>
+            </button>
+          </li>
+        </template>
+      </ul>
     </div>
   </div>
   <div x-h-split-panel data-size="75%" style="position: relative;">
@@ -103,7 +106,7 @@
           <input x-h-input x-model="$store.formats.number" placeholder="### ### ### ##0.00" />
         </div>
         <div class="hbox gap-2">
-          <button x-h-button data-variant="emphasized" @click="$store.formats.apply()" x-text="T('application-core:shell.settings.apply', 'Apply')"></button>
+          <button x-h-button data-variant="primary" @click="$store.formats.apply()" x-text="T('application-core:shell.settings.apply', 'Apply')"></button>
           <button x-h-button data-variant="outline" @click="$store.formats.reset()" x-text="T('application-core:shell.settings.resetDefaults', 'Reset to defaults')"></button>
         </div>
         <template x-if="languageWarnings().length > 0">
@@ -147,7 +150,7 @@
               </div>
             </template>
             <div class="hbox gap-2">
-              <button x-h-button data-variant="emphasized" @click="saveTenantConfig()" x-text="T('application-core:shell.settings.save', 'Save')"></button>
+              <button x-h-button data-variant="primary" @click="saveTenantConfig()" x-text="T('application-core:shell.settings.save', 'Save')"></button>
               <button x-h-button data-variant="outline" @click="loadTenantConfig()" x-text="T('application-core:shell.settings.reload', 'Reload')"></button>
             </div>
           </div>
@@ -189,23 +192,23 @@
                      whole list is off-screen); it lights up only when the row's edits differ from
                      what was loaded, and only what changed is written. -->
                 <div class="hbox gap-2 items-end">
-                  <div class="vbox gap-0" style="width: 10rem;">
+                  <div class="vbox" style="width: 10rem;">
                     <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingPrefix', 'Prefix')"></span>
                     <input x-h-input x-model="row.prefix" />
                   </div>
-                  <div class="vbox gap-0" style="width: 7rem;">
+                  <div class="vbox" style="width: 7rem;">
                     <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingSize', 'Total width')"></span>
                     <input x-h-input type="number" min="1" max="40" x-model="row.size" />
                   </div>
                   <!-- The base row of a PARTITIONED series is only the shape template new partitions
                        inherit - allocation always draws from a partition row - so it offers no Next. -->
                   <template x-if="!numberingIsShapeTemplate(row)">
-                    <div class="vbox gap-0" style="width: 9rem;">
+                    <div class="vbox" style="width: 9rem;">
                       <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingNext', 'Next')"></span>
                       <input x-h-input type="number" min="1" x-model="row.next" />
                     </div>
                   </template>
-                  <button x-h-button data-variant="emphasized" data-size="sm"
+                  <button x-h-button data-variant="primary" data-size="sm"
                           :disabled="row.saving || !numberingDirty(row)"
                           @click="saveNumberingRow(row)"
                           x-text="T('application-core:shell.settings.save', 'Save')"></button>

@@ -251,12 +251,12 @@
         <ag-grid.version>27.1.0</ag-grid.version>
         <papaparse.version>5.5.3</papaparse.version>
         <bpmn-visualization.version>0.47.0</bpmn-visualization.version>
-        <i18next.version>25.3.0</i18next.version>
-        <alpinejs.version>3.15.11</alpinejs.version>
-        <harmonia.version>2.14.2</harmonia.version>
+        <i18next.version>26.3.6</i18next.version>
+        <alpinejs.version>3.16.3</alpinejs.version>
+        <harmonia.version>3.1.2</harmonia.version>
         <opensans.version>5.2.7</opensans.version>
-        <lucide.version>1.8.0</lucide.version>
-        <pinecone-router.version>7.5.2</pinecone-router.version>
+        <lucide.version>1.20.0</lucide.version>
+        <pinecone-router.version>7.6.0</pinecone-router.version>
         <!-- Tests -->
         <testcontainers.version>2.0.5</testcontainers.version>
         <selenide.version>7.18.1</selenide.version>

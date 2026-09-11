@@ -568,7 +568,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
 
               # documentItemsLayout: chat - the document master's line-items child renders as a
-              # conversation thread (x-h-chat bubbles + a composer) instead of the editable table;
+              # conversation thread (x-h-bubble messages + a composer) instead of the editable table;
               # the body maps to the messageBody field, author/timestamp to the child's audit columns.
               # The personal owner makes it a personal root too: the PERSONAL document must render
               # the SAME chat thread (never the generic items table), through the personal items
@@ -2856,15 +2856,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // documentItemsLayout: chat - the .model marker is resolved (body property from the child's
         // messageBody field), and the Harmonia document view + page render the items pane as an
-        // x-h-chat thread with an append-message composer instead of the editable table.
+        // x-h-bubble thread with an append-message composer instead of the editable table.
         String intentModel = contentOf("emission.model");
         assertTrue(intentModel.contains("\"documentItemsLayout\": \"chat\""), "documentItemsLayout: chat must reach the .model");
         assertTrue(intentModel.contains("\"chatBodyProperty\": \"Body\""), "the chat body property must be resolved into the .model");
         assertTrue(intentModel.contains("\"chatInternalProperty\": \"Internal\""),
                 "the chat internal-flag property must be resolved into the .model");
-        // The thread is composed from shipped Harmonia primitives (a role="log" bubble list + a
-        // textarea composer bound to chatDraft) - the x-h-chat component is a later swap-in (TODO in
-        // the template), so assert the primitives that render the chat, not that directive.
+        // The thread is composed from shipped Harmonia components (a role="log" list of x-h-bubble
+        // messages + an input-group composer whose textarea binds chatDraft), so assert the
+        // primitives that render the chat rather than one directive.
         String ticketDoc = contentOf("gen/emission/views/Ticket/Ticket-document.html");
         assertTrue(ticketDoc.contains("role=\"log\""),
                 "documentItemsLayout: chat must emit the conversation thread (role=log) into the document view");

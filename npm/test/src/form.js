@@ -16,7 +16,7 @@ export async function fillField(page, field, value, opts = {}) {
   await input.fill(String(value));
 }
 
-// The x-h-select directive hides its input and builds a span[role=combobox] trigger
+// The x-h-select directive hides its input and builds a button[role=combobox] trigger
 // labelled by the field label; options carry role=option.
 export async function pickDropdown(page, relation, optionText) {
   // Anchored prefix match: the combobox accessible name is the label plus the placeholder or

@@ -57,6 +57,7 @@
         "internal": "Internal",
         "internalNote": "Internal note (not visible to the requester)",
         "writeMessage": "Write a message...",
+        "enterToSend": "Enter to send",
         "upload": "Upload",
         "uploading": "Uploading…",
         "add": "Add",
@@ -103,7 +104,6 @@
         "reportFilter": "Report Filter",
         "viewDetails": "View Details",
         "deleteTitle": "Delete {{name}}?",
-        "pageOf": "Page {{page}} / {{total}}",
         "newTitle": "New {{name}}",
         "deleteLine": "Delete line",
         "loadMore": "Load More..."

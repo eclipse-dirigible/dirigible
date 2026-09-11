@@ -191,6 +191,9 @@ document.addEventListener('alpine:init', () => {
     },
 
     async init() {
+      // This component renders the toast overlay, so it lends its $notifications magic to the
+      // shared store (a store has no component scope of its own to reach the magic from).
+      Alpine.store('notifications').attachToaster(this.$notifications);
       const projectionsLoaded = this.loadProjections();
       try {
         const res = await fetch(PERSPECTIVES_URL, { headers: { 'Accept': 'application/json' } });

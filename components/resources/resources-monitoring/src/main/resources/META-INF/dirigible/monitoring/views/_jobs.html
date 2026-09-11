@@ -14,8 +14,9 @@
           :data-variant="state.actionResult ? state.actionResult.variant : 'outline'"
           x-text="state.actionResult ? state.actionResult.text : ''"></span>
     <div x-h-toolbar-spacer></div>
-    <button x-h-button data-variant="outline" data-size="sm" @click="state.load()" :data-loading="state.loading">
-      <i role="img" x-h-lucide data-lucide="refresh-cw"></i>
+    <button x-h-button data-variant="outline" data-size="sm" @click="state.load()" :disabled="state.loading">
+      <template x-if="state.loading"><span x-h-spinner class="size-4"></span></template>
+      <svg role="presentation" x-h-lucide data-lucide="refresh-cw" x-show="!state.loading"></svg>
       <span x-text="T('monitoring:overview.refresh', 'Refresh')"></span>
     </button>
   </div>
@@ -35,7 +36,7 @@
 
         <table x-h-table x-show="!state.loading && state.items.length" x-cloak>
           <thead x-h-table-header>
-            <tr>
+            <tr x-h-table-row>
               <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colName', 'Job')"></th>
               <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colSchedule', 'Schedule')"></th>
               <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colStatus', 'Last run')"></th>
@@ -47,7 +48,7 @@
               <tr x-h-table-row data-hoverable="true" class="cursor-pointer"
                   :data-state="state.selectedName === job.name ? 'selected' : ''" @click="state.select(job)">
                 <td x-h-table-cell>
-                  <div class="vbox gap-0">
+                  <div class="vbox">
                     <span x-text="job.name"></span>
                     <span x-show="!job.enabled" x-h-text.muted class="text-xs"
                           x-text="T('monitoring:jobs.disabled', 'Disabled')"></span>
@@ -55,23 +56,23 @@
                 </td>
                 <td x-h-table-cell><code class="text-xs" x-text="job.expression"></code></td>
                 <td x-h-table-cell>
-                  <div class="vbox gap-0">
+                  <div class="vbox">
                     <span x-h-badge :data-variant="statusVariant(job.status)" class="self-start" x-text="job.status"></span>
                     <span x-h-text.muted class="text-xs" x-text="timeText(job.executedAt)"></span>
                   </div>
                 </td>
-                <td x-h-table-cell class="text-end" @click.stop>
+                <td x-h-table-cell class="text-right" @click.stop>
                   <div class="hbox items-center justify-end gap-1">
                     <button x-h-button data-variant="transparent" data-size="icon-sm" @click="state.openTrigger(job)"
                             :aria-label="T('monitoring:jobs.trigger', 'Run now')" :title="T('monitoring:jobs.trigger', 'Run now')">
-                      <i role="img" x-h-lucide data-lucide="play"></i>
+                      <svg role="presentation" x-h-lucide data-lucide="play"></svg>
                     </button>
                     <button x-h-button data-variant="transparent" data-size="icon-sm"
                             @click="state.setEnabled(job, !job.enabled)"
                             :aria-label="job.enabled ? 'Disable' : 'Enable'"
                             :title="job.enabled ? T('monitoring:jobs.disable', 'Disable') : T('monitoring:jobs.enable', 'Enable')">
-                      <svg x-h-lucide x-show="job.enabled" role="img" data-lucide="pause"></svg>
-                      <svg x-h-lucide x-show="!job.enabled" role="img" data-lucide="power"></svg>
+                      <svg x-h-lucide x-show="job.enabled" role="presentation" data-lucide="pause"></svg>
+                      <svg x-h-lucide x-show="!job.enabled" role="presentation" data-lucide="power"></svg>
                     </button>
                   </div>
                 </td>
@@ -90,7 +91,7 @@
             <span x-h-toolbar-title class="shrink-0" x-text="state.selected.name"></span>
             <div x-h-toolbar-spacer></div>
             <button x-h-button data-variant="transparent" data-size="icon-sm" @click="state.selectedName = ''"
-                    aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+                    aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
           </div>
           <div class="flex-1 min-h-0 overflow-auto p-3">
             <div x-show="state.logsLoading" x-cloak class="vbox gap-2">
@@ -100,7 +101,7 @@
                  x-text="T('monitoring:jobs.noLogs', 'This job has not run yet.')"></div>
             <table x-h-table x-show="!state.logsLoading && logEntries.length" x-cloak>
               <thead x-h-table-header>
-                <tr>
+                <tr x-h-table-row>
                   <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colTriggered', 'Triggered')"></th>
                   <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colStatus', 'Status')"></th>
                   <!-- The tenant column stays visible: the job-log service does not scope its reads,
@@ -135,7 +136,7 @@
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="T('monitoring:jobs.triggerTitle', 'Run {{job}} now', { job: state.triggerJobName })"></h2>
         <button x-h-dialog-close @click="state.closeTrigger()" aria-label="Close">
-          <i role="img" x-h-lucide data-lucide="x"></i>
+          <svg role="presentation" x-h-lucide data-lucide="x"></svg>
         </button>
       </div>
       <div x-h-dialog-content class="vbox gap-3">
@@ -152,8 +153,10 @@
       <div x-h-dialog-footer>
         <button x-h-button data-variant="transparent" @click="state.closeTrigger()"
                 x-text="T('application-core:shell.defaults.cancel', 'Cancel')"></button>
-        <button x-h-button data-variant="primary" :data-loading="state.triggering" @click="state.trigger()"
-                x-text="T('monitoring:jobs.trigger', 'Run now')"></button>
+        <button x-h-button data-variant="primary" :disabled="state.triggering" @click="state.trigger()">
+          <template x-if="state.triggering"><span x-h-spinner class="size-4"></span></template>
+          <span x-text="T('monitoring:jobs.trigger', 'Run now')"></span>
+        </button>
       </div>
     </div>
   </div>

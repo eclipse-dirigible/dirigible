@@ -31,12 +31,6 @@
     <title>Home</title>
 
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
-
-    <script>
-      (function () {
-        try { if (!localStorage.getItem('codbex.harmonia.colorMode')) localStorage.setItem('codbex.harmonia.colorMode', 'light'); } catch (e) { /* no storage */ }
-      })();
-    </script>
     <style>
       .home-entry { text-decoration: none; color: inherit; }
       /* The arrow is the "this is a link" affordance - it slides in on hover/keyboard focus. */
@@ -56,20 +50,32 @@
     <div x-h-toolbar data-variant="transparent" x-cloak>
       <div class="hbox items-center gap-2 p-1">
         <img x-show="branding.logo" :src="branding.logo" :alt="branding.name" class="size-5" />
-        <div class="vbox gap-0">
+        <div class="vbox">
           <span class="font-bold leading-tight" x-text="branding.name"></span>
           <span x-show="branding.subtitle" class="text-xs text-muted-foreground leading-tight" x-text="branding.subtitle"></span>
         </div>
       </div>
       <div x-h-toolbar-spacer></div>
-      <button x-h-button data-variant="transparent" data-size="icon-sm" @click="toggleTheme()"
-              :aria-label="dark ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
-        <svg x-h-lucide x-show="!dark" role="img" data-lucide="moon"></svg>
-        <svg x-h-lucide x-show="dark" role="img" data-lucide="sun"></svg>
+      <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm" aria-label="Theme" title="Theme">
+        <svg x-h-lucide role="presentation" :data-lucide="themeIcon"></svg>
       </button>
+      <ul x-h-menu aria-label="Theme" data-align="bottom-end">
+        <li x-h-menu-radio-item="'light'" name="theme" x-model="themeMode">
+          <svg role="presentation" x-h-lucide data-lucide="sun"></svg>
+          <span>Light</span>
+        </li>
+        <li x-h-menu-radio-item="'dark'" name="theme" x-model="themeMode">
+          <svg role="presentation" x-h-lucide data-lucide="moon"></svg>
+          <span>Dark</span>
+        </li>
+        <li x-h-menu-radio-item="'auto'" name="theme" x-model="themeMode">
+          <svg role="presentation" x-h-lucide data-lucide="sun-moon"></svg>
+          <span>Auto</span>
+        </li>
+      </ul>
       <span class="text-sm text-muted-foreground px-2" x-show="userName" x-text="userName"></span>
       <button x-h-button data-variant="transparent" data-size="sm" @click="logout()">
-        <i role="img" x-h-lucide data-lucide="log-out"></i> <span>Log out</span>
+        <svg role="presentation" x-h-lucide data-lucide="log-out"></svg> <span>Log out</span>
       </button>
     </div>
 
@@ -94,12 +100,12 @@
           <template x-for="s in primaryShells" :key="s.id">
             <a class="home-entry home-tile vbox gap-3 rounded-lg border border-border bg-card p-5" :href="s.path">
               <span class="home-tile-icon hbox items-center justify-center rounded-md bg-muted size-11 flex-none">
-                <i role="img" x-h-lucide :data-lucide="s.icon || iconFor(s.id)" class="size-5"></i>
+                <svg role="presentation" x-h-lucide :data-lucide="s.icon || iconFor(s.id)" class="size-5"></svg>
               </span>
               <span class="vbox min-w-0" style="gap: .15rem;">
                 <span class="hbox items-center gap-2 text-lg font-semibold">
                   <span x-text="s.label"></span>
-                  <i role="img" x-h-lucide data-lucide="arrow-right" class="home-entry-arrow size-4"></i>
+                  <svg role="presentation" x-h-lucide data-lucide="arrow-right" class="home-entry-arrow size-4"></svg>
                 </span>
                 <span class="text-sm text-muted-foreground" x-text="s.description || descriptionFor(s.id)"></span>
               </span>
@@ -112,13 +118,13 @@
              style="margin-top: 2rem; padding-top: 1rem; gap: .25rem;">
           <template x-for="s in secondaryShells" :key="s.id">
             <a class="home-entry hbox items-center gap-3 rounded-md p-3 hover:bg-muted" :href="s.path">
-              <i role="img" x-h-lucide :data-lucide="s.icon || iconFor(s.id)" class="size-4 text-muted-foreground flex-none"></i>
+              <svg role="presentation" x-h-lucide :data-lucide="s.icon || iconFor(s.id)" class="size-4 text-muted-foreground flex-none"></svg>
               <span class="text-sm font-medium flex-none" x-text="s.label"></span>
               <!-- The description is the first thing to give up room on a narrow window. -->
               <span class="text-sm text-muted-foreground truncate hidden sm:block"
                     x-text="s.description || descriptionFor(s.id)"></span>
               <span class="flex-1"></span>
-              <i role="img" x-h-lucide data-lucide="arrow-right" class="home-entry-arrow size-4 text-muted-foreground flex-none"></i>
+              <svg role="presentation" x-h-lucide data-lucide="arrow-right" class="home-entry-arrow size-4 text-muted-foreground flex-none"></svg>
             </a>
           </template>
         </div>

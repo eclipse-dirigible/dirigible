@@ -16,8 +16,9 @@
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
     <style>
       /* Harmonia themes `body`; theme `html` too so the area below short content is not left with
-         the browser default. The light/dark choice itself is applied by harmonia.min.js from the
-         shared `codbex.harmonia.colorMode` key, so this page follows the platform theme. */
+         the browser default. The colour scheme itself is applied by harmonia.min.js - the saved
+         choice, or the OS scheme in `auto` mode - which keeps every same-origin frame and tab in
+         sync, so this page follows the platform theme with no script of its own. */
       html { background-color: var(--background); color: var(--foreground); }
       body { min-height: 100vh; }
       [x-cloak] { display: none !important; }
@@ -28,7 +29,7 @@
 
     <div x-h-toolbar>
       <span x-h-toolbar-title class="shrink-0">Explore</span>
-      <div x-h-select class="w-56">
+      <div x-h-select style="width: 14rem">
         <input x-h-select-input x-model="selected" placeholder="Choose a collection" />
         <div x-h-select-content>
           <div x-h-select-list>
@@ -40,7 +41,7 @@
       </div>
       <div class="flex-1"></div>
       <button x-h-button data-variant="transparent" data-size="icon-sm" aria-label="Reload" @click="load()">
-        <i role="img" x-h-lucide data-lucide="refresh-cw"></i>
+        <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg>
       </button>
     </div>
 
@@ -69,7 +70,7 @@
                 </template>
               </tr>
             </template>
-            <tr x-show="rows.length === 0">
+            <tr x-h-table-row x-show="rows.length === 0">
               <td x-h-table-cell :colspan="columns().length" class="text-center">No data</td>
             </tr>
           </tbody>
