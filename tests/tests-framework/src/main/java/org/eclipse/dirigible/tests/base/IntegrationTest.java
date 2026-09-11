@@ -15,6 +15,8 @@ import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.framework.util.PortUtil;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,6 +31,17 @@ import java.util.concurrent.TimeUnit;
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @AutoConfigureMockMvc
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+// A method that never returns must cost its own class, not the whole CI shard (#7283): without a
+// bound here the shard ran into the job's timeout-minutes, was cancelled, and left neither a
+// failsafe report nor a thread dump behind. The bound is per test AND per lifecycle method (the
+// Spring context start is an extension callback and is not counted); the slowest method in the
+// suite measured 7.6 minutes, so 15 leaves roughly twice that. A method that needs a different
+// bound declares its own @Timeout, which overrides this one - JavaLspIT, JavaDebugIT and
+// SchemaTemplateForeignKeyIT each declare a tighter one.
+@Timeout(value = 15, unit = TimeUnit.MINUTES)
+// ... and the watchdog photographs the stall a few minutes before that bound fires, because the
+// interrupt @Timeout uses cannot land on a blocking socket read or a monitor deadlock.
+@ExtendWith(TestStallWatchdog.class)
 public abstract class IntegrationTest {
 
     // set config to false if you want to disable the headless mode
