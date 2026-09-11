@@ -41,10 +41,11 @@ import io.restassured.http.ContentType;
  * delegate paths in one process - {@code flowable:class} and
  * {@code flowable:delegateExpression="${JavaTask}"} - with constructor, field and collection
  * injection, a {@code @PostConstruct}-only delegate, and the two delegates that declare no
- * injection point at all (which must keep being built exactly as before). Two further processes pin
- * the behaviour that is easiest to regress: an unsatisfiable dependency must fail the STEP and not
- * the deployment, and a recompiled collaborator must reach the delegate Flowable caches on the
- * parsed activity.
+ * injection point at all (which must keep being built exactly as before). Three further processes
+ * pin the behaviour that is easiest to regress: an unsatisfiable dependency must fail the STEP and
+ * not the deployment, a recompiled collaborator must reach the delegate Flowable caches on the
+ * parsed activity, and a {@code flowable:class} execution or task listener - created through a
+ * different engine registration from the service-task one - must reach the same seam (#7222).
  */
 // One Dirigible boot for the whole class: the fixture is deployed once and every method starts its
 // own process instance, so the per-method context reset inherited from IntegrationTest would only
@@ -56,6 +57,7 @@ class JavaDelegateInjectionIT extends IntegrationTest {
     private static final String INJECTION_PROCESS = "java-delegate-injection";
     private static final String UNSATISFIED_PROCESS = "java-delegate-unsatisfied";
     private static final String VERSION_PROCESS = "java-delegate-version";
+    private static final String LISTENER_PROCESS = "java-delegate-listener-injection";
 
     private static final String VERSION_PROVIDER_PATH =
             IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/delegateinjection/VersionProvider.java";
@@ -134,6 +136,17 @@ class JavaDelegateInjectionIT extends IntegrationTest {
         assertHistoricVariable(startProcess(VERSION_PROCESS), "version", "v2");
     }
 
+    @Test
+    void both_listener_kinds_wire_their_collaborators() {
+        String instanceId = startProcess(LISTENER_PROCESS);
+
+        // flowable:executionListener, single constructor taking the @Component collaborator. Before
+        // #7222 the listener factory instantiated it reflectively, so this one could not even be
+        // built - and the @Inject task listener below ran with its field reading null.
+        assertRuntimeVariable(instanceId, "executionListenerRate", "42");
+        assertRuntimeVariable(instanceId, "taskListenerRate", "42");
+    }
+
     private String startProcess(String processDefinitionKey) {
         String body = "{\"processDefinitionKey\":\"" + processDefinitionKey + "\",\"businessKey\":\"" + processDefinitionKey
                 + "\",\"parameters\":\"{}\"}";
@@ -157,12 +170,27 @@ class JavaDelegateInjectionIT extends IntegrationTest {
                 ASSERTION_TIMEOUT_SECONDS);
     }
 
+    /**
+     * The instance waits at its user task, so the listeners' writes are read from the RUNTIME set. Note
+     * the key: the runtime endpoint serves Flowable's own variable entities, whose property is
+     * {@code name} - {@code variableName} is the HISTORIC endpoint's spelling.
+     */
+    private void assertRuntimeVariable(String processInstanceId, String name, String expectedValue) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/bpm/bpm-processes/instance/" + processInstanceId + "/variables")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("name", hasItem(name))
+                                                 .body("find { it.name == '" + name + "' }.value", equalTo(expectedValue)),
+                ASSERTION_TIMEOUT_SECONDS);
+    }
+
     private void assertNoRuntimeVariable(String processInstanceId, String name) {
         restAssuredExecutor.execute(() -> given().when()
                                                  .get("/services/bpm/bpm-processes/instance/" + processInstanceId + "/variables")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("variableName", not(hasItem(name))));
+                                                 .body("name", not(hasItem(name))));
     }
 
     private void write(String path, String content) {
