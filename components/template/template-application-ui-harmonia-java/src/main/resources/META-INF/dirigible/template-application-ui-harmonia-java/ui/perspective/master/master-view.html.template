@@ -186,7 +186,7 @@
 ## ProcessIds is the per-process at-most-once bookkeeping (Process=instanceId pairs) - platform
 ## plumbing with nothing to say to a reader, unlike ProcessId, which names the flow the record is in.
 #if(!$property.dataAutoIncrement && !$property.isHiddenProperty)
-#if($property.widgetLabel)#set($plabel = $property.widgetLabel)#else#set($plabel = $property.name)#end
+#if($property.widgetLabel)#set($plabel = $property.widgetLabelJs)#else#set($plabel = $property.name)#end
 #if($property.isDateType)#set($isDate = "true")#else#set($isDate = "false")#end
 #if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))
               <div class="vbox gap-0" x-show="selected?.${property.name} !== null && selected?.${property.name} !== undefined && selected?.${property.name} !== ''">

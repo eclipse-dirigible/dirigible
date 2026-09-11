@@ -359,6 +359,12 @@ final class ModelParameterProcessor {
         property.put("isReadOnlyProperty", isTrue(property, "isReadOnlyProperty"));
         property.put("widgetIsMajor", isTrue(property, "widgetIsMajor"));
         property.put("widgetLabel", strOr(property, "widgetLabel", NamingHelper.humanizeIdentifier(str(property, "name"))));
+        // The authored label reaches the Harmonia templates inside single-quoted JS string literals
+        // and Alpine T() call arguments - interpolated verbatim, an apostrophe in it ("Owner's copy")
+        // closes the literal early and breaks the whole generated page (dirigible #7294, the #7207
+        // class). Escaped once here, the same way widgetPatternJs is, so every template can write
+        // '${property.widgetLabelJs}' instead of '${property.widgetLabel}' without re-deriving it.
+        property.put("widgetLabelJs", JsLiterals.escape(str(property, "widgetLabel")));
 
         String name = str(property, "name");
         if ("ProcessId".equals(name)) {

@@ -192,7 +192,7 @@ document.addEventListener('alpine:init', () => {
     // controller's GET /{id}/history. Read-only - nothing here writes to the shadow table.
     history: [],
 #set($historyFirst = true)
-    historyLabels: {#foreach($property in $properties)#if(!$property.dataPrimaryKey && (!$property.auditType || $property.auditType == "NONE"))#if($property.widgetLabel)#set($hlabel = $property.widgetLabel)#else#set($hlabel = $property.name)#end#if($historyFirst)#set($historyFirst = false)#else, #end'${property.name}': ['$projectName:${tprefix}.t.${property.dataName}', '${hlabel}']#end#end},
+    historyLabels: {#foreach($property in $properties)#if(!$property.dataPrimaryKey && (!$property.auditType || $property.auditType == "NONE"))#if($property.widgetLabel)#set($hlabel = $property.widgetLabelJs)#else#set($hlabel = $property.name)#end#if($historyFirst)#set($historyFirst = false)#else, #end'${property.name}': ['$projectName:${tprefix}.t.${property.dataName}', '${hlabel}']#end#end},
 #end
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
 

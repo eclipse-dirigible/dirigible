@@ -302,7 +302,7 @@ document.addEventListener('alpine:init', () => {
     exportColumns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
 #end
 #end
     ],

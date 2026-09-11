@@ -37,7 +37,7 @@ document.addEventListener('alpine:init', () => {
       const series = [
 #foreach($property in $properties)
 #if(!$property.dataPrimaryKey)
-        { name: #if($property.widgetLabel)'${property.widgetLabel}'#else'${property.name}'#end, data: rows.map(e => Number(e.${property.name}) || 0) },
+        { name: #if($property.widgetLabel)'${property.widgetLabelJs}'#else'${property.name}'#end, data: rows.map(e => Number(e.${property.name}) || 0) },
 #end
 #end
       ];

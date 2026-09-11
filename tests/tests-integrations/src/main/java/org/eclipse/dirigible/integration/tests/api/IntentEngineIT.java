@@ -3282,6 +3282,58 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void an_authored_label_is_escaped_into_every_harmonia_interpolation() {
+        // #7294: the authored field `label:` (#6424, widgetLabel) reached the Harmonia form's T()
+        // fallback argument and the master/list/item-dialog column literals verbatim, so an
+        // apostrophe ("Owner's copy") closed the literal early and blanked the whole generated
+        // page - the #7207 class, one authored property (label) over from the seeded default.
+        writeIntent("""
+                name: labels
+                entities:
+                  - name: Badge
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 200, label: "Owner's copy" }
+                    relations:
+                      - { name: lines, kind: oneToMany, to: BadgeLine }
+
+                  - name: BadgeLine
+                    fields:
+                      - { name: id,  type: integer, primaryKey: true, generated: true }
+                      - { name: tag, type: string,   length: 40, label: "Reviewer's note" }
+                    relations:
+                      - { name: badge, kind: manyToOne, to: Badge, composition: true }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "labels.model");
+
+        // The reused manage form's T() fallback argument - the raw apostrophe would end the JS
+        // string literal inside the Alpine x-text expression, throwing at evaluation and aborting
+        // the walk of the enclosing element (the harmonia-ui guide's task-form rule, never applied
+        // to the entity views).
+        String badgeForm = contentOf("gen/labels/views/Badge/Badge-form.html");
+        assertTrue(badgeForm.contains("'Owner\\'s copy'"),
+                "the form's T() fallback must escape the apostrophe in the authored label, got: " + badgeForm);
+        assertFalse(badgeForm.contains("'Owner's copy'"),
+                "the raw unescaped apostrophe must never reach the generated form, got: " + badgeForm);
+
+        // The master page's column literal (Badge owns a oneToMany, so it generates as a MASTER,
+        // not a plain manage list) - a raw apostrophe here is a syntax error in the whole file.
+        String badgeMasterPage = contentOf("gen/labels/js/components/pages/Badge/BadgeMasterPage.js");
+        assertTrue(badgeMasterPage.contains("label: 'Owner\\'s copy'"),
+                "the master page's column label literal must escape the apostrophe, got: " + badgeMasterPage);
+
+        // The item dialog's column metadata (detail-register), the sibling #7152/#7255 already
+        // escape the seeded DEFAULT for.
+        String badgeLineRegister = contentOf("gen/labels/js/components/pages/Badge/BadgeLine.detail.js");
+        assertTrue(badgeLineRegister.contains("label: 'Reviewer\\'s note'"),
+                "the item dialog's column label literal must escape the apostrophe, got: " + badgeLineRegister);
+    }
+
+    @Test
     void report_widget_generates_the_kpi_block_and_replaces_entity_tiles() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()

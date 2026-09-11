@@ -116,7 +116,7 @@
 #set($readonly = ($property.isCalculatedProperty == "true" && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate || $property.calculatedActionOnUpdate)))
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
-#if($property.widgetLabel)#set($label = $property.widgetLabel)#else#set($label = $property.name)#end
+#if($property.widgetLabel)#set($label = $property.widgetLabelJs)#else#set($label = $property.name)#end
 #if($property.widgetSize)#set($span = $property.widgetSize)#else#set($span = "6")#end
 #if($property.widgetType == "TEXTAREA" || $property.widgetType == "CHECKBOX" || $property.widgetType == "MULTISELECT")#set($span = "12")#end
 #if($lookup)#set($span = "12")#end
@@ -505,7 +505,7 @@
           <div class="grid grid-cols-1 gap-y-3">
 #foreach($property in $properties)
 #if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)
-#if($property.widgetLabel)#set($rolabel = $property.widgetLabel)#else#set($rolabel = $property.name)#end
+#if($property.widgetLabel)#set($rolabel = $property.widgetLabelJs)#else#set($rolabel = $property.name)#end
             <div class="vbox gap-0" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
               <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${rolabel}')"></span>
 #if($property.widgetType == "DROPDOWN")
