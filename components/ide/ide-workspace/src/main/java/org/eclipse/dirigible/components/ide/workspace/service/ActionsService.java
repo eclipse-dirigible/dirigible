@@ -68,7 +68,7 @@ public class ActionsService {
             ProjectMetadata projectJson = GsonHelper.fromJson(new String(fileObject.getContent()), ProjectMetadata.class);
             List<ProjectAction> actions = projectJson.getActions();
             if (actions == null) {
-                logger.error("Actions section not found in the project descriptor file: " + project);
+                logger.debug("No actions section in the project descriptor file of project [{}]", project);
             } else {
                 ProjectAction projectAction = actions.stream()
                                                      .filter(a -> a.getName()
@@ -196,7 +196,6 @@ public class ActionsService {
             ProjectMetadata projectJson = GsonHelper.fromJson(new String(fileObject.getContent()), ProjectMetadata.class);
             List<ProjectAction> actions = projectJson.getActions();
             if (actions == null) {
-                logger.error("Actions section not found in the project descriptor file: " + project);
                 return new ArrayList<ProjectAction>();
             }
             return actions;

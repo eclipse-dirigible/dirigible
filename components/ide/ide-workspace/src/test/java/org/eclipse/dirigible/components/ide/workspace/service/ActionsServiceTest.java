@@ -11,12 +11,16 @@ package org.eclipse.dirigible.components.ide.workspace.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.apache.commons.lang3.SystemUtils;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.ide.workspace.domain.File;
 import org.eclipse.dirigible.components.ide.workspace.domain.Project;
 import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.project.ProjectAction;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +31,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 /**
  * The Class WorkspacesCoreServiceTest.
@@ -48,6 +60,12 @@ public class ActionsServiceTest {
     @Autowired
     private WorkspaceService workspaceService;
 
+    /** Captures what the service logs while a test runs. */
+    private ListAppender<ILoggingEvent> appender;
+
+    /** The logger of the service under test. */
+    private Logger serviceLogger;
+
     /** The project json content. */
     private static final String PROJECT_JSON_CONTENT = """
             {
@@ -68,6 +86,34 @@ public class ActionsServiceTest {
             	  }]
             }
             """;
+
+    /** A descriptor without an actions section - what a project that declares none looks like. */
+    private static final String PROJECT_JSON_WITHOUT_ACTIONS = """
+            {
+            	  "guid": "TestProject2"
+            }
+            """;
+
+    /**
+     * Attaches the log appender. Spring re-initializes logback while the application context starts, so
+     * the appender is attached per test rather than in a field initializer.
+     */
+    @BeforeEach
+    public void attachLogAppender() {
+        appender = new ListAppender<>();
+        appender.start();
+        serviceLogger = (Logger) LoggerFactory.getLogger(ActionsService.class);
+        serviceLogger.addAppender(appender);
+    }
+
+    /**
+     * Detaches the log appender.
+     */
+    @AfterEach
+    public void detachLogAppender() {
+        serviceLogger.detachAppender(appender);
+        appender.stop();
+    }
 
 
     /**
@@ -125,6 +171,42 @@ public class ActionsServiceTest {
         } finally {
             Configuration.set("DIRIGIBLE_PROJECT_TYPESCRIPT", "true");
         }
+    }
+
+    /**
+     * A project descriptor without an actions section is the normal case - it yields no actions and
+     * must not be reported as an error.
+     */
+    @Test
+    public void projectWithoutActionsSectionIsNotAnError() {
+        workspaceService.createWorkspace("TestWorkspace2");
+        workspaceService.createProject("TestWorkspace2", "TestProject2");
+        workspaceService.createFile("TestWorkspace2", "TestProject2", "project.json", PROJECT_JSON_WITHOUT_ACTIONS.getBytes(),
+                "application/json");
+        try {
+            List<ProjectAction> actions = actionsService.listRegisteredActions("TestWorkspace2", "TestProject2");
+            assertTrue(actions.isEmpty());
+
+            int result = actionsService.executeAction("TestWorkspace2", "TestProject2", "MyAction");
+            assertEquals(-1, result);
+
+            List<String> errors = loggedErrors();
+            assertTrue(errors.isEmpty(), "unexpected error logged: " + errors);
+        } finally {
+            workspaceService.deleteWorkspace("TestWorkspace2");
+        }
+    }
+
+    /**
+     * Logged errors.
+     *
+     * @return the messages the service under test logged at ERROR
+     */
+    private List<String> loggedErrors() {
+        return appender.list.stream()
+                            .filter(event -> event.getLevel() == Level.ERROR)
+                            .map(ILoggingEvent::getFormattedMessage)
+                            .toList();
     }
 
     /**
