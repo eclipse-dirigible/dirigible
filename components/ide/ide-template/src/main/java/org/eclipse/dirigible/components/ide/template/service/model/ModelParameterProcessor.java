@@ -124,6 +124,7 @@ final class ModelParameterProcessor {
         entity.put("referencedProjections", new ArrayList<>());
         splitChecks(entity, parameters);
         resolveUniqueConstraintLiterals(entity);
+        resolveLifecycleStatusNames(entity);
         resolveDataOrder(entity);
 
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
@@ -292,6 +293,59 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Normalizes the seeded status names a lifecycle refusal quotes into the escaped entries the
+     * generated repository builds its lookup map from.
+     *
+     * <p>
+     * The names used to travel as one {@code id=name,} join that the template split back apart at
+     * class-init time (#7295). A status name is authored prose: a comma in one shifted every following
+     * entry, and a quote or a backslash ended the Java literal the join was written into and failed the
+     * compile of the whole generated module. The model now carries the pairs structurally; a
+     * {@code .model} written before that still carries the join and is read back here, so nothing
+     * regenerates differently for a name that never held a separator.
+     *
+     * @param entity the entity
+     */
+    private static void resolveLifecycleStatusNames(Map<String, Object> entity) {
+        List<Object> entries = new ArrayList<>();
+        for (Map<String, Object> declared : asMaps(entity.get("lifecycleStatusNameList"))) {
+            addLifecycleStatusName(entries, str(declared, "id"), str(declared, "name"));
+        }
+        if (entries.isEmpty()) {
+            String joined = str(entity, "lifecycleStatusNames");
+            if (joined != null && !joined.isEmpty()) {
+                for (String seeded : joined.split(",")) {
+                    int separator = seeded.indexOf('=');
+                    if (separator > 0) {
+                        addLifecycleStatusName(entries, seeded.substring(0, separator), seeded.substring(separator + 1));
+                    }
+                }
+            }
+        }
+        if (!entries.isEmpty()) {
+            entity.put("lifecycleStatusNameEntries", entries);
+        }
+    }
+
+    /**
+     * Adds one seeded status name, escaped for the Java literal the generated repository writes it
+     * into.
+     *
+     * @param entries the entries collected so far
+     * @param id the status id
+     * @param name the seeded name
+     */
+    private static void addLifecycleStatusName(List<Object> entries, String id, String name) {
+        if (id == null || id.isEmpty() || name == null || name.isEmpty()) {
+            return;
+        }
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("idJavaLiteral", JavaLiterals.escape(id));
+        entry.put("nameJavaLiteral", JavaLiterals.escape(name));
+        entries.add(entry);
+    }
+
+    /**
      * Resolves a check's declared path hops to the generated classes that load them - the reader of a
      * {@code Relation.field} value must fetch the related record before it can read the field.
      *
@@ -376,6 +430,20 @@ final class ModelParameterProcessor {
         // class). Escaped once here, the same way widgetPatternJs is, so every template can write
         // '${property.widgetLabelJs}' instead of '${property.widgetLabel}' without re-deriving it.
         property.put("widgetLabelJs", JsLiterals.escape(str(property, "widgetLabel")));
+        // The authored description is the property's @Documentation argument in the generated entity -
+        // a Java string literal, so a quote in it ({@code Customer's "trade" name}) would end that
+        // literal and fail the compile of the whole generated module (#7295). The raw value stays for
+        // the form's own description paragraph, which is HTML text.
+        String description = str(property, "description");
+        if (description != null) {
+            property.put("descriptionJavaLiteral", JavaLiterals.escape(description));
+        }
+        // The series a document number is allocated from: authored free text ("Sales Invoice"), written
+        // into the allocator call as a literal by both the repository and the numbering delegate.
+        String numberSeries = str(property, "numberSeries");
+        if (numberSeries != null) {
+            property.put("numberSeriesJavaLiteral", JavaLiterals.escape(numberSeries));
+        }
 
         String name = str(property, "name");
         if ("ProcessId".equals(name)) {
@@ -1257,8 +1325,38 @@ final class ModelParameterProcessor {
                 part.put("repositoryClass", foreignKey.get("targetRepositoryClass"));
                 kept.add(part);
             }
+            for (Object part : kept) {
+                resolveLabelPartLiterals(asMap(part));
+            }
             entity.put("labelParts", kept);
             entity.put("hasLabel", Boolean.TRUE);
+        }
+    }
+
+    /**
+     * Derives the escaped twins of a label part's authored text, for the generated name computation
+     * that writes them into Java string literals.
+     *
+     * <p>
+     * A label pattern is prose an author writes around the fields it interpolates - a quote in a
+     * literal segment, or in a format, is interpolated verbatim into the {@code computeName} body,
+     * where it ends the literal it is written into and fails the compile of every generated class of
+     * the module (#7295, the #7241 class). The raw value stays for the surfaces that render it as text;
+     * only the Java site reads the twin.
+     *
+     * @param part the label part
+     */
+    private static void resolveLabelPartLiterals(Map<String, Object> part) {
+        if (part == null) {
+            return;
+        }
+        String text = str(part, "text");
+        if (text != null) {
+            part.put("textJavaLiteral", JavaLiterals.escape(text));
+        }
+        String format = str(part, "format");
+        if (format != null) {
+            part.put("formatJavaLiteral", JavaLiterals.escape(format));
         }
     }
 
@@ -1339,21 +1437,15 @@ final class ModelParameterProcessor {
     private static void resolveWidgetLiterals(Map<String, Object> property) {
         String widgetPattern = str(property, "widgetPattern");
         if (widgetPattern != null && !widgetPattern.isEmpty()) {
-            property.put("widgetPatternJs", "'" + widgetPattern.replace("\\", "\\\\")
-                                                               .replace("'", "\\'")
-                    + "'");
+            property.put("widgetPatternJs", "'" + JsLiterals.escape(widgetPattern) + "'");
             // The same expression as the body of a Java string literal, without the quotes: an
             // unescaped backslash would make the generated controller fail to compile, and the
             // client Java batch is all-or-nothing.
-            property.put("widgetPatternJava", widgetPattern.replace("\\", "\\\\")
-                                                           .replace("\"", "\\\""));
+            property.put("widgetPatternJava", JavaLiterals.escape(widgetPattern));
         }
         if (property.get("widgetOptionsFilterBy") != null && property.containsKey("widgetOptionsFilterValue")) {
             String raw = String.valueOf(property.get("widgetOptionsFilterValue"));
-            property.put("widgetOptionsFilterValueJs", raw.matches("-?\\d+(\\.\\d+)?") ? raw
-                    : "'" + raw.replace("\\", "\\\\")
-                               .replace("'", "\\'")
-                            + "'");
+            property.put("widgetOptionsFilterValueJs", raw.matches("-?\\d+(\\.\\d+)?") ? raw : "'" + JsLiterals.escape(raw) + "'");
         }
     }
 

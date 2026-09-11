@@ -23,8 +23,10 @@ package org.eclipse.dirigible.components.ide.template.service.model;
  * {@link #escape(String)} is THE escape for "an authored value inside a generated Java literal",
  * and it is public for that reason: the loop was copied into engine-intent twice before (dirigible
  * #7287), where a copy that drifts is a compile error in a generated module nobody sees until a
- * regen. Anything that renders a Java literal from a model value calls this - it does not grow a
- * fourth copy.
+ * regen. Every hand-rolled copy across this package and engine-intent was replaced by a call to it
+ * (dirigible #7295), and the copies differed - one dropped a carriage return, several escaped
+ * neither the newline nor the control characters - so "the same loop" was never quite true.
+ * Anything that renders a Java literal from a model value calls this; it does not grow a copy.
  */
 public final class JavaLiterals {
 

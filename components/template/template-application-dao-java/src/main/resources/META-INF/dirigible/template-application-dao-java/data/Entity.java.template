@@ -35,7 +35,7 @@ public class ${name}Entity {
 #end
     @Column(name = "${property.dataName}"#if($property.dataLength && $property.dataType != "DECIMAL"), length = ${property.dataLength}#end#if($property.dataPrecision), precision = ${property.dataPrecision}#end#if($property.dataScale), scale = ${property.dataScale}#end#if(!$property.dataPrimaryKey && $property.dataNotNull), nullable = false#elseif(!$property.dataPrimaryKey && !$property.dataNotNull), nullable = true#end#if($property.dataUnique), unique = true#end)
 #if($property.description)
-    @Documentation("${property.description}")
+    @Documentation("${property.descriptionJavaLiteral}")
 #else
     @Documentation("${property.name}")
 #end

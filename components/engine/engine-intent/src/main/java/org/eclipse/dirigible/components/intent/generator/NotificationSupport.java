@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.eclipse.dirigible.components.ide.template.service.model.JavaLiterals;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -373,11 +374,7 @@ public final class NotificationSupport {
     }
 
     static String quote(String value) {
-        return "\"" + value.replace("\\", "\\\\")
-                           .replace("\"", "\\\"")
-                           .replace("\n", "\\n")
-                           .replace("\r", "")
-                + "\"";
+        return "\"" + JavaLiterals.escape(value) + "\"";
     }
 
     /**

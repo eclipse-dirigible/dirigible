@@ -791,8 +791,16 @@ class EdmIntentGeneratorTest {
         Map<String, Object> entry = entityByName(entities(model), "JournalEntry");
         assertEquals("Status", entry.get("lifecycleStatusProperty"));
         assertEquals("1>2,1>3,2>4", entry.get("lifecycleEdges"));
-        // The seeded names ride along so a rejection reads "cannot move from POSTED to DRAFT".
-        assertEquals("1=DRAFT,2=POSTED,3=CANCELLED,4=VOIDED", entry.get("lifecycleStatusNames"));
+        // The seeded names ride along so a rejection reads "cannot move from POSTED to DRAFT" - as
+        // STRUCTURED pairs, because a name is authored prose and the `id=name,` join it used to be
+        // mis-parsed on a comma and broke the generated Java literal on a quote (#7295).
+        List<Map<String, Object>> statusNames = (List<Map<String, Object>>) entry.get("lifecycleStatusNameList");
+        assertEquals(List.of("1", "2", "3", "4"), statusNames.stream()
+                                                             .map(name -> name.get("id"))
+                                                             .toList());
+        assertEquals(List.of("DRAFT", "POSTED", "CANCELLED", "VOIDED"), statusNames.stream()
+                                                                                   .map(name -> name.get("name"))
+                                                                                   .toList());
         // With a declared start, a record cannot be CREATED mid-lifecycle either.
         assertEquals("1", entry.get("lifecycleInitialStatus"));
         // An entity without a lifecycle carries none of it.

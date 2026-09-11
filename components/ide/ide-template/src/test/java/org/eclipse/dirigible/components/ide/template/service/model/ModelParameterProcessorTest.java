@@ -838,6 +838,100 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * The authored prose a generated class writes into a Java string literal, escaped once here so no
+     * template has to re-derive it - and so a quote in it mis-values one field instead of failing the
+     * compile of the whole generated module (#7295).
+     */
+    @Test
+    void escapesTheAuthoredProseTheGeneratedJavaWritesIntoALiteral() {
+        Map<String, Object> property = property("Name", "VARCHAR");
+        property.put("description", "Customer's \"trade\" name");
+        property.put("numberSeries", "Sales \"Invoice\"");
+        ModelParameterProcessor.process(model(entity("Book", "Books", property)), parameters());
+
+        assertEquals("Customer's \\\"trade\\\" name", property.get("descriptionJavaLiteral"));
+        assertEquals("Sales \\\"Invoice\\\"", property.get("numberSeriesJavaLiteral"));
+        // The raw values stay for the surfaces that render them as text.
+        assertEquals("Customer's \"trade\" name", property.get("description"));
+    }
+
+    /**
+     * A property carrying neither gets no twin: a template reads the key's absence.
+     */
+    @Test
+    void aPropertyWithNoProseCarriesNoLiteralTwin() {
+        Map<String, Object> property = property("Name", "VARCHAR");
+        ModelParameterProcessor.process(model(entity("Book", "Books", property)), parameters());
+
+        assertNull(property.get("descriptionJavaLiteral"));
+        assertNull(property.get("numberSeriesJavaLiteral"));
+    }
+
+    /**
+     * A label pattern is authored around the fields it interpolates, and its literal segments and
+     * formats are written into the generated name computation as Java literals.
+     */
+    @Test
+    void escapesTheLiteralSegmentsAndFormatsOfALabelPattern() {
+        Map<String, Object> property = property("Code", "VARCHAR");
+        Map<String, Object> entity = entity("Book", "Books", property);
+        Map<String, Object> literal = new LinkedHashMap<>();
+        literal.put("kind", "literal");
+        literal.put("text", "the \"good\" one - ");
+        Map<String, Object> field = new LinkedHashMap<>();
+        field.put("kind", "field");
+        field.put("property", "Code");
+        field.put("format", "dd\\MM");
+        entity.put("labelParts", List.of(literal, field));
+        Map<String, Object> parameters = parameters();
+        // The label computation is a client-Java surface, so the pass that resolves it runs there.
+        parameters.put("javaRuntime", "true");
+        ModelParameterProcessor.process(model(entity), parameters);
+
+        assertEquals("the \\\"good\\\" one - ", literal.get("textJavaLiteral"));
+        assertEquals("dd\\\\MM", field.get("formatJavaLiteral"));
+    }
+
+    /**
+     * The seeded status names a lifecycle refusal quotes travel structurally, escaped per entry - a
+     * comma in a name used to shift every entry after it, a quote broke the literal.
+     */
+    @Test
+    void readsTheSeededStatusNamesStructurally() {
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Id", "INTEGER"));
+        entity.put("lifecycleStatusNameList",
+                List.of(Map.of("id", "1", "name", "Sent, awaiting reply"), Map.of("id", "2", "name", "\"P\"")));
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        List<Map<String, Object>> entries = (List<Map<String, Object>>) entity.get("lifecycleStatusNameEntries");
+        assertEquals(2, entries.size());
+        assertEquals("1", entries.get(0)
+                                 .get("idJavaLiteral"));
+        assertEquals("Sent, awaiting reply", entries.get(0)
+                                                    .get("nameJavaLiteral"));
+        assertEquals("\\\"P\\\"", entries.get(1)
+                                         .get("nameJavaLiteral"));
+    }
+
+    /**
+     * A model written before the structured list still carries the {@code id=name,} join, and the pass
+     * reads it back so nothing regenerates differently for a name that never held a separator.
+     */
+    @Test
+    void fallsBackToTheJoinedSeededStatusNames() {
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Id", "INTEGER"));
+        entity.put("lifecycleStatusNames", "1=DRAFT,2=POSTED");
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        List<Map<String, Object>> entries = (List<Map<String, Object>>) entity.get("lifecycleStatusNameEntries");
+        assertEquals(2, entries.size());
+        assertEquals("DRAFT", entries.get(0)
+                                     .get("nameJavaLiteral"));
+        assertEquals("2", entries.get(1)
+                                 .get("idJavaLiteral"));
+    }
+
+    /**
      * Builds a model around the given entities.
      *
      * @param entities the entities

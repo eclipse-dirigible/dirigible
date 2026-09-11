@@ -2778,9 +2778,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
                 // Always a QUOTED literal, even for a default that reads as a number: the column holds
                 // a string, and `same()` would compare a bare 0 against the stored "0" as unequal.
-                target.put("derivedDefault", '"' + text.replace("\\", "\\\\")
-                                                       .replace("\"", "\\\"")
-                        + '"');
+                target.put("derivedDefault", '"' + JavaLiterals.escape(text) + '"');
                 return;
         }
     }
@@ -3413,9 +3411,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * {@code Calc.eval("<expr>", source, <scale>)} - the calculated-field / posting-amount convention.
      */
     private static String calcExpression(String expr, int scale) {
-        return "Calc.eval(\"" + expr.replace("\\", "\\\\")
-                                    .replace("\"", "\\\"")
-                + "\", source, " + scale + ")";
+        return "Calc.eval(\"" + JavaLiterals.escape(expr) + "\", source, " + scale + ")";
     }
 
     /**
@@ -3449,11 +3445,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (copy != null) {
             return copy;
         }
-        return "\"" + v.replace("\\", "\\\\")
-                       .replace("\"", "\\\"")
-                       .replace("\n", "\\n")
-                       .replace("\r", "\\r")
-                + "\"";
+        return "\"" + JavaLiterals.escape(v) + "\"";
     }
 
     /**
@@ -3559,11 +3551,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (v.matches("-?\\d+\\.\\d+")) {
             return "new java.math.BigDecimal(\"" + v + "\")";
         }
-        return "\"" + v.replace("\\", "\\\\")
-                       .replace("\"", "\\\"")
-                       .replace("\n", "\\n")
-                       .replace("\r", "\\r")
-                + "\"";
+        return "\"" + JavaLiterals.escape(v) + "\"";
     }
 
     /** The junction's to-one relation whose target is the given entity, or null. */

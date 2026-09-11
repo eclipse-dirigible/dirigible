@@ -457,10 +457,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - name: Claim
                 audit: true
                 history: true
-                label: "{note} ({Person.name}) {period|yyyy MMMM}"
+                # The label's literal segments carry a quote, as authored prose does. Every one of
+                # them is written into the generated computeName() as a Java literal, so an
+                # unescaped one ends that literal and fails the compile of the whole module (#7295).
+                label: "the \\"{note}\\" ({Person.name}) {period|yyyy MMMM}"
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
-                  - { name: note, type: string, length: 200 }
+                  # description: reaches the generated entity as an @Documentation argument - a Java
+                  # string literal, so the quote here is the #7295 assertion.
+                  - { name: note, type: string, length: 200, description: 'The claim''s "short" note' }
                   # a boolean: a real checkbox on the power form AND on the personal one (#7103)
                   - { name: urgent, type: boolean }
                   - { name: period, type: month }
@@ -1107,7 +1112,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - name: ShipmentFlow
                 trigger: { onCreate: Shipment }
                 steps:
-                  - { name: dispatch, kind: serviceTask, args: { setField: note, value: DISPATCHED, next: settle } }
+                  # The written value is authored prose and is emitted as a Java string literal, so
+                  # the quote in it is the #7295 assertion on the setter delegate.
+                  - { name: dispatch, kind: serviceTask, args: { setField: note, value: 'DISPATCHED "in full"', next: settle } }
                   - { name: settle,   kind: serviceTask, args: { setField: note, value: SETTLED, next: end } }
                   - { name: end, kind: end }
 
@@ -1534,6 +1541,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 parameters:
                   - { name: minTotal, target: totalCost, op: ge, initial: "0" }
                   - { name: note, target: note, op: like }
+              # A report parameter's `initial:` is authored prose bound on every call, and the
+              # generated repository writes it into a Java string literal - a quote in it used to
+              # end that literal and fail the compile of the whole module (#7295). Its own report,
+              # because the fallback narrows every unparameterized call by construction.
+              - name: ClaimNotes
+                source: Claim
+                dimensions: [note]
+                measures: ["count(*)"]
+                parameters:
+                  - { name: search, target: note, op: like, initial: 'O''Neil "the" note' }
               # kind: statement (#6938): the line classification is emitted as a generated
               # <REPORT>_LINES .view artifact - published with the project and provisioned by the
               # ViewsSynchronizer AFTER the tables - and the .report keeps a thin windowed join over
@@ -3136,8 +3153,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // other writer (a REST update, a workflow setter, a glue action) free to jump anywhere.
         String docRepository = contentOf("gen/emission/data/doc/DocRepository.java");
         assertTrue(docRepository.contains("\"1>2,2>3\".split(\",\")"), "the lifecycle must emit the whole legal edge set");
-        assertTrue(docRepository.contains("1=DRAFT,2=POSTED,3=CANCELLED"),
-                "the seeded status names must ride along so a rejection names statuses, not positional ids");
+        // The names ride along as INDIVIDUAL escaped literals, not as one `id=name,` join: a status
+        // name is authored prose, and a comma in one shifted every entry after it while a quote broke
+        // the literal the join was written into (#7295).
+        assertTrue(docRepository.contains("names.put(\"1\", \"DRAFT\");") && docRepository.contains("names.put(\"3\", \"CANCELLED\");"),
+                "the seeded status names must ride along so a rejection names statuses, not positional ids: " + docRepository);
         assertTrue(docRepository.contains("enforceLifecycle(entity);"), "a full-row update must be validated against the graph");
         assertTrue(docRepository.contains("enforceLifecycleMove(lifecyclePrevious, entity.Status);"),
                 "a targeted write (transition button, workflow setter) must be validated against the graph too");
@@ -3393,6 +3413,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // must parse it back to a temporal - otherwise the label degrades to the raw "2026-07".
         assertTrue(claimRepository.contains("YearMonth.parse"),
                 "a |format token on a month field must parse the YYYY-MM string back to a temporal");
+        // Every authored string the generated Java writes into a string literal is ESCAPED on the way
+        // in (#7295, the #7241/#7154 class): a label's literal segments here, the field description
+        // the entity's @Documentation carries, the series a number is allocated from, the seeded
+        // status names a lifecycle refusal quotes, a setter's written value and a report parameter's
+        // bound fallback. The module javac's as a whole, so an unescaped one of them fails EVERY
+        // generated class - these assertions say which value each site wrote, not merely that it did.
+        assertTrue(claimRepository.contains("label.append(\"the \\\"\");"),
+                "a label's literal segment must reach computeName escaped: " + claimRepository);
+        assertTrue(contentOf("gen/emission/data/claim/ClaimEntity.java").contains("@Documentation(\"The claim's \\\"short\\\" note\")"),
+                "an authored field description must reach @Documentation escaped");
+        assertTrue(contentOf("gen/events/emission/ShipmentFlowDispatch.java").contains("\"DISPATCHED \\\"in full\\\"\""),
+                "a setField value must reach the setter delegate escaped");
+        String claimNotesRepository = contentOf("gen/claimnotes/data/reports/ClaimNotesRepository.java");
+        assertTrue(claimNotesRepository.contains("value(filter, \"search\", \"O'Neil \\\"the\\\" note\")"),
+                "an authored report parameter initial must be bound escaped: " + claimNotesRepository);
+
         // A workflow setter/writer targeted write keeps the stored display Name current: the label
         // repository OVERRIDES updateProperties to recompute it on that path too.
         assertTrue(claimRepository.contains("public int updateProperties(") && claimRepository.contains("computeName(entity)"),
@@ -4807,9 +4843,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                               .body("Person", equalTo(1))
                                                               .body("Rate", nullValue())
                                                               // label: the stored display name computed on write -
-                                                              // "{note} ({Person.name}) {period|yyyy MMMM}"; the month
-                                                              // value formats through the pattern, never the raw 2026-07.
-                                                              .body("Name", equalTo("spoofed (Admin) 2026 July"))
+                                                              // the \"{note}\" ({Person.name}) {period|yyyy MMMM}; the
+                                                              // month value formats through the pattern, never the raw
+                                                              // 2026-07, and the pattern's own quotes survive the Java
+                                                              // literal they are written into (#7295).
+                                                              .body("Name", equalTo("the \"spoofed\" (Admin) 2026 July"))
                                                               .extract()
                                                               .path("Id")));
 
@@ -4839,7 +4877,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("Note", equalTo("edited"))
                                                  .body("Person", equalTo(1))
                                                  .body("Rate", equalTo(50.0F))
-                                                 .body("Name", equalTo("edited (Admin)")));
+                                                 .body("Name", equalTo("the \"edited\" (Admin)")));
 
         // The personal-assignee task landed in the owner's (admin's) Inbox - assigned, not just
         // claimable (the trigger + BPMN chain resolved the identity mapping at start time).

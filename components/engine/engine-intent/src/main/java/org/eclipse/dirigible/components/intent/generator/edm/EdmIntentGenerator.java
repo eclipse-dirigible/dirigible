@@ -2633,16 +2633,23 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         entityMap.put("lifecycleStatusProperty", IntentNaming.pascalCase(status.getName()));
         entityMap.put("lifecycleEdges", String.join(",", edges));
-        List<String> names = new ArrayList<>();
+        // The seeded names a refusal quotes, as a STRUCTURED list rather than the `id=name,` join this
+        // used to carry (#7295): a name is authored prose, and a comma in one silently mis-parsed the
+        // join while a quote or a backslash broke the Java literal the template writes it into. A
+        // `.model` written before this still carries the join, which the parameter pass reads back.
+        List<Map<String, Object>> names = new ArrayList<>();
         for (Map.Entry<Integer, String> seeded : LifecycleStages.seededStatuses(model, status.getTo())
                                                                 .entrySet()) {
             if (seeded.getValue() != null && !seeded.getValue()
                                                     .isBlank()) {
-                names.add(seeded.getKey() + "=" + seeded.getValue());
+                Map<String, Object> name = new LinkedHashMap<>();
+                name.put("id", String.valueOf(seeded.getKey()));
+                name.put("name", seeded.getValue());
+                names.add(name);
             }
         }
         if (!names.isEmpty()) {
-            entityMap.put("lifecycleStatusNames", String.join(",", names));
+            entityMap.put("lifecycleStatusNameList", names);
         }
         if (status.getInit() != null && status.getInit()
                                               .matches("-?\\d+")) {
@@ -3908,8 +3915,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * {@code transform-edm} rebuilds into {@code uniqueConstraints}. Emitting it here too would write
      * it twice and round-trip it as a duplicate.
      */
-    private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys",
-            "relatedEntities", "scopedCalendars", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
+    private static final Set<String> STRUCTURED_ATTRIBUTES =
+            Set.of("rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys", "relatedEntities", "scopedCalendars",
+                    "lifecycleStatusNameList", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

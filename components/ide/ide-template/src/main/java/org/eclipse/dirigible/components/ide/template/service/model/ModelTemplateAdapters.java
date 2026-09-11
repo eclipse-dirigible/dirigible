@@ -240,6 +240,11 @@ final class ModelTemplateAdapters {
             ModelDataTypes.DataType dataType = ModelDataTypes.parse(str(parameter, "type"));
             parameter.put("typeJava", dataType.java());
             parameter.put("typeTypescript", dataType.typescript());
+            // The authored fallback the parameter is bound with when the caller leaves the input empty.
+            // The generated repository writes it into a Java string literal, so an apostrophe-carrying
+            // value is fine but a quote or a backslash would end that literal and fail the compile of
+            // the whole generated module (#7295).
+            parameter.put("initialJavaLiteral", JavaLiterals.escape(strOr(parameter, "initial", "")));
             String placeholder = ":" + str(parameter, "name");
             for (Map<String, Object> condition : asMaps(model.get("conditions"))) {
                 if (placeholder.equals(str(condition, "right")) && "string".equals(dataType.typescript())

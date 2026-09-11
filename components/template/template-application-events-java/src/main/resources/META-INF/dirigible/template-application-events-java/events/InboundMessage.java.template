@@ -41,7 +41,7 @@ public class ${className}Consumer implements MessageHandler {
 
     @Override
     public String destination() {
-        return "${destination}";
+        return "${destinationJavaLiteral}";
     }
 
     @Override
