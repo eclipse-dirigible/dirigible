@@ -1019,6 +1019,89 @@
                 <artifactId>dom4j</artifactId>
                 <version>2.2.0</version>
             </dependency>
+            <!-- Several webjars declare their transitive dependencies with npm-style open version
+                 ranges. A range is resolved by fetching maven-metadata.xml from every remote on every
+                 build, so a transient metadata failure on any of them breaks dependency collection and
+                 fails the reactor before a single test runs; and because the range picks whatever is
+                 published at the time, the content of the shipped webjar is not a function of this
+                 repository. The entries below pin every such artifact reachable from the reactor to the
+                 version the ranges resolve to today, so the coordinates are fixed and come from the
+                 local repository. When bumping the webjar that drags them in, re-check the pins. -->
+            <!-- via ag-grid-community__all-modules (${ag-grid.version}) -->
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>ag-grid-community__core</artifactId>
+                <version>27.1.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>ag-grid-community__client-side-row-model</artifactId>
+                <version>27.1.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>ag-grid-community__csv-export</artifactId>
+                <version>27.1.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>ag-grid-community__infinite-row-model</artifactId>
+                <version>27.1.0</version>
+            </dependency>
+            <!-- via alpinejs (${alpinejs.version}) -->
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>vue__reactivity</artifactId>
+                <version>3.2.0-beta.8</version>
+            </dependency>
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>vue__shared</artifactId>
+                <version>3.2.0-beta.8</version>
+            </dependency>
+            <!-- via bpmn-visualization (${bpmn-visualization.version}); strnum through fast-xml-parser -->
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>typed-mxgraph__typed-mxgraph</artifactId>
+                <version>1.0.8</version>
+            </dependency>
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>es-toolkit</artifactId>
+                <version>1.39.10</version>
+            </dependency>
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>strnum</artifactId>
+                <version>2.3.0</version>
+            </dependency>
+            <!-- via codbex__harmonia (${harmonia.version}) -->
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>floating-ui__dom</artifactId>
+                <version>1.8.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>floating-ui__core</artifactId>
+                <version>1.8.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>floating-ui__utils</artifactId>
+                <version>0.2.12</version>
+            </dependency>
+            <!-- via i18next (${i18next.version}); regenerator-runtime through babel__runtime -->
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>babel__runtime</artifactId>
+                <version>8.0.0-alpha.6</version>
+            </dependency>
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>regenerator-runtime</artifactId>
+                <version>0.14.1</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
