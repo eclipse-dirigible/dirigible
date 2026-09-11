@@ -217,6 +217,7 @@ final class ModelParameterProcessor {
         List<Object> rowChecks = new ArrayList<>();
         List<Object> guardChecks = new ArrayList<>();
         List<Object> documentChecks = new ArrayList<>();
+        List<Object> forbidWhenGuards = new ArrayList<>();
         for (Map<String, Object> check : checks) {
             String kind = str(check, "kind");
             resolveMessageLiteral(check);
@@ -225,11 +226,20 @@ final class ModelParameterProcessor {
                 rowChecks.add(check);
             } else if ("guard".equals(kind)) {
                 guardChecks.add(check);
-            } else if ("requiredWhen".equals(kind)) {
-                // A conditionally required value is row-level unless it names the status it is needed
-                // at: without a gate it must hold on every user write, with one it is the repository's
-                // business, like every other gated check.
+            } else if ("requiredWhen".equals(kind) || "forbidWhen".equals(kind)) {
+                // A conditionally required or forbidden value is row-level unless it names the status it
+                // is enforced at: without a gate it must hold on every user write, with one it is the
+                // repository's business, like every other gated check.
                 (str(check, "status") == null || str(check, "status").isEmpty() ? rowChecks : documentChecks).add(check);
+                if ("forbidWhen".equals(kind)) {
+                    // The UI half (#7275): a forbidWhen that reads the composition master carries a
+                    // descriptor the detail-register template emits, so the master-detail panel hides
+                    // the child's Add/edit/delete affordance while the condition holds.
+                    List<Map<String, Object>> masterGuard = asMaps(check.get("masterGuard"));
+                    if (!masterGuard.isEmpty()) {
+                        forbidWhenGuards.add(masterGuard);
+                    }
+                }
             } else {
                 documentChecks.add(check);
             }
@@ -237,6 +247,7 @@ final class ModelParameterProcessor {
         entity.put("rowChecks", rowChecks);
         entity.put("guardChecks", guardChecks);
         entity.put("documentChecks", documentChecks);
+        entity.put("forbidWhenGuards", forbidWhenGuards);
     }
 
     /**

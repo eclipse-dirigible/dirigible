@@ -408,6 +408,38 @@ class ModelParameterProcessorTest {
     }
 
     @Test
+    void aForbidWhenSplitsByItsGateAndCollectsItsMasterGuard() {
+        Map<String, Object> term = new LinkedHashMap<>();
+        term.put("property", "Status");
+        term.put("equal", Boolean.TRUE);
+        term.put("value", "7");
+        Map<String, Object> ungated = new LinkedHashMap<>();
+        ungated.put("kind", "forbidWhen");
+        ungated.put("masterGuard", List.of(term));
+        Map<String, Object> gated = new LinkedHashMap<>();
+        gated.put("kind", "forbidWhen");
+        gated.put("status", "7");
+        Map<String, Object> entity = entity("SalesInvoiceCustomerPayment", "Payments", property("Amount", "DECIMAL"));
+        entity.put("checks", List.of(ungated, gated));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        // Like requiredWhen, an ungated forbidWhen holds on every user write (row checks) and a gated one
+        // is the repository's business.
+        assertEquals(1, ModelValues.asList(entity.get("rowChecks"))
+                                   .size());
+        assertEquals(1, ModelValues.asList(entity.get("documentChecks"))
+                                   .size());
+        // Only the one whose condition reads the composition master carries a UI guard the detail-register
+        // template emits so the master-detail panel hides the child's Add/edit/delete affordance.
+        List<Object> guards = ModelValues.asList(entity.get("forbidWhenGuards"));
+        assertEquals(1, guards.size());
+        assertEquals("Status", ModelValues.asMaps(guards.get(0))
+                                          .get(0)
+                                          .get("property"));
+    }
+
+    @Test
     void resolvesTheHopsAConditionalRequirementReadsItsValueThrough() {
         Map<String, Object> hop = new LinkedHashMap<>();
         hop.put("local", "hop0");

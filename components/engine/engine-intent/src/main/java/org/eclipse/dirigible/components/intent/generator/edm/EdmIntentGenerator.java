@@ -2165,17 +2165,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     continue; // the parser already reported it
                 }
                 checkMap.put("guard", guard);
-                List<Map<String, Object>> pathLoads = new ArrayList<>();
-                for (ResolvePathSupport.Hop hop : walker.hops()) {
-                    Map<String, Object> load = new LinkedHashMap<>();
-                    load.put("local", hop.local());
-                    load.put("sourceExpression", hop.sourceExpression());
-                    load.put("entity", hop.entity());
-                    load.put("perspective", hop.perspective());
-                    load.put("crossModel", hop.crossModel());
-                    load.put("targetModel", hop.targetModel());
-                    pathLoads.add(load);
-                }
+                List<Map<String, Object>> pathLoads = pathLoadsOf(walker);
                 if (!pathLoads.isEmpty()) {
                     checkMap.put("pathLoads", pathLoads);
                 }
@@ -2189,6 +2179,43 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     }
                     checkMap.put("status", String.valueOf(check.getStatus()));
                     checkMap.put("statusProperty", IntentNaming.pascalCase(gate.getName()));
+                }
+                checkMaps.add(checkMap);
+                continue;
+            }
+            if ("forbidWhen".equals(check.getKind())) {
+                // The reject-twin of requiredWhen (#7275): the condition compiled to a Java boolean, but
+                // now a term may read a value ONE HOP away (`SalesInvoice.Status == PAID`) so a child can
+                // refuse a write based on its parent - the hops the reader must load ride along exactly
+                // as requiredWhen's value path does. No value expression: the check rejects on the
+                // condition alone.
+                ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
+                String guard = forbidWhenGuard(entity, byName, walker, check.getWhen());
+                if (guard == null) {
+                    continue; // the parser already reported it
+                }
+                checkMap.put("guard", guard);
+                List<Map<String, Object>> pathLoads = pathLoadsOf(walker);
+                if (!pathLoads.isEmpty()) {
+                    checkMap.put("pathLoads", pathLoads);
+                }
+                // Same optional gate as requiredWhen: no gate = every user write (the controllers), a
+                // gate = the repository when the record carries that status.
+                if (check.getStatus() != null) {
+                    RelationIntent gate = entityStatusRelation(entity);
+                    if (gate == null) {
+                        continue; // the parser already reported it
+                    }
+                    checkMap.put("status", String.valueOf(check.getStatus()));
+                    checkMap.put("statusProperty", IntentNaming.pascalCase(gate.getName()));
+                }
+                // The UI half: when every term reads the composition MASTER the detail panel already
+                // holds, a descriptor lets the generated view hide the child's Add/edit/delete affordance
+                // while the condition holds - the fromStatus (#7068) mechanism, no extra fetch. Absent
+                // (a record-local or non-master term), the server 400/ValidationException still holds.
+                List<Map<String, Object>> masterGuard = forbidWhenMasterGuard(entity, byName, compositionParents, check.getWhen());
+                if (masterGuard != null) {
+                    checkMap.put("masterGuard", masterGuard);
                 }
                 checkMaps.add(checkMap);
                 continue;
@@ -2312,6 +2339,166 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      */
     private static String requiredWhenGuard(EntityIntent entity, Map<String, EntityIntent> byName, Object when) {
         return CheckSupport.condition(entity, byName, when);
+    }
+
+    /**
+     * The generated loads a check's resolved paths need, in load order - a prefix always precedes what
+     * hangs off it. Shared by {@code requiredWhen} (its value path) and {@code forbidWhen} (its
+     * condition's one-hop terms), which both read a {@code Relation.field} the reader must fetch first.
+     */
+    private static List<Map<String, Object>> pathLoadsOf(ResolvePathSupport.Walker walker) {
+        List<Map<String, Object>> pathLoads = new ArrayList<>();
+        for (ResolvePathSupport.Hop hop : walker.hops()) {
+            Map<String, Object> load = new LinkedHashMap<>();
+            load.put("local", hop.local());
+            load.put("sourceExpression", hop.sourceExpression());
+            load.put("entity", hop.entity());
+            load.put("perspective", hop.perspective());
+            load.put("crossModel", hop.crossModel());
+            load.put("targetModel", hop.targetModel());
+            pathLoads.add(load);
+        }
+        return pathLoads;
+    }
+
+    /**
+     * Compiles a {@code forbidWhen} condition into the Java boolean the generated reject tests. Each
+     * term is either the record's own property ({@code entity.Prop}) or a one-hop
+     * {@code Relation.field} whose parent the walker loads first - the added reach over
+     * {@code requiredWhen}, which is why a child can refuse a write on its parent's state. Rendered
+     * against each operand's DECLARED type (a to-one is compared by its integer foreign key), ANDed,
+     * and null when a comparison does not compile - the parser has already reported it, and a condition
+     * degrading to {@code true} would refuse every write.
+     *
+     * @param entity the entity carrying the check
+     * @param byName the local entities by name
+     * @param walker the shared path walker, which accumulates the hops the terms read through
+     * @param when the authored condition
+     * @return the Java expression, or {@code null} when a comparison does not compile
+     */
+    private static String forbidWhenGuard(EntityIntent entity, Map<String, EntityIntent> byName, ResolvePathSupport.Walker walker,
+            Object when) {
+        List<String> conditions = new ArrayList<>();
+        for (String term : CheckSupport.terms(when)) {
+            CheckSupport.Comparison comparison = CheckSupport.parse(term);
+            if (comparison == null) {
+                return null;
+            }
+            String access;
+            String type;
+            if (ResolvePathSupport.isPath(comparison.property())) {
+                ResolvePathSupport.Path path = walker.resolve(comparison.property());
+                if (!path.resolved()) {
+                    return null;
+                }
+                access = path.expression();
+                type = ResolvePathSupport.RELATION_TERMINAL.equals(path.terminalType()) ? "integer"
+                        : path.terminalType() != null ? path.terminalType() : inferGuardType(comparison.literal());
+            } else {
+                FieldIntent field = fieldOf(entity, comparison.property());
+                RelationIntent relation = field == null ? toOneOf(entity, comparison.property()) : null;
+                if (field == null && relation == null) {
+                    return null;
+                }
+                access = "entity." + IntentNaming.pascalCase(comparison.property());
+                type = field != null ? field.getType() : relationKeyType(relation, byName);
+            }
+            String literal = CheckSupport.javaLiteral(type, comparison.literal());
+            if (literal == null) {
+                return null;
+            }
+            conditions.add(CheckSupport.comparison(access, comparison.equal(), literal));
+        }
+        return conditions.isEmpty() ? null : String.join(" && ", conditions);
+    }
+
+    /**
+     * The guard type of a comparison against a cross-model terminal, whose declared type is not known
+     * here (its owner model is not loaded): inferred from the literal, which a cross-model status name
+     * has already been refused into a numeric seed id by the symbol resolver.
+     */
+    private static String inferGuardType(String literal) {
+        if (literal == null) {
+            return "string";
+        }
+        if (literal.startsWith("'") || literal.startsWith("\"")) {
+            return "string";
+        }
+        if (literal.matches("-?\\d+")) {
+            return "integer";
+        }
+        return "true".equals(literal) || "false".equals(literal) ? "boolean" : "string";
+    }
+
+    /**
+     * The UI descriptor for a {@code forbidWhen} whose every term reads the composition MASTER of this
+     * child (#7275): the master-detail panel already holds that record, so the generated view can hide
+     * the child's Add/edit/delete affordance while the condition holds, with no extra fetch - the same
+     * way {@code fromStatus} (#7068) stops a create-from button offering itself. Returns {@code null}
+     * (server-side only) unless the entity IS a composition child and EVERY term is a one-hop
+     * {@code <Master>.<field>} over that master - a record-local term is about the row being added, and
+     * a term over some other relation names a record the panel does not hold.
+     *
+     * @param entity the composition child carrying the check
+     * @param byName the local entities by name
+     * @param compositionParents each child's composition-master entity name
+     * @param when the authored condition
+     * @return the term descriptors ({@code property}/{@code equal}/{@code value}), or {@code null}
+     */
+    private static List<Map<String, Object>> forbidWhenMasterGuard(EntityIntent entity, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, Object when) {
+        String master = compositionParents.get(entity.getName());
+        if (master == null) {
+            return null;
+        }
+        List<Map<String, Object>> terms = new ArrayList<>();
+        for (String term : CheckSupport.terms(when)) {
+            CheckSupport.Comparison comparison = CheckSupport.parse(term);
+            if (comparison == null || !ResolvePathSupport.isPath(comparison.property())) {
+                return null;
+            }
+            String[] segments = comparison.property()
+                                          .split("\\.", -1);
+            if (segments.length != 2) {
+                return null;
+            }
+            RelationIntent relation = toOneOf(entity, segments[0]);
+            if (relation == null || !master.equals(relation.getTo())) {
+                return null;
+            }
+            Map<String, Object> descriptor = new LinkedHashMap<>();
+            descriptor.put("property", IntentNaming.pascalCase(segments[1]));
+            descriptor.put("equal", comparison.equal());
+            descriptor.put("value", CheckSupport.unquote(comparison.literal()));
+            terms.add(descriptor);
+        }
+        return terms.isEmpty() ? null : terms;
+    }
+
+    /** The entity's to-one relation of that name, or {@code null}. */
+    private static RelationIntent toOneOf(EntityIntent entity, String name) {
+        for (RelationIntent relation : entity.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && name != null && name.equals(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The declared type of a to-one relation's foreign key - the target's primary-key type, falling
+     * back to the integer intent keys always are when the target is owned by another model.
+     */
+    private static String relationKeyType(RelationIntent relation, Map<String, EntityIntent> byName) {
+        EntityIntent target = relation.getTo() == null ? null : byName.get(relation.getTo());
+        if (target != null) {
+            FieldIntent key = primaryKeyOf(target);
+            if (key != null && key.getType() != null) {
+                return key.getType();
+            }
+        }
+        return "integer";
     }
 
     /**

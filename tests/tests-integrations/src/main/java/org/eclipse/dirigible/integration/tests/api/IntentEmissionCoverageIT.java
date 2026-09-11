@@ -315,6 +315,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - name: EntryLine
                 checks:
                   - { kind: exactlyOne, fields: [debit, credit], message: "Exactly one of debit/credit" }
+                  # forbidWhen (#7275), UNGATED + one hop to the PARENT: a line may not be added to a
+                  # posted entry. The generated controller loads the parent Entry by FK and compares its
+                  # status; the EntryLine.detail.js panel hides Add/edit/delete when Entry.Status == POSTED.
+                  - { kind: forbidWhen, when: "Entry.Status == POSTED", message: "Cannot add a line to a posted entry" }
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: debit,  type: decimal }
@@ -1944,6 +1948,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String linePatternRegister = contentOf("gen/emission/js/components/pages/Entry/EntryLine.detail.js");
         assertTrue(linePatternRegister.contains("pattern: '^[A-Z]{3}-[0-9]{4}$'"),
                 "an item field pattern must reach the item-dialog column metadata, got: " + linePatternRegister);
+        // forbidWhen UI half (#7275): the same rule reaches the EntryLine.detail.js panel as a guard it
+        // evaluates against the master it already holds, so Add/edit/delete are hidden while Entry is
+        // POSTED - the server 400 still holds on every path, this only stops offering the click.
+        assertTrue(
+                linePatternRegister.contains("forbidWhen:") && linePatternRegister.contains("property: 'Status'")
+                        && linePatternRegister.contains("value: '2'"),
+                "a forbidWhen over the composition master must reach the detail register as a UI guard, got: " + linePatternRegister);
 
         // number: stampOn: create - the generated DAO must allocate from the DECLARED series by
         // name (the shape deliberately never appears in generated code - it is tenant data).
@@ -2084,6 +2095,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a composition child of an immutable master must emit the inherited lock into its REST controller");
         assertTrue(lineController.contains("EntryRepository masterRepository"),
                 "the inherited lock must consult the MASTER's repository, got: " + lineController);
+        // forbidWhen (#7275) UNGATED + one hop to the PARENT: the row-level REST validation loads the
+        // parent Entry by FK and refuses the write while it is POSTED - the reject-twin of requiredWhen,
+        // reading a value one hop away, with the status NAME resolved to its seed id.
+        assertTrue(
+                lineController.contains("EntryRepository().findById(hop0Fk)")
+                        && lineController.contains("java.util.Objects.equals((hop0 == null ? null : hop0.Status), 2)")
+                        && lineController.contains("Cannot add a line to a posted entry"),
+                "an ungated forbidWhen must load the parent hop and refuse the write on the REST controller, got: " + lineController);
         // The document's own line items are the same story through a different layout - and it is the
         // one where the child literally resums the master (BillLineRepository -> BillRepository).
         assertTrue(contentOf("gen/emission/api/bill/BillLineController.java").contains("requireMasterMutable"),

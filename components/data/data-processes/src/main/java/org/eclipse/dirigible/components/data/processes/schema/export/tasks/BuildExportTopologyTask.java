@@ -18,7 +18,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.sql.SQLException;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -64,6 +63,8 @@ public class BuildExportTopologyTask extends BaseExportTask {
             LOGGER.debug("Determined export topology {}", exportTopology);
             context.setExportTopology(exportTopology);
 
+        } catch (SchemaExportException ex) {
+            throw ex;
         } catch (SQLException | RuntimeException ex) {
             throw new SchemaExportException("Failed to export topology of schema [" + schema + "] in datasource [" + dataSource + "]", ex);
         }
@@ -71,14 +72,13 @@ public class BuildExportTopologyTask extends BaseExportTask {
 
     private Set<String> determineInitialTargetTables(DirigibleDataSource dataSource, String schema, Set<String> includedTables,
             Set<String> excludedTables) throws SQLException {
-        Set<String> targetTables;
-        if (includedTables.isEmpty()) {
-            List<String> schemaTables = DatabaseMetadataUtil.getTablesInSchema(dataSource, schema);
-            targetTables = null == schemaTables ? Collections.emptySet() : new HashSet<>(schemaTables);
-        } else {
-            targetTables = includedTables;
+        List<String> schemaTables = DatabaseMetadataUtil.getTablesInSchema(dataSource, schema);
+        if (null == schemaTables) {
+            throw new SchemaExportException("Schema [" + schema + "] does not exist in datasource [" + dataSource.getName()
+                    + "]. Schema names are case sensitive.");
         }
 
+        Set<String> targetTables = includedTables.isEmpty() ? new HashSet<>(schemaTables) : new HashSet<>(includedTables);
         targetTables.removeAll(excludedTables);
 
         return targetTables;

@@ -57,7 +57,8 @@ import ch.qos.logback.classic.Level;
  * <li>an amended source REWRITES its post in place - the same entry, the new amounts, never a
  * second entry;
  * <li>a redelivery of the same content is a no-op, so the loop is not simply "rewrite on every
- * event";
+ * event" - read off the line rows' IDENTITY, the only thing that tells a no-op from a rewrite that
+ * re-derives the same content;
  * <li>the rewrite stops once the created document has left the status the posting created it in -
  * somebody has acted on it, so the divergence is reported and left to a correcting entry.
  * </ol>
@@ -185,12 +186,25 @@ class IntentPostingAmendIT extends IntegrationTest {
         // ...and it is still the only one: an amend is not a second posting.
         assertEquals(entry, onlyEntryOf(doc), "an amended source must rewrite ITS post, never open a second one");
 
-        // A redelivery - the same loop with nothing edited - changes nothing at all. Without this the
-        // rewrite above would also pass on a handler that simply re-posted on every event.
+        // A redelivery - the same loop with nothing edited - changes nothing at all. Neither the line
+        // count nor the amounts can tell that apart from a rewrite: the rewrite keeps the SAME header
+        // and re-derives the very same two lines, so both readings are already true before the handler
+        // has looked at the event and stay true whichever branch it takes. The claim is therefore made
+        // on the line IDS, the one thing the rewrite path cannot keep - it deletes the rows it replaces
+        // and inserts the derived ones (#7298).
+        List<Integer> lines = lineIdsOf(entry);
         transition("RejectDoc", doc);
         transition("IssueDoc", doc);
+        // Read once the handler has demonstrably got PAST that event: a second document issued
+        // afterwards travels the same topic to the same durable subscriber, so its own post existing
+        // means the redelivery was consumed before it. Without that fence the assertion would run
+        // while the event was still in flight and pass on a rewrite-on-every-event handler too.
+        int fence = create(DOCS, "{\"Date\":\"2026-02-04\",\"Amount\":10}");
+        transition("IssueDoc", fence);
+        awaitLines(onlyEntryOf(fence), 10.0f);
         assertEquals(entry, onlyEntryOf(doc));
         awaitLines(entry, 1260.0f);
+        assertEquals(lines, lineIdsOf(entry), "a redelivery must leave the post it already wrote alone, its rows included");
 
         // Past the created document's own lifecycle the rewrite stops: the accountant posts the entry,
         // and from there a divergence is reported rather than silently overwritten - unwinding a
@@ -209,18 +223,52 @@ class IntentPostingAmendIT extends IntegrationTest {
         awaitLines(entry, 1260.0f);
     }
 
-    /** The single entry the source carries, asserting there is exactly one. */
+    /**
+     * The single entry the source carries, asserting there is exactly one.
+     *
+     * <p>
+     * The rows are picked out here rather than by a query parameter: the generated list endpoint
+     * filters by a COMPOSITION foreign key, and the back-reference to the source is a plain
+     * association, so {@code ?Doc=} is simply ignored and the whole table comes back.
+     */
     private int onlyEntryOf(int doc) {
+        String ofDoc = "findAll { it.Doc == " + doc + " }";
         AtomicInteger entry = new AtomicInteger();
         restAssuredExecutor.execute(() -> entry.set(given().when()
-                                                           .get(ENTRIES + "?Doc=" + doc)
+                                                           .get(ENTRIES)
                                                            .then()
                                                            .statusCode(200)
-                                                           .body("", hasSize(1))
+                                                           .body(ofDoc, hasSize(1))
                                                            .extract()
-                                                           .path("[0].Id")),
+                                                           .jsonPath()
+                                                           .getInt(ofDoc + "[0].Id")),
                 POSTING_TIMEOUT_SECONDS);
         return entry.get();
+    }
+
+    /**
+     * The ids of the entry's line rows, ascending - the identity only a genuine no-op keeps.
+     *
+     * <p>
+     * The rewrite path keeps the header ({@code targetRepository.update(target)}) and replaces the
+     * lines, so a redelivery that rewrote instead of returning early leaves the entry id, the line
+     * count and both amounts exactly as they were, and is visible only in these ids (#7298).
+     */
+    private List<Integer> lineIdsOf(int entry) {
+        AtomicReference<List<Integer>> ids = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> ids.set(given().when()
+                                                         .get(LINES + "?Entry=" + entry)
+                                                         .then()
+                                                         .statusCode(200)
+                                                         .body("", hasSize(2))
+                                                         .extract()
+                                                         .jsonPath()
+                                                         .getList("Id", Integer.class)),
+                POSTING_TIMEOUT_SECONDS);
+        return ids.get()
+                  .stream()
+                  .sorted()
+                  .toList();
     }
 
     /** The balanced pair the posting derives: one debit line and one credit line, both the amount. */

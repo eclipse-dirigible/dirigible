@@ -20,14 +20,18 @@ class DirigibleCleanupBean {
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleCleanupBean.class);
 
     private final DirigibleCleaner dirigibleCleaner;
+    private final PlatformSchedulersStopper platformSchedulersStopper;
 
-    DirigibleCleanupBean(DirigibleCleaner dirigibleCleaner) {
+    DirigibleCleanupBean(DirigibleCleaner dirigibleCleaner, PlatformSchedulersStopper platformSchedulersStopper) {
         this.dirigibleCleaner = dirigibleCleaner;
+        this.platformSchedulersStopper = platformSchedulersStopper;
     }
 
     @PreDestroy
     public void destroy() {
         LOGGER.info("Destroying [{}]. Calling cleaner...", this.getClass());
+        // the schedulers run on the schema the cleaner is about to drop - see PlatformSchedulersStopper
+        platformSchedulersStopper.stopSchedulers();
         dirigibleCleaner.cleanup();
     }
 }

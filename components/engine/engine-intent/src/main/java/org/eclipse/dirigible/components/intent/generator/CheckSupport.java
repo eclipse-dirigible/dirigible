@@ -41,12 +41,15 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
 public final class CheckSupport {
 
     /**
-     * One comparison of a condition: a property of the record against a literal - a number, a quoted
+     * One comparison of a condition: a property of the record - or, for a {@code forbidWhen}, a one-hop
+     * {@code Relation.field} so a child can test its parent - against a literal: a number, a quoted
      * string, a bare word (a status name is already its seed id here, resolved before the typed
-     * mapping) or a boolean.
+     * mapping) or a boolean. The optional {@code .segment} is what a {@code forbidWhen} adds over a
+     * {@code requiredWhen}, whose {@code when} stays record-local and refuses a dotted property at term
+     * validation.
      */
     public static final Pattern TERM =
-            Pattern.compile("\\s*(\\w+)\\s*(==|!=)\\s*('[^']*'|\"[^\"]*\"|-?\\d+|[A-Za-z_][A-Za-z0-9_\\-]*)\\s*");
+            Pattern.compile("\\s*(\\w+(?:\\.\\w+)?)\\s*(==|!=)\\s*('[^']*'|\"[^\"]*\"|-?\\d+|[A-Za-z_][A-Za-z0-9_\\-]*)\\s*");
 
     /** The field types a condition may compare - those with an exact, type-safe equality. */
     public static final Set<String> GUARD_TYPES = Set.of("string", "text", "integer", "int", "long", "boolean");

@@ -54,7 +54,7 @@ public final class ResolvePathSupport {
     static final String RECORD_LOCAL = "entity";
 
     /** The {@link Path#terminalType()} of a path whose last segment is a to-one relation. */
-    static final String RELATION_TERMINAL = "relation";
+    public static final String RELATION_TERMINAL = "relation";
 
     private ResolvePathSupport() {}
 

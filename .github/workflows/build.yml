@@ -161,21 +161,28 @@ jobs:
         run: mvn test -P testcontainers
 
   # The full IT suite is split ("sharded") into four disjoint slices selected by JUnit 5 tags, so
-  # the wall-clock time of a run is the slowest shard (~35 min) instead of the whole suite (~2h+):
+  # the wall-clock time of a run is the slowest shard instead of the whole suite (~2h30 serial):
   #   api     - every HTTP-level IT (untagged, i.e. everything not tagged "ui") bar the long poles
   #   ui      - the browser-driven ITs except the sample-project, camel and long-pole families
   #   samples - the sample-project clone/publish ITs ("sample") + the camel journeys still driven
   #             through the browser ("camel"), which is now only the two template starters - the
   #             route ITs themselves publish over HTTP and so live in "api"
   #   slow    - the long poles of both families ("slow"). Membership is a balancing decision, not a
-  #             semantic one: without it "api" (~48 min) and "ui" (~43 min) are the critical path
-  #             while "samples" idles at ~10 min. It is currently the api classes measured above
-  #             ~55 s and the browser journeys above ~110 s on the h2 leg (measured on the shard
-  #             logs of run 31883998354). Re-check the cut when the shard times drift apart again.
+  #             semantic one: without it "api" and "ui" are the critical path while "samples"
+  #             idles. It is currently the api classes measured above ~55 s and the browser
+  #             journeys above ~110 s on the h2 leg (measured on the shard logs of run
+  #             31883998354). Re-check the cut when the shard times drift apart again.
   # The shards partition the suite: api + ui + samples + slow = the complete IT set, and no IT is
   # selected by two of them. A new untagged IT lands in "api"; a new UI IT (extends
   # UserInterfaceIntegrationTest) lands in "ui" unless it is explicitly tagged "sample", "camel" or
   # "slow". Mistagging can only unbalance the shards, never drop an IT from the run.
+  #
+  # Measured on nightly run 34428729298 (h2 / postgresql): api 57 / 62 min, slow 42, ui 36 / 36,
+  # samples 13 / 13. "api" is the critical path and the "slow" tag cannot rebalance it: its 83
+  # classes cost a near-uniform ~40 s each, almost all of it the Spring context each class boots
+  # (@DirtiesContext AFTER_EACH_TEST_METHOD), so the shard grows by ~40 s per IT class added and
+  # has no long pole to move out. #7283 raised the budget rather than split it; splitting "api"
+  # needs a partition mechanism, not a tag.
   integration-tests-h2:
     runs-on: ubuntu-latest
     strategy:
@@ -190,10 +197,13 @@ jobs:
             groups: "ui & !slow & (sample | camel)"
           - name: slow
             groups: "slow"
-    # A green shard takes ~35 min (~40 on the PostgreSQL leg); a heap-exhausted JVM used to thrash
-    # for 4h+ before anyone noticed. Cap the job above the healthy time so hangs fail fast instead
-    # of burning runners.
-    timeout-minutes: 60
+    # The slowest green shard ("api") takes ~57 min on h2 and ~62 on PostgreSQL; a heap-exhausted
+    # JVM used to thrash for 4h+ before anyone noticed. Cap the job above the healthy time so hangs
+    # fail fast instead of burning runners - but far enough above it that a routine run is never
+    # cancelled: at 60 the PostgreSQL "api" shard was killed two classes short of finishing, which
+    # reads as infrastructure rather than as a test result (#7283). A single method can no longer
+    # hang indefinitely either - IntegrationTest bounds every one of them.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -236,6 +246,21 @@ jobs:
       # and the build green, so what ran is asserted by count instead of by the job's colour.
       # Failsafe's own failIfNoTests cannot cover this - scanning does find the IT classes, the tag
       # filter drops them afterwards - and every shard expression selects a non-empty set.
+      # A cancelled or failed shard must leave evidence behind (#7283): the job-level timeout kills
+      # the Maven step before the guard below ever runs, so without an always() upload the reports
+      # of every class that DID finish - and any thread dump TestStallWatchdog wrote for the one
+      # that did not - are thrown away with the runner.
+      - name: Upload integration test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 3
+          name: failsafe-reports-h2-${{ matrix.shard.name }}-${{ github.run_attempt }}
+          path: |
+            tests/tests-integrations/target/failsafe-reports
+            tests/tests-integrations/target/surefire-reports
+          if-no-files-found: ignore
+
       - name: Assert integration tests ran
         run: |
           ran=$(ls tests/tests-integrations/target/failsafe-reports/TEST-*.xml 2>/dev/null | wc -l)
@@ -275,7 +300,7 @@ jobs:
             groups: "ui & !slow & (sample | camel)"
           - name: slow
             groups: "slow"
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       POSTGRES_DB: testdb
       POSTGRES_SYSTEM_DB: systemdb
@@ -363,6 +388,21 @@ jobs:
       # asserted instead is that PostgreSQL was written to at all, through pg_stat_database's
       # counters, which survive that cleanup. A database an H2 fallback never connected to reports
       # zero rows inserted.
+      # A cancelled or failed shard must leave evidence behind (#7283): the job-level timeout kills
+      # the Maven step before the guard below ever runs, so without an always() upload the reports
+      # of every class that DID finish - and any thread dump TestStallWatchdog wrote for the one
+      # that did not - are thrown away with the runner.
+      - name: Upload integration test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 3
+          name: failsafe-reports-postgresql-${{ matrix.shard.name }}-${{ github.run_attempt }}
+          path: |
+            tests/tests-integrations/target/failsafe-reports
+            tests/tests-integrations/target/surefire-reports
+          if-no-files-found: ignore
+
       - name: Assert integration tests ran on PostgreSQL
         run: |
           ran=$(ls tests/tests-integrations/target/failsafe-reports/TEST-*.xml 2>/dev/null | wc -l)

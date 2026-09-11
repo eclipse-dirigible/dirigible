@@ -45,6 +45,15 @@ import com.codeborne.selenide.Selenide;
  */
 class ContextLockedParentHarmoniaIT extends UserInterfaceIntegrationTest {
 
+    /**
+     * The budget every poll in this class gets, replacing a fixed 40 x 250 ms = 10 s. 60 s is the cap
+     * the framework's own cross-frame element search uses, and it is a budget rather than a fixed
+     * attempt count so a loaded runner cannot shorten the wait (issue #7282).
+     */
+    private static final long POLL_TIMEOUT_MILLIS = 60_000;
+
+    private static final long POLL_INTERVAL_MILLIS = 250;
+
     private static final String PROJECT = "context-locked-it";
     private static final String WORKSPACE = "workspace";
     private static final String PROJECT_PATH = IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/" + PROJECT;
@@ -82,9 +91,27 @@ class ContextLockedParentHarmoniaIT extends UserInterfaceIntegrationTest {
             """;
 
     /**
+     * The child form's readiness, independent of which parent-control branch renders. The field row's
+     * label is emitted by both branches and is the anchor; its parent is the row's {@code x-h-field}
+     * wrapper, which Harmonia stamps with {@code data-slot="field"} as it processes it. That stamp is
+     * therefore proof that Alpine has walked the injected fragment - so by the time it is there, the
+     * two {@code x-if} branches inside the same row have been decided too. Polled before the control is
+     * classified, so a page that has not painted the form can no longer be reported as a form that
+     * painted without the control (issue #7282 - the flake was the shell rendering its DEFAULT route,
+     * and the old script classified that as {@code missing} exactly like the defect).
+     */
+    private static final String FORM_READY_STATE = """
+            var label = document.querySelector('label[for="f_SalesInvoice"]');
+            var field = label ? label.parentElement : null;
+            return field && field.getAttribute('data-slot') === 'field' ? 'ready' : 'not-rendered';
+            """;
+
+    /**
      * Classifies the parent control as the page rendered it: {@code locked:<label>} for the read-only
      * display, {@code free} for the combobox (its trigger is a button the select directive appends next
-     * to the bound input), {@code missing} when neither branch rendered.
+     * to the bound input), {@code missing} when the form rendered but neither branch produced a control
+     * - which is the defect this test guards, and is only ever reported once {@link #FORM_READY_STATE}
+     * has settled.
      */
     private static final String PARENT_CONTROL_STATE = """
             var e = document.getElementById('f_SalesInvoice');
@@ -138,20 +165,28 @@ class ContextLockedParentHarmoniaIT extends UserInterfaceIntegrationTest {
                 "the detail panel must name the master FK in the child form's URL, got: " + dialogSources);
     }
 
-    /** The parent control's state, polled until it settles on the expected one (or times out). */
+    /**
+     * The parent control's state, polled until it settles on the expected one (or times out) - after
+     * the form itself is confirmed rendered, so the two failure modes stay apart: a form that never
+     * painted fails here, naming the wait, and only a form that painted without a control reaches the
+     * caller's assertion as {@code missing}.
+     */
     private String parentControlState(String expected) {
+        assertEquals("ready", poll(FORM_READY_STATE, "ready"::equals), "the child form did not render within " + POLL_TIMEOUT_MILLIS / 1000
+                + "s - the page never reached this route, not the parent control this test classifies");
         return poll(PARENT_CONTROL_STATE, expected::equals);
     }
 
     private String poll(String script, Predicate<String> settled) {
+        long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MILLIS;
         String value = "";
-        for (int attempt = 0; attempt < 40; attempt++) {
+        do {
             value = Selenide.executeJavaScript(script);
             if (value != null && settled.test(value)) {
                 return value;
             }
-            Selenide.sleep(250);
-        }
+            Selenide.sleep(POLL_INTERVAL_MILLIS);
+        } while (System.currentTimeMillis() < deadline);
         return value;
     }
 

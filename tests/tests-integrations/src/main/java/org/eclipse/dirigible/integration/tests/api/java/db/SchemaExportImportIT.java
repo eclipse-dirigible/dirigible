@@ -28,6 +28,7 @@ import org.eclipse.dirigible.tests.framework.util.ResourceUtil;
 import org.eclipse.dirigible.tests.framework.util.TestConditionsChecker;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.history.HistoricProcessInstance;
+import org.flowable.job.api.Job;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -40,6 +41,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static io.restassured.RestAssured.given;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,6 +56,8 @@ public class SchemaExportImportIT extends IntegrationTest {
 
     private static final String SOURCE_DATA_SOURCE_NAME = "SOURCEDS";
     private static final String TARGET_DATA_SOURCE_NAME = "TARGETDS";
+    private static final String MISSING_SCHEMA = "MISSING_SCHEMA_7281";
+    private static final List<String> EXCLUDED_SYSTEM_TABLES = List.of("ACT_RU_VARIABLE", "ACT_RU_JOB");
 
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
@@ -308,18 +312,30 @@ public class SchemaExportImportIT extends IntegrationTest {
 
     @Test
     void testSystemDBExportImport() throws SQLException {
-        String exportProcessId = triggerSystemDBExportProcess();
+        DirigibleDataSource systemDataSource = dataSourcesManager.getSystemDataSource();
+        String systemSchema = getSchema(systemDataSource);
+
+        String exportProcessId = triggerSystemDBExportProcess(systemSchema);
+        // a schema the datasource does not have now fails the export process, so this assertion is what
+        // guards the schema being read from the datasource instead of hardcoded
         assertProcessExecutedSuccessfully(exportProcessId);
+
+        // The import recreates each table from the type names the SOURCE datasource reported and feeds
+        // them to the dialect independent DataType enum, which knows none of PostgreSQL's serial and
+        // float8 - so an export taken from a PostgreSQL SystemDB cannot be imported anywhere yet
+        // (issue #7322). The round trip is therefore asserted where the platform can perform it.
+        assumeTrue(systemDataSource.isOfType(DatabaseSystem.H2),
+                "Skipping the import of the SystemDB export since its type names cannot be imported yet - see issue #7322");
 
         createH2DataSource(TARGET_DATA_SOURCE_NAME);
 
-        assertTablesCount(TARGET_DATA_SOURCE_NAME, "PUBLIC", 0);
+        assertTablesCount(TARGET_DATA_SOURCE_NAME, systemSchema, 0);
 
         String importProcessId = triggerSystemDBImportProcess();
         assertProcessExecutedSuccessfully(importProcessId);
 
         DirigibleDataSource dataSource = dataSourcesManager.getDataSource(TARGET_DATA_SOURCE_NAME);
-        List<String> createdTables = DatabaseMetadataUtil.getTablesInSchema(dataSource, "PUBLIC");
+        List<String> createdTables = DatabaseMetadataUtil.getTablesInSchema(dataSource, systemSchema);
         assertThat(createdTables).hasSizeGreaterThan(0);
     }
 
@@ -333,18 +349,109 @@ public class SchemaExportImportIT extends IntegrationTest {
         return triggerImportProcess(body);
     }
 
-    private String triggerSystemDBExportProcess() {
+    private String triggerSystemDBExportProcess(String systemSchema) throws SQLException {
         // exclude Flowable tables which are related to the Flowable export process execution
         // if not excluded, import will fail due to import issues related to table constraints
         String body = """
                 {
-                    "dataSource": "SystemDB",
-                    "schema": "PUBLIC",
+                    "dataSource": "%s",
+                    "schema": "%s",
                     "exportPath": "/systemdb-export-folder",
                     "includedTables": [],
-                    "excludedTables": ["ACT_RU_VARIABLE", "ACT_RU_JOB"]
+                    "excludedTables": [%s]
                 }
-                """;
+                """.formatted(systemDataSourceName(), systemSchema, excludedSystemTables(systemSchema));
         return triggerExportProcess(body);
+    }
+
+    /**
+     * The export matches a table name exactly as the datasource reports it - upper case on H2, lower
+     * case on PostgreSQL - so the names to exclude are taken from the datasource rather than written as
+     * literals.
+     *
+     * @param systemSchema the schema of the system datasource
+     * @return the excluded table names as JSON array elements
+     * @throws SQLException the SQL exception
+     */
+    private String excludedSystemTables(String systemSchema) throws SQLException {
+        List<String> systemTables = DatabaseMetadataUtil.getTablesInSchema(dataSourcesManager.getSystemDataSource(), systemSchema);
+
+        return systemTables.stream()
+                           .filter(table -> EXCLUDED_SYSTEM_TABLES.stream()
+                                                                  .anyMatch(excluded -> excluded.equalsIgnoreCase(table)))
+                           .map(table -> "\"" + table + "\"")
+                           .collect(Collectors.joining(", "));
+    }
+
+    private String systemDataSourceName() {
+        return dataSourcesManager.getSystemDataSource()
+                                 .getName();
+    }
+
+    /**
+     * The schema of a datasource is a property of that datasource - PUBLIC on H2, public on PostgreSQL
+     * - and the metadata lookup behind the export matches it case sensitively, so it must never be
+     * hardcoded.
+     *
+     * @param dataSource the data source
+     * @return the schema the connections of this datasource are opened in
+     * @throws SQLException the SQL exception
+     */
+    private String getSchema(DirigibleDataSource dataSource) throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            return connection.getSchema();
+        }
+    }
+
+    @Test
+    void testExportOfMissingSchemaFailsTheProcess() {
+        String body = """
+                {
+                    "dataSource": "%s",
+                    "schema": "%s",
+                    "exportPath": "/missing-schema-export-folder",
+                    "includedTables": [],
+                    "excludedTables": []
+                }
+                """.formatted(systemDataSourceName(), MISSING_SCHEMA);
+
+        String exportProcessId = triggerExportProcess(body);
+
+        Job failedJob = awaitFailedJob(exportProcessId);
+        assertThat(failedJob.getExceptionMessage()).contains(MISSING_SCHEMA);
+        assertThat(isProcessCompletedSuccessfully(exportProcessId)).isFalse();
+
+        processEngine.getRuntimeService()
+                     .deleteProcessInstance(exportProcessId, "Cleanup of " + MISSING_SCHEMA + " export test");
+    }
+
+    /**
+     * A failing asynchronous service task is parked as a retrying timer job carrying the failure
+     * message, and lands in the dead letter queue once the retries are exhausted.
+     *
+     * @param processInstanceId the process instance id
+     * @return the job holding the failure
+     */
+    private Job awaitFailedJob(String processInstanceId) {
+        AwaitilityExecutor.execute("The export process " + processInstanceId + " did not fail for the expected time.",
+                () -> await().atMost(60, TimeUnit.SECONDS)
+                             .pollInterval(1, TimeUnit.SECONDS)
+                             .until(() -> failedJob(processInstanceId) != null));
+
+        return failedJob(processInstanceId);
+    }
+
+    private Job failedJob(String processInstanceId) {
+        Job timerJob = processEngine.getManagementService()
+                                    .createTimerJobQuery()
+                                    .processInstanceId(processInstanceId)
+                                    .singleResult();
+        if (null != timerJob && null != timerJob.getExceptionMessage()) {
+            return timerJob;
+        }
+        return processEngine.getManagementService()
+                            .createDeadLetterJobQuery()
+                            .processInstanceId(processInstanceId)
+                            .singleResult();
     }
 }

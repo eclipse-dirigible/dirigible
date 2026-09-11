@@ -52,6 +52,13 @@ final class StatusSymbolResolver {
     private static final Pattern COMPARISON =
             Pattern.compile("(\\b[A-Za-z_][A-Za-z0-9_]*\\b)\\s*(==|!=|<>|<=|>=|=|<|>)\\s*([A-Za-z_][A-Za-z0-9_]*)\\b");
 
+    /**
+     * A {@code forbidWhen} one-hop comparison {@code <Relation>.<field> ==|!= <NAME>} - the whole term,
+     * so the name on the right resolves against the RELATION TARGET's nomenclature rather than the
+     * record's own.
+     */
+    private static final Pattern RELATION_COMPARISON = Pattern.compile("\\s*(\\w+)\\.(\\w+)\\s*(==|!=)\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*");
+
     /** The operators for which a status NAME is meaningful - a name has no ordering. */
     private static final Set<String> EQUALITY = Set.of("==", "!=", "<>", "=");
 
@@ -195,8 +202,16 @@ final class StatusSymbolResolver {
                 putResolved(check, "status", status, subject + " status");
                 putResolved(check, "setStatus", status, subject + " setStatus");
                 // A requiredWhen condition may be about the status itself ("required once ISSUED"), so
-                // it resolves like every other guard - the terms about other properties pass through.
-                rewriteWhen(check, statusRelation, status, subject + " when");
+                // it resolves like every other guard - the terms about other properties pass through. A
+                // forbidWhen additionally reads a parent's status one hop away (`SalesInvoice.Status ==
+                // PAID`), which resolves against the RELATION TARGET's nomenclature, not the record's -
+                // so it is routed to its own resolver, which falls back to the record-local rewrite for
+                // its record-own terms.
+                if ("forbidwhen".equals(lower(text(check, "kind")))) {
+                    rewriteForbidWhen(entityName, check, statusRelation, status, subject + " when");
+                } else {
+                    rewriteWhen(check, statusRelation, status, subject + " when");
+                }
             }
         }
     }
@@ -665,6 +680,61 @@ final class StatusSymbolResolver {
         } else if (value instanceof String expression) {
             put(owner, "when", rewriteExpression(expression, statusRelation, target, subject));
         }
+    }
+
+    /**
+     * Rewrite a {@code forbidWhen} guard in place - each term either a one-hop
+     * {@code <Relation>.<field> ==|!= <NAME>} (dirigible #7275), whose name resolves against the
+     * RELATION TARGET's nomenclature, or a record-local comparison that defers to the ordinary
+     * record-scoped rewrite. A cross-model relation's nomenclature is seeded in its owner model, which
+     * this parser cannot read, so a name there is refused with the numeric-id fallback - as every
+     * cross-model status reference is.
+     */
+    @SuppressWarnings("unchecked")
+    private void rewriteForbidWhen(String entityName, Map<?, ?> check, String ownStatusRelation, Target ownStatus, String subject) {
+        Object value = check.get("when");
+        if (value instanceof List<?> list) {
+            List<Object> mutable = (List<Object>) list;
+            for (int i = 0; i < mutable.size(); i++) {
+                if (mutable.get(i) instanceof String term) {
+                    mutable.set(i, rewriteForbidWhenTerm(entityName, term, ownStatusRelation, ownStatus, subject));
+                }
+            }
+        } else if (value instanceof String term) {
+            put(check, "when", rewriteForbidWhenTerm(entityName, term, ownStatusRelation, ownStatus, subject));
+        }
+    }
+
+    private String rewriteForbidWhenTerm(String entityName, String term, String ownStatusRelation, Target ownStatus, String subject) {
+        Matcher matcher = RELATION_COMPARISON.matcher(term);
+        if (!matcher.matches()) {
+            // A record-local term (the child's own status/flag): resolve against the entity's own
+            // nomenclature exactly as every other record-scoped guard does.
+            return rewriteExpression(term, ownStatusRelation, ownStatus, subject);
+        }
+        String relationName = matcher.group(1);
+        String field = matcher.group(2);
+        String name = matcher.group(4);
+        if (INTEGER.matcher(name)
+                   .matches()) {
+            return term; // already a seed id
+        }
+        Map<?, ?> relation = toOneRelation(entityName, relationName);
+        if (relation == null) {
+            return term; // the parser reports the unknown relation
+        }
+        String targetEntity = text(relation, "to");
+        String targetStatusRelation = statusRelationName(targetEntity);
+        if (targetStatusRelation == null || !targetStatusRelation.equalsIgnoreCase(field)) {
+            return term; // not the target's status field - an ordinary column comparison, left alone
+        }
+        if (text(relation, "model") != null) {
+            issues.add(subject + " names the status [" + name + "] of [" + targetEntity + "], which belongs to model ["
+                    + text(relation, "model") + "] and is seeded there - a cross-model status must be referenced by its numeric seed id");
+            return term;
+        }
+        Integer id = resolveSymbol(name, statusOf(targetEntity), subject);
+        return id == null ? term : relationName + "." + field + " " + matcher.group(3) + " " + id;
     }
 
     /**
