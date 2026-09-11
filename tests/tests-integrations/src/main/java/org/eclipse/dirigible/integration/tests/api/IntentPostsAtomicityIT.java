@@ -92,6 +92,8 @@ class IntentPostsAtomicityIT extends IntegrationTest {
                 fields:
                   - { name: id,       type: integer, primaryKey: true, generated: true }
                   - { name: quantity, type: decimal, precision: 18, scale: 2, required: true }
+                  - { name: factor,   type: decimal, precision: 18, scale: 2 }
+                  - { name: sequence, type: long }
                 relations:
                   - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue }
 
@@ -116,6 +118,8 @@ class IntentPostsAtomicityIT extends IntegrationTest {
                 idempotentBy: GoodsIssue
                 set:
                   Quantity: item.Quantity
+                  Factor: -1.5
+                  Sequence: 7
               - name: goodsIssueNote
                 forEntity: GoodsIssue
                 event: 2
@@ -177,6 +181,18 @@ class IntentPostsAtomicityIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("findAll { it.GoodsIssue == " + issue + " }.Quantity.sum()", equalTo(8.0)));
+
+        // #7287: the two constants are written to a DECIMAL and a LONG column. A bare `-1.5` / `7` in
+        // the generated assignment does not compile (the columns are a BigDecimal and a Long), so this
+        // whole run - generate, publish, compile, post - is the proof that they are rendered typed:
+        // nothing above would have produced a row at all.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/stockmovement/StockMovementController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.GoodsIssue == " + issue
+                                                         + " }.every { it.Factor.toString().startsWith('-1.5')"
+                                                         + " && it.Sequence.toString() == '7' }", equalTo(true)));
     }
 
     private void transition(String name, int id) {

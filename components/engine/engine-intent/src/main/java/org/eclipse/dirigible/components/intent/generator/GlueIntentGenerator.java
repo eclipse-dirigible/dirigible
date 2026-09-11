@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.ide.template.service.model.JavaLiterals;
 import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport.FieldLoad;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
@@ -1946,7 +1947,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                 .entrySet()) {
                 Map<String, String> pair = new LinkedHashMap<>();
                 pair.put("field", IntentNaming.pascalCase(f.getKey()));
-                pair.put("expr", postSetExpr(f.getValue()));
+                pair.put("expr", postSetExpr(f.getValue(), PostSetSupport.targetType(target, byName, f.getKey())));
                 assigns.add(pair);
             }
             e.put("assigns", assigns);
@@ -1962,11 +1963,18 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * literal, and a value that reads as an expression this renderer cannot compile never reaches here
      * - the parser refuses it.
      *
+     * <p>
+     * A constant is rendered for the TYPE of the column it is assigned to, which the target entity
+     * carries: an intent {@code decimal} / {@code double} column is a {@code BigDecimal} in the
+     * generated entity and a {@code long} one a {@code Long}, so the bare number the renderer used to
+     * emit did not compile (dirigible #7287).
+     *
      * @param raw the authored value
+     * @param type the target column's type
      * @return the Java expression
      */
-    private static String postSetExpr(String raw) {
-        return PostSetSupport.expression(raw);
+    private static String postSetExpr(String raw, PostSetSupport.TargetType type) {
+        return PostSetSupport.expression(raw, type);
     }
 
     /** Test hook: build the {@code posts} glue collection without a repository. */
@@ -3062,9 +3070,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /** A YAML scalar as a Java literal: numbers bare, everything else a quoted string. */
     private static String javaLiteral(Object value) {
         // A Boolean written as a String would filter a boolean column with the text "true" and match
-        // nothing; the backslash is escaped before the quote so a value carrying either cannot close the
-        // literal early. Statuses arrive already resolved to ids, so a lifecycle filter takes the bare
-        // integer branch.
+        // nothing. Statuses arrive already resolved to ids, so a lifecycle filter takes the bare integer
+        // branch. The quoted branch goes through the ONE escape helper (dirigible #7287) - a local
+        // backslash-then-quote pass survived a quote but not a newline, which closes the literal too.
         if (value instanceof Boolean) {
             return String.valueOf(value);
         }
@@ -3072,9 +3080,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (v.matches("-?\\d+")) {
             return v;
         }
-        return '"' + v.replace("\\", "\\\\")
-                      .replace("\"", "\\\"")
-                + '"';
+        return '"' + JavaLiterals.escape(v) + '"';
     }
 
     /**
