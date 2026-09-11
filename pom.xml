@@ -1060,7 +1060,7 @@
             <dependency>
                 <groupId>org.webjars.npm</groupId>
                 <artifactId>es-toolkit</artifactId>
-                <version>1.39.10</version>
+                <version>1.51.0</version>
             </dependency>
             <dependency>
                 <groupId>org.webjars.npm</groupId>
