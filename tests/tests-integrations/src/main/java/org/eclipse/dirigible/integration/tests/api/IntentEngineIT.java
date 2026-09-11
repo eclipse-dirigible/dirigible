@@ -754,6 +754,7 @@ class IntentEngineIT extends IntegrationTest {
         assertGlue();
         assertSettings();
         assertAppTestManifest();
+        assertGenerationDescriptors();
     }
 
     @Test
@@ -5364,6 +5365,28 @@ class IntentEngineIT extends IntegrationTest {
         // the multilingual setting entity is flagged
         assertTrue(manifest.contains("\"name\": \"Country\"") && manifest.contains("\"multilingual\": true"),
                 "the multilingual Country entity should be flagged");
+    }
+
+    /**
+     * Every code generation of the project keeps its own {@code .gen} descriptor (#7057).
+     *
+     * <p>
+     * This project is the reproducer's shape: its model and its glue are {@code orders.model} and
+     * {@code orders.glue}, two model files of one project differing only in extension, and one Generate
+     * runs a code generation against each. Named after the base name alone, both descriptors were
+     * written to {@code orders.gen} and the survivor described only the generation that ran last - the
+     * model generation's parameters, the whole perspectives/entities tree, were simply gone from the
+     * record a regeneration reads.
+     */
+    private void assertGenerationDescriptors() {
+        assertTrue(resource("orders.model.gen").exists(), "the model generation should keep its own descriptor");
+        assertTrue(resource("orders.glue.gen").exists(), "the glue generation should keep its own descriptor");
+        assertTrue(contentOf("orders.model.gen").contains("template-application-ui-harmonia-java"),
+                "the model descriptor should record the full-stack template it was generated with");
+        assertTrue(contentOf("orders.model.gen").contains("\"perspectives\""),
+                "the model descriptor should carry the parameter graph a regeneration replays");
+        assertTrue(contentOf("orders.glue.gen").contains("template-application-events-java"),
+                "the glue descriptor should record the glue template it was generated with");
     }
 
     private void assertSettings() {

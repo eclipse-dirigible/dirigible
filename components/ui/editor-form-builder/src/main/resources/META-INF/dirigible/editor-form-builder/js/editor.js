@@ -17,6 +17,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
     const dialogHub = new DialogHub();
     const contextMenuHub = new ContextMenuHub();
     let genFile = '';
+    let legacyGenFile = '';
     let workspace = '';
     let formContainer;
     $scope.formSelected = false;
@@ -2654,8 +2655,15 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
         }
     };
 
+    // The generation descriptor is named after the whole model file ('leave-request.form.gen') since
+    // #7057, so that two model files of one project differing only in extension keep their own
+    // record. A project generated before that carries the base-name form ('leave-request.gen'),
+    // which is still the record of its generation - hence the fallback.
+    const resolveGenFile = () => WorkspaceService.resourceExists(genFile).then(() => genFile,
+        () => WorkspaceService.resourceExists(legacyGenFile).then(() => legacyGenFile));
+
     const checkGenFile = () => {
-        WorkspaceService.resourceExists(genFile).then(() => {
+        resolveGenFile().then(() => {
             $scope.$evalAsync(() => {
                 $scope.canRegenerate = true;
             });
@@ -2744,15 +2752,7 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
     $scope.regenerate = () => {
         $scope.shortcuts();
         dialogHub.showBusyDialog('Loading data');
-        WorkspaceService.loadContent(genFile).then((response) => {
-            let { models, perspectives, templateId, filePath, workspaceName, projectName, ...params } = response.data;
-            if (!response.data.templateId) {
-                chooseTemplate(response.data.projectName, response.data.filePath, params);
-            } else {
-                dialogHub.showBusyDialog('Regenerating');
-                generateFromModel(response.data.projectName, response.data.filePath, response.data.templateId, params);
-            }
-        }, (error) => {
+        const onError = (error) => {
             console.error(error);
             dialogHub.closeBusyDialog();
             dialogHub.showAlert({
@@ -2761,7 +2761,16 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                 type: AlertTypes.Error,
                 preformatted: true,
             });
-        });
+        };
+        resolveGenFile().then((path) => WorkspaceService.loadContent(path).then((response) => {
+            let { models, perspectives, templateId, filePath, workspaceName, projectName, ...params } = response.data;
+            if (!response.data.templateId) {
+                chooseTemplate(response.data.projectName, response.data.filePath, params);
+            } else {
+                dialogHub.showBusyDialog('Regenerating');
+                generateFromModel(response.data.projectName, response.data.filePath, response.data.templateId, params);
+            }
+        }, onError), onError);
     };
 
     layoutHub.onFocusEditor((data) => {
@@ -2772,7 +2781,8 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
         if (data.path === dataParameters.filePath) {
             $scope.$evalAsync(() => {
                 dataParameters = ViewParameters.get();
-                genFile = dataParameters.filePath.substring(0, dataParameters.filePath.lastIndexOf('.')) + '.gen';
+                genFile = dataParameters.filePath + '.gen';
+                legacyGenFile = dataParameters.filePath.substring(0, dataParameters.filePath.lastIndexOf('.')) + '.gen';
                 workspace = dataParameters.filePath.substring(dataParameters.filePath.indexOf('/', 1), 1);
                 // loadFileContents(); // TODO: Make dynamic data reload possible
             });
@@ -2798,7 +2808,8 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
         $scope.state.error = true;
         $scope.errorMessage = 'The \'filePath\' data parameter is missing.';
     } else {
-        genFile = dataParameters.filePath.substring(0, dataParameters.filePath.lastIndexOf('.')) + '.gen';
+        genFile = dataParameters.filePath + '.gen';
+        legacyGenFile = dataParameters.filePath.substring(0, dataParameters.filePath.lastIndexOf('.')) + '.gen';
         workspace = dataParameters.filePath.substring(dataParameters.filePath.indexOf('/', 1), 1);
         angular.element($document[0]).ready(() => {
             formContainer = $document[0].getElementById('formContainer');

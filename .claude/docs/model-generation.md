@@ -23,6 +23,12 @@ rides on — runs entirely in Java, in `components/ide/ide-template`
 - **The Mustache engine writes into the parameter map it is handed** (it adds an indexed twin of every
   collection), so `ModelTemplateRenderer` copies the context per invocation. Without that, the
   artefacts land in the `.gen` descriptor, which is re-read on the next regeneration and accumulates.
+- **The `.gen` descriptor is named after the model file's whole name** — `myapp.model.gen`,
+  `myapp.glue.gen`, `OrdersByCustomer.report.gen` — so every generation of a project keeps its own
+  record. Named after the base name alone (#7057) a project's model and glue generations both wrote
+  `myapp.gen` and the survivor described only the one that ran last. The readers (the entity / report /
+  form-builder editors' Regenerate, `ProjectDeployer`) accept the legacy base-name form as well,
+  because a project generated earlier has it committed.
 - **The intent Generate is one call**: `IntentGenerationService` writes the model files and then runs
   the `.settings` recipes through this pipeline itself, reporting each one's outcome in
   `codeGenerations` (`generated`, plus `error`). No client replays a plan any more.
