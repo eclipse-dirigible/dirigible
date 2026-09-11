@@ -14,6 +14,7 @@ import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
+import org.eclipse.dirigible.tests.framework.util.SleepUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Component;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.containsString;
+import static org.junit.jupiter.api.Assertions.fail;
 
 @Lazy
 @Component
@@ -35,6 +37,8 @@ public class IDE {
     private static final String PASSWORD_FIELD_ID = "password";
     private static final String SUBMIT_TYPE = "submit";
     private static final String SIGN_IN_BUTTON_TEXT = "Sign in";
+    private static final long LOGIN_COMPLETION_TIMEOUT_MILLIS = 30_000;
+    private static final long LOGIN_COMPLETION_POLL_MILLIS = 500;
 
     private final Browser browser;
     private final String username;
@@ -120,6 +124,27 @@ public class IDE {
         browser.enterTextInElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.ID, USERNAME_FIELD_ID, username);
         browser.enterTextInElementByAttributePattern(HtmlElementType.INPUT, HtmlAttribute.ID, PASSWORD_FIELD_ID, password);
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.TYPE, SUBMIT_TYPE, SIGN_IN_BUTTON_TEXT);
+        awaitLoginCompleted();
+    }
+
+    /**
+     * Waits for the sign-in form to be replaced by the page the login redirects to. Clicking Sign in
+     * only SUBMITS the form, so a caller that navigates straight afterwards raced the login: the app
+     * URL was requested before the session existed, Spring saved it and answered with the login
+     * redirect, and the request it saves never carries the fragment the browser did not send - so a
+     * deep link into a generated SPA silently lost its route and the shell rendered its default page
+     * instead (issue #7282).
+     */
+    private void awaitLoginCompleted() {
+        long deadline = System.currentTimeMillis() + LOGIN_COMPLETION_TIMEOUT_MILLIS;
+        do {
+            if (!isLoginPageOpened()) {
+                LOGGER.info("Logged in");
+                return;
+            }
+            SleepUtil.sleepMillis(LOGIN_COMPLETION_POLL_MILLIS);
+        } while (System.currentTimeMillis() < deadline);
+        fail("The sign-in page is still open after " + LOGIN_COMPLETION_TIMEOUT_MILLIS / 1000 + "s - the login did not complete");
     }
 
     private boolean isLoginPageOpened() {
