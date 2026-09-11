@@ -18,6 +18,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 		let contents;
 		let modelFile = '';
 		let genFile = '';
+		let legacyGenFile = '';
 		let fileWorkspace = '';
 		$scope.canRegenerate = false;
 		$scope.errorMessage = 'An unknown error was encountered. Please see console for more information.';
@@ -79,8 +80,15 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 			}
 		};
 
+		// The generation descriptor is named after the whole model file ('myapp.model.gen') since
+		// #7057, so that two model files of one project differing only in extension keep their own
+		// record. A project generated before that carries the base-name form ('myapp.gen'), which is
+		// still the record of its generation - hence the fallback.
+		const resolveGenFile = () => WorkspaceService.resourceExists(genFile).then(() => genFile,
+			() => WorkspaceService.resourceExists(legacyGenFile).then(() => legacyGenFile));
+
 		$scope.checkGenFile = () => {
-			WorkspaceService.resourceExists(genFile).then(() => {
+			resolveGenFile().then(() => {
 				$scope.canRegenerate = true;
 			}, () => {
 				$scope.canRegenerate = false;
@@ -217,15 +225,7 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 		$scope.regenerate = () => {
 			dialogHub.showBusyDialog('Regenerating');
 			$scope.save();
-			WorkspaceService.loadContent(genFile).then((response) => {
-				let { models, perspectives, templateId, filePath, workspaceName, projectName, ...params } = response.data;
-				if (!response.data.templateId) {
-					$scope.chooseTemplate(response.data.projectName, response.data.filePath, params);
-				} else {
-					dialogHub.showBusyDialog('Regenerating from model');
-					$scope.generateFromModel(response.data.projectName, response.data.filePath, response.data.templateId, params);
-				}
-			}, (error) => {
+			const onError = (error) => {
 				console.error(error);
 				dialogHub.showAlert({
 					title: 'Unable to load model file',
@@ -234,7 +234,16 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 					preformatted: false,
 				});
 				dialogHub.closeBusyDialog();
-			});
+			};
+			resolveGenFile().then((path) => WorkspaceService.loadContent(path).then((response) => {
+				let { models, perspectives, templateId, filePath, workspaceName, projectName, ...params } = response.data;
+				if (!response.data.templateId) {
+					$scope.chooseTemplate(response.data.projectName, response.data.filePath, params);
+				} else {
+					dialogHub.showBusyDialog('Regenerating from model');
+					$scope.generateFromModel(response.data.projectName, response.data.filePath, response.data.templateId, params);
+				}
+			}, onError), onError);
 		};
 
 		layoutHub.onFocusEditor((data) => {
@@ -246,7 +255,8 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 				$scope.$evalAsync(() => {
 					$scope.dataParameters = ViewParameters.get();
 					modelFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.model';
-					genFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
+					genFile = modelFile + '.gen';
+					legacyGenFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
 					fileWorkspace = $scope.dataParameters.filePath.substring(1, $scope.dataParameters.filePath.indexOf('/', 1));
 				});
 			};
@@ -1552,7 +1562,8 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 			$scope.errorMessage = "The 'contentType' data parameter is missing.";
 		} else {
 			modelFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.model';
-			genFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
+			genFile = modelFile + '.gen';
+			legacyGenFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
 			fileWorkspace = $scope.dataParameters.filePath.substring(1, $scope.dataParameters.filePath.indexOf('/', 1));
 			loadFileContents();
 		}

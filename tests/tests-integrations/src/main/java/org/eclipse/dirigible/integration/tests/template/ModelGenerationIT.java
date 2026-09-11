@@ -243,7 +243,10 @@ class ModelGenerationIT extends IntegrationTest {
             }
             problems.addAll(unresolvedReferences(label, file.getKey(), file.getValue()));
         }
-        String descriptorPath = baseName(fixture) + DESCRIPTOR_EXTENSION;
+        // Named after the model file's whole name, so two model files of one project differing only in
+        // extension ('orders.model' and 'orders.glue') keep their own record rather than overwriting
+        // each other's (#7057).
+        String descriptorPath = fixture + DESCRIPTOR_EXTENSION;
         String descriptor = rendered.get(descriptorPath);
         if (descriptor == null) {
             problems.add("[" + label + "] rendered no " + descriptorPath + " descriptor, which regeneration reads to decide what changed");

@@ -15,6 +15,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	const layoutHub = new LayoutHub();
 	const dialogHub = new DialogHub();
 	let genFile = '';
+	let legacyGenFile = '';
 	let workspace = '';
 	let contents;
 	$scope.changed = false;
@@ -189,18 +190,17 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		loadDatabasesMetadata();
 	};
 
+	// The generation descriptor is named after the whole model file ('revenue.report.gen') since
+	// #7057, so that two model files of one project differing only in extension keep their own
+	// record. A project generated before that carries the base-name form ('revenue.gen'), which is
+	// still the record of its generation - hence the fallback.
+	const resolveGenFile = () => WorkspaceService.resourceExists(genFile).then(() => genFile,
+		() => WorkspaceService.resourceExists(legacyGenFile).then(() => legacyGenFile));
+
 	$scope.regenerate = () => {
 		$scope.save();
 		dialogHub.showBusyDialog('Loading data');
-		WorkspaceService.loadContent(genFile).then((response) => {
-			let { models, perspectives, templateId, filePath, workspaceName, projectName, ...params } = response.data;
-			if (!response.data.templateId) {
-				$scope.chooseTemplate(response.data.projectName, response.data.filePath, params);
-			} else {
-				dialogHub.showBusyDialog('Regenerating');
-				$scope.generateFromModel(response.data.projectName, response.data.filePath, response.data.templateId, params);
-			}
-		}, (error) => {
+		const onError = (error) => {
 			console.error(error);
 			dialogHub.closeBusyDialog();
 			dialogHub.showAlert({
@@ -209,7 +209,16 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 				type: AlertTypes.Error,
 				preformatted: true,
 			});
-		});
+		};
+		resolveGenFile().then((path) => WorkspaceService.loadContent(path).then((response) => {
+			let { models, perspectives, templateId, filePath, workspaceName, projectName, ...params } = response.data;
+			if (!response.data.templateId) {
+				$scope.chooseTemplate(response.data.projectName, response.data.filePath, params);
+			} else {
+				dialogHub.showBusyDialog('Regenerating');
+				$scope.generateFromModel(response.data.projectName, response.data.filePath, response.data.templateId, params);
+			}
+		}, onError), onError);
 	};
 
 	$scope.generateFromModel = (project, filePath, templateId, params) => {
@@ -235,7 +244,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	};
 
 	$scope.checkGenFile = () => {
-		WorkspaceService.resourceExists(genFile).then(() => {
+		resolveGenFile().then(() => {
 			$scope.$evalAsync(() => {
 				$scope.canRegenerate = true;
 			});
@@ -325,7 +334,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		if (data.path === $scope.dataParameters.filePath) {
 			$scope.$evalAsync(() => {
 				$scope.dataParameters = ViewParameters.get();
-				genFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
+				genFile = $scope.dataParameters.filePath + '.gen';
+				legacyGenFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
 				workspace = $scope.dataParameters.filePath.substring($scope.dataParameters.filePath.indexOf('/', 1), 1);
 			});
 		};
@@ -1479,7 +1489,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		$scope.state.error = true;
 		$scope.errorMessage = 'The \'contentType\' data parameter is missing.';
 	} else {
-		genFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
+		genFile = $scope.dataParameters.filePath + '.gen';
+		legacyGenFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
 		workspace = $scope.dataParameters.filePath.substring($scope.dataParameters.filePath.indexOf('/', 1), 1);
 		loadFileContents();
 		$scope.checkGenFile();

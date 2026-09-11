@@ -54,7 +54,13 @@ public class ModelGenerationService {
     /** The folder every generation writes into. */
     private static final String GENERATION_FOLDER = "gen";
 
-    /** The extension of the descriptor recording what a model was generated with. */
+    /**
+     * The extension of the descriptor recording what a model was generated with. It is appended to the
+     * model file's whole name - {@code myapp.model.gen}, {@code myapp.glue.gen} - so that every
+     * generation of a project keeps its own record. Naming it after the base name alone made two model
+     * files of one project that differ only in extension write the same descriptor, and the surviving
+     * file described only the generation that ran last (#7057).
+     */
     private static final String DESCRIPTOR_EXTENSION = ".gen";
 
     /** The workspace service. */
@@ -124,7 +130,7 @@ public class ModelGenerationService {
 
         List<GeneratedFile> files = new ArrayList<>(rendered.size() + 1);
         files.addAll(rendered);
-        files.add(new GeneratedFile(null, str(parameters, "fileName") + DESCRIPTOR_EXTENSION, JavaScriptJson.pretty(parameters)));
+        files.add(new GeneratedFile(null, path + DESCRIPTOR_EXTENSION, JavaScriptJson.pretty(parameters)));
         return files;
     }
 
