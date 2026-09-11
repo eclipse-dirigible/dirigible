@@ -65,6 +65,7 @@ class IntentCompositionCascadeIT extends IntegrationTest {
     private static final String API = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api";
     private static final String TRIPS = API + "/trip/TripController";
     private static final String LEGS = API + "/trip/TripLegController";
+    private static final String TAGS = API + "/trip/TripTagController";
     private static final String COPIES = API + "/trip/TripCopyController";
     private static final String NOTES = API + "/trip/TripLegNoteController";
     private static final String FLEETS = API + "/fleet/FleetController";
@@ -92,6 +93,17 @@ class IntentCompositionCascadeIT extends IntegrationTest {
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
+
+              # A second cascading child, declared BEFORE TripLeg. The generated cascade visits the
+              # child TYPES in model order, so this one's rows are already deleted by the time the
+              # chain below refuses - which is what makes the roll-back claim a proof rather than a
+              # bet on which leg the leg query happens to visit first (#7298).
+              - name: TripTag
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: text, type: string, length: 100 }
+                relations:
+                  - { name: Trip, kind: manyToOne, to: Trip, composition: true, required: true }
 
               # The cascading child: it goes with its trip, and its own delete event is what
               # gives the fleet its count back.
@@ -147,8 +159,10 @@ class IntentCompositionCascadeIT extends IntegrationTest {
         create(LEGS, "{\"Trip\":" + cascading + ",\"Distance\":10,\"Fleet\":" + fleet + "}");
         create(LEGS, "{\"Trip\":" + cascading + ",\"Distance\":20,\"Fleet\":" + fleet + "}");
 
-        // A second one whose second leg carries a note - the chain that refuses one level down.
+        // A second one whose second leg carries a note - the chain that refuses one level down. Its tag
+        // is the row the cascade deletes BEFORE it ever reaches the legs.
         int chained = create(TRIPS, "{\"Note\":\"chained\"}");
+        create(TAGS, "{\"Trip\":" + chained + ",\"Text\":\"tagged\"}");
         create(LEGS, "{\"Trip\":" + chained + ",\"Distance\":30,\"Fleet\":" + fleet + "}");
         int notedLeg = create(LEGS, "{\"Trip\":" + chained + ",\"Distance\":40,\"Fleet\":" + fleet + "}");
         create(NOTES, "{\"TripLeg\":" + notedLeg + ",\"Text\":\"keep me\"}");
@@ -165,7 +179,9 @@ class IntentCompositionCascadeIT extends IntegrationTest {
         assertFleetCount(fleet, 2);
 
         // (3) The chain refuses at its second level, and the whole delete rolls back with it: the trip
-        // is still there, and so is the leg the cascade had ALREADY deleted when the note stopped it.
+        // is still there, and so is everything the cascade had ALREADY deleted when the note stopped
+        // it - the tag for certain (its child type is swept before the legs are looked at) and the
+        // unnoted leg as well.
         restAssuredExecutor.execute(() -> given().when()
                                                  .delete(TRIPS + "/" + chained)
                                                  .then()
@@ -175,6 +191,7 @@ class IntentCompositionCascadeIT extends IntegrationTest {
                                                  .get(TRIPS + "/" + chained)
                                                  .then()
                                                  .statusCode(200));
+        assertTagsOfTrip(chained, 1);
         assertLegsOfTrip(chained, 2);
         // Nothing was counted away either - the rolled-back deletes recorded no events to act on.
         assertFleetCount(fleet, 2);
@@ -221,6 +238,19 @@ class IntentCompositionCascadeIT extends IntegrationTest {
     private void assertLegsOfTrip(int trip, int expected) {
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(LEGS + "?Trip=" + trip)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("", hasSize(expected)));
+    }
+
+    /**
+     * The tag rows of a trip. TripTag is the cascade's FIRST child type (model order), so it is the row
+     * a refusal further down the chain has to bring back - unlike a leg, whose deletion depends on
+     * which row the leg query visits first, which no ORDER BY pins (#7298).
+     */
+    private void assertTagsOfTrip(int trip, int expected) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(TAGS + "?Trip=" + trip)
                                                  .then()
                                                  .statusCode(200)
                                                  .body("", hasSize(expected)));
