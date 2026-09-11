@@ -5,8 +5,9 @@ name: Nightly Integration Tests
 # PRs run the fast "smoke-tests" job (see pull-request.yml). Runs on a nightly schedule and on
 # demand; the same full suite also runs on every push to master (see build.yml). Like build.yml, the
 # suite is sharded into four tag-selected slices (api / ui / samples / slow) that run in parallel,
-# so the wall-clock time is the slowest shard (~35 min), not the whole suite. build.yml carries the
-# description of what each shard selects; keep the two matrices identical.
+# so the wall-clock time is the slowest shard ("api", ~57 min on h2 and ~62 on PostgreSQL), not the
+# whole suite. build.yml carries the description of what each shard selects and the measured shard
+# times behind the job timeout; keep the two matrices identical.
 on:
   schedule:
     - cron: '0 2 * * *'
@@ -31,7 +32,7 @@ jobs:
             groups: "ui & !slow & (sample | camel)"
           - name: slow
             groups: "slow"
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -74,6 +75,21 @@ jobs:
       # and the build green, so what ran is asserted by count instead of by the job's colour.
       # Failsafe's own failIfNoTests cannot cover this - scanning does find the IT classes, the tag
       # filter drops them afterwards - and every shard expression selects a non-empty set.
+      # A cancelled or failed shard must leave evidence behind (#7283): the job-level timeout kills
+      # the Maven step before the guard below ever runs, so without an always() upload the reports
+      # of every class that DID finish - and any thread dump TestStallWatchdog wrote for the one
+      # that did not - are thrown away with the runner.
+      - name: Upload integration test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 3
+          name: failsafe-reports-h2-${{ matrix.shard.name }}-${{ github.run_attempt }}
+          path: |
+            tests/tests-integrations/target/failsafe-reports
+            tests/tests-integrations/target/surefire-reports
+          if-no-files-found: ignore
+
       - name: Assert integration tests ran
         run: |
           ran=$(ls tests/tests-integrations/target/failsafe-reports/TEST-*.xml 2>/dev/null | wc -l)
@@ -112,7 +128,7 @@ jobs:
             groups: "ui & !slow & (sample | camel)"
           - name: slow
             groups: "slow"
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       POSTGRES_DB: testdb
       POSTGRES_SYSTEM_DB: systemdb
@@ -200,6 +216,21 @@ jobs:
       # asserted instead is that PostgreSQL was written to at all, through pg_stat_database's
       # counters, which survive that cleanup. A database an H2 fallback never connected to reports
       # zero rows inserted.
+      # A cancelled or failed shard must leave evidence behind (#7283): the job-level timeout kills
+      # the Maven step before the guard below ever runs, so without an always() upload the reports
+      # of every class that DID finish - and any thread dump TestStallWatchdog wrote for the one
+      # that did not - are thrown away with the runner.
+      - name: Upload integration test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 3
+          name: failsafe-reports-postgresql-${{ matrix.shard.name }}-${{ github.run_attempt }}
+          path: |
+            tests/tests-integrations/target/failsafe-reports
+            tests/tests-integrations/target/surefire-reports
+          if-no-files-found: ignore
+
       - name: Assert integration tests ran on PostgreSQL
         run: |
           ran=$(ls tests/tests-integrations/target/failsafe-reports/TEST-*.xml 2>/dev/null | wc -l)

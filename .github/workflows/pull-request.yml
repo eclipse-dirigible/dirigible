@@ -108,6 +108,11 @@ jobs:
 
   smoke-tests:
     runs-on: ubuntu-latest
+    # ~91 min green (measured on runs 34489811133 / 34490597976 / 34491967246): the gate selects
+    # every HTTP-level IT plus the smoke-tagged journeys, and each IT class boots its own Spring
+    # context. The cap only has to be out of a healthy run's way - it exists so a hang costs one
+    # job instead of the 6h GitHub default (#7283).
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
         with:
@@ -153,6 +158,21 @@ jobs:
       # and the build green, so what ran is asserted by count instead of by the job's colour.
       # Failsafe's own failIfNoTests cannot cover this - scanning does find the IT classes, the tag
       # filter drops them afterwards - and every shard expression selects a non-empty set.
+      # A cancelled or failed run must leave evidence behind (#7283): the job-level timeout kills
+      # the Maven step before the guard below ever runs, so without an always() upload the reports
+      # of every class that DID finish - and any thread dump TestStallWatchdog wrote for the one
+      # that did not - are thrown away with the runner.
+      - name: Upload integration test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 3
+          name: failsafe-reports-smoke-${{ github.run_attempt }}
+          path: |
+            tests/tests-integrations/target/failsafe-reports
+            tests/tests-integrations/target/surefire-reports
+          if-no-files-found: ignore
+
       - name: Assert integration tests ran
         run: |
           ran=$(ls tests/tests-integrations/target/failsafe-reports/TEST-*.xml 2>/dev/null | wc -l)
