@@ -2050,9 +2050,12 @@ public final class IntentParser {
      *
      * <p>
      * Only the status condition is checked: every other condition compares an ordinary column, where a
-     * string literal is just a literal. A cross-model source has no local relations to check against
-     * (its field references are resolved at generation time against the owner's {@code .model}), so it
-     * keeps the numeric-id form the same way every other cross-model status site does.
+     * string literal is just a literal. A cross-model source has no local relations to check against -
+     * neither its nomenclature nor even WHICH of the conditions names its status is knowable here - so
+     * it keeps the numeric-id form the same way every other cross-model status site does, and a name
+     * written there is refused where the owner's {@code .model} is in hand: at generation time, by
+     * {@code GlueIntentGenerator} (issue #7288), rather than left to render as a string compared
+     * against the integer status FK.
      */
     private static void validateWhereStatusValue(ScheduleConditionIntent condition, EntityIntent source, String subject,
             List<String> issues) {
@@ -6871,9 +6874,9 @@ public final class IntentParser {
 
     /**
      * Decision steps must declare {@code if} and {@code then}; {@code then} and the optional
-     * {@code else} must reference a declared step of the same process (or the literal {@code end}).
-     * Without this check a typo silently produces BPMN that Flowable rejects on the next
-     * synchronization cycle.
+     * {@code else} must reference a declared step of the same process (or the literal {@code end}), and
+     * neither may name the decision itself. Without this check a typo silently produces BPMN that
+     * Flowable rejects on the next synchronization cycle.
      */
     private static void validateDecisionTargets(ProcessIntent process, List<String> issues) {
         Set<String> stepNames = new HashSet<>();
@@ -6902,7 +6905,16 @@ public final class IntentParser {
 
     private static void checkDecisionTarget(ProcessIntent process, StepIntent step, String arg, String target, Set<String> stepNames,
             List<String> issues) {
-        if (!isRoutingLiteral(target) && !stepNames.contains(target)) {
+        if (isRoutingLiteral(target)) {
+            return;
+        }
+        if (target.equals(step.getName())) {
+            // An exclusive gateway has no wait state, so a branch back to the gateway emits a
+            // self-targeting sequence flow the engine spins on - the `next: <self>` spin one key over
+            // (dirigible #7226 / #7292). A cycle THROUGH a wait state stays legal.
+            issues.add("process [" + process.getName() + "] decision [" + step.getName() + "] `" + arg
+                    + "` targets itself - a self-loop that never advances");
+        } else if (!stepNames.contains(target)) {
             issues.add("process [" + process.getName() + "] decision [" + step.getName() + "] `" + arg + "` references unknown step ["
                     + target + "]");
         }
@@ -7289,21 +7301,40 @@ public final class IntentParser {
      * It is refused rather than rendered because both other outcomes are silent: passing the text
      * through emits a bare Java identifier and breaks the compile of the whole generated module
      * (dirigible #7246), and rendering it as a string constant would put the text of the path into the
-     * ledger cell instead of the value it names. An author who really means the text quotes it.
+     * ledger cell instead of the value it names. An author who really means the text quotes it - in the
+     * one spelling that survives YAML, which the refusal now prints ({@code '"Receipt.Store"'}: YAML
+     * strips a single level of quoting, so the earlier remedy {@code "Receipt.Store"} arrived back as
+     * the same bare path and earned the same refusal, dirigible #7287).
+     *
+     * <p>
+     * The second refusal here is a TYPE one: a constant the target column cannot hold - a text into a
+     * {@code decimal}, a fraction into a {@code long}, anything into a date - reaches {@code javac} as
+     * a literal of the wrong type and breaks the same compile the first refusal exists to protect.
      *
      * @param model the model
      * @param issues the collected issues
      */
     private static void validatePostSets(IntentModel model, List<String> issues) {
+        Map<String, EntityIntent> byName = IntentEntities.byName(model);
         for (PostIntent post : model.getPosts()) {
             String subject = "posts [" + post.getName() + "]";
+            EntityIntent target = post.getInto() == null ? null : byName.get(post.getInto());
             for (Map.Entry<String, String> assignment : post.getSet()
                                                             .entrySet()) {
-                if (PostSetSupport.isUnsupportedExpression(assignment.getValue())) {
-                    issues.add(subject + " set [" + assignment.getKey() + "]: value [" + assignment.getValue()
+                String field = assignment.getKey();
+                String value = assignment.getValue();
+                if (PostSetSupport.isUnsupportedExpression(value)) {
+                    issues.add(subject + " set [" + field + "]: value [" + value
                             + "] is not a value this rule can render - write item.<Field>, source.<Field>,"
-                            + " -item.<Field>, a number, or a plain constant; quote it (\"" + assignment.getValue()
-                            + "\") to mean that text.");
+                            + " -item.<Field>, a number, or a plain constant; write it as " + PostSetSupport.quotedSpelling(value)
+                            + " to mean that text (YAML strips a single level of quoting, so the double quotes"
+                            + " need the single ones around them to survive).");
+                    continue;
+                }
+                String mismatch = PostSetSupport.typeMismatch(value, PostSetSupport.targetType(target, byName, field));
+                if (mismatch != null) {
+                    issues.add(subject + " set [" + field + "]: value [" + value + "] does not fit [" + post.getInto() + "." + field
+                            + "] - " + mismatch + ".");
                 }
             }
         }

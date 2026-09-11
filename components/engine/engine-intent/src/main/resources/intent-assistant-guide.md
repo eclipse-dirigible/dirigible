@@ -2982,7 +2982,8 @@ mid-nomenclature would silently retarget the query. A name that is not seeded is
 and so is a value that is no status at all - never a `.eq("Status", "OVERDUE")` that matches nothing
 for as long as the schedule keeps ticking. The nomenclature must be seeded in THIS model: a
 cross-model source (`model: <uses alias>`) keeps the numeric seed id, as every other cross-model
-status site does.
+status site does - a name there is refused at Generate (the owner's `.model` is what tells which
+condition names the status), so write the id.
 
 **A `where` value may be a moment relative to now** - which is what makes the archetypal schedule, a
 **staleness sweep**, expressible at all ("stuck provisioning for 30 minutes", "unanswered for a week",

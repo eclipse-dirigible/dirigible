@@ -62,6 +62,13 @@ public enum DirigibleConfig {
 
     SYNCHRONIZER_CROSS_RETRY_INTERVAL_MILLIS("DIRIGIBLE_SYNCHRONIZER_CROSS_RETRY_INTERVAL_MILLIS", "10000"), //
 
+    /**
+     * How often an idle instance gives its FAILED artefacts one more START attempt (#7248). A pass
+     * otherwise runs only on a registry change, so a listener the broker refused at boot was never
+     * retried until someone published something else.
+     */
+    SYNCHRONIZER_FAILED_RETRY_INTERVAL_SECONDS("DIRIGIBLE_SYNCHRONIZER_FAILED_RETRY_INTERVAL_SECONDS", "30"), //
+
     /** Bridge the platform readiness onto Spring's ApplicationAvailability (#6448). */
     READINESS_AVAILABILITY_BRIDGE_ENABLED("DIRIGIBLE_READINESS_AVAILABILITY_BRIDGE_ENABLED", Boolean.FALSE.toString()), //
 

@@ -54,99 +54,106 @@ public class ${className}Notification implements MessageHandler {
         if (!(${guardExpression})) {
             return;
         }
+        // The try opens HERE, before the relation loads and the attachment render (#7290): those read
+        // the database too - a connection blip, a foreign key at a row a concurrent delete removed, a
+        // broken .print template - and a throw from any of them used to propagate straight out of
+        // onMessage with no stamp: the broker redelivers forever and the record's outcome stays empty,
+        // exactly the silent state #7023 introduced the stamp to remove. Mirrors the notify branch of
+        // Job.java.template (#7278) and Transition.java.template/Send.java.template, which already open
+        // their try before the loads.
+        try {
 #foreach($load in $relationLoads)
-        ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
+            ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
 #end
 #if($usesRecordUrl == "true")
-        // {recordUrl} - the deep link to the record this message is about. The ROUTE is composed HERE,
-        // in the layer that knows the generated application's URL layout; the intent layer contributes
-        // only the entity and its key, which is what keeps it path-agnostic.
-        String recordUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
-                + "/services/web/${projectName}/gen/${genFolderName}/index.html#/${recordUrlEntity}/" + entity.${recordUrlKeyProperty}
-                + "/edit";
+            // {recordUrl} - the deep link to the record this message is about. The ROUTE is composed HERE,
+            // in the layer that knows the generated application's URL layout; the intent layer contributes
+            // only the entity and its key, which is what keeps it path-agnostic.
+            String recordUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
+                    + "/services/web/${projectName}/gen/${genFolderName}/index.html#/${recordUrlEntity}/" + entity.${recordUrlKeyProperty}
+                    + "/edit";
 #end
 #if($usesInboxUrl == "true")
-        // {inboxUrl} - the deep link to the recipient's process Inbox.
-        String inboxUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
-                + "/services/web/${projectName}/gen/${genFolderName}/index.html#/inbox";
+            // {inboxUrl} - the deep link to the recipient's process Inbox.
+            String inboxUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
+                    + "/services/web/${projectName}/gen/${genFolderName}/index.html#/inbox";
 #end
-        String to = ${toExpression};
-        if (to == null || to.isBlank()) {
-            return;
-        }
-        String subject = ${subjectExpression};
-        String body = ${bodyExpression};
-        Map part = new HashMap();
-        part.put("type", "text");
-        part.put("contentType", "text/plain");
-        part.put("text", body);
-        List<Map> parts = new java.util.ArrayList<>();
-        parts.add(part);
+            String to = ${toExpression};
+            if (to == null || to.isBlank()) {
+                return;
+            }
+            String subject = ${subjectExpression};
+            String body = ${bodyExpression};
+            Map part = new HashMap();
+            part.put("type", "text");
+            part.put("contentType", "text/plain");
+            part.put("text", body);
+            List<Map> parts = new java.util.ArrayList<>();
+            parts.add(part);
 #if($attach == "print")
-        // attach: print - render the record's own print template to PDF server-side (the generated
-        // feeder assembles the { document, items } payload the template binds) and attach it, so the
-        // recipient receives the document itself and not just a notice about it.
+            // attach: print - render the record's own print template to PDF server-side (the generated
+            // feeder assembles the { document, items } payload the template binds) and attach it, so the
+            // recipient receives the document itself and not just a notice about it.
 #if($attachLanguageFkProperty != "")
-        ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
-                : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+            ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                    : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
 #end
-        String language = ${attachLanguageExpression};
-        Map document = new HashMap();
-        document.put("type", "attachment");
-        document.put("contentType", "application/pdf");
-        document.put("fileName", ${attachFileNameExpression});
-        // Bind the render language to the thread so the feeder's multilingual overlay resolves nomenclature
-        // values in the SAME language as the template - there is no request here to carry Accept-Language
-        // (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
-        byte[] data;
-        org.eclipse.dirigible.sdk.security.User.setLanguage(language);
-        try {
-            data = org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", language,
-                    new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty}));
-        } finally {
-            org.eclipse.dirigible.sdk.security.User.clearLanguage();
-        }
-        document.put("data", data);
-        parts.add(document);
+            String language = ${attachLanguageExpression};
+            Map document = new HashMap();
+            document.put("type", "attachment");
+            document.put("contentType", "application/pdf");
+            document.put("fileName", ${attachFileNameExpression});
+            // Bind the render language to the thread so the feeder's multilingual overlay resolves nomenclature
+            // values in the SAME language as the template - there is no request here to carry Accept-Language
+            // (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
+            byte[] data;
+            org.eclipse.dirigible.sdk.security.User.setLanguage(language);
+            try {
+                data = org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", language,
+                        new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty}));
+            } finally {
+                org.eclipse.dirigible.sdk.security.User.clearLanguage();
+            }
+            document.put("data", data);
+            parts.add(document);
 #elseif($attach == "report")
-        // attach: { report, bind } - run the declared report scoped to THIS recipient and attach the
-        // rendered PDF. The bindings ARE the report's parameters, which is what makes the rows this
-        // recipient's own: a customer statement is a period of rows, not one record's document.
+            // attach: { report, bind } - run the declared report scoped to THIS recipient and attach the
+            // rendered PDF. The bindings ARE the report's parameters, which is what makes the rows this
+            // recipient's own: a customer statement is a period of rows, not one record's document.
 #if($attachLanguageFkProperty != "")
-        ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
-                : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+            ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                    : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
 #end
-        String language = ${attachLanguageExpression};
-        Map<String, Object> reportFilter = new HashMap<>();
+            String language = ${attachLanguageExpression};
+            Map<String, Object> reportFilter = new HashMap<>();
 #foreach($binding in $attachReportBindings)
-        reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));
+            reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));
 #end
-        Map document = new HashMap();
-        document.put("type", "attachment");
-        document.put("contentType", "application/pdf");
-        document.put("fileName", ${attachFileNameExpression});
-        // Bind the render language to the thread so the report query's :language overlay resolves the
-        // translatable dimensions in the SAME language as the template - there is no request here to carry
-        // Accept-Language (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
-        byte[] data;
-        org.eclipse.dirigible.sdk.security.User.setLanguage(language);
-        try {
-            Map<String, Object> reportData = new HashMap<>();
-            // The bound values double as the rendered header, so the PDF states which slice it is - a
-            // table of rows never does.
-            reportData.put("document", reportFilter);
-            reportData.put("items", new gen.${attachReportGenFolder}.data.${attachReportPerspective}.${attachReport}Repository()
-                    .findAll(null, null, reportFilter));
-            data = org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", language,
-                    org.eclipse.dirigible.sdk.utils.Json.stringify(reportData));
-        } finally {
-            org.eclipse.dirigible.sdk.security.User.clearLanguage();
-        }
-        document.put("data", data);
-        parts.add(document);
+            Map document = new HashMap();
+            document.put("type", "attachment");
+            document.put("contentType", "application/pdf");
+            document.put("fileName", ${attachFileNameExpression});
+            // Bind the render language to the thread so the report query's :language overlay resolves the
+            // translatable dimensions in the SAME language as the template - there is no request here to carry
+            // Accept-Language (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
+            byte[] data;
+            org.eclipse.dirigible.sdk.security.User.setLanguage(language);
+            try {
+                Map<String, Object> reportData = new HashMap<>();
+                // The bound values double as the rendered header, so the PDF states which slice it is - a
+                // table of rows never does.
+                reportData.put("document", reportFilter);
+                reportData.put("items", new gen.${attachReportGenFolder}.data.${attachReportPerspective}.${attachReport}Repository()
+                        .findAll(null, null, reportFilter));
+                data = org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", language,
+                        org.eclipse.dirigible.sdk.utils.Json.stringify(reportData));
+            } finally {
+                org.eclipse.dirigible.sdk.security.User.clearLanguage();
+            }
+            document.put("data", data);
+            parts.add(document);
 #end
-        String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
-        try {
+            String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
             Mail.send(from, new String[] {to}, new String[0], new String[0], subject, parts);
 #if($notifyOutcomeProperty != "")
             stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, null);

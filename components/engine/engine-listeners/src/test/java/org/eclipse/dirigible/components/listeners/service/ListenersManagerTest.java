@@ -19,6 +19,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
 /**
@@ -121,7 +122,9 @@ class ListenersManagerTest {
                 resource);
         when(resource.exists()).thenReturn(false);
 
-        listenersManager.startListener(listenerEntity);
+        // A missing handler is a failure the synchronizer must see, not a normal return that reads
+        // as CREATED and running with nothing subscribed (#7248).
+        assertThrows(IllegalStateException.class, () -> listenersManager.startListener(listenerEntity));
 
         verifyNoInteractions(messageListenerManagerFactory);
     }

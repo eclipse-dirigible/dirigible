@@ -2451,6 +2451,74 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void an_event_notification_keeps_its_relation_loads_and_attachment_render_inside_the_fail_soft_try() {
+        // Issue #7290 (the single-record twin of #7233/#7278): the per-row try above covers a
+        // SCHEDULE's notify branch. A notifications: entry (one record, no loop) had the identical gap
+        // - only Mail.send sat inside the try, so a relation load or a broken .print template
+        // propagated straight out of onMessage with NO stamp: the broker redelivers forever and the
+        // record's outcome stays empty, exactly the silent state #7023 introduced the stamp to remove.
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: name,   type: string }
+                      - { name: email,  type: string }
+                      - { name: locale, type: string, length: 5 }
+                  - name: Invoice
+                    function: Document
+                    fields:
+                      - { name: id,              type: integer, primaryKey: true, generated: true }
+                      - { name: dueDate,         type: date }
+                      - { name: reminderOutcome, type: string, length: 128 }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: InvoiceItem
+                    function: DocumentItem
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                notifications:
+                  - name: invoiceIssued
+                    event: { onCreate: Invoice }
+                    to: Customer.email
+                    subject: "Invoice {id} issued"
+                    body: "Dear {Customer.name}, your invoice is attached."
+                    attach: print
+                    languageFrom: Customer.locale
+                    outcome: reminderOutcome
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "billing.glue");
+
+        String notification = codeOf("gen/events/billing/InvoiceIssuedNotification.java");
+        int method = notification.indexOf("public void onMessage(String message) {");
+        int tryOpens = notification.indexOf("try {", method);
+        int load = notification.indexOf("new CustomerRepository().findById(entity.Customer)");
+        int render = notification.indexOf("Print.render(\"Invoice\",");
+        int send = notification.indexOf("Mail.send(");
+        int catches = notification.indexOf("} catch (Exception ex) {");
+        assertTrue(method > 0 && tryOpens > 0 && load > 0 && render > 0 && send > 0 && catches > 0, "got: " + notification);
+        // The ordering is the whole fix: the try must open before the relation load.
+        assertTrue(tryOpens < load, "the recipient's one-hop relation load runs inside the fail-soft try");
+        assertTrue(load < render, "the attachment render follows the load, in the same try");
+        assertTrue(render < send && send < catches, "render, then send, then the catch - one try encloses both");
+        // Both outcome stamps survive: `sent` inside the try, `failed: <reason>` from the catch - so a
+        // relation load or render failure is stamped on the record exactly as a bounced mailbox is.
+        int stampSent = notification.indexOf("stampNotifyOutcome(entity.Id, null);");
+        int stampFailed = notification.indexOf("stampNotifyOutcome(entity.Id, ex);");
+        assertTrue(send < stampSent && stampSent < catches && catches < stampFailed,
+                "both delivery outcomes are still stamped, got: " + notification);
+    }
+
+    @Test
     void a_recurring_template_schedule_keys_on_the_period_of_the_run() {
         // Issue #7106: the recurring-template family had no key to declare. A monthly bill generated
         // from a standing BillTemplate is a plain document with a `date` - no period column to name -
@@ -3214,6 +3282,58 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void an_authored_label_is_escaped_into_every_harmonia_interpolation() {
+        // #7294: the authored field `label:` (#6424, widgetLabel) reached the Harmonia form's T()
+        // fallback argument and the master/list/item-dialog column literals verbatim, so an
+        // apostrophe ("Owner's copy") closed the literal early and blanked the whole generated
+        // page - the #7207 class, one authored property (label) over from the seeded default.
+        writeIntent("""
+                name: labels
+                entities:
+                  - name: Badge
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 200, label: "Owner's copy" }
+                    relations:
+                      - { name: lines, kind: oneToMany, to: BadgeLine }
+
+                  - name: BadgeLine
+                    fields:
+                      - { name: id,  type: integer, primaryKey: true, generated: true }
+                      - { name: tag, type: string,   length: 40, label: "Reviewer's note" }
+                    relations:
+                      - { name: badge, kind: manyToOne, to: Badge, composition: true }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "labels.model");
+
+        // The reused manage form's T() fallback argument - the raw apostrophe would end the JS
+        // string literal inside the Alpine x-text expression, throwing at evaluation and aborting
+        // the walk of the enclosing element (the harmonia-ui guide's task-form rule, never applied
+        // to the entity views).
+        String badgeForm = contentOf("gen/labels/views/Badge/Badge-form.html");
+        assertTrue(badgeForm.contains("'Owner\\'s copy'"),
+                "the form's T() fallback must escape the apostrophe in the authored label, got: " + badgeForm);
+        assertFalse(badgeForm.contains("'Owner's copy'"),
+                "the raw unescaped apostrophe must never reach the generated form, got: " + badgeForm);
+
+        // The master page's column literal (Badge owns a oneToMany, so it generates as a MASTER,
+        // not a plain manage list) - a raw apostrophe here is a syntax error in the whole file.
+        String badgeMasterPage = contentOf("gen/labels/js/components/pages/Badge/BadgeMasterPage.js");
+        assertTrue(badgeMasterPage.contains("label: 'Owner\\'s copy'"),
+                "the master page's column label literal must escape the apostrophe, got: " + badgeMasterPage);
+
+        // The item dialog's column metadata (detail-register), the sibling #7152/#7255 already
+        // escape the seeded DEFAULT for.
+        String badgeLineRegister = contentOf("gen/labels/js/components/pages/Badge/BadgeLine.detail.js");
+        assertTrue(badgeLineRegister.contains("label: 'Reviewer\\'s note'"),
+                "the item dialog's column label literal must escape the apostrophe, got: " + badgeLineRegister);
+    }
+
+    @Test
     void report_widget_generates_the_kpi_block_and_replaces_entity_tiles() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()
@@ -3520,6 +3640,10 @@ class IntentEngineIT extends IntegrationTest {
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
                       - { name: quantity, type: decimal, precision: 18, scale: 3 }
+                      - { name: factor, type: decimal, precision: 18, scale: 2 }
+                      - { name: sequence, type: long }
+                      - { name: direction, type: integer }
+                      - { name: ledger, type: string, length: 20 }
                     relations:
                       - { name: Product, kind: manyToOne, to: Product }
                       - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue }
@@ -3539,6 +3663,10 @@ class IntentEngineIT extends IntegrationTest {
                     set:
                       Product: item.Product
                       Quantity: "-item.Quantity"
+                      Factor: -1.5
+                      Sequence: 7
+                      Direction: 2
+                      Ledger: issued
                   - name: goodsIssueNote
                     forEntity: GoodsIssue
                     event: create
@@ -3573,6 +3701,14 @@ class IntentEngineIT extends IntegrationTest {
         assertEquals(save, post.lastIndexOf("targetRepository.save(row)"),
                 "there must be exactly ONE save site - a second one outside the block would write rows unprotected");
         assertFalse(post.contains("${"), "the post template must render every placeholder");
+        // #7287: a constant is rendered for the TARGET COLUMN's Java type. A decimal column is a
+        // BigDecimal and a long one a Long in the generated entity, so the bare `-1.5` / `7` this used
+        // to emit did not compile - and neither did a bare identifier for the text.
+        assertTrue(post.contains("row.Factor = new java.math.BigDecimal(\"-1.5\");"),
+                "a decimal column takes a BigDecimal, not a bare double literal: " + post);
+        assertTrue(post.contains("row.Sequence = 7L;"), "a long column takes a long literal, not a bare int: " + post);
+        assertTrue(post.contains("row.Direction = 2;"), "an integer column keeps the bare integer: " + post);
+        assertTrue(post.contains("row.Ledger = \"issued\";"), "a text column takes an escaped string literal: " + post);
 
         // The single-row mode (no forEach) writes one row through one repository call - a transaction on
         // its own, so it needs no unit of work and must not pretend to open one.

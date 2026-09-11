@@ -60,7 +60,7 @@ document.addEventListener('alpine:init', () => {
     // Column metadata for printing (label + numeric alignment/format), from the report model.
     printColumns: [
 #foreach($property in $properties)
-      { key: '${property.name}', label: #if($property.widgetLabel)'${property.widgetLabel}'#else'${property.name}'#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end },
+      { key: '${property.name}', label: #if($property.widgetLabel)'${property.widgetLabelJs}'#else'${property.name}'#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end },
 #end
     ],
 

@@ -349,9 +349,11 @@ final class StatusSymbolResolver {
      * <p>
      * Same-model source only. A cross-model source ({@code model: <uses alias>}) is not in this file's
      * {@code entities}, so neither its nomenclature nor even WHICH of the conditions names its status
-     * is knowable here - its {@code where} field references are validated at generation time against
-     * the owner's {@code .model} - and it therefore keeps the numeric-id form, exactly as every other
-     * cross-model status site does.
+     * is knowable here - and it therefore keeps the numeric-id form, exactly as every other cross-model
+     * status site does. A name written there is not left in place to render as a string compared
+     * against the integer status FK: it is refused where the owner's {@code .model} is read, at
+     * generation time by {@code GlueIntentGenerator} (issue #7288), the same way the sibling
+     * cross-model {@code items: where:} rule is (#7225).
      */
     private void rewriteSchedules(Map<?, ?> root) {
         for (Object node : asList(root.get("schedules"))) {

@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.ide.template.service.model.JavaLiterals;
 import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport.FieldLoad;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
@@ -1946,7 +1947,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                 .entrySet()) {
                 Map<String, String> pair = new LinkedHashMap<>();
                 pair.put("field", IntentNaming.pascalCase(f.getKey()));
-                pair.put("expr", postSetExpr(f.getValue()));
+                pair.put("expr", postSetExpr(f.getValue(), PostSetSupport.targetType(target, byName, f.getKey())));
                 assigns.add(pair);
             }
             e.put("assigns", assigns);
@@ -1962,11 +1963,18 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * literal, and a value that reads as an expression this renderer cannot compile never reaches here
      * - the parser refuses it.
      *
+     * <p>
+     * A constant is rendered for the TYPE of the column it is assigned to, which the target entity
+     * carries: an intent {@code decimal} / {@code double} column is a {@code BigDecimal} in the
+     * generated entity and a {@code long} one a {@code Long}, so the bare number the renderer used to
+     * emit did not compile (dirigible #7287).
+     *
      * @param raw the authored value
+     * @param type the target column's type
      * @return the Java expression
      */
-    private static String postSetExpr(String raw) {
-        return PostSetSupport.expression(raw);
+    private static String postSetExpr(String raw, PostSetSupport.TargetType type) {
+        return PostSetSupport.expression(raw, type);
     }
 
     /** Test hook: build the {@code posts} glue collection without a repository. */
@@ -3066,9 +3074,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /** A YAML scalar as a Java literal: numbers bare, everything else a quoted string. */
     private static String javaLiteral(Object value) {
         // A Boolean written as a String would filter a boolean column with the text "true" and match
-        // nothing; the backslash is escaped before the quote so a value carrying either cannot close the
-        // literal early. Statuses arrive already resolved to ids, so a lifecycle filter takes the bare
-        // integer branch.
+        // nothing. Statuses arrive already resolved to ids, so a lifecycle filter takes the bare integer
+        // branch. The quoted branch goes through the ONE escape helper (dirigible #7287) - a local
+        // backslash-then-quote pass survived a quote but not a newline, which closes the literal too.
         if (value instanceof Boolean) {
             return String.valueOf(value);
         }
@@ -3076,9 +3084,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (v.matches("-?\\d+")) {
             return v;
         }
-        return '"' + v.replace("\\", "\\\\")
-                      .replace("\"", "\\\"")
-                + '"';
+        return '"' + JavaLiterals.escape(v) + '"';
     }
 
     /**
@@ -4123,6 +4129,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                             + schedule.getModel() + "] source - the schedule was NOT generated");
                     continue;
                 }
+                // The row query's status condition on a cross-model source (#7288): the source's
+                // nomenclature is seeded in the owner model, so the parser's resolver left the query
+                // alone - and which condition even names the status is known only here, off the owner
+                // .model's DOCUMENT_STATUS widget. A NAME left in it would render as a string compared
+                // against the integer status FK, a query that matches nothing on every tick. Refused
+                // the way every cross-model status site is: by seed id only.
+                ScheduleConditionIntent namedStatus = crossModelStatusName(schedule.getWhere(), sourceTarget);
+                if (namedStatus != null) {
+                    throw new IntentValidationException(List.of("schedule [" + schedule.getName()
+                            + "] where-condition on the status relation [" + sourceTarget.statusProperty() + "] names the status ["
+                            + namedStatus.getValue() + "] of [" + entity + "], which belongs to model [" + schedule.getModel()
+                            + "] and is seeded there - a cross-model status must be referenced by its numeric seed id"));
+                }
             }
 
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -4352,8 +4371,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * mapping and action shape).
      */
     static List<Map<String, Object>> buildSchedulesForTest(IntentModel model) {
+        return buildSchedulesForTest(model, null);
+    }
+
+    /**
+     * Test hook: build the {@code schedules} glue collection against a context, so what the generation
+     * reads off a cross-model source's owner {@code .model} - its perspective, its key, and which of
+     * its properties is the status relation - is the real fact rather than a naming-convention default.
+     */
+    static List<Map<String, Object>> buildSchedulesForTest(IntentModel model, IntentGenerationContext context) {
         return buildSchedules(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
-                null);
+                context);
     }
 
     /**
@@ -4624,12 +4652,33 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * of a unit test), in which case nothing here can tell which condition is the status one.
      */
     private static ScheduleConditionIntent crossModelItemStatusName(GeneratesItemsIntent items, CrossModelSupport.TargetInfo itemSource) {
-        if (items == null || !items.hasWhere() || itemSource == null || itemSource.statusProperty() == null) {
+        return items == null || !items.hasWhere() ? null : crossModelStatusName(items.getWhere(), itemSource);
+    }
+
+    /**
+     * The condition of a cross-model row query that compares the owner's status relation with a NAME
+     * rather than a seed id, or null when there is none - no condition names the status, the one that
+     * does gives the id, or the owner model declares no status relation (or was not resolvable, the
+     * convention fallback of a unit test), in which case nothing here can tell which condition is the
+     * status one.
+     *
+     * <p>
+     * Shared by the two sites whose {@code { field, op, value }} triples run against a row this model
+     * does not own, and whose status names the parser's resolver therefore had to leave alone: a
+     * create-from's items rule (#7225) and a schedule's {@code where} (#7288).
+     *
+     * @param conditions the authored conditions
+     * @param target the owner's resolved facts
+     * @return the offending condition, or null
+     */
+    private static ScheduleConditionIntent crossModelStatusName(List<ScheduleConditionIntent> conditions,
+            CrossModelSupport.TargetInfo target) {
+        if (conditions == null || target == null || target.statusProperty() == null) {
             return null;
         }
-        for (ScheduleConditionIntent condition : items.getWhere()) {
+        for (ScheduleConditionIntent condition : conditions) {
             if (condition.getField() != null && condition.getField()
-                                                         .equalsIgnoreCase(itemSource.statusProperty())
+                                                         .equalsIgnoreCase(target.statusProperty())
                     && !isSeedId(condition.getValue())) {
                 return condition;
             }

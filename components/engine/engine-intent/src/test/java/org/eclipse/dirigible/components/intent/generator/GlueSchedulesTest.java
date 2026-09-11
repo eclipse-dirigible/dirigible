@@ -12,13 +12,19 @@ package org.eclipse.dirigible.components.intent.generator;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
+import org.eclipse.dirigible.repository.api.IRepository;
+import org.eclipse.dirigible.repository.api.IResource;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -610,5 +616,123 @@ class GlueSchedulesTest {
                                                                     .keySet()));
         assertEquals(List.of("kind", "property", "lower", "upper"), List.copyOf(unique.get(1)
                                                                                       .keySet()));
+    }
+
+    /**
+     * A dunning run over another model's invoices - the cross-model SOURCE shape ({@code model:}),
+     * whose nomenclature is seeded in the owner model too.
+     */
+    private static final String CROSS_MODEL_DUNNING = """
+            name: dunning
+            uses:
+              - { model: invoices }
+            entities:
+              - name: DunningLetter
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string }
+                  - { name: sentOn, type: date }
+            schedules:
+              - name: dunning
+                cron: "0 0 6 * * ?"
+                entity: SalesInvoice
+                model: invoices
+                where:
+                  - { field: Status, op: eq, value: OVERDUE }
+                generate:
+                  to: DunningLetter
+                  map:
+                    Number: Number
+                  defaults:
+                    sentOn: now
+            """;
+
+    /**
+     * The owner model as the invoices project generated it: the status FK is the property the edm
+     * generator gave the {@code DOCUMENT_STATUS} widget, which is how a consumer learns WHICH property
+     * is the status one.
+     */
+    private static final String OWNER_MODEL = """
+            {
+              "model": {
+                "entities": [
+                  {
+                    "name": "SalesInvoice",
+                    "perspectiveName": "SalesInvoice",
+                    "dataName": "INVOICES_SALESINVOICE",
+                    "properties": [
+                      { "name": "Id", "dataName": "ID", "dataType": "INTEGER", "dataPrimaryKey": "true" },
+                      { "name": "Number", "dataName": "NUMBER", "dataType": "VARCHAR" },
+                      { "name": "Status", "dataName": "STATUS_ID", "dataType": "INTEGER",
+                        "relationshipEntityName": "SalesInvoiceStatus", "widgetType": "DOCUMENT_STATUS" }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+    /**
+     * A cross-model source's nomenclature is seeded in the owner model, so a status NAME in the row
+     * query cannot resolve at parse - and used to be left in place, rendering as
+     * {@code .eq("Status", "OVERDUE")} against the integer status FK: a query that matched nothing for
+     * as long as the schedule kept ticking, with no diagnostic (dirigible #7288, the #7251 failure one
+     * {@code model:} key away). It is refused the way every other cross-model status site is - by seed
+     * id only - at the one point the owner {@code .model} tells which condition names the status.
+     */
+    @Test
+    void aStatusNameOnACrossModelScheduleSourceIsRefused() {
+        IntentGenerationContext context = contextWithOwnerModel(IntentParser.parse(CROSS_MODEL_DUNNING));
+
+        IntentValidationException failure =
+                assertThrows(IntentValidationException.class, () -> GlueIntentGenerator.buildSchedulesForTest(context.getModel(), context));
+
+        assertTrue(failure.getIssues()
+                          .stream()
+                          .anyMatch(issue -> issue.contains("[Status]") && issue.contains("[OVERDUE]") && issue.contains("[invoices]")
+                                  && issue.contains("numeric seed id")),
+                "the refusal must name the relation, the name and the owner model: " + failure.getIssues());
+    }
+
+    /** The seed id is the cross-model form, and it renders exactly as a local query does. */
+    @Test
+    void aStatusSeedIdOnACrossModelScheduleSourceRenders() {
+        IntentGenerationContext context =
+                contextWithOwnerModel(IntentParser.parse(CROSS_MODEL_DUNNING.replace("value: OVERDUE", "value: 4")));
+
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(context.getModel(), context)
+                                                   .get(0);
+
+        assertEquals(true, s.get("sourceCrossModel"));
+        assertEquals("Criteria.create().eq(\"Status\", 4)", s.get("criteriaExpression"));
+        // Read off the owner model, not guessed from the entity name.
+        assertEquals("SalesInvoice", s.get("perspective"));
+    }
+
+    /**
+     * An ordinary column compared with a string stays a string: only the status condition is refused,
+     * because only there is a literal a value no row can ever carry.
+     */
+    @Test
+    void aStringOnANonStatusConditionOfACrossModelScheduleSourceRenders() {
+        IntentGenerationContext context = contextWithOwnerModel(IntentParser.parse(
+                CROSS_MODEL_DUNNING.replace("{ field: Status, op: eq, value: OVERDUE }", "{ field: Number, op: eq, value: SI-1 }")));
+
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(context.getModel(), context)
+                                                   .get(0);
+
+        assertEquals("Criteria.create().eq(\"Number\", \"SI-1\")", s.get("criteriaExpression"));
+    }
+
+    private static IntentGenerationContext contextWithOwnerModel(IntentModel model) {
+        IRepository repository = mock(IRepository.class);
+        IResource missing = mock(IResource.class);
+        when(missing.exists()).thenReturn(false);
+        IResource owner = mock(IResource.class);
+        when(owner.exists()).thenReturn(true);
+        when(owner.getContent()).thenReturn(OWNER_MODEL.getBytes(StandardCharsets.UTF_8));
+        when(repository.getResource(anyString())).thenReturn(missing);
+        when(repository.getResource("/users/admin/workspace/invoices/invoices.model")).thenReturn(owner);
+        return TestContexts.context(model, repository, "/users/admin/workspace/dunning", "app");
     }
 }

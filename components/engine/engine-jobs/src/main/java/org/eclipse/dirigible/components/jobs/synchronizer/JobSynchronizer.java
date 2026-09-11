@@ -233,11 +233,12 @@ public class JobSynchronizer extends MultitenantBaseSynchronizer<Job, Long> {
                         getService().save(job);
                         callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                     } catch (Exception e) {
-                        if (logger.isErrorEnabled()) {
-                            logger.error(e.getMessage(), e);
-                        }
+                        // FAILED, not CREATED: nothing was scheduled, and only FAILED keeps the job
+                        // eligible for the START phase of this pass and of every later one (#7248).
+                        // Returning false hands it to the in-pass topological retry as well.
                         callback.addError(e.getMessage());
-                        callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
+                        callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
+                        return false;
                     }
                 }
                 break;
@@ -275,19 +276,25 @@ public class JobSynchronizer extends MultitenantBaseSynchronizer<Job, Long> {
                 }
                 break;
             case START:
-                if (ArtefactLifecycle.FAILED.equals(job.getLifecycle())) {
-                    String message = "Cannot start a Job in a failing state: " + job.getKey();
-                    callback.addError(message);
-                    callback.registerState(this, wrapper, ArtefactLifecycle.FATAL, message);
-                    return true;
-                }
-                if (job.getRunning() == null || !job.getRunning()) {
+                // A FAILED job is retried, never promoted to FATAL (#7248): scheduling fails for
+                // reasons that heal later - the scheduler's store not reachable yet at boot - and
+                // FATAL stripped the artefact from every later pass, so the job stayed unscheduled
+                // until the file's bytes changed. Gated on FAILED as well as on running: the artefact
+                // completes once per tenant on one shared object, and only the lifecycle is reset
+                // between tenants - so the first tenant to schedule flips running and would otherwise
+                // skip every tenant after it.
+                if (ArtefactLifecycle.FAILED.equals(job.getLifecycle()) || job.getRunning() == null || !job.getRunning()) {
                     try {
                         jobsManager.scheduleJob(job);
                         job.setRunning(true);
                         getService().save(job);
+                        if (ArtefactLifecycle.FAILED.equals(job.getLifecycle())) {
+                            callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
+                        }
                     } catch (Exception e) {
+                        callback.addError(e.getMessage());
                         callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
+                        return false;
                     }
                 }
                 break;

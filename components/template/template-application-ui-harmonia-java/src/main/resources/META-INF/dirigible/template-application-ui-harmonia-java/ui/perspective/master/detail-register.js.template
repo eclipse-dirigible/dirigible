@@ -76,7 +76,7 @@ App.registerDetail('${masterEntity}', {
   columns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.name != $masterEntityId)
-#if($property.widgetLabel)#set($clabel = $property.widgetLabel)#else#set($clabel = $property.name)#end
+#if($property.widgetLabel)#set($clabel = $property.widgetLabelJs)#else#set($clabel = $property.name)#end
 #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")
     { name: '${property.name}', label: '${clabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}' }#sensitiveMeta($property) },
 ## Extra read-only columns pulled from the SAME lookup row (relation `show`): the FK's referenced record
@@ -107,7 +107,7 @@ App.registerDetail('${masterEntity}', {
   editColumns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.name != $masterEntityId && (!$property.auditType || $property.auditType == "NONE"))
-#if($property.widgetLabel)#set($elabel = $property.widgetLabel)#else#set($elabel = $property.name)#end
+#if($property.widgetLabel)#set($elabel = $property.widgetLabelJs)#else#set($elabel = $property.name)#end
 ## Read-only only when DERIVED - an expression, or an update-time recompute. A field whose only
 ## calculated aspect is calculatedActionOnCreate is a server-side DEFAULT (Due, Currency, a tax
 ## event date): pre-filled, but the user's pick is respected - it must stay editable (#6696).

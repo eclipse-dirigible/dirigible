@@ -18,8 +18,15 @@ package org.eclipse.dirigible.components.ide.template.service.model;
  * into and break the compile of the whole generated module - an authored {@code defaultValue: '6"'}
  * rendered {@code entity.Size = "6"";} (dirigible #7154). Escaping the value keeps the worst case
  * at one mis-valued field.
+ *
+ * <p>
+ * {@link #escape(String)} is THE escape for "an authored value inside a generated Java literal",
+ * and it is public for that reason: the loop was copied into engine-intent twice before (dirigible
+ * #7287), where a copy that drifts is a compile error in a generated module nobody sees until a
+ * regen. Anything that renders a Java literal from a model value calls this - it does not grow a
+ * fourth copy.
  */
-final class JavaLiterals {
+public final class JavaLiterals {
 
     /**
      * Not instantiable.
@@ -33,7 +40,7 @@ final class JavaLiterals {
      * @param value the raw value
      * @return the escaped value, ready to be placed between two double quotes
      */
-    static String escape(String value) {
+    public static String escape(String value) {
         StringBuilder escaped = new StringBuilder(value.length() + 8);
         for (int index = 0; index < value.length(); index++) {
             char character = value.charAt(index);
@@ -73,7 +80,7 @@ final class JavaLiterals {
      * @param defaultValue the authored default, as the model carries it
      * @return the Java expression, or null when there is none
      */
-    static String defaultValueExpression(String javaClass, String defaultValue) {
+    public static String defaultValueExpression(String javaClass, String defaultValue) {
         if (javaClass == null || defaultValue == null || defaultValue.isEmpty()) {
             return null;
         }
