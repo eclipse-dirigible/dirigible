@@ -24,7 +24,7 @@
     <!-- The entity also renders on a calendar (intent `view: calendar|range`), which owns /${name};
          this browse page lives at /${name}/list. -->
     <button x-h-button data-variant="outline" data-size="sm" @click="goCalendar()">
-      <i role="img" x-h-lucide data-lucide="calendar"></i>
+      <svg role="presentation" x-h-lucide data-lucide="calendar"></svg>
       <span x-text="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')"></span>
     </button>
 #end
@@ -32,20 +32,20 @@
     <!-- The entity also renders as a slot picker (intent `view: slots`), which owns /${name};
          this browse page lives at /${name}/list. -->
     <button x-h-button data-variant="outline" data-size="sm" @click="goSlots()">
-      <i role="img" x-h-lucide data-lucide="clock"></i>
+      <svg role="presentation" x-h-lucide data-lucide="clock"></svg>
       <span x-text="T('$projectName:${tprefix}.defaults.slots', 'Slots')"></span>
     </button>
 #end
     <button x-h-button data-variant="primary" @click="newEntity()">
-      <i role="img" x-h-lucide data-lucide="plus"></i>
+      <svg role="presentation" x-h-lucide data-lucide="plus"></svg>
       <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>
     </button>
     <!-- Export the filtered rows as CSV / print them (Save as PDF via the browser dialog). -->
     <button x-h-button data-variant="outline" data-size="sm" :disabled="sortedItems.length === 0" @click="exportCsv()">
-      <i role="img" x-h-lucide data-lucide="download"></i><span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>
+      <svg role="presentation" x-h-lucide data-lucide="download"></svg><span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>
     </button>
     <button x-h-button data-variant="outline" data-size="sm" :disabled="sortedItems.length === 0" @click="printList()">
-      <i role="img" x-h-lucide data-lucide="printer"></i><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
+      <svg role="presentation" x-h-lucide data-lucide="printer"></svg><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
     </button>
     <!-- Developer-contributed page actions for this view (customActions extension point). -->
     <template x-for="action in $store.customActions.getActions(caView, 'page')" :key="action.id">
@@ -73,7 +73,7 @@
   <!-- Empty -->
   <div x-show="displayState === 'empty'" x-h-info-page class="p-4">
     <div x-h-info-page-header>
-      <div x-h-info-page-media.icon><i role="img" x-h-lucide data-lucide="inbox"></i></div>
+      <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="inbox"></svg></div>
       <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.noDataYet', 'No ${menuLabel} yet', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></div>
       <div x-h-info-page-description x-text="T('$projectName:${tprefix}.messages.getStarted', 'Get started by creating the first record.')"></div>
     </div>
@@ -85,7 +85,7 @@
   <!-- Data: master-detail — the table shows only the major columns; selecting a row reveals the
        record's full property list (and its actionable process tasks) in the right-hand pane. -->
   <div x-show="displayState === 'default' || displayState === 'no-results'"
-       x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
+       x-h-split class="flex-1" data-orientation="horizontal" data-variant="border">
 
     <!-- Master: the records table -->
     <div x-h-split-panel data-size="60%" data-min="320">
@@ -98,7 +98,7 @@
              tree of any depth from data; folding these six copies into one is a worthwhile
              follow-up, but it is a behaviour change and not part of the 2.9 API migration.) -->
         <div x-show="treeVisible" x-h-table-container.scroll class="flex-1" data-border="true">
-          <ul x-h-tree class="p-2">
+          <ul x-h-tree class="p-2" :aria-label="T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}')">
               <template x-for="n1 in childrenOf(null)" :key="n1.${primaryKeysString}">
                 <li x-h-tree-item="true" :aria-selected="isSelected(n1)" @tree-item-click.self="selectRow(n1)">
                   <div x-h-tree-row>
@@ -184,9 +184,9 @@
                 <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS") class="text-right"#end#visibleGate($property) @click="cycleSort('${property.name}')">
                   <div class="hbox items-center justify-between">
                     <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${property.name}')"></span>
-                    <svg x-h-lucide role="img" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></svg>
-                    <svg x-h-lucide role="img" data-lucide="arrow-down"    class="size-4" x-show="isSortedDesc('${property.name}')"></svg>
-                    <svg x-h-lucide role="img" data-lucide="arrow-up-down" class="size-4" x-show="isUnsorted('${property.name}')"></svg>
+                    <svg x-h-lucide role="presentation" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></svg>
+                    <svg x-h-lucide role="presentation" data-lucide="arrow-down"    class="size-4" x-show="isSortedDesc('${property.name}')"></svg>
+                    <svg x-h-lucide role="presentation" data-lucide="arrow-up-down" class="size-4" x-show="isUnsorted('${property.name}')"></svg>
                   </div>
                 </th>
 #end
@@ -201,7 +201,7 @@
                 <template x-for="col in filterColumns" :key="col.name">
                   <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''">
                     <select x-show="col.type === 'fk'" x-model="columnFilters[col.name]" @change="applyServerFilter()"
-                            class="w-full text-sm rounded-md border border-border bg-transparent px-2 py-1">
+                            class="w-full text-sm rounded-md border border-border px-2 py-1">
                       <option value="" x-text="T('$projectName:${tprefix}.defaults.all', 'All')"></option>
                       <template x-for="opt in optionsForFilter(col.name)" :key="opt.value">
                         <option :value="opt.value" x-text="opt.text"></option>
@@ -226,13 +226,13 @@
                            type="text"
                            @input.debounce.400ms="applyServerFilter()"
                            :placeholder="T('$projectName:${tprefix}.defaults.filter', 'Filter…')"
-                           class="w-full text-sm rounded-md border border-border bg-transparent px-2 py-1" />
+                           class="w-full text-sm rounded-md border border-border px-2 py-1" />
                   </th>
                 </template>
                 <th x-h-table-head scope="col" class="text-center">
-                  <button type="button" x-show="hasActiveColumnFilters" @click="clearColumnFilters()"
-                          :title="T('$projectName:${tprefix}.defaults.clearFilters', 'Clear filters')" class="text-muted-foreground hover:text-foreground">
-                    <i role="img" x-h-lucide data-lucide="filter-x" class="size-4"></i>
+                  <button type="button" x-h-button data-variant="transparent" data-size="icon-sm" x-show="hasActiveColumnFilters" @click="clearColumnFilters()"
+                          :title="T('$projectName:${tprefix}.defaults.clearFilters', 'Clear filters')" :aria-label="T('$projectName:${tprefix}.defaults.clearFilters', 'Clear filters')">
+                    <svg role="presentation" x-h-lucide data-lucide="funnel-x" class="size-4"></svg>
                   </button>
                 </th>
               </tr>
@@ -265,7 +265,7 @@
 #end
                   <td x-h-table-cell data-row-actions @click.stop>
                     <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions">
-                      <i role="img" x-h-lucide data-lucide="ellipsis"></i>
+                      <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
                     </button>
                     <ul x-h-menu data-align="bottom-end">
                       <li x-h-menu-item @click="previewEntity(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
@@ -288,11 +288,30 @@
           </table>
         </div>
 
-        <div#if($hierarchyProperty) x-show="!treeVisible"#end class="hbox items-center gap-2 p-2" x-show="totalPages > 1">
-          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)"><i role="img" x-h-lucide data-lucide="chevron-left"></i><span x-text="T('$projectName:${tprefix}.defaults.previous', 'Prev')"></span></button>
-          <span x-h-text.muted x-text="T('$projectName:${tprefix}.defaults.pageOf', 'Page {{page}} / {{total}}', { page: currentPage, total: totalPages })"></span>
-          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)"><span x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span><i role="img" x-h-lucide data-lucide="chevron-right"></i></button>
-        </div>
+## Pager: first / last / the current page's neighbours with an ellipsis over each gap (pageWindow).
+## A hierarchical entity hides it while the (unpaged) tree is showing - one x-show, both conditions.
+        <nav x-h-pagination class="w-fit! p-2" x-show="#if($hierarchyProperty)!treeVisible && #{end}totalPages > 1">
+          <ul x-h-pagination-content>
+            <li x-h-pagination-item>
+              <a x-h-pagination-link.previous href="#" :aria-label="T('$projectName:${tprefix}.defaults.previous', 'Previous')" :aria-disabled="currentPage <= 1" :tabindex="currentPage <= 1 ? -1 : 0" @click.prevent="if (currentPage > 1) goPage(currentPage - 1)">
+                <svg x-h-lucide role="presentation" data-lucide="chevron-left"></svg>
+                <span x-h-pagination-link-label x-text="T('$projectName:${tprefix}.defaults.previous', 'Previous')"></span>
+              </a>
+            </li>
+            <template x-for="(p, i) in pageWindow()" :key="i">
+              <li x-h-pagination-item>
+                <template x-if="p === '...'"><span x-h-pagination-ellipsis></span></template>
+                <template x-if="p !== '...'"><a x-h-pagination-link="currentPage === p" href="#" @click.prevent="goPage(p)" x-text="p"></a></template>
+              </li>
+            </template>
+            <li x-h-pagination-item>
+              <a x-h-pagination-link.next href="#" :aria-label="T('$projectName:${tprefix}.defaults.next', 'Next')" :aria-disabled="currentPage >= totalPages" :tabindex="currentPage >= totalPages ? -1 : 0" @click.prevent="if (currentPage < totalPages) goPage(currentPage + 1)">
+                <span x-h-pagination-link-label x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span>
+                <svg x-h-lucide role="presentation" data-lucide="chevron-right"></svg>
+              </a>
+            </li>
+          </ul>
+        </nav>
       </div>
     </div>
 
@@ -316,17 +335,17 @@
                to the selected record. The filter is a query parameter on the calendar's own route,
                so without a button here the URL is knowledge the user has to type. -->
 #foreach($scopedCalendar in $scopedCalendars)
-          <button x-h-button data-variant="outline" data-size="sm" @click="openScopedCalendar('${scopedCalendar.entity}', '${scopedCalendar.scopeProperty}', selectedId)"><i role="img" x-h-lucide data-lucide="calendar-days"></i><span x-text="T('$projectName:${tprefix}.t.${scopedCalendar.dataName}_plural', '${scopedCalendar.label}')"></span></button>
+          <button x-h-button data-variant="outline" data-size="sm" @click="openScopedCalendar('${scopedCalendar.entity}', '${scopedCalendar.scopeProperty}', selectedId)"><svg role="presentation" x-h-lucide data-lucide="calendar-days"></svg><span x-text="T('$projectName:${tprefix}.t.${scopedCalendar.dataName}_plural', '${scopedCalendar.label}')"></span></button>
 #end
 #end
-          <button x-h-button data-variant="outline" data-size="sm" @click="previewEntity(selected)"><i role="img" x-h-lucide data-lucide="eye"></i><span x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></span></button>
+          <button x-h-button data-variant="outline" data-size="sm" @click="previewEntity(selected)"><svg role="presentation" x-h-lucide data-lucide="eye"></svg><span x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></span></button>
 #if($immutableStatusProperty || $immutableAlways)
           <!-- Edit/Delete are disabled for an immutable record (the controller would 409). -->
-          <button x-h-button data-variant="outline" data-size="sm" :disabled="isRowImmutable(selected)" :title="isRowImmutable(selected) ? T('$projectName:${tprefix}.messages.immutable', 'This record is read-only in its current status - corrections go through the workflow.') : null" @click="editEntity(selected)"><i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span></button>
-          <button x-h-button data-variant="transparent" data-size="sm" :disabled="isRowImmutable(selected)" @click="askDelete(selected)" aria-label="Delete"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="isRowImmutable(selected)" :title="isRowImmutable(selected) ? T('$projectName:${tprefix}.messages.immutable', 'This record is read-only in its current status - corrections go through the workflow.') : null" @click="editEntity(selected)"><svg role="presentation" x-h-lucide data-lucide="pencil"></svg><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span></button>
+          <button x-h-button data-variant="transparent" data-size="sm" :disabled="isRowImmutable(selected)" @click="askDelete(selected)" aria-label="Delete"><svg role="presentation" x-h-lucide data-lucide="trash-2"></svg></button>
 #else
-          <button x-h-button data-variant="outline" data-size="sm" @click="editEntity(selected)"><i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span></button>
-          <button x-h-button data-variant="transparent" data-size="sm" @click="askDelete(selected)" aria-label="Delete"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
+          <button x-h-button data-variant="outline" data-size="sm" @click="editEntity(selected)"><svg role="presentation" x-h-lucide data-lucide="pencil"></svg><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span></button>
+          <button x-h-button data-variant="transparent" data-size="sm" @click="askDelete(selected)" aria-label="Delete"><svg role="presentation" x-h-lucide data-lucide="trash-2"></svg></button>
 #end
         </div>
 
@@ -335,7 +354,7 @@
         <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
           <template x-for="task in $store.processTasks.getTasks(selected)" :key="task.id">
             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
-              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="$store.processTasks.taskName(task)"></span>
+              <svg role="presentation" x-h-lucide data-lucide="inbox"></svg><span x-text="$store.processTasks.taskName(task)"></span>
             </button>
           </template>
         </div>
@@ -365,7 +384,7 @@
 #if(!$property.dataAutoIncrement && !$property.isHiddenProperty)
 #if($property.widgetLabel)#set($plabel = $property.widgetLabelJs)#else#set($plabel = $property.name)#end
 #if($property.isDateType)#set($isDate = "true")#else#set($isDate = "false")#end
-          <div class="vbox gap-0"#visibleGate($property)>
+          <div class="vbox"#visibleGate($property)>
             <span x-h-text.muted class="text-xs" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${plabel}')"></span>
 #if($property.widgetType == "DOCUMENT_STATUS")
             <span><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', selected?.${property.name}))" x-show="lookupText('${property.name}', selected?.${property.name})" x-text="lookupText('${property.name}', selected?.${property.name})"></span></span>
@@ -394,7 +413,7 @@
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.deleteTitle', 'Delete ${entityLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></h2>
         <p x-h-dialog-description></p>
-        <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+        <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
       <div x-h-dialog-content>
         <p x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure you want to delete this record?', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></p>

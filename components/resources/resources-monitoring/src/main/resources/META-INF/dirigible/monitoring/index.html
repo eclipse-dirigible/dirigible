@@ -22,12 +22,6 @@
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
     <link href="/services/web/application-core/shell/css/app.css" rel="stylesheet" />
     <link href="./css/app.css" rel="stylesheet" />
-
-    <script>
-      (function () {
-        try { if (!localStorage.getItem('codbex.harmonia.colorMode')) localStorage.setItem('codbex.harmonia.colorMode', 'light'); } catch (e) { /* no storage */ }
-      })();
-    </script>
   </head>
 
   <body class="vbox size-full" x-data="app">
@@ -47,7 +41,7 @@
           <div x-h-sidebar-header>
             <div class="hbox items-center gap-2 p-1">
               <img :src="$store.branding.logo" :alt="$store.branding.name" class="size-5" />
-              <div class="vbox gap-0">
+              <div class="vbox">
                 <span class="font-bold leading-tight" x-text="$store.branding.name"></span>
                 <span x-h-text.muted class="text-xs leading-tight" x-text="T('monitoring:shell.title', 'Monitoring')"></span>
               </div>
@@ -60,8 +54,8 @@
               <div x-h-sidebar-group-content>
                 <ul x-h-sidebar-menu>
                   <li x-h-sidebar-menu-item>
-                    <button id="monitoring-nav-overview" x-h-sidebar-menu-button :data-active="isActive('/overview')" @click="navigate('/overview')">
-                      <i role="img" x-h-lucide data-lucide="activity"></i>
+                    <button id="monitoring-nav-overview" x-h-sidebar-menu-nav :data-active="isActive('/overview')" @click="navigate('/overview')">
+                      <svg role="presentation" x-h-lucide data-lucide="activity"></svg>
                       <span class="flex-1" x-text="T('monitoring:shell.nav.overview', 'Overview')"></span>
                       <!-- The problem count doubles as the shell's alarm: it is visible from every page. -->
                       <span x-show="$store.overview.problemCount > 0" x-h-badge data-variant="negative"
@@ -69,32 +63,32 @@
                     </button>
                   </li>
                   <li x-h-sidebar-menu-item>
-                    <button id="monitoring-nav-processes" x-h-sidebar-menu-button :data-active="isActive('/processes')" @click="navigate('/processes')">
-                      <i role="img" x-h-lucide data-lucide="workflow"></i>
+                    <button id="monitoring-nav-processes" x-h-sidebar-menu-nav :data-active="isActive('/processes')" @click="navigate('/processes')">
+                      <svg role="presentation" x-h-lucide data-lucide="workflow"></svg>
                       <span class="flex-1" x-text="T('monitoring:shell.nav.processes', 'Processes')"></span>
                     </button>
                   </li>
                   <li x-h-sidebar-menu-item>
-                    <button id="monitoring-nav-jobs" x-h-sidebar-menu-button :data-active="isActive('/jobs')" @click="navigate('/jobs')">
-                      <i role="img" x-h-lucide data-lucide="alarm-clock"></i>
+                    <button id="monitoring-nav-jobs" x-h-sidebar-menu-nav :data-active="isActive('/jobs')" @click="navigate('/jobs')">
+                      <svg role="presentation" x-h-lucide data-lucide="alarm-clock"></svg>
                       <span class="flex-1" x-text="T('monitoring:shell.nav.jobs', 'Jobs')"></span>
                     </button>
                   </li>
                   <li x-h-sidebar-menu-item>
-                    <button id="monitoring-nav-logs" x-h-sidebar-menu-button :data-active="isActive('/logs')" @click="navigate('/logs')">
-                      <i role="img" x-h-lucide data-lucide="scroll-text"></i>
+                    <button id="monitoring-nav-logs" x-h-sidebar-menu-nav :data-active="isActive('/logs')" @click="navigate('/logs')">
+                      <svg role="presentation" x-h-lucide data-lucide="scroll-text"></svg>
                       <span class="flex-1" x-text="T('monitoring:shell.nav.logs', 'Logs')"></span>
                     </button>
                   </li>
                   <li x-h-sidebar-menu-item>
-                    <button id="monitoring-nav-messaging" x-h-sidebar-menu-button :data-active="isActive('/messaging')" @click="navigate('/messaging')">
-                      <i role="img" x-h-lucide data-lucide="mails"></i>
+                    <button id="monitoring-nav-messaging" x-h-sidebar-menu-nav :data-active="isActive('/messaging')" @click="navigate('/messaging')">
+                      <svg role="presentation" x-h-lucide data-lucide="mails"></svg>
                       <span class="flex-1" x-text="T('monitoring:shell.nav.messaging', 'Messaging')"></span>
                     </button>
                   </li>
                   <li x-h-sidebar-menu-item>
-                    <button id="monitoring-nav-system" x-h-sidebar-menu-button :data-active="isActive('/system')" @click="navigate('/system')">
-                      <i role="img" x-h-lucide data-lucide="server"></i>
+                    <button id="monitoring-nav-system" x-h-sidebar-menu-nav :data-active="isActive('/system')" @click="navigate('/system')">
+                      <svg role="presentation" x-h-lucide data-lucide="server"></svg>
                       <span class="flex-1" x-text="T('monitoring:shell.nav.system', 'System')"></span>
                     </button>
                   </li>
@@ -108,14 +102,14 @@
             <ul x-h-sidebar-menu>
               <li x-h-sidebar-menu-item>
                 <a x-h-sidebar-menu-button href="/services/web/shell-ide/" target="_blank" rel="noopener">
-                  <i role="img" x-h-lucide data-lucide="external-link"></i>
+                  <svg role="presentation" x-h-lucide data-lucide="external-link"></svg>
                   <span x-text="T('monitoring:shell.nav.workbench', 'Open in Workbench')"></span>
                 </a>
               </li>
             </ul>
             <!-- Which build this is - the first question about an instance, so it is on every page.
                  The System page carries the rest of it (commit, type, providers, engines). -->
-            <div id="monitoring-build" class="px-2 pb-1 pt-0.5" x-show="$store.version.summary" x-cloak>
+            <div id="monitoring-build" class="px-2 pb-1 pt-1" x-show="$store.version.summary" x-cloak>
               <span x-h-text.muted class="text-xs" :title="$store.version.tooltip"
                     x-text="$store.version.summary"></span>
             </div>
@@ -129,46 +123,60 @@
           <div x-h-toolbar data-variant="transparent" x-cloak>
             <button x-show="hiddenPanels.left" x-h-button data-variant="transparent"
                     aria-label="Navigation" @click="openSideNav()" data-size="icon">
-              <i role="img" x-h-lucide data-lucide="menu"></i>
+              <svg role="presentation" x-h-lucide data-lucide="menu"></svg>
             </button>
             <span x-h-toolbar-title class="shrink-0" x-text="T('monitoring:shell.title', 'Monitoring')"></span>
             <div x-h-toolbar-spacer></div>
-            <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.theme.toggle()"
-                    :aria-label="$store.theme.value === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
-              <svg x-h-lucide x-show="$store.theme.value !== 'dark'" role="img" data-lucide="moon"></svg>
-              <svg x-h-lucide x-show="$store.theme.value === 'dark'" role="img" data-lucide="sun"></svg>
+            <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
+                    :aria-label="T('application-core:shell.theme.title', 'Theme')" :title="T('application-core:shell.theme.title', 'Theme')">
+              <svg x-h-lucide role="presentation" :data-lucide="$store.theme.icon"></svg>
             </button>
+            <ul x-h-menu aria-label="Theme" data-align="bottom-end">
+              <li x-h-menu-radio-item="'light'" name="theme" x-model="$store.theme.mode">
+                <svg role="presentation" x-h-lucide data-lucide="sun"></svg>
+                <span x-text="T('application-core:shell.theme.light', 'Light')"></span>
+              </li>
+              <li x-h-menu-radio-item="'dark'" name="theme" x-model="$store.theme.mode">
+                <svg role="presentation" x-h-lucide data-lucide="moon"></svg>
+                <span x-text="T('application-core:shell.theme.dark', 'Dark')"></span>
+              </li>
+              <li x-h-menu-radio-item="'auto'" name="theme" x-model="$store.theme.mode">
+                <svg role="presentation" x-h-lucide data-lucide="sun-moon"></svg>
+                <span x-text="T('application-core:shell.theme.auto', 'Auto')"></span>
+              </li>
+            </ul>
 
             <button id="user-menu-trigger" x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
                     :aria-label="$store.currentUser.name || 'Account'">
-              <i role="img" x-h-lucide data-lucide="circle-user"></i>
+              <svg role="presentation" x-h-lucide data-lucide="circle-user"></svg>
             </button>
             <ul x-h-menu aria-label="User menu" data-align="bottom-end">
-              <div x-h-tile class="mb-1">
-                <div x-h-tile-media><i role="img" x-h-lucide data-lucide="circle-user" class="size-6"></i></div>
-                <div x-h-tile-content>
-                  <div x-h-tile-title x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></div>
+              <li role="presentation">
+                <div x-h-tile class="mb-1">
+                  <div x-h-tile-media><svg role="presentation" x-h-lucide data-lucide="circle-user" class="size-6"></svg></div>
+                  <div x-h-tile-content>
+                    <div x-h-tile-title x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></div>
+                  </div>
                 </div>
-              </div>
+              </li>
               <div x-h-menu-separator></div>
               <!-- Switch shells without the detour through Home: the same `platform-shells` list the
                    launchpad renders, minus this one (the shared `shells` store). -->
               <div x-h-menu-label x-text="T('application-core:shell.switch.title', 'Switch to')"></div>
               <li x-h-menu-item @click="$store.shells.openHome()">
-                <i role="img" x-h-lucide data-lucide="house"></i>
+                <svg role="presentation" x-h-lucide data-lucide="house"></svg>
                 <span x-text="T('application-core:shell.switch.home', 'Home')"></span>
               </li>
               <template x-for="shell in $store.shells.items" :key="shell.id">
                 <li x-h-menu-item @click="$store.shells.open(shell)">
-                  <!-- svg, not <i>: the Lucide plugin REPLACES the element it upgrades, so a bound
-                       :data-lucide on an <i> throws and aborts Alpine's walk over the rest of the menu. -->
-                  <svg x-h-lucide role="img" :data-lucide="$store.shells.iconFor(shell)"></svg>
+                  <!-- An svg placeholder is rendered in place, so the bound :data-lucide stays reactive. -->
+                  <svg x-h-lucide role="presentation" :data-lucide="$store.shells.iconFor(shell)"></svg>
                   <span x-text="shell.label"></span>
                 </li>
               </template>
               <div x-h-menu-separator></div>
               <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
-                <i role="img" x-h-lucide data-lucide="log-out"></i>
+                <svg role="presentation" x-h-lucide data-lucide="log-out"></svg>
                 <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
               </li>
             </ul>

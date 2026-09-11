@@ -42,22 +42,22 @@ body {
 
 .builder-message.user {
   align-self: flex-end;
-  background: var(--color-primary, #3584e4);
-  color: var(--color-primary-foreground, #ffffff);
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
 
 .builder-message.assistant,
 .builder-message.note {
   align-self: flex-start;
-  background: var(--color-muted, #f1f3f5);
-  color: var(--color-foreground, #1d2d3e);
+  background: var(--muted);
+  color: var(--foreground);
 }
 
 .builder-message.error {
   align-self: stretch;
   max-width: 100%;
-  background: var(--color-negative-muted, #fdeaea);
-  color: var(--color-negative, #a51d2d);
+  background: color-mix(in oklab, var(--negative) 15%, var(--background));
+  color: var(--negative);
 }
 
 /* A requirement the intent could not express. Deliberately NOT styled like the assistant's prose:
@@ -66,13 +66,13 @@ body {
 .builder-message.boundary {
   align-self: stretch;
   max-width: 100%;
-  background: var(--color-warning-muted, #fdf3e0);
-  color: var(--color-foreground, #1d2d3e);
-  border-left: 3px solid var(--color-warning, #e9a319);
+  background: color-mix(in oklab, var(--warning) 15%, var(--background));
+  color: var(--foreground);
+  border-left: 3px solid var(--warning);
 }
 
 .builder-thinking {
-  color: var(--color-muted-foreground, #6a6d70);
+  color: var(--muted-foreground);
 }
 
 .builder-welcome {
@@ -91,7 +91,7 @@ body {
 
 .builder-composer {
   padding: 0.75rem;
-  border-top: 1px solid var(--color-border, #e5e5e5);
+  border-top: 1px solid var(--border);
   align-items: flex-end;
 }
 
@@ -108,16 +108,16 @@ body {
 .builder-issues {
   padding: 0.75rem;
   border-radius: 0.5rem;
-  background: var(--color-negative-muted, #fdeaea);
-  color: var(--color-negative, #a51d2d);
+  background: color-mix(in oklab, var(--negative) 15%, var(--background));
+  color: var(--negative);
   overflow-wrap: anywhere;
 }
 
 .builder-warnings {
   padding: 0.75rem;
   border-radius: 0.5rem;
-  background: var(--color-warning-muted, #fdf3e3);
-  color: var(--color-warning, #b45309);
+  background: color-mix(in oklab, var(--warning) 15%, var(--background));
+  color: var(--warning);
   overflow-wrap: anywhere;
 }
 
@@ -149,19 +149,19 @@ body {
   margin: 0.75rem 0 0.25rem 0;
   font-size: 0.9375rem;
   font-weight: 600;
-  color: var(--color-foreground, #1d2d3e);
+  color: var(--foreground);
 }
 
 .builder-diagrams .intent-diagram {
   width: 100%;
   overflow: auto;
-  border: 1px solid var(--color-border, #e5e5e5);
+  border: 1px solid var(--border);
   border-radius: 0.5rem;
-  background: var(--color-card, #ffffff);
+  background: var(--card);
 }
 
 .builder-diagrams .intent-diagram-empty {
-  color: var(--color-muted-foreground, #6a6d70);
+  color: var(--muted-foreground);
   font-style: italic;
   font-size: 0.875rem;
 }

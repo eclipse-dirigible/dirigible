@@ -61,7 +61,8 @@ document.addEventListener('alpine:init', () => {
         userName: '',
         shells: [],
         loaded: false,
-        dark: false,
+        _themeMode: 'auto',   // 'light' | 'dark' | 'auto' - the selection
+        themeScheme: 'light', // the scheme applied right now
 
         async init() {
             const b = window.PlatformBranding || (window.top && window.top.PlatformBranding) || {};
@@ -72,7 +73,7 @@ document.addEventListener('alpine:init', () => {
                 const link = document.querySelector('link[rel="icon"]');
                 if (link) link.href = favicon;
             }
-            try { this.dark = window.Harmonia && Harmonia.getColorScheme() === 'dark'; } catch (e) { this.dark = false; }
+            this.initTheme();
             await Promise.all([this.loadUser(), this.loadShells()]);
             this.loaded = true;
         },
@@ -115,9 +116,36 @@ document.addEventListener('alpine:init', () => {
         iconFor(id) { return ICONS[id] || 'box'; },
         descriptionFor(id) { return DESCRIPTIONS[id] || ''; },
 
-        toggleTheme() {
-            this.dark = !this.dark;
-            if (window.Harmonia) Harmonia.setColorScheme(this.dark ? 'dark' : 'light');
+        // Harmonia owns the colour scheme: it persists the selection, applies the `.dark` class and
+        // keeps every same-origin frame and tab in sync. The listener keeps this control in step
+        // when the change is made elsewhere, or when the OS flips while `auto` is selected.
+        initTheme() {
+            if (!window.Harmonia) return;
+            this._themeMode = Harmonia.getColorScheme();
+            this.themeScheme = this.resolveScheme(this._themeMode);
+            Harmonia.addColorSchemeListener((scheme, mode) => {
+                this.themeScheme = scheme;
+                if (mode) this._themeMode = mode;
+            });
+        },
+
+        get themeMode() { return this._themeMode; },
+
+        set themeMode(value) {
+            if (value !== 'light' && value !== 'dark' && value !== 'auto') return;
+            this._themeMode = value;
+            this.themeScheme = this.resolveScheme(value);
+            if (window.Harmonia) Harmonia.setColorScheme(value);
+        },
+
+        get themeIcon() {
+            if (this._themeMode === 'auto') return 'sun-moon';
+            return this.themeScheme === 'dark' ? 'moon' : 'sun';
+        },
+
+        resolveScheme(mode) {
+            if (mode === 'light' || mode === 'dark') return mode;
+            return window.Harmonia ? Harmonia.getSystemColorScheme() : 'light';
         },
 
         logout() { window.location.replace('/logout'); },

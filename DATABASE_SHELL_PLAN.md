@@ -12,11 +12,11 @@ this plan clones.
 
 ### Corrections to this plan, found while building it
 
-- **The bump is to 2.9.0, not 2.10.0.** 2.10.0 is published on npm but has no webjar on Maven
-  Central, and 2.9.0 carries every breaking change that mattered (the tree rewrite included). The
-  2.10.0 delta — a cross-origin iframe crash fix and an inverted `getBreakpointListener` third
-  argument — is a follow-up; when its webjar lands, the six shells calling that listener must pass
-  `true`.
+- **The bump was to 2.9.0 at the time (2.10.0 had no webjar yet); the platform has since moved on to
+  3.1.2.** The `getBreakpointListener` third argument is deliberately left at its default
+  (`topFrame = false`): the listener then measures the frame it runs in, which is what the CSS
+  breakpoint variants resolve against, so the shells calling it pass nothing. (An earlier note here
+  asked them to pass `true`; Harmonia's own docs argue the opposite, and the docs win.)
 - **The `data-disabled` sweep was a bug fix, not a rename.** `data-disabled` on a root `x-h-select`
   never did anything, even on 2.6.0: it was always a per-*option* attribute, and the whole control
   is disabled through native `disabled` on `x-h-select-input`. Preview-mode and read-only dropdowns

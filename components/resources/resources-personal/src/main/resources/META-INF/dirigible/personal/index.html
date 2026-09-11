@@ -34,12 +34,6 @@
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
     <link href="/services/web/application-core/shell/css/app.css" rel="stylesheet" />
     <link href="./css/app.css" rel="stylesheet" />
-
-    <script>
-      (function () {
-        try { if (!localStorage.getItem('codbex.harmonia.colorMode')) localStorage.setItem('codbex.harmonia.colorMode', 'light'); } catch (e) { /* no storage */ }
-      })();
-    </script>
   </head>
 
   <body class="vbox size-full" x-data="app">
@@ -69,7 +63,7 @@
                     <span class="truncate font-medium" x-text="projectionLabel()"></span>
                     <span class="truncate text-xs font-normal" x-text="projectionSubtitle()"></span>
                   </div>
-                  <i x-h-lucide role="img" data-lucide="chevrons-up-down"></i>
+                  <svg x-h-lucide role="presentation" data-lucide="chevrons-up-down"></svg>
                 </button>
                 <ul x-h-menu aria-label="Projections" data-align="bottom-start">
                   <div x-h-menu-label x-text="T('application-core:shell.projections.title', 'Applications')"></div>
@@ -77,10 +71,10 @@
                     <li x-h-menu-item @click="selectProjection(p)">
                       <template x-if="isSvgIcon(p.icon)"><svg x-h-icon :data-link="p.icon" class="size-4" role="presentation"></svg></template>
                       <template x-if="isImageIcon(p.icon)"><img :src="p.icon" alt="" class="size-4" /></template>
-                      <template x-if="!isSvgIcon(p.icon) && !isImageIcon(p.icon)"><i role="img" x-h-lucide :data-lucide="p.icon || 'box'"></i></template>
+                      <template x-if="!isSvgIcon(p.icon) && !isImageIcon(p.icon)"><svg role="presentation" x-h-lucide :data-lucide="p.icon || 'box'"></svg></template>
                       <span class="flex-1" x-text="p.tkey ? T(p.tkey, p.label) : p.label"></span>
-                      <!-- svg placeholder: x-show on an <i x-h-lucide> is lost when the i is replaced by the svg -->
-                      <svg x-h-lucide x-show="projectionId === p.id" role="img" data-lucide="check"></svg>
+                      <!-- svg placeholder: an Alpine binding (here x-show) only survives on an svg, which is rendered in place -->
+                      <svg x-h-lucide x-show="projectionId === p.id" role="presentation" data-lucide="check"></svg>
                     </li>
                   </template>
                 </ul>
@@ -89,7 +83,7 @@
             <template x-if="projections.length <= 1">
               <div class="hbox items-center gap-2 p-1">
                 <img :src="$store.branding.logo" :alt="$store.branding.name" class="size-5" />
-                <div class="vbox gap-0">
+                <div class="vbox">
                   <span class="font-bold leading-tight" x-text="$store.branding.name"></span>
                   <span x-show="$store.branding.subtitle" class="text-xs text-muted-foreground leading-tight" x-text="$store.branding.subtitle"></span>
                 </div>
@@ -106,8 +100,8 @@
                   <!-- The Personal shell is task-first: the Inbox IS the home page - a personal task
                        ("Fill & confirm your July timesheet") is how work arrives here. -->
                   <li x-h-sidebar-menu-item>
-                    <button x-h-sidebar-menu-button :data-active="isBuiltinActive('/inbox') || isBuiltinActive('/')" @click="navigate('/inbox')">
-                      <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('application-core:shell.nav.inbox', 'Inbox')"></span>
+                    <button x-h-sidebar-menu-nav :data-active="isBuiltinActive('/inbox') || isBuiltinActive('/')" @click="navigate('/inbox')">
+                      <svg role="presentation" x-h-lucide data-lucide="inbox"></svg><span x-text="T('application-core:shell.nav.inbox', 'Inbox')"></span>
                     </button>
                   </li>
                 </ul>
@@ -127,10 +121,10 @@
                   <ul x-h-sidebar-menu>
                     <template x-for="item in group.items" :key="item.id">
                       <li x-h-sidebar-menu-item>
-                        <button x-h-sidebar-menu-button :data-active="isAppActive(item)" @click="openApp(item)">
+                        <button x-h-sidebar-menu-nav :data-active="isAppActive(item)" @click="openApp(item)">
                           <template x-if="isSvgIcon(item.icon)"><svg x-h-icon :data-link="item.icon" class="size-4" role="presentation"></svg></template>
                           <template x-if="isImageIcon(item.icon)"><img :src="item.icon" alt="" class="size-4" /></template>
-                          <template x-if="!isSvgIcon(item.icon) && !isImageIcon(item.icon)"><i role="img" x-h-lucide :data-lucide="item.icon || 'box'"></i></template>
+                          <template x-if="!isSvgIcon(item.icon) && !isImageIcon(item.icon)"><svg role="presentation" x-h-lucide :data-lucide="item.icon || 'box'"></svg></template>
                           <span x-text="item.tkey ? T(item.tkey, item.label) : item.label"></span>
                         </button>
                       </li>
@@ -143,13 +137,15 @@
 
           <!-- Settings pinned to the footer; it aggregates every app's SETTING entities. -->
           <div x-h-sidebar-footer>
-            <ul x-h-sidebar-menu>
-              <li x-h-sidebar-menu-item x-show="visibleSettingsItems().length > 0">
-                <button x-h-sidebar-menu-button :data-active="settingsMode" @click="openSettings()">
-                  <i role="img" x-h-lucide data-lucide="settings"></i><span x-text="T('application-core:shell.nav.settings', 'Settings')"></span>
-                </button>
-              </li>
-            </ul>
+            <nav :aria-label="T('application-core:shell.nav.settings', 'Settings')">
+              <ul x-h-sidebar-menu>
+                <li x-h-sidebar-menu-item x-show="visibleSettingsItems().length > 0">
+                  <button x-h-sidebar-menu-nav :data-active="settingsMode" @click="openSettings()">
+                    <svg role="presentation" x-h-lucide data-lucide="settings"></svg><span x-text="T('application-core:shell.nav.settings', 'Settings')"></span>
+                  </button>
+                </li>
+              </ul>
+            </nav>
           </div>
         </div>
       </div>
@@ -160,28 +156,43 @@
           <div x-h-toolbar data-variant="transparent" x-cloak>
             <button x-show="hiddenPanels.left" x-h-button data-variant="transparent"
                     aria-label="Navigation" @click="openSideNav()" data-size="icon">
-              <i role="img" x-h-lucide data-lucide="menu"></i>
+              <svg role="presentation" x-h-lucide data-lucide="menu"></svg>
             </button>
             <span x-h-toolbar-title x-text="T('application-core:shell.nav.personal', 'Personal')"></span>
             <div x-h-toolbar-spacer></div>
-            <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.theme.toggle()"
-                    :aria-label="$store.theme.value === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
-              <svg x-h-lucide x-show="$store.theme.value !== 'dark'" role="img" data-lucide="moon"></svg>
-              <svg x-h-lucide x-show="$store.theme.value === 'dark'" role="img" data-lucide="sun"></svg>
+            <!-- Theme: light / dark / auto through the shared `theme` store. Harmonia applies the saved
+                 colour scheme (or the OS scheme in auto mode) itself and keeps every same-origin frame
+                 and tab in sync. -->
+            <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
+                    :aria-label="T('application-core:shell.theme.title', 'Theme')" :title="T('application-core:shell.theme.title', 'Theme')">
+              <svg x-h-lucide role="presentation" :data-lucide="$store.theme.icon"></svg>
             </button>
+            <ul x-h-menu aria-label="Theme" data-align="bottom-end">
+              <li x-h-menu-radio-item="'light'" name="theme" x-model="$store.theme.mode">
+                <svg role="presentation" x-h-lucide data-lucide="sun"></svg>
+                <span x-text="T('application-core:shell.theme.light', 'Light')"></span>
+              </li>
+              <li x-h-menu-radio-item="'dark'" name="theme" x-model="$store.theme.mode">
+                <svg role="presentation" x-h-lucide data-lucide="moon"></svg>
+                <span x-text="T('application-core:shell.theme.dark', 'Dark')"></span>
+              </li>
+              <li x-h-menu-radio-item="'auto'" name="theme" x-model="$store.theme.mode">
+                <svg role="presentation" x-h-lucide data-lucide="sun-moon"></svg>
+                <span x-text="T('application-core:shell.theme.auto', 'Auto')"></span>
+              </li>
+            </ul>
 
             <!-- Notifications: the bell shows the unread count; the popover lists them. -->
             <button x-h-button x-h-popover-trigger data-variant="transparent" data-size="icon-sm" aria-label="Notifications" class="relative">
-              <i role="img" x-h-lucide data-lucide="bell"></i>
-              <span x-show="$store.notifications.unreadCount > 0" class="absolute" x-text="$store.notifications.unreadCount"
-                    style="right:-2px; bottom:-2px; min-width:15px; height:15px; padding:0 3px; border-radius:9999px; background:#e01b24; color:#fff; font-size:9px; line-height:15px; text-align:center; font-weight:700;"></span>
+              <svg role="presentation" x-h-lucide data-lucide="bell"></svg>
+              <template x-if="$store.notifications.unreadCount"><span x-h-badge-indicator data-variant="negative" x-text="$store.notifications.unreadCount"></span></template>
             </button>
-            <div class="w-80" x-h-popover data-innerclicks="true">
+            <div class="w-xs" x-h-popover data-innerclicks="true">
               <div x-h-toolbar data-size="sm">
                 <span x-h-toolbar-title class="shrink-0" x-text="T('application-core:shell.notifications.title', 'Notifications') + ' (' + $store.notifications.unreadCount + ')'"></span>
                 <div x-h-toolbar-spacer></div>
                 <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.notifications.markAllRead()"
-                        title="Mark all as read" aria-label="Mark all as read"><i role="img" x-h-lucide data-lucide="check-check"></i></button>
+                        title="Mark all as read" aria-label="Mark all as read"><svg role="presentation" x-h-lucide data-lucide="check-check"></svg></button>
               </div>
               <div x-show="$store.notifications.items.length === 0" x-h-text.muted class="p-3 text-sm" x-text="T('application-core:shell.notifications.caughtUp', 'You\u2019re all caught up.')"></div>
               <ol x-show="$store.notifications.items.length" x-h-notification-list>
@@ -201,26 +212,28 @@
             <!-- Logged-in user: avatar; the dropdown shows the user name and Log out. -->
             <button id="user-menu-trigger" x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
                     :aria-label="$store.currentUser.name || 'Account'">
-              <i role="img" x-h-lucide data-lucide="circle-user"></i>
+              <svg role="presentation" x-h-lucide data-lucide="circle-user"></svg>
             </button>
             <ul x-h-menu aria-label="User menu" data-align="bottom-end">
-              <div x-h-tile class="mb-1">
-                <div x-h-tile-media><i role="img" x-h-lucide data-lucide="circle-user" class="size-6"></i></div>
-                <div x-h-tile-content>
-                  <div x-h-tile-title x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></div>
+              <li role="presentation">
+                <div x-h-tile class="mb-1">
+                  <div x-h-tile-media><svg role="presentation" x-h-lucide data-lucide="circle-user" class="size-6"></svg></div>
+                  <div x-h-tile-content>
+                    <div x-h-tile-title x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></div>
+                  </div>
                 </div>
-              </div>
+              </li>
               <div x-h-menu-separator></div>
               <!-- Act as (delegated entry): entitled users arm an acting identity; while armed the
                    personal surfaces and the Inbox serve that person's world (the banner rules). -->
               <template x-if="actAs.entitled && !actAs.acting">
                 <li x-h-menu-item @click="actAsDialog = true">
-                  <i role="img" x-h-lucide data-lucide="user-round-cog"></i> <span x-text="T('application-core:shell.actAs.start', 'Act as...')"></span>
+                  <svg role="presentation" x-h-lucide data-lucide="user-round-cog"></svg> <span x-text="T('application-core:shell.actAs.start', 'Act as...')"></span>
                 </li>
               </template>
               <template x-if="actAs.acting">
                 <li x-h-menu-item @click="disarmActAs()">
-                  <i role="img" x-h-lucide data-lucide="user-round-x"></i> <span x-text="T('application-core:shell.actAs.stop', 'Stop acting as') + ' ' + actAs.acting"></span>
+                  <svg role="presentation" x-h-lucide data-lucide="user-round-x"></svg> <span x-text="T('application-core:shell.actAs.stop', 'Stop acting as') + ' ' + actAs.acting"></span>
                 </li>
               </template>
               <!-- Switch shells without the detour through Home: the same `platform-shells` list the
@@ -228,20 +241,19 @@
               <div x-h-menu-separator></div>
               <div x-h-menu-label x-text="T('application-core:shell.switch.title', 'Switch to')"></div>
               <li x-h-menu-item @click="$store.shells.openHome()">
-                <i role="img" x-h-lucide data-lucide="house"></i>
+                <svg role="presentation" x-h-lucide data-lucide="house"></svg>
                 <span x-text="T('application-core:shell.switch.home', 'Home')"></span>
               </li>
               <template x-for="shell in $store.shells.items" :key="shell.id">
                 <li x-h-menu-item @click="$store.shells.open(shell)">
-                  <!-- svg, not <i>: the Lucide plugin REPLACES the element it upgrades, so a bound
-                       :data-lucide on an <i> throws and aborts Alpine's walk over the rest of the menu. -->
-                  <svg x-h-lucide role="img" :data-lucide="$store.shells.iconFor(shell)"></svg>
+                  <!-- svg placeholder: rendered in place, so the bound :data-lucide stays live (a replaced placeholder reads it once). -->
+                  <svg x-h-lucide role="presentation" :data-lucide="$store.shells.iconFor(shell)"></svg>
                   <span x-text="shell.label"></span>
                 </li>
               </template>
               <div x-h-menu-separator></div>
               <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
-                <i role="img" x-h-lucide data-lucide="log-out"></i> <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
+                <svg role="presentation" x-h-lucide data-lucide="log-out"></svg> <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
               </li>
             </ul>
           </div>
@@ -249,8 +261,8 @@
           <!-- Act-as (delegated entry) banner: loud and persistent while armed - every entry below
                is recorded in the acting person's name (the audit log keeps the real user). -->
           <div x-show="actAs.acting" x-cloak class="hbox items-center gap-2 px-3 py-1.5 text-sm"
-               style="background: var(--color-warning, #b45309); color: #fff;">
-            <i role="img" x-h-lucide data-lucide="user-round-cog"></i>
+               style="background: var(--warning); color: #fff;">
+            <svg role="presentation" x-h-lucide data-lucide="user-round-cog"></svg>
             <span>
               <span x-text="T('application-core:shell.actAs.bannerActing', 'Acting as')"></span>
               <b x-text="actAs.acting"></b>
@@ -284,7 +296,7 @@
       <div x-h-dialog style="width: 92vw; max-width: 1100px;">
         <div x-h-dialog-header>
           <h2 x-h-dialog-title x-text="T($store.processTasks.formTitleKey, $store.processTasks.formTitle)"></h2>
-          <button x-h-dialog-close @click="$store.processTasks.closeForm()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+          <button x-h-dialog-close @click="$store.processTasks.closeForm()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
         <div x-h-dialog-content>
           <iframe x-show="$store.processTasks.formOpen" :src="$store.processTasks.formUrl"
@@ -300,7 +312,7 @@
       <div x-h-dialog style="width: 92vw; max-width: 1100px;">
         <div x-h-dialog-header>
           <h2 x-h-dialog-title x-text="$store.customActions.dialogTitle"></h2>
-          <button x-h-dialog-close @click="$store.customActions.closeDialog()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+          <button x-h-dialog-close @click="$store.customActions.closeDialog()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
         <div x-h-dialog-content>
           <iframe x-show="$store.customActions.dialogOpen" :src="$store.customActions.dialogUrl"
@@ -312,10 +324,10 @@
     <!-- Confirmation for an `endpoint` custom action (a generate / create-from): the POST mutates
          data the moment it fires, so the user gets an explicit chance to cancel before it runs. -->
     <div x-h-dialog-overlay :data-open="$store.customActions.confirmOpen">
-      <div x-h-dialog data-size="sm" role="alertdialog">
+      <div x-h-dialog role="alertdialog">
         <div x-h-dialog-header>
           <h2 x-h-dialog-title x-text="($store.customActions.confirmAction && $store.customActions.confirmAction.label) || T('application-core:shell.customActions.confirmTitle', 'Run action')"></h2>
-          <button x-h-dialog-close @click="$store.customActions.cancelConfirm()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+          <button x-h-dialog-close @click="$store.customActions.cancelConfirm()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
         <div x-h-dialog-content>
           <p x-h-text.muted x-text="T('application-core:shell.customActions.confirmBody', 'Run {{name}} for the selected record? This creates or changes data.', { name: ($store.customActions.confirmAction && $store.customActions.confirmAction.label) || '' })"></p>
@@ -340,7 +352,7 @@
         <div x-h-dialog data-prompt-dialog>
           <div x-h-dialog-header>
             <h2 x-h-dialog-title x-text="(s.promptAction && s.promptAction.label) || T('application-core:shell.customActions.promptTitle', 'Run action')"></h2>
-            <button x-h-dialog-close @click="s.cancelPrompt()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+            <button x-h-dialog-close @click="s.cancelPrompt()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
           </div>
           <div x-h-dialog-content>
             <div x-show="s.promptError" x-h-alert data-variant="negative" role="alert">
@@ -351,10 +363,10 @@
                 <div x-h-field :style="['NUMBER','CHECKBOX','DATE'].includes(col.widget) ? '' : 'grid-column: 1 / -1'">
                   <label x-h-label x-text="col.tkey ? T(col.tkey, col.label) : col.label"></label>
                   <template x-if="col.widget === 'DROPDOWN'">
-                    <div x-h-select data-filter="contains">
+                    <div x-h-select>
                       <input x-h-select-input x-model="s.promptValues[col.name]" :placeholder="T('application-core:shell.customActions.promptSelect', 'Select...')" />
                       <div x-h-select-content>
-                        <div x-h-select-search></div>
+                        <div x-h-select-search data-filter="contains"></div>
                         <div x-h-select-list>
                           <template x-for="opt in s.promptOptionsFor(col.name)" :key="opt.value">
                             <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
@@ -370,7 +382,7 @@
                     <div class="hbox items-center"><span x-h-checkbox><input type="checkbox" x-model="s.promptValues[col.name]" /></span></div>
                   </template>
                   <template x-if="col.widget === 'DATE'">
-                    <div x-h-date-picker.table>
+                    <div x-h-date-picker>
                       <input type="text" :placeholder="HarmoniaFormat.dateHint()" />
                       <button x-h-date-picker-trigger aria-label="Choose date"></button>
                       <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="s.promptValues[col.name]"></div>
@@ -400,7 +412,7 @@
       <div x-h-dialog style="max-width: 460px;">
         <div x-h-dialog-header>
           <h2 x-h-dialog-title x-text="T('application-core:shell.actAs.title', 'Act as another person')"></h2>
-          <button x-h-dialog-close @click="actAsDialog = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+          <button x-h-dialog-close @click="actAsDialog = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
         <div x-h-dialog-content class="vbox gap-2">
           <p class="text-sm" x-h-text.muted

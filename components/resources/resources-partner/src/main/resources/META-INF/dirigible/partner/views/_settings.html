@@ -6,33 +6,36 @@
   while visible - an inline x-show=display:none block measures 0x0 and ignores data-size). No own
   x-data: it inherits the shell's `app` component (settingsItems / selectSetting / settingsUrl).
 -->
-<div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
+<div x-h-split class="flex-1" data-orientation="horizontal" data-variant="border">
   <div x-h-split-panel data-size="25%" data-min="200">
     <div class="vbox gap-2 p-3">
       <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.configAll', 'Configuration and nomenclature across all applications.')"></span>
-      <!-- Region & Language: a built-in settings entry (not from an app) - the platform-wide
-           data-language preference. Selecting it renders the local detail page on the right. -->
-      <button x-h-button data-variant="outline" class="justify-start"
-              :data-state="isSettingActive({ id: 'region-language' }) ? 'selected' : ''"
-              @click="selectSetting({ id: 'region-language' })">
-        <i role="img" x-h-lucide data-lucide="globe"></i>
-        <span x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
-      </button>
-      <!-- Tenant Configuration: a built-in settings entry (not from an app) - the predefined,
-           per-tenant-overridable properties (branding). Selecting it renders the local detail on the right. -->
-      <button x-h-button data-variant="outline" class="justify-start"
-              :data-state="isSettingActive({ id: 'tenant-configuration' }) ? 'selected' : ''"
-              @click="selectSetting({ id: 'tenant-configuration' })">
-        <i role="img" x-h-lucide data-lucide="sliders-horizontal"></i>
-        <span x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></span>
-      </button>
-      <template x-for="item in visibleSettingsItems()" :key="item.id">
-        <button x-h-button data-variant="outline" class="justify-start"
-                :data-state="isSettingActive(item) ? 'selected' : ''" @click="selectSetting(item)">
-          <i role="img" x-h-lucide data-lucide="settings"></i>
-          <span x-text="item.tkey ? T(item.tkey, item.label) : item.label"></span>
-        </button>
-      </template>
+      <ul x-h-list :aria-label="T('application-core:shell.settings.title', 'Settings')">
+        <!-- Region & Language: a built-in settings entry (not from an app) - the platform-wide
+             data-language preference. Selecting it renders the local detail page on the right. -->
+        <li x-h-list-item>
+          <button x-h-list-item-button :aria-current="isSettingActive({ id: 'region-language' })" @click="selectSetting({ id: 'region-language' })">
+            <svg role="presentation" x-h-lucide data-lucide="globe"></svg>
+            <span x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
+          </button>
+        </li>
+        <!-- Tenant Configuration: a built-in settings entry (not from an app) - the predefined,
+             per-tenant-overridable properties (branding). Selecting it renders the local detail on the right. -->
+        <li x-h-list-item>
+          <button x-h-list-item-button :aria-current="isSettingActive({ id: 'tenant-configuration' })" @click="selectSetting({ id: 'tenant-configuration' })">
+            <svg role="presentation" x-h-lucide data-lucide="sliders-horizontal"></svg>
+            <span x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></span>
+          </button>
+        </li>
+        <template x-for="item in visibleSettingsItems()" :key="item.id">
+          <li x-h-list-item>
+            <button x-h-list-item-button :aria-current="isSettingActive(item)" @click="selectSetting(item)">
+              <svg role="presentation" x-h-lucide data-lucide="settings"></svg>
+              <span x-text="item.tkey ? T(item.tkey, item.label) : item.label"></span>
+            </button>
+          </li>
+        </template>
+      </ul>
     </div>
   </div>
   <div x-h-split-panel data-size="75%" style="position: relative;">
@@ -88,7 +91,7 @@
           <input x-h-input x-model="$store.formats.number" placeholder="### ### ### ##0.00" />
         </div>
         <div class="hbox gap-2">
-          <button x-h-button data-variant="emphasized" @click="$store.formats.apply()" x-text="T('application-core:shell.settings.apply', 'Apply')"></button>
+          <button x-h-button data-variant="primary" @click="$store.formats.apply()" x-text="T('application-core:shell.settings.apply', 'Apply')"></button>
           <button x-h-button data-variant="outline" @click="$store.formats.reset()" x-text="T('application-core:shell.settings.resetDefaults', 'Reset to defaults')"></button>
         </div>
         <template x-if="languageWarnings().length > 0">
@@ -132,7 +135,7 @@
               </div>
             </template>
             <div class="hbox gap-2">
-              <button x-h-button data-variant="emphasized" @click="saveTenantConfig()" x-text="T('application-core:shell.settings.save', 'Save')"></button>
+              <button x-h-button data-variant="primary" @click="saveTenantConfig()" x-text="T('application-core:shell.settings.save', 'Save')"></button>
               <button x-h-button data-variant="outline" @click="loadTenantConfig()" x-text="T('application-core:shell.settings.reload', 'Reload')"></button>
             </div>
           </div>

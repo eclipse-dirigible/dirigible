@@ -151,9 +151,10 @@ Three things about it are deliberate and easy to get wrong:
 | process tasks | gated on `hasProcess` / `ProcessId` | ✅ processTasks Alpine store (inbox fetch + claim + bucket by processInstanceId) + inline popover in list/manage/master rows + app-wide task-form dialog |
 
 Asset embedding (Phase 1 — DONE, verified end-to-end against a live app):
-- Alpine `3.15.11` + Harmonia `1.24.2` + Lucide `1.8.0` are **webjars** bundled via
-  `components/resources/application-core` (`harmonia.version` in the root pom; `1.24.2` carries the
-  `x-h-select` dropdown fix), served version-less through webjars-locator at `/webjars/...` (public).
+- Alpine `3.16.3` + Harmonia `3.1.2` + Lucide `1.20.0` are **webjars** bundled via
+  `components/resources/application-core` (`alpinejs.version` / `harmonia.version` / `lucide.version`
+  in the root pom), served version-less through webjars-locator at `/webjars/...` (public). The
+  Harmonia rules live in the upstream skill - see `.claude/docs/harmonia-ui.md`.
 - Pinecone Router is the `org.webjars.npm:pinecone-router` **webjar** (pulled by
   `application-core`), served version-less at `/webjars/pinecone-router/dist/router.min.js`
   (the package `main`, a self-registering IIFE). It was previously vendored — there was no webjar

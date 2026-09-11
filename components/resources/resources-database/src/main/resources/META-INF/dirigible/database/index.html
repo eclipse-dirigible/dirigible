@@ -22,12 +22,6 @@
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
     <link href="/services/web/application-core/shell/css/app.css" rel="stylesheet" />
     <link href="./css/app.css" rel="stylesheet" />
-
-    <script>
-      (function () {
-        try { if (!localStorage.getItem('codbex.harmonia.colorMode')) localStorage.setItem('codbex.harmonia.colorMode', 'light'); } catch (e) { /* no storage */ }
-      })();
-    </script>
   </head>
 
   <body class="vbox size-full" x-data="app">
@@ -47,7 +41,7 @@
           <div x-h-sidebar-header>
             <div class="hbox items-center gap-2 p-1">
               <img :src="$store.branding.logo" :alt="$store.branding.name" class="size-5" />
-              <div class="vbox gap-0">
+              <div class="vbox">
                 <span class="font-bold leading-tight" x-text="$store.branding.name"></span>
                 <span x-h-text.muted class="text-xs leading-tight" x-text="T('database:shell.title', 'Database')"></span>
               </div>
@@ -60,14 +54,14 @@
               <div x-h-sidebar-group-content>
                 <ul x-h-sidebar-menu>
                   <li x-h-sidebar-menu-item>
-                    <button id="database-nav-explorer" x-h-sidebar-menu-button :data-active="isActive('/explorer')" @click="navigate('/explorer')">
-                      <i role="img" x-h-lucide data-lucide="database"></i>
+                    <button id="database-nav-explorer" x-h-sidebar-menu-nav :data-active="isActive('/explorer')" @click="navigate('/explorer')">
+                      <svg role="presentation" x-h-lucide data-lucide="database"></svg>
                       <span class="flex-1" x-text="T('database:shell.nav.explorer', 'Explorer')"></span>
                     </button>
                   </li>
                   <li x-h-sidebar-menu-item>
-                    <button id="database-nav-sql" x-h-sidebar-menu-button :data-active="isActive('/sql')" @click="navigate('/sql')">
-                      <i role="img" x-h-lucide data-lucide="square-terminal"></i>
+                    <button id="database-nav-sql" x-h-sidebar-menu-nav :data-active="isActive('/sql')" @click="navigate('/sql')">
+                      <svg role="presentation" x-h-lucide data-lucide="square-terminal"></svg>
                       <span class="flex-1" x-text="T('database:shell.nav.sql', 'SQL Console')"></span>
                     </button>
                   </li>
@@ -81,7 +75,7 @@
             <ul x-h-sidebar-menu>
               <li x-h-sidebar-menu-item>
                 <a x-h-sidebar-menu-button href="/services/web/shell-ide/" target="_blank" rel="noopener">
-                  <i role="img" x-h-lucide data-lucide="external-link"></i>
+                  <svg role="presentation" x-h-lucide data-lucide="external-link"></svg>
                   <span x-text="T('database:shell.nav.workbench', 'Open in Workbench')"></span>
                 </a>
               </li>
@@ -96,46 +90,60 @@
           <div x-h-toolbar data-variant="transparent" x-cloak>
             <button x-show="hiddenPanels.left" x-h-button data-variant="transparent"
                     aria-label="Navigation" @click="openSideNav()" data-size="icon">
-              <i role="img" x-h-lucide data-lucide="menu"></i>
+              <svg role="presentation" x-h-lucide data-lucide="menu"></svg>
             </button>
             <span x-h-toolbar-title class="shrink-0" x-text="T('database:shell.title', 'Database')"></span>
             <div x-h-toolbar-spacer></div>
-            <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.theme.toggle()"
-                    :aria-label="$store.theme.value === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
-              <svg x-h-lucide x-show="$store.theme.value !== 'dark'" role="img" data-lucide="moon"></svg>
-              <svg x-h-lucide x-show="$store.theme.value === 'dark'" role="img" data-lucide="sun"></svg>
+            <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
+                    :aria-label="T('application-core:shell.theme.title', 'Theme')" :title="T('application-core:shell.theme.title', 'Theme')">
+              <svg x-h-lucide role="presentation" :data-lucide="$store.theme.icon"></svg>
             </button>
+            <ul x-h-menu aria-label="Theme" data-align="bottom-end">
+              <li x-h-menu-radio-item="'light'" name="theme" x-model="$store.theme.mode">
+                <svg role="presentation" x-h-lucide data-lucide="sun"></svg>
+                <span x-text="T('application-core:shell.theme.light', 'Light')"></span>
+              </li>
+              <li x-h-menu-radio-item="'dark'" name="theme" x-model="$store.theme.mode">
+                <svg role="presentation" x-h-lucide data-lucide="moon"></svg>
+                <span x-text="T('application-core:shell.theme.dark', 'Dark')"></span>
+              </li>
+              <li x-h-menu-radio-item="'auto'" name="theme" x-model="$store.theme.mode">
+                <svg role="presentation" x-h-lucide data-lucide="sun-moon"></svg>
+                <span x-text="T('application-core:shell.theme.auto', 'Auto')"></span>
+              </li>
+            </ul>
 
             <button id="user-menu-trigger" x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
                     :aria-label="$store.currentUser.name || 'Account'">
-              <i role="img" x-h-lucide data-lucide="circle-user"></i>
+              <svg role="presentation" x-h-lucide data-lucide="circle-user"></svg>
             </button>
             <ul x-h-menu aria-label="User menu" data-align="bottom-end">
-              <div x-h-tile class="mb-1">
-                <div x-h-tile-media><i role="img" x-h-lucide data-lucide="circle-user" class="size-6"></i></div>
-                <div x-h-tile-content>
-                  <div x-h-tile-title x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></div>
+              <li role="presentation">
+                <div x-h-tile class="mb-1">
+                  <div x-h-tile-media><svg role="presentation" x-h-lucide data-lucide="circle-user" class="size-6"></svg></div>
+                  <div x-h-tile-content>
+                    <div x-h-tile-title x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></div>
+                  </div>
                 </div>
-              </div>
+              </li>
               <div x-h-menu-separator></div>
               <!-- Switch shells without the detour through Home: the same `platform-shells` list the
                    launchpad renders, minus this one (the shared `shells` store). -->
               <div x-h-menu-label x-text="T('application-core:shell.switch.title', 'Switch to')"></div>
               <li x-h-menu-item @click="$store.shells.openHome()">
-                <i role="img" x-h-lucide data-lucide="house"></i>
+                <svg role="presentation" x-h-lucide data-lucide="house"></svg>
                 <span x-text="T('application-core:shell.switch.home', 'Home')"></span>
               </li>
               <template x-for="shell in $store.shells.items" :key="shell.id">
                 <li x-h-menu-item @click="$store.shells.open(shell)">
-                  <!-- svg, not <i>: the Lucide plugin REPLACES the element it upgrades, so a bound
-                       :data-lucide on an <i> throws and aborts Alpine's walk over the rest of the menu. -->
-                  <svg x-h-lucide role="img" :data-lucide="$store.shells.iconFor(shell)"></svg>
+                  <!-- An svg placeholder is rendered in place, so the bound :data-lucide stays reactive. -->
+                  <svg x-h-lucide role="presentation" :data-lucide="$store.shells.iconFor(shell)"></svg>
                   <span x-text="shell.label"></span>
                 </li>
               </template>
               <div x-h-menu-separator></div>
               <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
-                <i role="img" x-h-lucide data-lucide="log-out"></i>
+                <svg role="presentation" x-h-lucide data-lucide="log-out"></svg>
                 <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
               </li>
             </ul>

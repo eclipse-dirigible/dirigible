@@ -3859,8 +3859,32 @@ public final class IntentParser {
                        .isEmpty()) {
                 validatePhases(entity, issues);
             }
+            validateWidgetSizes(entity, issues);
         }
         return entityNames;
+    }
+
+    /**
+     * A field's or a to-one relation's {@code size:} is a column count on the form's 12-column grid -
+     * emitted as the property's {@code widgetSize} and rendered by the Harmonia form as
+     * {@code sm:col-span-<n>}. Only 1..12 exist there: any other number renders a class Harmonia never
+     * ships, so the control silently falls back to the grid's default width while the intent looks
+     * authored.
+     */
+    private static void validateWidgetSizes(EntityIntent entity, List<String> issues) {
+        for (FieldIntent field : entity.getFields()) {
+            validateWidgetSize(entity, "field [" + field.getName() + "]", field.getSize(), issues);
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            validateWidgetSize(entity, "relation [" + relation.getName() + "]", relation.getSize(), issues);
+        }
+    }
+
+    private static void validateWidgetSize(EntityIntent entity, String subject, Integer size, List<String> issues) {
+        if (size != null && (size < 1 || size > 12)) {
+            issues.add("entity [" + entity.getName() + "] " + subject + " declares size " + size
+                    + " - a form width is a column count between 1 and 12");
+        }
     }
 
     /**

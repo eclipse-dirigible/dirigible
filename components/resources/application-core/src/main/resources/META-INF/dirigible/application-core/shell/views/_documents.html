@@ -22,9 +22,9 @@
     <!-- Section caption, unified with the entity/inbox titles (text-2xl semibold); the breadcrumb
          below it is the in-folder path navigator (root = Home). -->
     <span x-h-toolbar-title class="shrink-0 text-2xl font-semibold tracking-tight" x-text="T('application-core:shell.nav.documents', 'Documents')"></span>
-    <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!hasBack()" @click="goBack()" aria-label="Back"><i role="img" x-h-lucide data-lucide="arrow-left"></i></button>
-    <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!hasForward()" @click="goForward()" aria-label="Forward"><i role="img" x-h-lucide data-lucide="arrow-right"></i></button>
-    <button x-h-button data-variant="transparent" data-size="icon-sm" @click="refresh()" aria-label="Refresh"><i role="img" x-h-lucide data-lucide="refresh-cw"></i></button>
+    <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!hasBack()" @click="goBack()" aria-label="Back"><svg role="presentation" x-h-lucide data-lucide="arrow-left"></svg></button>
+    <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!hasForward()" @click="goForward()" aria-label="Forward"><svg role="presentation" x-h-lucide data-lucide="arrow-right"></svg></button>
+    <button x-h-button data-variant="transparent" data-size="icon-sm" @click="refresh()" aria-label="Refresh"><svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg></button>
     <nav x-h-breadcrumb data-overflow="scroll" class="px-1">
       <ol x-h-breadcrumb-list>
         <template x-for="(c, i) in breadcrumbs" :key="c.path + ':' + i">
@@ -36,13 +36,13 @@
       </ol>
     </nav>
     <div x-h-toolbar-spacer></div>
-    <button x-h-button data-variant="transparent" data-size="icon-sm" :aria-pressed="search.show" @click="toggleSearch()" aria-label="Find item"><i role="img" x-h-lucide data-lucide="search"></i></button>
-    <button x-h-button data-variant="transparent" data-size="icon-sm" @click="askNewFolder()" aria-label="New folder"><i role="img" x-h-lucide data-lucide="folder-plus"></i></button>
-    <button x-h-button data-variant="transparent" data-size="icon-sm" @click="askAccess(null)" :aria-label="T('application-core:shell.documents.manageAccess', 'Manage access')" :title="T('application-core:shell.documents.manageAccess', 'Manage access')"><i role="img" x-h-lucide data-lucide="shield"></i></button>
-    <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!anySelected()" @click="askDeleteSelected()" aria-label="Delete selected"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
-    <a x-h-button data-variant="transparent" data-size="icon-sm" :href="zipUrl()" target="_blank" aria-label="Download folder as zip"><i role="img" x-h-lucide data-lucide="folder-down"></i></a>
-    <button x-h-menu-trigger.dropdown x-h-button data-variant="transparent" data-size="icon-sm" aria-label="Upload"><i role="img" x-h-lucide data-lucide="upload"></i></button>
-    <ul x-h-menu data-align="bottom-end">
+    <button x-h-button data-variant="transparent" data-size="icon-sm" :aria-pressed="search.show" @click="toggleSearch()" aria-label="Find item"><svg role="presentation" x-h-lucide data-lucide="search"></svg></button>
+    <button x-h-button data-variant="transparent" data-size="icon-sm" @click="askNewFolder()" aria-label="New folder"><svg role="presentation" x-h-lucide data-lucide="folder-plus"></svg></button>
+    <button x-h-button data-variant="transparent" data-size="icon-sm" @click="askAccess(null)" :aria-label="T('application-core:shell.documents.manageAccess', 'Manage access')" :title="T('application-core:shell.documents.manageAccess', 'Manage access')"><svg role="presentation" x-h-lucide data-lucide="shield"></svg></button>
+    <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!anySelected()" @click="askDeleteSelected()" aria-label="Delete selected"><svg role="presentation" x-h-lucide data-lucide="trash-2"></svg></button>
+    <a x-h-button data-variant="transparent" data-size="icon-sm" :href="zipUrl()" target="_blank" aria-label="Download folder as zip"><svg role="presentation" x-h-lucide data-lucide="folder-down"></svg></a>
+    <button x-h-menu-trigger.dropdown x-h-button data-variant="transparent" data-size="icon-sm" aria-label="Upload"><svg role="presentation" x-h-lucide data-lucide="upload"></svg></button>
+    <ul x-h-menu aria-label="Upload" data-align="bottom-end">
       <li x-h-menu-item @click="triggerUpload(false)" x-text="T('application-core:shell.documents.uploadFiles', 'Upload files')"></li>
       <li x-h-menu-item @click="triggerUpload(true)" x-text="T('application-core:shell.documents.uploadZip', 'Upload zip contents')"></li>
     </ul>
@@ -52,14 +52,14 @@
   <!-- Search-in-folder bar (toggled) -->
   <div x-show="search.show" class="px-4 pb-2">
     <div x-h-input-group data-size="sm">
-      <div x-h-input-group-addon data-align="inline-start"><svg x-h-icon data-icon="search" class="size-4" role="img" aria-label="search"></svg></div>
       <input x-h-input.group type="search" :placeholder="T('application-core:shell.documents.findInFolder', 'Find in folder')" x-model="search.filterBy" @input="clearSelection(); refreshIcons()" />
+      <div x-h-input-group-addon data-align="inline-start"><svg x-h-icon data-icon="search" class="size-4" role="presentation"></svg></div>
     </div>
   </div>
 
   <div x-show="state === 'error'" x-h-alert data-variant="negative" role="alert" class="m-4"><div x-h-alert-description x-text="error"></div></div>
 
-  <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
+  <div x-h-split class="flex-1" data-orientation="horizontal" data-variant="border">
 
     <!-- Master: file/folder list (with drag-and-drop upload) -->
     <div x-h-split-panel data-size="20%" data-min="340">
@@ -95,12 +95,12 @@
                   </td>
                   <th x-h-table-head scope="row">
                     <button x-h-button data-variant="link" class="justify-start" @click="onRowClick(item)">
-                      <i role="img" x-h-lucide :data-lucide="fileIcon(item)"></i><span x-text="item.name"></span>
+                      <svg role="presentation" x-h-lucide :data-lucide="fileIcon(item)"></svg><span x-text="item.name"></span>
                     </button>
                   </th>
                   <td x-h-table-cell data-row-actions>
-                    <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Item actions"><i role="img" x-h-lucide data-lucide="ellipsis"></i></button>
-                    <ul x-h-menu data-align="bottom-end">
+                    <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Item actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
+                    <ul x-h-menu aria-label="Item actions" data-align="bottom-end">
                       <li x-show="isDocument(item)" x-h-menu-item @click="copyLink(item)" x-text="T('application-core:shell.documents.copyLink', 'Copy link')"></li>
                       <li x-h-menu-item @click="askRename(item)" x-text="T('application-core:shell.documents.rename', 'Rename')"></li>
                       <li x-show="isDocument(item)" x-h-menu-item @click="window.open(downloadUrl(item), '_blank')" x-text="T('application-core:shell.documents.download', 'Download')"></li>
@@ -144,7 +144,7 @@
         <!-- Empty / not previewable -->
         <div x-show="!selectedFile || !canPreview" x-h-info-page class="p-4">
           <div x-h-info-page-header>
-            <div x-h-info-page-media.icon><i x-h-lucide data-lucide="eye" role="img" aria-label="preview"></i></div>
+            <div x-h-info-page-media.icon><svg x-h-lucide data-lucide="eye" role="img" aria-label="preview"></svg></div>
             <div x-h-info-page-title x-text="T('application-core:shell.documents.filePreview', 'File Preview')"></div>
             <div x-h-info-page-description x-text="(selectedFile && !canPreview) ? T('application-core:shell.documents.cannotPreview', 'This file cannot be previewed.') : T('application-core:shell.documents.previewHint', 'Click on a file to see its preview.')"></div>
           </div>
@@ -156,7 +156,7 @@
   <!-- New folder dialog -->
   <div x-h-dialog-overlay :data-open="newFolderOpen">
     <div x-h-dialog>
-      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.newFolder', 'New folder')"></h2><button x-h-dialog-close @click="newFolderOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button></div>
+      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.newFolder', 'New folder')"></h2><button x-h-dialog-close @click="newFolderOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button></div>
       <div x-h-dialog-content>
         <div x-h-field>
           <label x-h-label for="nf" x-text="T('application-core:shell.documents.folderName', 'Folder name')"></label>
@@ -177,7 +177,7 @@
     <div x-h-dialog>
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="T('application-core:shell.documents.manageAccess', 'Manage access')"></h2>
-        <button x-h-dialog-close @click="accessOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+        <button x-h-dialog-close @click="accessOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
       <div x-h-dialog-content>
         <p class="text-sm text-muted-foreground mb-3">
@@ -197,8 +197,8 @@
             <template x-for="g in access.own" :key="g.method + ':' + g.role">
               <div class="hbox items-center gap-2 py-1">
                 <span x-h-badge data-variant="outline" x-text="g.method"></span>
-                <span class="text-sm grow" x-text="g.role"></span>
-                <button x-h-button data-variant="transparent" data-size="icon-sm" @click="removeGrant(g)" :disabled="busy" aria-label="Remove"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
+                <span class="text-sm flex-1" x-text="g.role"></span>
+                <button x-h-button data-variant="transparent" data-size="icon-sm" @click="removeGrant(g)" :disabled="busy" aria-label="Remove"><svg role="presentation" x-h-lucide data-lucide="trash-2"></svg></button>
               </div>
             </template>
           </div>
@@ -208,9 +208,9 @@
           <div class="mb-3">
             <div class="text-xs text-muted-foreground mb-1" x-text="T('application-core:shell.documents.accessInherited', 'Inherited from a parent folder')"></div>
             <template x-for="g in access.inherited" :key="'i' + g.path + g.method + g.role">
-              <div class="hbox items-center gap-2 py-1 opacity-60">
+              <div class="hbox items-center gap-2 py-1 opacity-50">
                 <span x-h-badge data-variant="outline" x-text="g.method"></span>
-                <span class="text-sm grow" x-text="g.role"></span>
+                <span class="text-sm flex-1" x-text="g.role"></span>
                 <span class="text-xs text-muted-foreground" x-text="g.path"></span>
               </div>
             </template>
@@ -218,7 +218,7 @@
         </template>
 
         <div class="hbox items-end gap-2">
-          <div x-h-field class="grow">
+          <div x-h-field class="flex-1">
             <label x-h-label for="acr" x-text="T('application-core:shell.documents.accessRole', 'Role')"></label>
             <input x-h-input id="acr" type="text" x-model="accessDraft.role" @keydown.enter="addGrant()" :placeholder="T('application-core:shell.documents.accessRolePlaceholder', 'Role name...')" />
           </div>
@@ -243,7 +243,7 @@
   <!-- Rename dialog -->
   <div x-h-dialog-overlay :data-open="renameOpen">
     <div x-h-dialog>
-      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.rename', 'Rename')"></h2><button x-h-dialog-close @click="renameOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button></div>
+      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.rename', 'Rename')"></h2><button x-h-dialog-close @click="renameOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button></div>
       <div x-h-dialog-content>
         <div x-h-field>
           <label x-h-label for="rn" x-text="T('application-core:shell.documents.newName', 'New name')"></label>
@@ -261,7 +261,7 @@
   <!-- Delete dialog -->
   <div x-h-dialog-overlay :data-open="deleteOpen">
     <div x-h-dialog>
-      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.delete', 'Delete')"></h2><button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button></div>
+      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.delete', 'Delete')"></h2><button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button></div>
       <div x-h-dialog-content>
         <p x-show="deleteTargets.length === 1">Delete <strong x-text="deleteTargets[0] && deleteTargets[0].name"></strong>? This cannot be undone.</p>
         <p x-show="deleteTargets.length > 1">Delete <strong x-text="deleteTargets.length"></strong> items? This cannot be undone.</p>

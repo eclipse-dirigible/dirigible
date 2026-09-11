@@ -378,6 +378,9 @@ document.addEventListener('alpine:init', () => {
     },
 
     async init() {
+      // This component renders the toast overlay, so it lends its $notifications magic to the
+      // shared store (a store has no component scope of its own to reach the magic from).
+      Alpine.store('notifications').attachToaster(this.$notifications);
       this.loadActAs(); // fire-and-forget: the menu entry appears when the state arrives
       // The arming expires server-side; re-read it when the tab comes back so the banner is not
       // still claiming an identity the platform has already dropped.

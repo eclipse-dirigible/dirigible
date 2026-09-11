@@ -49,7 +49,7 @@
     <div class="grid grid-cols-1 sm:grid-cols-12 gap-4" style="max-width: 900px">
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name" && $property.name != $skipOwnerFk && $property.name != $skipParentFk && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS")
-      <div x-h-field class="#if($property.widgetType == "MULTISELECT")col-span-full#elseif($property.widgetSize && $property.widgetSize != "")sm:col-span-${property.widgetSize}#{else}sm:col-span-6#end"#visibleGate($property) :data-invalid="fieldError === '${property.name}'">
+      <div x-h-field class="#if($property.widgetType =="MULTISELECT")col-span-12#elseif($property.widgetSize && $property.widgetSize != "")sm:col-span-${property.widgetSize}#{else}sm:col-span-6#end"#visibleGate($property) :data-invalid="fieldError === '${property.name}'">
 ## A CHECKBOX carries its label BESIDE it, inside the branch below - not above, as every
 ## other control does.
 #if($property.widgetType != "CHECKBOX")
@@ -58,10 +58,10 @@
         </label>
 #end
 #if($property.widgetType == "DROPDOWN")
-        <div x-h-select data-filter="contains">
+        <div x-h-select>
           <input x-h-select-input x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select #if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end') })" />
           <div x-h-select-content>
-            <div x-h-select-search></div>
+            <div x-h-select-search data-filter="contains"></div>
             <div x-h-select-list>
               <template x-for="opt in (options['${property.name}'] || [])" :key="opt.value">
                 <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
@@ -72,10 +72,10 @@
 #elseif($property.widgetType == "MULTISELECT")
         <!-- Subset (intent `kind: subset`): the bound ARRAY model puts the select in
              multiple mode - the csv is split on load and joined back on save. -->
-        <div x-h-select data-filter="contains">
+        <div x-h-select>
           <input x-h-select-input x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select #if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end') })" />
           <div x-h-select-content>
-            <div x-h-select-search></div>
+            <div x-h-select-search data-filter="contains"></div>
             <div x-h-select-list>
               <template x-for="opt in (options['${property.name}'] || [])" :key="opt.value">
                 <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
@@ -150,7 +150,7 @@
       <div x-h-card-content class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
 #foreach($property in $properties)
 #if($property.isReadOnlyProperty == "true" && !$property.sensitiveProperty && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE"))
-        <div class="vbox gap-0" x-show="form.${property.name} != null &amp;&amp; form.${property.name} !== ''">
+        <div class="vbox" x-show="form.${property.name} != null &amp;&amp; form.${property.name} !== ''">
           <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end')"></span>
           <span class="text-sm" x-text="form.${property.name}"></span>
         </div>
@@ -168,10 +168,10 @@
           <div x-h-card>
             <div x-h-card-header class="hbox items-center">
               <span x-h-card-title x-text="child.label"></span>
-              <div class="grow"></div>
+              <div class="flex-1"></div>
 #if(!$personalReadOnly)
               <button x-h-button data-variant="primary" data-size="sm" @click="addChild(child)">
-                <i role="img" x-h-lucide data-lucide="plus"></i>
+                <svg role="presentation" x-h-lucide data-lucide="plus"></svg>
                 <span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span>
               </button>
 #end
@@ -215,13 +215,13 @@
 
     <div class="hbox gap-2" style="max-width: 900px">
 #if($personalReadOnly)
-      <div class="grow"></div>
+      <div class="flex-1"></div>
       <button x-h-button data-variant="transparent" @click="goBack()"
               x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
 #else
       <button x-h-button data-variant="negative" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="deleteOpen = true"
               x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
-      <div class="grow"></div>
+      <div class="flex-1"></div>
       <button x-h-button data-variant="transparent" @click="goBack()" :disabled="saving"
               x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
       <button x-h-button data-variant="primary"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end @click="save()" :disabled="saving">
@@ -235,10 +235,10 @@
   <!-- Delete confirmation. The dialog MUST be nested inside the overlay (not a sibling) or it is
        not hidden when closed - it would show its "Delete?" body on the New page. -->
   <div x-h-dialog-overlay :data-open="deleteOpen">
-    <div x-h-dialog data-size="sm">
+    <div x-h-dialog>
       <div x-h-dialog-header>
         <span x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + '?'"></span>
-        <button type="button" x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+        <button type="button" x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
       <div x-h-dialog-content><p x-h-text.muted x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure? This cannot be undone.')"></p></div>
       <div x-h-dialog-footer>

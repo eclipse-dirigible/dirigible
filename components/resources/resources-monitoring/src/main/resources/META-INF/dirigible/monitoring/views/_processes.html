@@ -15,12 +15,13 @@
     <button x-h-button data-size="sm" :data-variant="state.mode === 'historic' ? 'primary' : 'transparent'"
             @click="state.setMode('historic')" x-text="T('monitoring:processes.historic', 'Completed')"></button>
     <div x-h-toolbar-spacer></div>
-    <div class="w-64 shrink-0">
+    <div class="w-3xs shrink-0">
       <input x-h-input type="search" x-model="state.filter"
              :placeholder="T('monitoring:processes.search', 'Search process, business key or id')" />
     </div>
-    <button x-h-button data-variant="outline" data-size="sm" @click="state.load()" :data-loading="state.loading">
-      <i role="img" x-h-lucide data-lucide="refresh-cw"></i>
+    <button x-h-button data-variant="outline" data-size="sm" @click="state.load()" :disabled="state.loading">
+      <template x-if="state.loading"><span x-h-spinner class="size-4"></span></template>
+      <svg role="presentation" x-h-lucide data-lucide="refresh-cw" x-show="!state.loading"></svg>
       <span x-text="T('monitoring:overview.refresh', 'Refresh')"></span>
     </button>
   </div>
@@ -41,7 +42,7 @@
 
         <table x-h-table x-show="!state.loading && state.visibleInstances.length" x-cloak>
           <thead x-h-table-header>
-            <tr>
+            <tr x-h-table-row>
               <th x-h-table-head scope="col" x-text="T('monitoring:processes.colProcess', 'Process')"></th>
               <th x-h-table-head scope="col" x-text="T('monitoring:overview.colBusinessKey', 'Business key')"></th>
               <th x-h-table-head scope="col" x-text="T('monitoring:processes.colStarted', 'Started')"></th>
@@ -73,7 +74,7 @@
             <div x-h-toolbar-spacer></div>
             <button x-h-button data-variant="transparent" data-size="icon-sm" @click="state.clearSelection()"
                     aria-label="Close" :title="T('monitoring:processes.close', 'Close')">
-              <i role="img" x-h-lucide data-lucide="x"></i>
+              <svg role="presentation" x-h-lucide data-lucide="x"></svg>
             </button>
           </div>
 
@@ -83,14 +84,15 @@
               <span x-h-badge data-variant="negative"
                     x-text="T('monitoring:processes.stuck', 'Stuck: {{count}} dead-letter job(s)', { count: state.incidents.length })"></span>
               <div class="flex-1"></div>
-              <button x-h-button data-variant="outline" data-size="sm" :data-loading="state.acting"
+              <button x-h-button data-variant="outline" data-size="sm" :disabled="state.acting"
                       @click="state.act('RETRY')">
-                <i role="img" x-h-lucide data-lucide="rotate-cw"></i>
+                <template x-if="state.acting"><span x-h-spinner class="size-4"></span></template>
+                <svg role="presentation" x-h-lucide data-lucide="rotate-cw" x-show="!state.acting"></svg>
                 <span x-text="T('monitoring:processes.retry', 'Retry')"></span>
               </button>
-              <button x-h-button data-variant="outline" data-size="sm" :data-loading="state.acting"
+              <button x-h-button data-variant="outline" data-size="sm" :disabled="state.acting"
                       @click="state.act('SKIP')">
-                <i role="img" x-h-lucide data-lucide="skip-forward"></i>
+                <svg role="presentation" x-h-lucide data-lucide="skip-forward"></svg>
                 <span x-text="T('monitoring:processes.skip', 'Skip step')"></span>
               </button>
             </div>
@@ -105,49 +107,62 @@
                   x-text="state.actionResult ? state.actionResult.text : ''"></span>
           </div>
 
+          <!-- Every tab lives in its own x-h-tab-item; each tab names the panel it controls and the
+               panel names the tab that labels it (the Harmonia tabs contract). -->
           <div x-h-tabs data-orientation="horizontal" class="flex-1 min-h-0">
             <div x-h-tab-bar data-size="sm">
               <div x-h-tab-list>
-                <button x-h-tab :aria-selected="tab === 'diagram'" @click="selectTab('diagram')"
-                        x-text="T('monitoring:processes.tabDiagram', 'Diagram')"></button>
-                <button x-h-tab :aria-selected="tab === 'variables'" @click="selectTab('variables')"
-                        x-text="T('monitoring:processes.tabVariables', 'Variables')"></button>
-                <button x-h-tab x-show="state.mode === 'active'" :aria-selected="tab === 'tasks'"
-                        @click="selectTab('tasks')" x-text="T('monitoring:processes.tabTasks', 'Tasks')"></button>
-              </div>
-              <div class="flex-1"></div>
-              <template x-if="tab === 'diagram'">
-                <div class="hbox items-center gap-1 pr-1">
-                  <button x-h-button data-variant="transparent" data-size="icon-sm" @click="zoomOut()" aria-label="Zoom out">
-                    <i role="img" x-h-lucide data-lucide="zoom-out"></i>
-                  </button>
-                  <button x-h-button data-variant="transparent" data-size="icon-sm" @click="zoomIn()" aria-label="Zoom in">
-                    <i role="img" x-h-lucide data-lucide="zoom-in"></i>
-                  </button>
-                  <button x-h-button data-variant="transparent" data-size="icon-sm" @click="fit()" aria-label="Fit">
-                    <i role="img" x-h-lucide data-lucide="maximize"></i>
-                  </button>
+                <div x-h-tab-item>
+                  <button id="monitoring-process-tab-diagram" x-h-tab aria-controls="monitoring-process-panel-diagram"
+                          :aria-selected="tab === 'diagram'" @click="selectTab('diagram')"
+                          x-text="T('monitoring:processes.tabDiagram', 'Diagram')"></button>
                 </div>
-              </template>
+                <div x-h-tab-item>
+                  <button id="monitoring-process-tab-variables" x-h-tab aria-controls="monitoring-process-panel-variables"
+                          :aria-selected="tab === 'variables'" @click="selectTab('variables')"
+                          x-text="T('monitoring:processes.tabVariables', 'Variables')"></button>
+                </div>
+                <div x-h-tab-item x-show="state.mode === 'active'">
+                  <button id="monitoring-process-tab-tasks" x-h-tab aria-controls="monitoring-process-panel-tasks"
+                          :aria-selected="tab === 'tasks'" @click="selectTab('tasks')"
+                          x-text="T('monitoring:processes.tabTasks', 'Tasks')"></button>
+                </div>
+              </div>
+              <!-- The zoom controls act on the diagram, so they show with its tab only. -->
+              <div x-h-tab-list-actions.end x-show="tab === 'diagram'">
+                <button x-h-tab-list-action data-variant="transparent" @click="zoomOut()" aria-label="Zoom out">
+                  <svg role="presentation" x-h-lucide data-lucide="zoom-out"></svg>
+                </button>
+                <button x-h-tab-list-action data-variant="transparent" @click="zoomIn()" aria-label="Zoom in">
+                  <svg role="presentation" x-h-lucide data-lucide="zoom-in"></svg>
+                </button>
+                <button x-h-tab-list-action data-variant="transparent" @click="fit()" aria-label="Fit">
+                  <svg role="presentation" x-h-lucide data-lucide="maximize"></svg>
+                </button>
+              </div>
             </div>
 
             <!-- The diagram is rendered into its container by the page component; the container only
                  exists while its tab is open, because the visualizer measures it on load. -->
-            <template x-if="tab === 'diagram'">
-              <div class="flex-1 min-h-0">
-                <div x-show="diagramError" x-cloak x-h-text.muted class="p-3 text-sm" x-text="diagramError"></div>
-                <div x-ref="diagram" class="monitoring-bpmn size-full"></div>
-              </div>
-            </template>
+            <div id="monitoring-process-panel-diagram" x-h-tabs-content aria-labelledby="monitoring-process-tab-diagram"
+                 :hidden="tab !== 'diagram'" tabindex="-1" class="flex-1 min-h-0">
+              <template x-if="tab === 'diagram'">
+                <div class="size-full">
+                  <div x-show="diagramError" x-cloak x-h-text.muted class="p-3 text-sm" x-text="diagramError"></div>
+                  <div x-ref="diagram" class="monitoring-bpmn size-full"></div>
+                </div>
+              </template>
+            </div>
 
             <!-- Variables (read-only - editing them is Workbench territory) -->
-            <template x-if="tab === 'variables'">
-              <div class="flex-1 min-h-0 overflow-auto p-3">
-                <div x-show="!state.variables.length" x-h-text.muted class="text-sm"
-                     x-text="T('monitoring:processes.noVariables', 'This instance carries no variables.')"></div>
-                <table x-h-table x-show="state.variables.length">
+            <div id="monitoring-process-panel-variables" x-h-tabs-content aria-labelledby="monitoring-process-tab-variables"
+                 :hidden="tab !== 'variables'" tabindex="-1" class="flex-1 min-h-0 overflow-auto p-3">
+              <div x-show="!state.variables.length" x-h-text.muted class="text-sm"
+                   x-text="T('monitoring:processes.noVariables', 'This instance carries no variables.')"></div>
+              <div x-h-table-container x-show="state.variables.length">
+                <table x-h-table>
                   <thead x-h-table-header>
-                    <tr>
+                    <tr x-h-table-row>
                       <th x-h-table-head scope="col" x-text="T('monitoring:processes.colName', 'Name')"></th>
                       <th x-h-table-head scope="col" x-text="T('monitoring:processes.colType', 'Type')"></th>
                       <th x-h-table-head scope="col" x-text="T('monitoring:processes.colValue', 'Value')"></th>
@@ -164,16 +179,17 @@
                   </tbody>
                 </table>
               </div>
-            </template>
+            </div>
 
             <!-- Open user tasks -->
-            <template x-if="tab === 'tasks'">
-              <div class="flex-1 min-h-0 overflow-auto p-3">
-                <div x-show="!state.tasks.length" x-h-text.muted class="text-sm"
-                     x-text="T('monitoring:processes.noTasks', 'No open user tasks.')"></div>
-                <table x-h-table x-show="state.tasks.length">
+            <div id="monitoring-process-panel-tasks" x-h-tabs-content aria-labelledby="monitoring-process-tab-tasks"
+                 :hidden="tab !== 'tasks'" tabindex="-1" class="flex-1 min-h-0 overflow-auto p-3">
+              <div x-show="!state.tasks.length" x-h-text.muted class="text-sm"
+                   x-text="T('monitoring:processes.noTasks', 'No open user tasks.')"></div>
+              <div x-h-table-container x-show="state.tasks.length">
+                <table x-h-table>
                   <thead x-h-table-header>
-                    <tr>
+                    <tr x-h-table-row>
                       <th x-h-table-head scope="col" x-text="T('monitoring:processes.colTask', 'Task')"></th>
                       <th x-h-table-head scope="col" x-text="T('monitoring:processes.colAssignee', 'Assignee')"></th>
                       <th x-h-table-head scope="col" x-text="T('monitoring:processes.colCandidates', 'Candidates')"></th>
@@ -190,7 +206,7 @@
                   </tbody>
                 </table>
               </div>
-            </template>
+            </div>
           </div>
 
         </div>

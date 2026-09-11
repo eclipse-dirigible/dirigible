@@ -306,8 +306,26 @@ document.addEventListener('alpine:init', () => {
     },
 
     get totalPages() { return Math.max(1, Math.ceil(this.count / this.limit)); },
-    next() { if (this.page < this.totalPages) { this.page++; this.load(); } },
-    prev() { if (this.page > 1) { this.page--; this.load(); } },
+    // Server-side paging: a page change re-queries; the clamp keeps a stale pager click in range.
+    goPage(n) {
+      const page = Math.max(1, Math.min(n, this.totalPages));
+      if (page === this.page) return;
+      this.page = page;
+      this.load();
+    },
+    // The page numbers the pager shows: first, last and the current page's neighbours, '...' over
+    // each gap - at most 7 entries, so a long report never renders a link per page.
+    pageWindow() {
+      const total = this.totalPages, current = this.page;
+      if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+      const start = Math.max(2, current - 1), end = Math.min(total - 1, current + 1);
+      const pages = [1];
+      if (start > 2) pages.push('...');
+      for (let p = start; p <= end; p++) pages.push(p);
+      if (end < total - 1) pages.push('...');
+      pages.push(total);
+      return pages;
+    },
 
     // Export the FULL result set (POST /export returns all rows) as CSV.
     async exportCsv() {

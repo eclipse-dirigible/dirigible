@@ -3,6 +3,8 @@ name: alpinejs
 description: Architect non-trivial Alpine.js applications — deciding between x-data and Alpine.store(), organizing pages/views as components, structuring folders and JS modules, integrating routers like Pinecone Router, and handling both build-step and CDN-only setups. Use this skill whenever the user asks about Alpine.js project structure, file organization, "best practices," scaling beyond a one-page demo, where to put business logic, how to organize stores/components, routing in Alpine, SPA-style page modules, "x-data vs store," CDN versus bundler trade-offs, or how to migrate inline x-data into proper JS modules — even if they don't say "architecture" explicitly. Don't trigger for simple syntax questions or single-component how-tos that have nothing to do with structure.
 ---
 > Reference copied from **codbex/codbex-athena-app** (`.claude/skills/`) for the Harmonia runtime UI work in this repo. Source of truth lives in that project; keep in sync when Harmonia changes.
+>
+> Two things in it do NOT apply to this repo: icons are rendered by the `x-h-lucide` plugin, so never call `lucide.createIcons()` (the `alpine:initialized` example below is athena's older pattern), and every Harmonia component follows the upstream Harmonia skill, not the snippets here (see `.claude/docs/harmonia-ui.md`).
 
 
 # Alpine.js Application Architecture
