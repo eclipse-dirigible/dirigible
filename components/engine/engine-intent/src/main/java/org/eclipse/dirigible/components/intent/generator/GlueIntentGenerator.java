@@ -2294,8 +2294,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @param event the {@code event:} binding map
      * @return the {@code guardExpression} / {@code hasGuard} keys
      */
-    private static Map<String, Object> guardFields(Map<String, Object> event) {
-        String guard = NotificationSupport.guard(stringArg(event, "when"));
+    private static Map<String, Object> guardFields(Map<String, Object> event, EntityIntent entity, Map<String, EntityIntent> byName) {
+        // The guard as authored - a comparison or the list form (an implicit AND, #6957) - rendered
+        // against the guarded property's declared type, so a status guard compares the integer FK with
+        // an integer (#7289). Passing the stringified map here instead is what left a list guard
+        // rendering as `true`: the whole list never matched the scalar pattern.
+        String guard = NotificationSupport.guard(event == null ? null : event.get("when"), entity, byName);
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("guardExpression", guard);
         fields.put("hasGuard", !"true".equals(guard));
@@ -4003,7 +4007,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("urlExpression", IntegrationSupport.urlExpression(integration.getUrl()));
             // The event axis carries a `when` guard and every other consumer of the axis honours it -
             // an integration that ignored it forwarded records the author had excluded.
-            entry.putAll(guardFields(integration.getEvent()));
+            entry.putAll(guardFields(integration.getEvent(), byName.get(entity), byName));
             entry.putAll(PayloadSupport.payloadFields(payload));
             entry.put("relationLoads", relationLoads(payload == null ? List.of() : payload.loads()));
             integrations.add(entry);
@@ -4065,7 +4069,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("channel", target.channel()
                                        .name());
             entry.put("producerMethod", target.producerMethod());
-            entry.putAll(guardFields(outbound.getEvent()));
+            entry.putAll(guardFields(outbound.getEvent(), byName.get(entity), byName));
             entry.putAll(PayloadSupport.payloadFields(payload));
             entry.put("relationLoads", relationLoads(payload == null ? List.of() : payload.loads()));
             departures.add(entry);

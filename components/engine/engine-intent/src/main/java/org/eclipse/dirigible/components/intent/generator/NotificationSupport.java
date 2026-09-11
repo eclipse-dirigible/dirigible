@@ -34,8 +34,10 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
  * entity (rendered {@code entity.<PascalField>}), or a one-hop <b>{@code relation.field}</b> of a
  * to-one relation (rendered against a related entity the listener loads once by FK id - the same
  * one-hop mechanism the decision resolvers use, see {@link ProcessResolverSupport}). Multi-hop
- * paths are not supported. The {@code when} guard supports a single {@code field ==|!= literal}
- * comparison on a direct field.
+ * paths are not supported. The {@code when} guard is one {@code <Property> ==|!= <literal>}
+ * comparison over the record's own properties - or the list form meaning their AND - rendered
+ * against the property's declared type by {@link CheckSupport#condition} where the entity is known;
+ * see {@link #guard(Object, EntityIntent, Map)}.
  *
  * <p>
  * Inside a <b>fan-out</b> the entity every bare path resolves against is the ROW; a placeholder
@@ -228,8 +230,8 @@ public final class NotificationSupport {
             Map<String, String> compositionParents, CrossModelLookup crossModel) {
         Object when = notification.getEvent()
                                   .get("when");
-        return plan(notification.getTo(), notification.getSubject(), notification.getBody(), when == null ? null : when.toString(),
-                eventEntity, byName, compositionParents, crossModel);
+        return plan(notification.getTo(), notification.getSubject(), notification.getBody(), when, eventEntity, byName, compositionParents,
+                crossModel);
     }
 
     /**
@@ -241,14 +243,14 @@ public final class NotificationSupport {
      * @param to the recipient: a literal address, a direct field, or a one-hop {@code relation.field}
      * @param subject the subject, with {@code {field}} / {@code {relation.field}} placeholders
      * @param body the body, with the same placeholders
-     * @param when an optional guard over a direct field, or {@code null} for none
+     * @param when an optional guard - a comparison, a list of them, or {@code null} for none
      * @param entity the entity the message is about (its fields back the paths)
      * @param byName all LOCAL entities by name (to resolve same-model relation targets)
      * @param compositionParents composition-parent map (to resolve a target's perspective)
      * @param crossModel resolver for a cross-model relation's owner facts, or {@code null}
      * @return the plan, or {@code null} if the recipient cannot be resolved
      */
-    public static Plan plan(String to, String subject, String body, String when, EntityIntent entity, Map<String, EntityIntent> byName,
+    public static Plan plan(String to, String subject, String body, Object when, EntityIntent entity, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, CrossModelLookup crossModel) {
         return plan(to, subject, body, when, entity, null, byName, compositionParents, crossModel);
     }
@@ -264,7 +266,7 @@ public final class NotificationSupport {
      * @param subject the subject, with {@code {field}} / {@code {relation.field}} /
      *        {@code {record.field}} placeholders
      * @param body the body, with the same placeholders
-     * @param when an optional guard over a direct field, or {@code null} for none
+     * @param when an optional guard - a comparison, a list of them, or {@code null} for none
      * @param entity the entity the message is about (a fan-out's row)
      * @param anchor the fan-out's anchor record, or {@code null} outside a fan-out
      * @param byName all LOCAL entities by name (to resolve same-model relation targets)
@@ -272,7 +274,7 @@ public final class NotificationSupport {
      * @param crossModel resolver for a cross-model relation's owner facts, or {@code null}
      * @return the plan, or {@code null} if the recipient cannot be resolved
      */
-    public static Plan plan(String to, String subject, String body, String when, EntityIntent entity, EntityIntent anchor,
+    public static Plan plan(String to, String subject, String body, Object when, EntityIntent entity, EntityIntent anchor,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, CrossModelLookup crossModel) {
         Resolver resolver = new Resolver(entity, anchor, byName, compositionParents, crossModel);
         String recipient = resolver.value(to);
@@ -281,8 +283,8 @@ public final class NotificationSupport {
         }
         String subjectExpression = resolver.text(subject);
         String bodyExpression = resolver.text(body);
-        return new Plan(resolver.loads(), guard(when), recipient, subjectExpression, bodyExpression, resolver.usesRecordUrl(),
-                resolver.usesInboxUrl());
+        return new Plan(resolver.loads(), guard(when, entity, byName), recipient, subjectExpression, bodyExpression,
+                resolver.usesRecordUrl(), resolver.usesInboxUrl());
     }
 
     /**
@@ -329,6 +331,35 @@ public final class NotificationSupport {
             }
         }
         return conditions.isEmpty() ? "true" : String.join(" && ", conditions);
+    }
+
+    /**
+     * A {@code when} guard rendered against the guarded property's DECLARED type - the form every guard
+     * of the declarative glue event axis takes (issue #7289), where the parser holds the guard to the
+     * same closed grammar a {@code requiredWhen} condition is held to.
+     *
+     * <p>
+     * The typed rendering is the point. An untyped {@code Objects.equals} quotes whatever it cannot
+     * recognise, so {@code Status == ISSUED} - the natural authoring of a status guard, with the name
+     * resolved to its seed id before the typed mapping - used to compare the integer status FK with a
+     * string and never hold: the mail never went out, the departure never left, and parse, generation,
+     * compile and publish were all green. A to-one's key is compared numerically because its width is
+     * not knowable here; see {@link CheckSupport#condition}.
+     *
+     * <p>
+     * When the condition does not compile - which for a glue guard the parser has already refused, and
+     * for a call site with no entity to read the types off (a cross-model schedule row) it cannot know
+     * - the untyped {@link #guard(Object)} answers instead, so nothing that renders today stops
+     * rendering.
+     *
+     * @param when the guard - a comparison string, a list of them, or {@code null}
+     * @param entity the entity the guard is read off, or {@code null} when it is not resolvable
+     * @param byName the local entities by name (a to-one's key type comes from its target)
+     * @return a Java boolean expression
+     */
+    public static String guard(Object when, EntityIntent entity, Map<String, EntityIntent> byName) {
+        String typed = CheckSupport.condition(entity, byName, when);
+        return typed == null ? guard(when) : typed;
     }
 
     private static String literalToJava(String rhs) {

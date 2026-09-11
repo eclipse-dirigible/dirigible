@@ -2704,11 +2704,51 @@ public final class IntentParser {
             }
         }
         validatePhaseBinding(event, subject, entity == null ? null : entityByName(model, entity), issues);
+        validateEventGuard(event, subject, entity == null ? null : entityByName(model, entity), model, issues);
         if (declared != 1) {
             issues.add(
                     subject + " must declare exactly one of onCreate/onUpdate/onDelete/onTransition/onPhase/onStepReached/onStepCompleted");
         }
         return entity;
+    }
+
+    /**
+     * The {@code when} guard of an event binding (issue #7289) - the moment qualifier of a
+     * {@code notifications}, {@code integrations} or {@code outbound} entry: one
+     * {@code <Property> ==|!= <literal>} comparison over the event entity's own properties, or the list
+     * form meaning their AND (#6957), with a status named by its seeded name resolved to the id before
+     * this runs.
+     *
+     * <p>
+     * It is refused rather than degraded, for the reason {@code requiredWhen} refuses its own
+     * condition: the renderer answered {@code true} for anything its pattern did not match, so a guard
+     * with a typo ({@code Status = ISSUED}, {@code status == 'ISSUED' and channel == 'mail'}) switched
+     * itself off and the notification fired on EVERY update - a guard nobody authored, and silent all
+     * the way through generation, compile and publish. A guard on a property the record does not carry
+     * or against a literal of the wrong type is the same failure with a boxed comparison that never
+     * holds.
+     *
+     * @param event the binding map (may be {@code null})
+     * @param subject the issue prefix naming the consumer
+     * @param entity the bound entity when it resolved, else {@code null} - the grammar is still held
+     *        to, the property cannot be
+     * @param model the model, for the entities a to-one's key type is read from
+     * @param issues the collecting issue list
+     */
+    private static void validateEventGuard(Map<String, Object> event, String subject, EntityIntent entity, IntentModel model,
+            List<String> issues) {
+        if (event == null || event.get("when") == null) {
+            return;
+        }
+        List<String> terms = CheckSupport.terms(event.get("when"));
+        if (terms.isEmpty()) {
+            issues.add(subject + " event when must not be an empty list");
+            return;
+        }
+        java.util.Map<String, EntityIntent> byName = IntentEntities.byName(model);
+        for (String term : terms) {
+            validateGuardTerm(entity, byName, term, subject + " event", issues);
+        }
     }
 
     /**
@@ -4736,7 +4776,7 @@ public final class IntentParser {
                 issues.add(subject + " when must not be an empty list");
             }
             for (String term : terms) {
-                validateRequiredWhenTerm(entity, byName, term, subject, issues);
+                validateGuardTerm(entity, byName, term, subject, issues);
             }
         }
         if (check.getStatus() != null && entityStatusRelationOf(entity) == null) {
@@ -4746,22 +4786,34 @@ public final class IntentParser {
     }
 
     /**
-     * One comparison of a {@code requiredWhen} condition: the property must be the record's own (the
+     * One comparison of a typed {@code when} guard - a {@code requiredWhen} condition or the
+     * {@code event.when} of the declarative glue axis: the property must be the record's own (the
      * condition is read off the row, nothing is loaded to evaluate it) and the literal must be a value
      * of that property's type. Both refusals are about a guard that would otherwise be silently
      * always-false - a boxed comparison across types never holds - which switches the rule off while
      * looking authored.
+     *
+     * <p>
+     * The property is looked up through {@link CheckSupport}, i.e. exactly as the renderer of the same
+     * guard looks it up ({@link CheckSupport#condition}), so a guard the generator compiles cannot be
+     * refused here and a guard refused here cannot compile there.
+     *
+     * @param entity the entity the guard is read off, or {@code null} when the binding did not resolve
+     *        (the grammar is still held to, the property cannot be)
      */
-    private static void validateRequiredWhenTerm(EntityIntent entity, java.util.Map<String, EntityIntent> byName, String term,
-            String subject, List<String> issues) {
+    private static void validateGuardTerm(EntityIntent entity, java.util.Map<String, EntityIntent> byName, String term, String subject,
+            List<String> issues) {
         CheckSupport.Comparison comparison = CheckSupport.parse(term);
         if (comparison == null) {
             issues.add(subject + " when [" + term + "] must be `<Property> ==|!= <literal>` - a number, a status name, a quoted"
                     + " string or a bare word");
             return;
         }
-        FieldIntent field = fieldByName(entity, comparison.property());
-        RelationIntent relation = field == null ? toOneByName(entity, comparison.property()) : null;
+        if (entity == null) {
+            return;
+        }
+        FieldIntent field = CheckSupport.field(entity, comparison.property());
+        RelationIntent relation = field == null ? CheckSupport.toOne(entity, comparison.property()) : null;
         if (field == null && relation == null) {
             issues.add(subject + " when [" + term + "] guards [" + comparison.property() + "], which is not a field or to-one relation of ["
                     + entity.getName() + "] - the condition is read off the record itself");
@@ -4770,7 +4822,7 @@ public final class IntentParser {
         // Normalised before anything looks at it: a field without a `type:` is a string here as it is
         // everywhere else in the parser, and `Integer` is the `integer` the rest of the DSL accepts.
         // The raw value also must not reach GUARD_TYPES.contains, which throws on a null.
-        String declared = field != null ? field.getType() : relationKeyType(relation, byName);
+        String declared = field != null ? field.getType() : CheckSupport.relationKeyType(relation, byName);
         String type = CheckSupport.guardType(declared);
         if (field != null && !CheckSupport.GUARD_TYPES.contains(type)) {
             issues.add(subject + " when [" + term + "] compares [" + comparison.property() + "], which is a [" + declared
@@ -4781,39 +4833,6 @@ public final class IntentParser {
             issues.add(subject + " when [" + term + "] compares [" + comparison.property() + "], a [" + type + "], with ["
                     + comparison.literal() + "], which is not a value of that type");
         }
-    }
-
-    /** The entity's to-one relation of that name, or {@code null}. */
-    private static RelationIntent toOneByName(EntityIntent entity, String name) {
-        if (entity.getRelations() != null) {
-            for (RelationIntent relation : entity.getRelations()) {
-                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
-                if (toOne && name != null && name.equals(relation.getName())) {
-                    return relation;
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * The declared type of a to-one relation's foreign key - the target's primary-key type. A
-     * cross-model target's model is not loaded here, and intent primary keys are whole numbers, so that
-     * is what an unresolvable target falls back to. The WIDTH of that number is not knowable here (the
-     * owner's {@code .model} may type its key {@code long}), which is why the generator renders a
-     * to-one's guard as a numeric comparison rather than a boxed equality - see
-     * {@link CheckSupport#numericComparison}.
-     */
-    private static String relationKeyType(RelationIntent relation, java.util.Map<String, EntityIntent> byName) {
-        EntityIntent target = relation.getTo() == null ? null : byName.get(relation.getTo());
-        if (target != null && target.getFields() != null) {
-            for (FieldIntent field : target.getFields()) {
-                if (field.isPrimaryKey() && field.getType() != null) {
-                    return field.getType();
-                }
-            }
-        }
-        return "integer";
     }
 
     /** The entity's {@code function: EntityStatus} relation, or {@code null}. */

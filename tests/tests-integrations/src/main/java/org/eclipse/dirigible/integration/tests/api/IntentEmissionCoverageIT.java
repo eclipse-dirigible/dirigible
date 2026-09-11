@@ -1256,10 +1256,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
             # The departure half (#6767): the same record leaving on a queue, as a DECLARED envelope
             # rather than the row as stored. The guard keeps an internal note off the wire, which is
-            # the assertion that the `when` of the event axis reaches a publisher at all.
+            # the assertion that the `when` of the event axis reaches a publisher at all. It is the
+            # LIST form - the implicit AND (#6957) - which this axis used to stringify into its scalar
+            # pattern and render as `true`, so a two-term guard let EVERY record depart (#7289).
             outbound:
               - name: publishSignal
-                event: { onCreate: Signal, when: "note != internal" }
+                event: { onCreate: Signal, when: ["note != internal", "note != secret"] }
                 to: { queue: emission-signals-out }
                 payload:
                   type: "signal.raised"
@@ -2662,8 +2664,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String publisher = contentOf("gen/events/emission/PublishSignalPublisher.java");
         assertTrue(publisher.contains("return \"emission-test-Signal-Signal\";") && publisher.contains("ListenerKind.TOPIC"),
                 "a departure must subscribe to the topic the entity's repository publishes its create on");
-        assertTrue(publisher.contains("!java.util.Objects.equals(entity.Note, \"internal\")"),
-                "the event axis carries a when guard, and a departure must honour it");
+        assertTrue(
+                publisher.contains(
+                        "!java.util.Objects.equals(entity.Note, \"internal\") && !java.util.Objects.equals(entity.Note, \"secret\")"),
+                "the event axis carries a when guard, and a departure must honour EVERY term of its list form (#7289)");
         assertTrue(
                 publisher.contains("payload.put(\"type\", \"signal.raised\")")
                         && publisher.contains("payload.put(\"messageId\", java.util.UUID.randomUUID().toString())")
@@ -5587,12 +5591,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
      * declared queue, and a record the guard excludes puts nothing there. Only this layer can show it -
      * the publisher being really subscribed, the envelope being really built, and the guard really
      * running - which no assertion over the emitted source reaches.
+     *
+     * <p>
+     * The guard is the LIST form, so this is also where the #7289 degradation shows: rendered as
+     * {@code true}, as the axis rendered every list guard, BOTH excluded records would depart.
      */
     private void assertOutboundDepartureRuntime() {
         String signalApi = API + "/signal/SignalController";
         // The guarded record first: the queue is FIFO, so had it departed it would arrive BEFORE the
         // one that must, and the drain below would see it.
         createSignal(signalApi, "internal");
+        createSignal(signalApi, "secret");
         createSignal(signalApi, "outbound-ok");
 
         String departed = null;
@@ -5601,7 +5610,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             if (message == null) {
                 continue;
             }
-            assertFalse(message.contains("\"internal\""), "a record the when guard excludes must never depart: " + message);
+            assertFalse(message.contains("\"internal\"") || message.contains("\"secret\""),
+                    "a record any term of the when guard excludes must never depart: " + message);
             if (message.contains("outbound-ok")) {
                 departed = message;
             }
