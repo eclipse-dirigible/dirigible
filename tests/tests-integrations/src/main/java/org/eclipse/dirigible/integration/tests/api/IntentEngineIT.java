@@ -28,6 +28,7 @@ import java.util.Map;
 import org.eclipse.dirigible.components.data.structures.domain.Table;
 import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
 import org.eclipse.dirigible.components.data.structures.synchronizer.SchemasSynchronizer;
+import org.eclipse.dirigible.components.ide.workspace.service.PublisherService;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -131,7 +132,9 @@ class IntentEngineIT extends IntegrationTest {
     private static final String DEPENDENCY_PROJECT_PATH =
             IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/" + DEPENDENCY_PROJECT;
     /** A third project holding only a hand-written owner {@code .model} - see #7227's test. */
-    private static final String OWNER_PROJECT_PATH = IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/partners";
+    private static final String OWNER_PROJECT = "partners";
+
+    private static final String OWNER_PROJECT_PATH = IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/" + OWNER_PROJECT;
 
     private static final String DEPENDENCY_GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + DEPENDENCY_PROJECT + "&path=app.intent";
@@ -461,6 +464,13 @@ class IntentEngineIT extends IntegrationTest {
 
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
+
+    /**
+     * Removing the PUBLISHED copy of a project is half of this class's cleanup - see
+     * {@link #removeProject()}.
+     */
+    @Autowired
+    private PublisherService publisherService;
 
     /**
      * Reads a generated .schema back exactly as the runtime does, to assert what it creates from it.
@@ -5076,6 +5086,11 @@ class IntentEngineIT extends IntegrationTest {
         return repository.getResource(PROJECT_PATH + "/" + fileName);
     }
 
+    /** A repository-absolute resource - {@link #resource(String)} is relative to the test project. */
+    private IResource resourceOf(String path) {
+        return repository.getResource(path);
+    }
+
     private String contentOf(String fileName) {
         return new String(resource(fileName).getContent(), StandardCharsets.UTF_8);
     }
@@ -5862,6 +5877,15 @@ class IntentEngineIT extends IntegrationTest {
         writeIntent(MUTUAL_SOURCE_INTENT);
         writeDependencyIntent(MUTUAL_TARGET_INTENT);
 
+        // The refusal below is about the ABSENCE of the owner model, in either of the two places
+        // ownerModelExists reads - so state that as a precondition rather than let a leftover from an
+        // earlier test in this class turn the 422 into an unexplained 200 (see removeProject()).
+        assertFalse(resourceOf(DEPENDENCY_PROJECT_PATH + "/quotations.model").exists(),
+                "the workspace copy of the dependency model must be gone before a bootstrap pass is expected");
+        assertFalse(resourceOf(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + DEPENDENCY_PROJECT + "/quotations.model").exists(),
+                "the PUBLISHED copy of the dependency model must be gone too - a Generate publishes, so deleting the workspace"
+                        + " project alone leaves an owner model the bootstrap check legitimately accepts");
+
         // 1. The default pass refuses - and says the one thing the generic cross-model message cannot,
         // namely that this pass would succeed if it were allowed to skip the create-from.
         restAssuredExecutor.execute(() -> given().when()
@@ -5950,16 +5974,32 @@ class IntentEngineIT extends IntegrationTest {
         }
     }
 
+    /**
+     * Both copies of every project this class writes - the workspace one AND the published one.
+     *
+     * <p>
+     * Deleting the workspace project is not the whole cleanup: a Generate runs the project's
+     * {@code .settings} recipes through {@code ModelGenerationService}, which PUBLISHES the project
+     * once it has written them, so every generating test here leaves a {@code /registry/public/
+     * <project>} copy behind. That copy is a real deployment, not a cache - the IDE draws the same
+     * distinction with its "Delete" and "Delete &amp; Unpublish" buttons - and
+     * {@code CrossModelSupport.ownerModelExists} deliberately accepts a published {@code .model} as the
+     * owner model, it being the only copy a prepackaged module ever has. Left behind, it makes the next
+     * test's cross-model owner resolve against the previous test's output: that is how
+     * {@link #mutual_cross_model_generates_bootstraps()} stopped seeing its bootstrap refusal as soon
+     * as another test in this class generated the shared dependency project.
+     */
     @AfterEach
     void removeProject() {
-        if (repository.hasCollection(PROJECT_PATH)) {
-            repository.removeCollection(PROJECT_PATH);
+        removeProject(PROJECT_PATH, PROJECT);
+        removeProject(DEPENDENCY_PROJECT_PATH, DEPENDENCY_PROJECT);
+        removeProject(OWNER_PROJECT_PATH, OWNER_PROJECT);
+    }
+
+    private void removeProject(String projectPath, String projectName) {
+        if (repository.hasCollection(projectPath)) {
+            repository.removeCollection(projectPath);
         }
-        if (repository.hasCollection(DEPENDENCY_PROJECT_PATH)) {
-            repository.removeCollection(DEPENDENCY_PROJECT_PATH);
-        }
-        if (repository.hasCollection(OWNER_PROJECT_PATH)) {
-            repository.removeCollection(OWNER_PROJECT_PATH);
-        }
+        publisherService.unpublish(projectName);
     }
 }
