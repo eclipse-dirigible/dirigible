@@ -82,8 +82,21 @@ function formController(ctx) {
   // AngularJS resolves $http with { data, status, statusText, ... } and legacy .form code branches
   // on the status (`if (response.status != 202)`), so the success path must carry it too - not just
   // the rejection path. ctx.http resolves the body alone, hence the exchange() call here.
+  //
+  // The rejection carries the ApiError shape App.services.apiErrors reads (httpStatus/errorMessage)
+  // on the thrown object ITSELF, so a .form's own .catch can hand it straight to
+  // refusalMessageFor(error, '<its own fallback>') - never read .data.message, the raw
+  // developer-facing sentence a 500 carries (#7296). The legacy .data.message field stays too, for
+  // .form code authored against the old AngularJS $http shim before this fix existed.
   const wrap = (p) => p.then((r) => ({ data: r.data, status: r.status }))
-                       .catch((e) => { throw { data: { message: e && e.message }, status: e && e.httpStatus }; });
+                       .catch((e) => {
+                         throw {
+                           data: { message: e && e.message },
+                           status: e && e.httpStatus,
+                           httpStatus: e && e.httpStatus,
+                           errorMessage: e && e.errorMessage,
+                         };
+                       });
   const $http = {
     get:    (url)       => wrap(harmoniaHttp.exchange('GET', url, undefined)),
     post:   (url, data) => wrap(harmoniaHttp.exchange('POST', url, data)),

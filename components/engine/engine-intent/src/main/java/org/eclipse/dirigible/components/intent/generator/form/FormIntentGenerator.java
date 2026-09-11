@@ -548,7 +548,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                                 __dialogs.closeWindow();
                                 window.close();
                             }).catch((error) => {
-                                const message = error && error.data && error.data.message ? error.data.message : 'Unknown error';
+                                const message = App.services.apiErrors.refusalMessageFor(error, 'Submit failed.');
                                 __notifications.show({ type: 'negative', title: 'Submit failed', description: message });
                             });
                         }

@@ -3049,10 +3049,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 emittedPages.contains("gen/emission/admin/index.html")
                         && emittedPages.contains("gen/emission/js/components/pages/my/ClaimMyListPage.js"),
                 "the generated-page walk must cover the admin page and the SPA pages, else the rule below is vacuous: " + emittedPages);
+        // #7296: `error.data.message` (a BPM task form's old .catch, and the old template-bpm
+        // scaffold's alert()) is a THIRD spelling of the same defect that neither pattern below
+        // matched. It does not collide with the $http shim's own `message: e && e.message` field
+        // WRITE (form.js.template), which every generated form.js legitimately still carries for
+        // .form code authored against the old AngularJS $http compat shape - that is a different
+        // token sequence. FormIntentGenerator's own fix is unit-tested directly (no `forms:` /
+        // userTask form binding exists in this fixture to exercise gen/.../forms/*/form.js) - see
+        // TaskFormApiErrorTest.
         List<String> rawMessagePages = emittedPages.stream()
                                                    .filter(page -> {
                                                        String content = contentOf(page);
-                                                       return content.contains("(e && e.message)") || content.contains("String(e.message");
+                                                       return content.contains("(e && e.message)") || content.contains("String(e.message")
+                                                               || content.contains("error.data.message");
                                                    })
                                                    .toList();
         assertTrue(rawMessagePages.isEmpty(),
