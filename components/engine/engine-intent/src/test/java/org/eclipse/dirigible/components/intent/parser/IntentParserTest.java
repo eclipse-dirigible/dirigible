@@ -1896,7 +1896,27 @@ class IntentParserTest {
     }
 
     @Test
-    void scheduleWithBothNotifyAndGenerateIsRejected() {
+    void scheduleMayBothNotifyAndGenerate() {
+        // Issue #7276: one tick that BOTH mails and records what it sent - what a reminder history
+        // needs to reflect the automated sends, not only the manual clicks.
+        String yaml = SCHEDULE_GEN_HEAD + """
+                    notify:
+                      to: status
+                      subject: "x"
+                      body: "y"
+                    generate:
+                      to: EmployeeTimesheet
+                      unique: [Employee]
+                      map:
+                        Employee: id
+                """;
+        IntentParser.parse(yaml);
+    }
+
+    @Test
+    void scheduleThatNotifiesAndGeneratesWithoutUniqueIsRejected() {
+        // Without the natural key the combined tick re-mails every matched row on every tick and
+        // writes another record beside each send - the failure the combined form exists to remove.
         String yaml = SCHEDULE_GEN_HEAD + """
                     notify:
                       to: status
@@ -1910,8 +1930,8 @@ class IntentParserTest {
         IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
         assertTrue(ex.getIssues()
                      .stream()
-                     .anyMatch(i -> i.contains("has both notify and generate")),
-                "expected a both-actions issue, got: " + ex.getIssues());
+                     .anyMatch(i -> i.contains("both notify and generate but no generate unique")),
+                "expected a missing-unique issue, got: " + ex.getIssues());
     }
 
     @Test

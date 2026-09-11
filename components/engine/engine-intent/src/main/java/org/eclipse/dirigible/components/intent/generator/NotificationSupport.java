@@ -95,6 +95,20 @@ public final class NotificationSupport {
      */
     static final String INBOX_URL_TOKEN = "inboxUrl";
 
+    /**
+     * The {@code escalation.<field>} scope - the level a schedule's days-past-due ladder placed the row
+     * at (issue #7276), reachable from the message text so the wording can differ per level ("a
+     * friendly reminder" at the first, "final notice before collection" at the last). It is also the
+     * NAME of the local the generated job holds that level in, which is what keeps the rendered access
+     * and the declaration in step.
+     *
+     * <p>
+     * Placeholders only, exactly like {@link NotifySupport#RECORD_SCOPE}: a recipient is a person, and
+     * a ladder of settings has no mailbox. One field of the level, never a walk on - a second hop would
+     * be a load per message, and the composed value belongs on the level itself.
+     */
+    public static final String ESCALATION_LOCAL = "escalation";
+
     private NotificationSupport() {}
 
     /**
@@ -228,10 +242,39 @@ public final class NotificationSupport {
      */
     public static Plan plan(NotificationIntent notification, EntityIntent eventEntity, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, CrossModelLookup crossModel) {
+        return plan(notification, eventEntity, null, byName, compositionParents, crossModel);
+    }
+
+    /**
+     * The same translation with an escalation LADDER in scope: the message text may read one field of
+     * the level a schedule's {@code escalate:} placed the row at, through {@code {escalation.<field>}}
+     * (issue #7276). Pass {@code null} for the ladder everywhere an escalation cannot apply - a
+     * placeholder then stays unresolvable and degrades to its own literal text, as every unknown
+     * placeholder does.
+     *
+     * @param notification the notification
+     * @param eventEntity the entity whose event fires it
+     * @param escalation the escalation ladder entity, or {@code null}
+     * @param byName all LOCAL entities by name (to resolve same-model relation targets)
+     * @param compositionParents composition-parent map (to resolve a target's perspective)
+     * @param crossModel resolver for a cross-model relation's owner facts, or {@code null}
+     * @return the plan, or {@code null} if the {@code to} recipient cannot be resolved
+     */
+    public static Plan plan(NotificationIntent notification, EntityIntent eventEntity, EntityIntent escalation,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, CrossModelLookup crossModel) {
         Object when = notification.getEvent()
                                   .get("when");
-        return plan(notification.getTo(), notification.getSubject(), notification.getBody(), when, eventEntity, byName, compositionParents,
-                crossModel);
+        Resolver resolver = new Resolver(eventEntity, null, escalation, byName, compositionParents, crossModel);
+        String recipient = resolver.value(notification.getTo());
+        if (recipient == null) {
+            return null; // an unresolvable recipient relation.field - skip rather than email garbage
+        }
+        // Rendered BEFORE the loads are read: a placeholder is what registers most one-hop loads, and an
+        // argument list evaluated left to right would snapshot the loads before the text added any.
+        String subjectExpression = resolver.text(notification.getSubject());
+        String bodyExpression = resolver.text(notification.getBody());
+        return new Plan(resolver.loads(), guard(when, eventEntity, byName), recipient, subjectExpression, bodyExpression,
+                resolver.usesRecordUrl(), resolver.usesInboxUrl());
     }
 
     /**
@@ -276,7 +319,7 @@ public final class NotificationSupport {
      */
     public static Plan plan(String to, String subject, String body, Object when, EntityIntent entity, EntityIntent anchor,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, CrossModelLookup crossModel) {
-        Resolver resolver = new Resolver(entity, anchor, byName, compositionParents, crossModel);
+        Resolver resolver = new Resolver(entity, anchor, null, byName, compositionParents, crossModel);
         String recipient = resolver.value(to);
         if (recipient == null) {
             return null; // an unresolvable recipient relation.field - skip rather than email garbage
@@ -394,7 +437,7 @@ public final class NotificationSupport {
      */
     static Resolver resolver(EntityIntent entity, Map<String, EntityIntent> byName, Map<String, String> compositionParents,
             CrossModelLookup crossModel) {
-        return new Resolver(entity, null, byName, compositionParents, crossModel);
+        return new Resolver(entity, null, null, byName, compositionParents, crossModel);
     }
 
     /** Resolves values/text against the event entity, accumulating the relation loads they require. */
@@ -402,6 +445,7 @@ public final class NotificationSupport {
 
         private final EntityIntent entity;
         private final EntityIntent anchor;
+        private final EntityIntent escalation;
         private final Map<String, EntityIntent> byName;
         private final Map<String, String> compositionParents;
         private final Set<String> settingEntities;
@@ -410,10 +454,11 @@ public final class NotificationSupport {
         private boolean usesRecordUrl;
         private boolean usesInboxUrl;
 
-        Resolver(EntityIntent entity, EntityIntent anchor, Map<String, EntityIntent> byName, Map<String, String> compositionParents,
-                CrossModelLookup crossModel) {
+        Resolver(EntityIntent entity, EntityIntent anchor, EntityIntent escalation, Map<String, EntityIntent> byName,
+                Map<String, String> compositionParents, CrossModelLookup crossModel) {
             this.entity = entity;
             this.anchor = anchor;
+            this.escalation = escalation;
             this.byName = byName;
             this.compositionParents = compositionParents;
             this.settingEntities = IntentEntities.settingEntities(byName.values());
@@ -502,6 +547,15 @@ public final class NotificationSupport {
             if (INBOX_URL_TOKEN.equals(path)) {
                 usesInboxUrl = true;
                 return INBOX_URL_TOKEN;
+            }
+            if (recordScope && escalation != null && path.startsWith(ESCALATION_LOCAL + ".")) {
+                // The escalation level this row was placed at, already loaded by the generated job: one
+                // field of it, never a walk on - the same rule the anchor scope below states.
+                String field = path.substring(ESCALATION_LOCAL.length() + 1);
+                if (field.isEmpty() || field.indexOf('.') >= 0 || fieldOf(escalation, field) == null) {
+                    return null;
+                }
+                return ESCALATION_LOCAL + "." + IntentNaming.pascalCase(field);
             }
             if (recordScope && anchor != null && path.startsWith(NotifySupport.RECORD_SCOPE + ".")) {
                 // The anchor record of a fan-out, already loaded by the generated code: one field of it,

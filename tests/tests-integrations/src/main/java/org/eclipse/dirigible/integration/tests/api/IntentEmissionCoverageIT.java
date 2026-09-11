@@ -785,6 +785,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # is fail-soft, so without this the mail that never left was a log line and nothing
                   # else - and this instance has no SMTP, which is exactly the case being asserted.
                   - { name: sendOutcome, type: string, length: 128, readOnly: true }
+                  # #7276: the date the dunning ladder below counts days from.
+                  - { name: dueOn, type: date }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person }
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
@@ -806,6 +808,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Bill,   kind: manyToOne, to: Bill, required: true }
                   - { name: Person, kind: manyToOne, to: Person }
+
+              # #7276 dunning: the escalation LADDER (a settings table of levels and their
+              # days-past-due thresholds) and the HISTORY the scheduled run writes - what was
+              # actually sent, and at which level.
+              - name: ReminderLevel
+                function: Setting
+                fields:
+                  - { name: id,           type: integer, primaryKey: true, generated: true }
+                  - { name: name,         type: string }
+                  - { name: daysAfterDue, type: integer }
+                  - { name: wording,      type: string, length: 500 }
+              - name: BillReminder
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: sentOn, type: date }
+                relations:
+                  - { name: Bill,  kind: manyToOne, to: Bill, required: true }
+                  - { name: Level, kind: manyToOne, to: ReminderLevel }
 
               # keyed cross-entity aggregate: a signed ledger summed per (Person, Unit) into a
               # materialised total row keyed by the same two FKs. Ledger.amount is SENSITIVE and
@@ -1072,6 +1092,30 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   attach: print
                   languageFrom: Person.locale
                   outcome: sendOutcome
+
+              # #7276: a tick that BOTH records and mails, escalating by how overdue the bill is. It
+              # never fires here (the 1st of January at 07:00); it is in this fixture so the combined
+              # job - the ladder lookup, the level written into the natural key, the guard that gates
+              # the send - is COMPILED by the publish below, which is the only proof it builds.
+              - name: bill-dunning
+                cron: "0 0 7 1 1 *"
+                entity: Bill
+                where:
+                  - { field: dueOn, op: lt, value: CURRENT_DATE }
+                escalate:
+                  ladder: ReminderLevel
+                  after: daysAfterDue
+                  since: dueOn
+                  into: Level
+                generate:
+                  to: BillReminder
+                  unique: [Bill, Level]
+                  map: { Bill: id }
+                  defaults: { sentOn: now }
+                notify:
+                  to: Person.email
+                  subject: "Bill {note} - {escalation.name}"
+                  body: "{escalation.wording}"
 
             processes:
               # assignee: personal - the confirm task lands in exactly the owner's Inbox (the IT
@@ -2850,6 +2894,26 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         int dunningCatch = dunning.indexOf("} catch (Exception ex) {");
         assertTrue(dunningTry > 0 && dunningTry < dunningLoad && dunningLoad < dunningRender && dunningRender < dunningCatch,
                 "the row's loads and the attachment render must run inside the fail-soft try: " + dunning);
+
+        // #7276 - the escalating dunning tick that records what it sent. The ladder lookup, the level
+        // written onto the history row AND into the natural key, and the guard that skips the send for
+        // a level already sent all have to COMPILE against the generated entities: `escalation` is a
+        // typed local read for a `long` comparison and for an Integer foreign key, and the publish +
+        // client-Java javac below is the first thing that proves it.
+        String escalating = contentOf("gen/events/emission/BillDunningJob.java");
+        assertTrue(
+                escalating.contains("ReminderLevelEntity escalationCandidate = null;")
+                        && escalating.contains("ReminderLevelEntity escalation = escalationCandidate;"),
+                "the chosen level is a typed, effectively final local of the row's try: " + escalating);
+        assertTrue(escalating.contains("java.time.temporal.ChronoUnit.DAYS.between(entity.DueOn"),
+                "how overdue the row is decides the level: " + escalating);
+        assertTrue(escalating.contains("target.Level = escalation.Id;"), "the level is written onto the history row: " + escalating);
+        assertTrue(escalating.contains(".eq(\"Level\", keyLevel)"),
+                "the level is part of the key that sends each level once: " + escalating);
+        int escalatingGuard = escalating.indexOf("BillReminderRepository().findAll(Criteria.create()");
+        int escalatingSend = escalating.indexOf("Mail.send(");
+        assertTrue(escalatingGuard > 0 && escalatingSend > escalatingGuard,
+                "the natural key gates the send as well as the write: " + escalating);
 
         // month widget: the YYYY-MM field renders the Harmonia month picker on BOTH writable
         // surfaces - the power form and the personal form (my-shell parity).
