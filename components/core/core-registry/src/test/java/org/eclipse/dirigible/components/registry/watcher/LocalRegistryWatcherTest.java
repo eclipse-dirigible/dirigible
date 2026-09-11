@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.registry.watcher;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
@@ -27,6 +28,7 @@ import org.eclipse.dirigible.repository.api.IRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.verification.VerificationMode;
 
 /**
  * The registry watcher that everything depends on registers the registry root and nothing below it,
@@ -37,6 +39,7 @@ class LocalRegistryWatcherTest {
 
     /** A change picked up by the watch service: up to ~10s where the JDK falls back to polling. */
     private static final long WATCH_TIMEOUT_MILLIS = 60_000;
+
 
     /** How long to wait for the watch loop to be up before changing anything under it. */
     private static final long START_TIMEOUT_MILLIS = 30_000;
@@ -63,7 +66,7 @@ class LocalRegistryWatcherTest {
                                   .resolve("artefact.txt"),
                 "content");
 
-        verify(synchronizationWatcher, timeout(WATCH_TIMEOUT_MILLIS)).force();
+        verify(synchronizationWatcher, reported()).force();
     }
 
     /**
@@ -76,10 +79,11 @@ class LocalRegistryWatcherTest {
 
         Path fresh = Files.createDirectories(registry.resolve("fresh-project")
                                                      .resolve("deep"));
-        verify(synchronizationWatcher, timeout(WATCH_TIMEOUT_MILLIS)).force();
+        verify(synchronizationWatcher, reported()).force();
+        clearInvocations(synchronizationWatcher);
 
         Files.writeString(fresh.resolve("artefact.txt"), "content");
-        verify(synchronizationWatcher, timeout(WATCH_TIMEOUT_MILLIS).atLeast(2)).force();
+        verify(synchronizationWatcher, reported()).force();
     }
 
     /** A deletion leaves runtime state behind just as a creation leaves it missing. */
@@ -89,11 +93,12 @@ class LocalRegistryWatcherTest {
         Path artefact = registry.resolve("project")
                                 .resolve("artefact.txt");
         Files.writeString(artefact, "content");
-        verify(synchronizationWatcher, timeout(WATCH_TIMEOUT_MILLIS)).force();
+        verify(synchronizationWatcher, reported()).force();
+        clearInvocations(synchronizationWatcher);
 
         Files.delete(artefact);
 
-        verify(synchronizationWatcher, timeout(WATCH_TIMEOUT_MILLIS).atLeast(2)).force();
+        verify(synchronizationWatcher, reported()).force();
     }
 
     /** An ignored top-level folder is neither watched nor reported - that is what the key is for. */
@@ -124,6 +129,19 @@ class LocalRegistryWatcherTest {
         watcher.initialize();
         awaitWatching();
         return registry;
+    }
+
+    /**
+     * The verification every assertion here uses: the write was reported <i>at least</i> once. How many
+     * events one write produces is the platform's business - inotify reports a created file as
+     * ENTRY_CREATE and again as ENTRY_MODIFY, while the polling watch service macOS falls back to
+     * reports it once - and marking the registry modified is idempotent, so the count carries nothing
+     * worth pinning down. The steps of a sequence are separated by clearing the recorded calls instead.
+     *
+     * @return the verification mode
+     */
+    private static VerificationMode reported() {
+        return timeout(WATCH_TIMEOUT_MILLIS).atLeastOnce();
     }
 
     private void awaitWatching() {
