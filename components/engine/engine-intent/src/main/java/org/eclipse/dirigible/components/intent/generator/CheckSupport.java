@@ -61,6 +61,10 @@ public final class CheckSupport {
      */
     public static final Set<String> NUMERIC_GUARD_TYPES = Set.of("integer", "int", "long");
 
+    /** The field types a {@code compare} check orders, by the family they compare inside. */
+    private static final Map<String, String> COMPARE_FAMILIES = Map.of("date", "date", "timestamp", "timestamp", "integer", "number", "int",
+            "number", "long", "number", "decimal", "number", "double", "number");
+
     private CheckSupport() {}
 
     /**
@@ -295,6 +299,178 @@ public final class CheckSupport {
             }
         }
         return "integer";
+    }
+
+    /**
+     * The comparison family a field type lands in - {@code date}, {@code timestamp} or {@code number} -
+     * or {@code null} when the type does not order at all (a string, a {@code month}, a {@code week}:
+     * ordering those lexicographically is never what the author meant, so a {@code compare} over one is
+     * refused rather than generated).
+     *
+     * <p>
+     * A {@code compare} check's two operands must sit in ONE family, which is what the generated code
+     * needs: two temporals compare through their own {@code compareTo} (a {@code LocalDate} does not
+     * compare to an {@code Instant}), two numbers by value through {@code BigDecimal} so a
+     * {@code decimal} against a {@code long} stays exact.
+     *
+     * @param type the authored field type, may be {@code null}
+     * @return the family, or {@code null}
+     */
+    public static String compareFamily(String type) {
+        return type == null ? null
+                : COMPARE_FAMILIES.get(type.trim()
+                                           .toLowerCase(Locale.ROOT));
+    }
+
+    /**
+     * Reads a {@code checks: compare} right-hand LITERAL (issue #7338) against the type of the field it
+     * is compared with - the one place the rule lives, so the parser refuses exactly what the generator
+     * cannot render.
+     *
+     * <p>
+     * The literal is typed by that field: a numeric field takes a number and compares by VALUE through
+     * {@code BigDecimal} (the same exactness the two-field form has); a temporal field takes either a
+     * MOMENT - {@code CURRENT_DATE} / {@code CURRENT_TIMESTAMP} / {@code NOW} with at most one signed
+     * ISO-8601 offset, the vocabulary a schedule's {@code where:} already carries - or an ISO-8601
+     * instant/date literal. The moment is resolved against the clock of the write, not of the
+     * generation, and it is rendered in the SHAPE the generated entity column actually carries
+     * ({@code LocalDate} for a {@code date}, {@code Instant} for a {@code timestamp}), because a
+     * comparison across those two shapes does not compile.
+     *
+     * <p>
+     * A temporal literal must be QUOTED in the YAML: an unquoted {@code 2026-01-01} is resolved by the
+     * YAML loader into a date object long before this sees it, and would arrive here as a locale-shaped
+     * string nobody authored.
+     *
+     * @param fieldType the declared type of the field on the left of the comparison
+     * @param value the authored literal
+     * @return the reading - either a Java expression or the reason it is refused, never both
+     */
+    public static CompareLiteral compareLiteral(String fieldType, Object value) {
+        String family = compareFamily(fieldType);
+        if (family == null) {
+            return CompareLiteral.refused("field is a [" + fieldType + "] - only dates, timestamps and numbers compare");
+        }
+        if (value == null) {
+            return CompareLiteral.refused("requires a `value`");
+        }
+        if ("number".equals(family)) {
+            java.math.BigDecimal number = decimal(value);
+            return number == null
+                    ? CompareLiteral.refused("value [" + value + "] is not a number, and a [" + fieldType + "] compares" + " with numbers")
+                    : CompareLiteral.of("new java.math.BigDecimal(\"" + number.toPlainString() + "\")");
+        }
+        boolean date = "date".equals(family);
+        String now = date ? "java.time.LocalDate.now()" : "java.time.Instant.now()";
+        ScheduleSupport.Moment moment = ScheduleSupport.moment(value);
+        if (moment != null) {
+            boolean momentIsDate = moment.shape() == ScheduleSupport.Moment.Shape.DATE;
+            if (momentIsDate != date) {
+                return CompareLiteral.refused(
+                        "value [" + value + "] names a " + (momentIsDate ? "date" : "timestamp") + " moment, and" + " a [" + fieldType
+                                + "] compares with " + (date ? "dates - use CURRENT_DATE" : "timestamps - use CURRENT_TIMESTAMP"));
+            }
+            String offset = moment.duration();
+            if (offset == null) {
+                return CompareLiteral.of(now);
+            }
+            String amount = date ? period(offset) : duration(offset);
+            if (amount == null) {
+                return CompareLiteral.refused("value [" + value + "] carries an offset a [" + fieldType + "] cannot"
+                        + (date ? " - a date has no time component" : "") + ": [" + offset + "]");
+            }
+            return CompareLiteral.of(now + (moment.forward() ? ".plus(" : ".minus(") + amount + ")");
+        }
+        String text = String.valueOf(value)
+                            .trim();
+        try {
+            if (date) {
+                java.time.LocalDate.parse(text);
+                return CompareLiteral.of("java.time.LocalDate.parse(\"" + text + "\")");
+            }
+            java.time.Instant.parse(text);
+            return CompareLiteral.of("java.time.Instant.parse(\"" + text + "\")");
+        } catch (java.time.format.DateTimeParseException ex) {
+            return CompareLiteral.refused("value [" + value + "] is neither a moment (CURRENT_DATE / CURRENT_TIMESTAMP / NOW, with at"
+                    + " most one signed ISO-8601 offset) nor a quoted ISO-8601 "
+                    + (date ? "date (\"2026-01-01\")" : "instant" + " (\"2026-01-01T00:00:00Z\")") + ", and a [" + fieldType
+                    + "] compares with those");
+        }
+    }
+
+    /** The authored value as an exact decimal, or {@code null} when it does not read as a number. */
+    private static java.math.BigDecimal decimal(Object value) {
+        try {
+            return new java.math.BigDecimal(String.valueOf(value)
+                                                  .trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    /** The date-only offset as the Java amount expression, or {@code null} when it is not one. */
+    private static String period(String offset) {
+        try {
+            java.time.Period.parse(offset);
+            return "java.time.Period.parse(\"" + offset + "\")";
+        } catch (java.time.format.DateTimeParseException ex) {
+            return null;
+        }
+    }
+
+    /** The instant offset as the Java amount expression, or {@code null} when it is not one. */
+    private static String duration(String offset) {
+        try {
+            java.time.Duration.parse(offset);
+            return "java.time.Duration.parse(\"" + offset + "\")";
+        } catch (java.time.format.DateTimeParseException ex) {
+            return null;
+        }
+    }
+
+    /**
+     * The reading of a {@code compare} literal: the Java expression the generated comparison evaluates,
+     * or the reason the literal is refused. Exactly one of the two is present - a refused literal has
+     * no rendering, and a rendered one has nothing to report.
+     */
+    public static final class CompareLiteral {
+
+        private final String javaExpression;
+        private final String problem;
+
+        private CompareLiteral(String javaExpression, String problem) {
+            this.javaExpression = javaExpression;
+            this.problem = problem;
+        }
+
+        private static CompareLiteral of(String javaExpression) {
+            return new CompareLiteral(javaExpression, null);
+        }
+
+        private static CompareLiteral refused(String problem) {
+            return new CompareLiteral(null, problem);
+        }
+
+        /**
+         * @return whether the literal reads
+         */
+        public boolean valid() {
+            return problem == null;
+        }
+
+        /**
+         * @return the Java expression the comparison's right-hand side renders as, or {@code null}
+         */
+        public String javaExpression() {
+            return javaExpression;
+        }
+
+        /**
+         * @return why the literal is refused, as the tail of an author-facing issue, or {@code null}
+         */
+        public String problem() {
+            return problem;
+        }
     }
 
     /**

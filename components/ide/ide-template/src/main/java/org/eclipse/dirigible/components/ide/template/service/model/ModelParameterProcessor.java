@@ -222,8 +222,13 @@ final class ModelParameterProcessor {
             String kind = str(check, "kind");
             resolveMessageLiteral(check);
             resolveCheckPathLoads(check, parameters);
-            if ("exactlyOne".equals(kind) || "compare".equals(kind)) {
+            if ("exactlyOne".equals(kind)) {
                 rowChecks.add(check);
+            } else if ("compare".equals(kind)) {
+                // A comparison is row-level unless it names the status it is enforced at - the same
+                // routing requiredWhen has: without a gate it holds on every user write, with one it is
+                // the repository's, so "days > 0 before SUBMITTED" does not forbid the draft (#7338).
+                (str(check, "status") == null || str(check, "status").isEmpty() ? rowChecks : documentChecks).add(check);
             } else if ("guard".equals(kind)) {
                 guardChecks.add(check);
             } else if ("requiredWhen".equals(kind) || "forbidWhen".equals(kind)) {

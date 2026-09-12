@@ -522,13 +522,29 @@ field may declare:
 - `checks:` (entity-level) - **declarative cross-field / cross-line validations**:
   - `{ kind: exactlyOne, fields: [debit, credit], message: "..." }` (row-level): exactly one of the
     listed own fields is non-null - enforced on every user write (400).
-  - `{ kind: compare, field: due, op: ge, than: date, message: "..." }` (row-level): two values of
-    the SAME record must stand in a relation to each other - a due date not before the document
-    date, a validity `to` not before its `from`, a delivery date not before the order date.
-    `op:` is one of `ge`, `gt`, `le`, `lt`, `eq`, `ne`; both operands are the entity's own fields
-    (never relations) and must be both dates, both timestamps or both numbers. Enforced on every
-    user write (400 with the authored message); an absent operand is not a violation - a comparison
-    is about two values that exist, and requiredness is its own declaration.
+  - `{ kind: compare, field: due, op: ge, than: date, message: "..." }`: a value of the record must
+    stand in a relation to a second one - a due date not before the document date, a validity `to`
+    not before its `from`, a delivery date not before the order date. `op:` is one of `ge`, `gt`,
+    `le`, `lt`, `eq`, `ne`; the left operand is the entity's own field (never a relation) and the
+    right one is either another of its own fields (`than:`) or a LITERAL (`value:`) - exactly one of
+    the two. Enforced on every user write (400 with the authored message); an absent operand is not
+    a violation - a comparison is about values that exist, and requiredness is its own declaration.
+  - `{ kind: compare, field: days, op: gt, value: 0, message: "..." }`: the same check against a
+    constant - **this is how "a quantity is positive", "a percentage is at most 100" and "a date is
+    not in the past" are declared.** Do not hand-edit the generated controller's `validate()` for
+    them (the next regeneration drops it, silently) and do not smuggle them into a
+    `calculatedActionOnCreate` that throws (that is a calculation, not a refusal, and it only fires
+    on the field that declares it). The literal is typed by the field it is compared with: a number
+    for a numeric field; for a `date`/`timestamp` either a moment (`CURRENT_DATE`,
+    `CURRENT_TIMESTAMP`, `NOW`, with at most one signed ISO-8601 offset such as `CURRENT_DATE+P7D`,
+    resolved against the clock of the write) or a QUOTED ISO-8601 date / instant - an unquoted
+    `2026-01-01` is read by the YAML loader as a date object and refused here.
+  - A `compare` takes an OPTIONAL `status:` gate, the same routing `requiredWhen` has: without one
+    it holds on every user write, with one the repository enforces it when the record is persisted
+    carrying that status. `{ kind: compare, field: days, op: gt, value: 0, status: SUBMITTED }` is
+    "a submitted request covers at least one day" without forbidding the draft still being filled
+    in - the rule to reach for instead of mis-authoring it as an `itemsMin` over a child the
+    approval step has not created yet. A gated compare needs the `function: EntityStatus` relation.
   - `{ kind: itemsSumEqual, over: [debit, credit], status: 2, message: "..." }` (document-level):
     the sums of the two item fields must be equal - the double-entry invariant. Enforced in the
     repository whenever the document is persisted CARRYING the `status` gate seed id, i.e. at the

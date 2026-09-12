@@ -91,6 +91,14 @@ public final class ScheduleSupport {
         }
 
         /**
+         * @return whether the offset moves FORWARD from the token ({@code CURRENT_DATE+P7D}), as opposed to
+         *         back from it
+         */
+        public boolean forward() {
+            return forward;
+        }
+
+        /**
          * @return whether the offset is an ISO-8601 amount this shape can carry (always {@code true} for a
          *         bare token)
          */

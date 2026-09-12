@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.intent.parser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -856,8 +857,7 @@ class IntentParserTest {
     /**
      * A {@code compare} check relates two values of the SAME row - the rule that could not be declared
      * at all, so a document was saved and issued with a due date behind its own date (dirigible #7095).
-     * Both operands must be own fields of ONE comparison family, the operator is explicit, and it is
-     * row-level, so a status gate is refused.
+     * Both operands must be own fields of ONE comparison family and the operator is explicit.
      */
     @Test
     void compareChecksParseAndValidate() {
@@ -888,8 +888,75 @@ class IntentParserTest {
         assertCompareIssue(yaml.replace("field: due", "field: note"), "only dates, timestamps and numbers compare");
         assertCompareIssue(yaml.replace("than: date", "than: issuedOn"), "is not a field of [SalesInvoice]");
         assertCompareIssue(yaml.replace("field: due", "field: date"), "compares [date] with itself");
-        assertCompareIssue(yaml.replace("op: ge,", "op: ge, status: 2,"), "cannot carry a `status` gate");
-        assertCompareIssue(yaml.replace("field: due, op: ge, than: date, ", ""), "requires `field` and `than`");
+        assertCompareIssue(yaml.replace("field: due, op: ge, than: date, ", ""), "exactly one right-hand side");
+        // ...and a right-hand side is exactly ONE thing: neither both operands nor none of them.
+        assertCompareIssue(yaml.replace("than: date,", "than: date, value: \"CURRENT_DATE\","), "exactly one right-hand side");
+    }
+
+    /**
+     * A {@code compare} check against a LITERAL (dirigible #7338) - the commonest business validation
+     * of all ("a quantity is positive", "a percentage is at most 100"), which had no declaration at all
+     * and was hand-edited into the generated {@code validate()} or smuggled into a calculation that
+     * throws. The literal is typed by the field it is compared with, and the optional status gate is
+     * the routing: with one, the rule holds at the transition rather than on the first draft.
+     */
+    @Test
+    void compareChecksAgainstLiteralsParseAndValidate() {
+        String yaml = """
+                name: leave
+                seeds:
+                  - name: request-statuses
+                    entity: RequestStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: SUBMITTED }
+                entities:
+                  - name: RequestStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: VacationRequest
+                    checks:
+                      - { kind: compare, field: days, op: gt, value: 0, status: SUBMITTED,
+                          message: "A request must cover at least one working day" }
+                      - { kind: compare, field: share, op: le, value: 100, message: "A share cannot exceed 100%" }
+                      - { kind: compare, field: from, op: ge, value: "CURRENT_DATE", message: "Leave cannot start in the past" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: days, type: decimal }
+                      - { name: share, type: integer }
+                      - { name: from, type: date }
+                      - { name: note, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: RequestStatus, function: EntityStatus }
+                """;
+        List<CheckIntent> checks = IntentParser.parse(yaml)
+                                               .getEntities()
+                                               .get(1)
+                                               .getChecks();
+        assertEquals("days", checks.get(0)
+                                   .getField());
+        assertEquals(0L, checks.get(0)
+                               .getValue());
+        assertEquals(2, checks.get(0)
+                              .getStatus(),
+                "the gate resolves the status NAME to its seed id, as every other gate does");
+        assertNull(checks.get(1)
+                         .getStatus(),
+                "a gate is optional - without one the comparison holds on every user write");
+        assertEquals("CURRENT_DATE", checks.get(2)
+                                           .getValue());
+
+        assertCompareIssue(yaml.replace("value: 100", "value: \"most\""), "is not a number");
+        assertCompareIssue(yaml.replace("field: share", "field: note"), "only dates, timestamps and numbers compare");
+        assertCompareIssue(yaml.replace("value: \"CURRENT_DATE\"", "value: \"CURRENT_TIMESTAMP\""),
+                "compares with dates - use CURRENT_DATE");
+        assertCompareIssue(yaml.replace("value: \"CURRENT_DATE\"", "value: \"CURRENT_DATE-PT30M\""), "a date has no time component");
+        assertCompareIssue(yaml.replace("value: \"CURRENT_DATE\"", "value: \"next monday\""), "nor a quoted ISO-8601 date");
+        assertCompareIssue(yaml.replace("status: SUBMITTED", "status: 2")
+                               .replace("function: EntityStatus", "function: Label"),
+                "requires the entity to declare a `function: EntityStatus` relation");
     }
 
     private static void assertCompareIssue(String yaml, String expected) {

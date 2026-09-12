@@ -231,6 +231,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # the two comparison families the generated code emits differently.
                   - { kind: compare, field: due,  op: ge, than: date,  message: 'A "due" date is never before the entry date' }
                   - { kind: compare, field: paid, op: le, than: debit, message: "Paid cannot exceed the debit total" }
+                  # ...and the same comparison against a LITERAL (#7338) - the commonest validation of
+                  # all, which had no declaration at all before and was hand-edited into the generated
+                  # controller (where the next regeneration silently dropped it).
+                  - { kind: compare, field: paid, op: ge, value: 0, message: "A paid amount cannot be negative" }
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: date,   type: date, required: true }
@@ -266,6 +270,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # surfaces). The condition names a seeded status by name, like every other guard.
                   - { kind: requiredWhen, field: Party.name, when: "Status == POSTED",
                       message: "A posted document must name its counterparty" }
+                  # compare against a literal, GATED (#7338): the amount must be positive by the time
+                  # the document is posted - not while it is still a draft being filled in. The gate is
+                  # the routing, exactly as on requiredWhen: with one, the rule is the repository's.
+                  - { kind: compare, field: amount, op: gt, value: 0, status: POSTED,
+                      message: "A posted document must carry a positive amount" }
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: date,   type: date, required: true }
@@ -1922,6 +1931,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(entryController.contains(
                 "!(new java.math.BigDecimal(entity.Paid.toString()).compareTo(new java.math.BigDecimal(entity.Debit.toString())) <= 0)"),
                 "checks: compare over two numbers must compare by value through BigDecimal, got: " + entryController);
+        // ...and a comparison against a LITERAL (#7338) renders the right-hand side as a Java
+        // expression in the column's own shape - one operand to null-guard, not two.
+        assertTrue(
+                entryController.contains("if (entity.Paid != null\n") && entryController.contains(
+                        "!(new java.math.BigDecimal(entity.Paid.toString()).compareTo(new java.math.BigDecimal(\"0\")) >= 0)"),
+                "checks: compare against a numeric literal must compare by value through BigDecimal, got: " + entryController);
         String snapshotController = contentOf("gen/emission/api/snapshot/SnapshotController.java");
         assertTrue(snapshotController.contains("requireMutable") && snapshotController.contains("append-only"),
                 "immutable: true must emit the unconditional append-only gate in the REST controller");
@@ -2040,8 +2055,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // actually fires is asserted over REST in assertRuntimeEnforcement.
         assertFalse(docController.contains("java.util.Objects.equals(entity.Status, 2)"),
                 "a to-one guard must not be a boxed equality against an int literal, got: " + docController);
-        assertFalse(contentOf("gen/emission/data/doc/DocRepository.java").contains("A posted document must name its counterparty"),
+        String docGateRepository = contentOf("gen/emission/data/doc/DocRepository.java");
+        assertFalse(docGateRepository.contains("A posted document must name its counterparty"),
                 "an ungated check is not the repository's - a gate it does not carry cannot be tested there");
+        // ...while a GATED comparison against a literal (#7338) is the repository's, guarded on the
+        // status the document is being persisted with - so a draft may still carry nothing.
+        assertTrue(
+                docGateRepository.contains("if (entity.Status != null && entity.Status == 2)")
+                        && docGateRepository.contains(
+                                "!(new java.math.BigDecimal(entity.Amount.toString()).compareTo(new java.math.BigDecimal(\"0\")) > 0)")
+                        && docGateRepository.contains("A posted document must carry a positive amount"),
+                "a gated checks: compare must be enforced by the repository at its gate status, got: " + docGateRepository);
 
         String entryRepository = contentOf("gen/emission/data/entry/EntryRepository.java");
         assertTrue(entryRepository.contains("An entry needs at least one \\\"line\\\""),
@@ -3177,6 +3201,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // right, which it can only do if the manifest says which fields and which operator (#7095).
         assertTrue(testManifest.contains("\"field\": \"Due\"") && testManifest.contains("\"than\": \"Date\""),
                 "the manifest must carry the entity's compare checks so the sample record satisfies them");
+        // ...including the literal ones (#7338): a sample value that fails the declared comparison
+        // fails the generated app test just as surely, so the runner needs the literal to steer by.
+        assertTrue(testManifest.contains("\"field\": \"Paid\"") && testManifest.contains("\"value\": 0"),
+                "the manifest must carry a compare check's literal right-hand side too");
 
         // transitions: the server half is a controller that guards the source status + the when
         // guard (409) and flips ONLY the status column via the targeted updateProperty; the client
@@ -4205,6 +4233,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200));
 
+        // checks: compare against a LITERAL, at runtime (#7338) - a negative paid amount is refused
+        // with the authored message, zero passes (`ge` is inclusive), and the creates above carry no
+        // Paid at all: an absent operand is not a violation here either.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-15\",\"Paid\":-1,\"Account\":2}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", containsString("A paid amount cannot be negative")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-15\",\"Paid\":0,\"Account\":2}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController")
+                                                 .then()
+                                                 .statusCode(200));
+
         // A valid DRAFT entry on the leaf account.
         AtomicInteger created = new AtomicInteger();
         restAssuredExecutor.execute(() -> created.set(given().contentType("application/json")
@@ -4704,6 +4749,35 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                          + ",\"Date\":\"2026-01-18\",\"Amount\":10,\"Status\":2,\"Party\":1}")
                                                  .when()
                                                  .put(API + "/doc/DocController/" + toOneGuarded.get())
+                                                 .then()
+                                                 .statusCode(200));
+
+        // ...and the GATED comparison against a literal (#7338): a zero-amount document is a perfectly
+        // good DRAFT, and is refused only when the write carries the POSTED status - the gate is the
+        // whole point, and a check that fired on the draft would be the itemsMin mis-authoring that
+        // refused every submission in the field.
+        AtomicInteger gatedCompare = new AtomicInteger();
+        restAssuredExecutor.execute(() -> gatedCompare.set(given().contentType("application/json")
+                                                                  .body("{\"Date\":\"2026-01-19\",\"Amount\":0,\"Party\":1}")
+                                                                  .when()
+                                                                  .post(API + "/doc/DocController")
+                                                                  .then()
+                                                                  .statusCode(200)
+                                                                  .extract()
+                                                                  .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + gatedCompare.get()
+                                                         + ",\"Date\":\"2026-01-19\",\"Amount\":0,\"Status\":2,\"Party\":1}")
+                                                 .when()
+                                                 .put(API + "/doc/DocController/" + gatedCompare.get())
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", containsString("A posted document must carry a positive amount")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + gatedCompare.get()
+                                                         + ",\"Date\":\"2026-01-19\",\"Amount\":25,\"Status\":2,\"Party\":1}")
+                                                 .when()
+                                                 .put(API + "/doc/DocController/" + gatedCompare.get())
                                                  .then()
                                                  .statusCode(200));
 

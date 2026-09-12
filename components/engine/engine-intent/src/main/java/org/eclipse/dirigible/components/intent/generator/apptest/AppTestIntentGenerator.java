@@ -236,9 +236,11 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         // exactlyOne checks: exactly one of the named fields may be non-null - a sample record
         // filling all of them is rejected with 400, so the runner keeps only the first
         List<List<String>> exactlyOne = new ArrayList<>();
-        // compare checks: two of the record's own fields must stand in a relation - the sample values
-        // are per-type constants, so two dates come out EQUAL and a strict comparison (gt/lt/ne) would
-        // reject the sample record with 400. The runner derives the left operand from the right.
+        // compare checks: the record's own field must stand in a relation to a second value - another
+        // of its fields, or a literal (#7338). The sample values are per-type constants, so two dates
+        // come out EQUAL and a strict comparison (gt/lt/ne) would reject the sample record with 400 -
+        // and a sample quantity of 1 fails `gt 10` just as surely. The runner derives the left operand
+        // from whichever right-hand side the check names.
         List<Map<String, Object>> compare = new ArrayList<>();
         for (CheckIntent check : entity.getChecks() == null ? List.<CheckIntent>of() : entity.getChecks()) {
             if ("exactlyOne".equals(check.getKind()) && check.getFields() != null && !check.getFields()
@@ -248,13 +250,18 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                                     .map(IntentNaming::pascalCase)
                                     .toList());
             }
-            if ("compare".equals(check.getKind()) && check.getField() != null && check.getThan() != null && check.getOp() != null) {
+            if ("compare".equals(check.getKind()) && check.getField() != null && check.getOp() != null
+                    && (check.getThan() != null || check.getValue() != null)) {
                 Map<String, Object> entry = new LinkedHashMap<>();
                 entry.put("field", IntentNaming.pascalCase(check.getField()));
                 entry.put("op", check.getOp()
                                      .trim()
                                      .toLowerCase(java.util.Locale.ROOT));
-                entry.put("than", IntentNaming.pascalCase(check.getThan()));
+                if (check.getThan() != null) {
+                    entry.put("than", IntentNaming.pascalCase(check.getThan()));
+                } else {
+                    entry.put("value", check.getValue());
+                }
                 compare.add(entry);
             }
         }

@@ -599,10 +599,23 @@ public class ${name}PartnerController {
             }
         }
 #elseif($check.kind == "compare")
-## Two values of the SAME row, compared (intent `checks: compare`). A comparison is about two values
-## that exist, so an absent operand is not a violation - requiredness is its own declaration. Numbers
-## compare by value through BigDecimal (a decimal against a long still compares exactly); temporals
-## compare through their own compareTo, which is why the parser holds both fields to one family.
+## A value of the row compared with a second one (intent `checks: compare`) - another field of the
+## SAME row, or a LITERAL (#7338: the positive quantity, the percentage at most 100, the date that is
+## not in the past). A comparison is about values that EXIST, so an absent left operand is not a
+## violation - requiredness is its own declaration. Numbers compare by value through BigDecimal (a
+## decimal against a long still compares exactly); temporals compare through their own compareTo,
+## which is why the parser holds the two sides to one family - and why a moment literal is rendered
+## in the column's own shape (LocalDate for a date, Instant for a timestamp).
+#if($check.literal)
+        if (entity.${check.field} != null
+#if($check.numeric == "true")
+                && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(${check.literal}) ${check.op} 0)) {
+#else
+                && !(entity.${check.field}.compareTo(${check.literal}) ${check.op} 0)) {
+#end
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+        }
+#else
         if (entity.${check.field} != null && entity.${check.than} != null
 #if($check.numeric == "true")
                 && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(new java.math.BigDecimal(entity.${check.than}.toString())) ${check.op} 0)) {
@@ -611,6 +624,7 @@ public class ${name}PartnerController {
 #end
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
         }
+#end
 #else
         // Row-level check (intent `checks: exactlyOne`).
         {

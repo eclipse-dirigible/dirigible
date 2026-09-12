@@ -1062,6 +1062,30 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             if (${check.guard}) {
                 throw new ValidationException("${check.message}");
             }
+#elseif($check.kind == "compare")
+            // A value of the row compared with a second one (intent `checks: compare`) - another field
+            // of the same row, or a literal (#7338) - gated on the status at which it must finally hold:
+            // "days > 0 before SUBMITTED" refuses the transition, not the draft still being filled in.
+            // An absent left operand is not a violation here either; requiredness is its own declaration.
+#if($check.literal)
+            if (entity.${check.field} != null
+#if($check.numeric == "true")
+                    && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(${check.literal}) ${check.op} 0)) {
+#else
+                    && !(entity.${check.field}.compareTo(${check.literal}) ${check.op} 0)) {
+#end
+                throw new ValidationException("${check.messageJavaLiteral}");
+            }
+#else
+            if (entity.${check.field} != null && entity.${check.than} != null
+#if($check.numeric == "true")
+                    && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(new java.math.BigDecimal(entity.${check.than}.toString())) ${check.op} 0)) {
+#else
+                    && !(entity.${check.field}.compareTo(entity.${check.than}) ${check.op} 0)) {
+#end
+                throw new ValidationException("${check.messageJavaLiteral}");
+            }
+#end
 #elseif($check.kind == "itemsSumEqual")
             java.math.BigDecimal sum${check.overA} = java.math.BigDecimal.ZERO;
             java.math.BigDecimal sum${check.overB} = java.math.BigDecimal.ZERO;
