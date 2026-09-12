@@ -160,6 +160,24 @@ class EdmModelRoundTripIT extends IntegrationTest {
                   - { name: seatsTaken, type: integer }
                   - { name: seatsFree,  type: integer }
 
+              # A duplicable document (#7358): its object form is entity metadata the .edm has to carry,
+              # or an unrelated modeler save silently puts back the copy that keeps the source's dates.
+              - name: Order
+                duplicable:
+                  defaults: { orderedOn: now }
+                  reset: [dueOn]
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: orderedOn, type: date }
+                  - { name: dueOn,     type: date, calculatedActionOnCreate: custom.DueDate }
+
+              - name: OrderItem
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: quantity, type: integer }
+                relations:
+                  - { name: Order, kind: manyToOne, to: Order, composition: true }
+
               - name: Booking
                 checks:
                   - { kind: exactlyOne, fields: [seats, waitlistSeats], message: "Either a seat or a waitlist seat" }
@@ -260,7 +278,8 @@ class EdmModelRoundTripIT extends IntegrationTest {
         // otherwise there is nothing for the transform to read back. uniqueConstraints is excluded here:
         // it is owned by the composite-unique-key feature, which emits it as a <constraints> section, not
         // a JSON attribute.
-        for (String key : new String[] {"rollupGuard", "checks", "labelParts", "relatedEntities", "scopedCalendars", "lookupColumns"}) {
+        for (String key : new String[] {"rollupGuard", "checks", "labelParts", "relatedEntities", "scopedCalendars", "lookupColumns",
+                "duplicateReset", "duplicateDefaults"}) {
             assertTrue(edm.contains(key + "=\""), "the .edm must carry the structured value [" + key + "] as an attribute");
         }
 
@@ -298,6 +317,8 @@ class EdmModelRoundTripIT extends IntegrationTest {
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Category", "scopedCalendars");
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Booking", "checks");
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Booking", "rollupGuard");
+        assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Order", "duplicateReset");
+        assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Order", "duplicateDefaults");
         assertPropertyStructuredEquals(modelFromIntent, modelFromEdm, "Product", "Category", "lookupColumns");
 
         // uniqueConstraints is owned by the composite-unique-key feature (a <constraints> section, not a

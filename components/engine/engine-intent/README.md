@@ -95,7 +95,9 @@ entities:
 
 Entity-level extras: `order: [Id, Product, Quantity, ...]` sequences form controls/list columns;
 `duplicable: true` adds a Duplicate button on a document (clones header + items through the normal
-create path); `imports: |` injects Java import lines into the generated repository (pairs with
+create path), and its object form says what the copy must NOT carry over - `duplicable: { defaults: {
+date: now }, reset: [due, taxEventDate] }`, where `reset` hands a field back to the entity's own
+create-time rule and `defaults` writes a constant (`now` is today in the field's own shape); `imports: |` injects Java import lines into the generated repository (pairs with
 calculated actions); `aggregate: true` on a document master's numeric field keeps it equal to the
 sum of the items' same-named field (the totals footer).
 

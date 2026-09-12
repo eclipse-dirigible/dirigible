@@ -700,6 +700,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Roster, kind: manyToOne, to: Roster, composition: true, required: true }
                   - { name: Person, kind: manyToOne, to: Person }
 
+              # #7358: the Duplicate cloned the header verbatim, so a copy kept the source's dates. The
+              # object form of `duplicable` is what the generated document page has to render - one
+              # delete per reset, one assignment per default, and `now` in the field's own shape.
+              - name: Reorder
+                function: Document
+                duplicable:
+                  defaults: { orderedOn: now, period: now, comment: "Copy" }
+                  reset: [note]
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: reference, type: string, length: 40, function: DocumentTitle }
+                  - { name: orderedOn, type: date, required: true }
+                  - { name: period,    type: month }
+                  - { name: note,      type: string, length: 100 }
+                  - { name: comment,   type: string, length: 100 }
+              - name: ReorderItem
+                function: DocumentItem
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: quantity, type: decimal }
+                relations:
+                  - { name: Reorder, kind: manyToOne, to: Reorder, composition: true, required: true }
+
               # partner: the EXTERNAL-partner mirror of personal - PartnerTicket is owned by a Person
               # (reusing identity: email; the admin seed maps the IT user), with a sensitive field.
               - name: PartnerTicket
@@ -2658,6 +2681,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(timesheetMyDocPage.contains("readOnly: true"), "the panel of a see-only child must carry the refusal");
         String claimMyFormPage = contentOf("gen/emission/js/components/pages/my/ClaimMyFormPage.js");
         assertTrue(claimMyFormPage.contains("readOnly: false"), "a writable child's panel must keep offering its Add");
+
+        // #7358: what a Duplicate does NOT copy. Without the object form every ordinary user field
+        // rides along, so "same document as last month" opens dated last month - and a
+        // calculatedActionOnCreate cannot repair it, since it fills an empty value and respects a
+        // present one.
+        String reorderDoc = contentOf("gen/emission/js/components/pages/Reorder/ReorderDocumentPage.js");
+        assertTrue(reorderDoc.contains("delete header['Note'];"), "a duplicable reset must be dropped from the cloned header");
+        assertTrue(reorderDoc.contains("header['OrderedOn'] = this.todayAs('date');"),
+                "now on a date field must be written as today in that field's shape");
+        assertTrue(reorderDoc.contains("header['Period'] = this.todayAs('month');"),
+                "now on a month field must be the YYYY-MM shape, not a full date");
+        assertTrue(reorderDoc.contains("header['Comment'] = \"Copy\";"), "a literal default must reach the page quoted");
+        assertTrue(reorderDoc.contains("todayAs(shape)") && reorderDoc.contains("now.getFullYear() + '-' + pad(now.getMonth() + 1)"),
+                "todayAs must build from the LOCAL calendar fields - toISOString is UTC, so a copy made in the evening"
+                        + " east of Greenwich would be dated yesterday");
 
         // assignee: personal - the BPMN assigns the task to the start-time-resolved owner and the
         // trigger listener seeds that variable from the identity mapping.

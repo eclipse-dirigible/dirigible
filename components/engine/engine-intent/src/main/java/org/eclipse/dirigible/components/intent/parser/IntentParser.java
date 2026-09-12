@@ -46,6 +46,7 @@ import org.eclipse.dirigible.components.intent.model.ActionIntent;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
+import org.eclipse.dirigible.components.intent.model.DuplicateIntent;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
 import org.eclipse.dirigible.components.intent.model.CheckIntent;
@@ -336,6 +337,7 @@ public final class IntentParser {
         rejectLifecycleOn(tree);
         moveGeneratesItemLines(tree);
         expandUniqueShorthand(tree);
+        normalizeDuplicable(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
         // together with the structural issues below.
@@ -395,6 +397,7 @@ public final class IntentParser {
         validateFunctions(model, issues);
         validateViews(model, issues);
         validateDocumentItemsLayout(model, issues);
+        validateDuplicable(model, issues);
         validateOrders(model, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
@@ -577,6 +580,156 @@ public final class IntentParser {
             return flagged;
         }
         return compositionChildren == 1 ? sole : null;
+    }
+
+    /** Whether the given value is present and not blank. */
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    /**
+     * Validate an entity's {@code duplicable} object form: every name it mentions must be a property of
+     * the entity the copy is made of, must be one the copy actually carries, and must end up with a
+     * value.
+     *
+     * <p>
+     * The built-in drops (identity, audit, status, number, read-only, aggregate) were never authorable
+     * and stay that way: naming one is refused rather than accepted and ignored, or an author would
+     * believe they control something the Duplicate action decided long before reading this block.
+     *
+     * @param model the typed model
+     * @param issues collected issues
+     */
+    private static void validateDuplicable(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            DuplicateIntent duplicate = entity.getDuplicable();
+            if (entity.getName() == null || duplicate == null) {
+                continue;
+            }
+            String subject = "entity [" + entity.getName() + "] duplicable";
+            Set<String> reset = new LinkedHashSet<>();
+            for (String name : duplicate.getReset()) {
+                if (name == null || name.isBlank()) {
+                    issues.add(subject + ".reset has a blank entry");
+                    continue;
+                }
+                reset.add(name.trim()
+                              .toLowerCase(Locale.ROOT));
+                validateDuplicableProperty(entity, subject + ".reset", name.trim(), true, null, issues);
+            }
+            for (Map.Entry<String, String> assignment : duplicate.getDefaults()
+                                                                 .entrySet()) {
+                String name = assignment.getKey();
+                if (name == null || name.isBlank()) {
+                    issues.add(subject + ".defaults has a blank key");
+                    continue;
+                }
+                if (reset.contains(name.trim()
+                                       .toLowerCase(Locale.ROOT))) {
+                    issues.add(subject + " names [" + name.trim() + "] in both reset and defaults - a field is either handed back to the"
+                            + " entity's create-time rule or assigned here, never both");
+                    continue;
+                }
+                validateDuplicableProperty(entity, subject + ".defaults", name.trim(), false, assignment.getValue(), issues);
+            }
+        }
+    }
+
+    /**
+     * One {@code reset} entry or {@code defaults} key: it must be a field or a to-one relation of this
+     * entity, must not be one of the built-in drops, and - for a {@code reset} - must be a value the
+     * create it posts can supply on its own.
+     *
+     * @param entity the entity being duplicated
+     * @param subject the message prefix (the block and key being checked)
+     * @param name the authored property name
+     * @param isReset whether this is a {@code reset} entry (else a {@code defaults} key)
+     * @param value the authored default value, for a {@code defaults} key
+     * @param issues collected issues
+     */
+    private static void validateDuplicableProperty(EntityIntent entity, String subject, String name, boolean isReset, String value,
+            List<String> issues) {
+        for (FieldIntent field : entity.getFields()) {
+            if (!name.equalsIgnoreCase(field.getName())) {
+                continue;
+            }
+            if (field.isPrimaryKey() || "uuid".equalsIgnoreCase(field.getType())) {
+                issues.add(subject + " names [" + name + "] - the record's identity is minted by the server and never copied");
+                return;
+            }
+            if (field.getNumber() != null) {
+                issues.add(subject + " names [" + name + "] - the document number is minted by the server and never copied");
+                return;
+            }
+            if (field.isAggregate()) {
+                issues.add(subject + " names [" + name + "] - an aggregate is derived from the lines and never copied");
+                return;
+            }
+            if (field.isReadOnly()) {
+                issues.add(subject + " names [" + name + "] - a readOnly field is never copied");
+                return;
+            }
+            if (isReset) {
+                validateDuplicableReset(subject, name, field, issues);
+            } else {
+                validateDuplicableDefault(subject, name, field.getType(), value, issues);
+            }
+            return;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (!name.equalsIgnoreCase(relation.getName())) {
+                continue;
+            }
+            if (!"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
+                issues.add(subject + " names [" + name + "] - only a field or a to-one relation is copied, so only one can be reset or"
+                        + " defaulted");
+                return;
+            }
+            if (relation.isEntityStatus()) {
+                issues.add(subject + " names [" + name + "] - the status of a copy is the lifecycle's initial one and never copied");
+                return;
+            }
+            if (!isReset) {
+                validateDuplicableDefault(subject, name, "integer", value, issues);
+            }
+            return;
+        }
+        issues.add(subject + " names [" + name + "] which is not a field or a to-one relation of entity [" + entity.getName() + "]");
+    }
+
+    /**
+     * A {@code reset} hands the field back to the create path, so the create has to be able to fill it.
+     * A required field with neither a {@code defaultValue} nor a create-time rule would make every
+     * duplicate fail with the server's own "field is required" - at authoring time that is a mistake,
+     * not a decision.
+     */
+    private static void validateDuplicableReset(String subject, String name, FieldIntent field, List<String> issues) {
+        boolean filled =
+                hasText(field.getDefaultValue()) || hasText(field.getCalculatedActionOnCreate()) || hasText(field.getCalculatedOnCreate());
+        if (field.isRequired() && !filled) {
+            issues.add(subject + " names required field [" + name + "], which has no defaultValue and no create-time rule - resetting it"
+                    + " would make every duplicate fail; give it a defaults: value or a create-time rule");
+        }
+    }
+
+    /**
+     * A {@code defaults} value: {@code now} is today in the field's own shape, so it is only meaningful
+     * on a field that HOLDS a date - the same rule and the same wording {@code generates.defaults}
+     * uses. Anything else is a literal, coerced to the property's type at generation.
+     */
+    private static void validateDuplicableDefault(String subject, String name, String type, String value, List<String> issues) {
+        if (value == null || value.isBlank()) {
+            issues.add(subject + " assigns [" + name + "] a blank value - give it a value or list it under reset:");
+            return;
+        }
+        if (!"now".equals(value.trim())) {
+            return;
+        }
+        String kind = type == null ? "" : type.toLowerCase(Locale.ROOT);
+        if (!"date".equals(kind) && !"month".equals(kind) && !"week".equals(kind)) {
+            issues.add(subject + " assigns [" + name + "] the value now, but that property is not a date - now is today in the field's own"
+                    + " shape, so it is only a value for a date / month / week field");
+        }
     }
 
     /**
@@ -5521,6 +5674,45 @@ public final class IntentParser {
      *
      * @param tree the SnakeYAML-loaded raw tree
      */
+    /**
+     * Normalize an entity's {@code duplicable} key to the object form the typed model maps:
+     * {@code true} becomes the empty mapping (no resets, no defaults - today's behaviour exactly) and
+     * {@code false} is removed, so nothing downstream has to know that the key was ever a boolean.
+     *
+     * <p>
+     * Done on the raw tree, before the unknown-key walk, for the reason {@link #expandUniqueShorthand}
+     * is: a shorthand and a full form share ONE typed class, and Gson maps a boolean onto an object
+     * with an exception rather than a message an author can act on. The walk then sees {@code defaults}
+     * / {@code reset} as declared fields of that class.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void normalizeDuplicable(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity) || !entity.containsKey("duplicable")) {
+                continue;
+            }
+            Object declared = entity.get("duplicable");
+            Map<Object, Object> writable = (Map<Object, Object>) entity;
+            if (declared == null || Boolean.FALSE.equals(declared)) {
+                writable.remove("duplicable");
+            } else if (Boolean.TRUE.equals(declared)) {
+                writable.put("duplicable", new LinkedHashMap<>());
+            } else if (!(declared instanceof Map)) {
+                issues.add("entity [" + entity.get("name") + "] duplicable [" + declared
+                        + "] is neither true/false nor a mapping - the object form takes defaults: and reset:");
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
+        }
+    }
+
     private static void expandUniqueShorthand(Object tree) {
         if (!(tree instanceof Map<?, ?> root)) {
             return;

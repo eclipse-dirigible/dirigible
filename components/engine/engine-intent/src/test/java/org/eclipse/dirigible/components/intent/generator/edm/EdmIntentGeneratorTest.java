@@ -291,6 +291,94 @@ class EdmIntentGeneratorTest {
         assertEquals("MANAGE_DETAILS", entityByName(entities, "SalesInvoiceItem").get("layoutType"));
     }
 
+    /**
+     * #7358: a Duplicate copied every ordinary user field, so "same invoice as last month" opened dated
+     * last month, due last month, with last month's tax event. The object form of {@code duplicable}
+     * says which fields the copy resets and which it assigns, and both halves have to reach the
+     * document template - and survive the {@code .edm} round-trip, or an unrelated modeler save would
+     * silently put the defect back.
+     */
+    @Test
+    void duplicableObjectFormEmitsTheResetsAndTheDefaults() {
+        String yaml = """
+                name: sales-invoices
+                entities:
+                  - name: SalesInvoice
+                    duplicable:
+                      defaults: { date: now, note: "Copy", period: now }
+                      reset: [due]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date, required: true }
+                      - { name: due, type: date, calculatedActionOnCreate: custom.DueDate }
+                      - { name: note, type: string }
+                      - { name: period, type: month }
+                  - name: SalesInvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal }
+                    relations:
+                      - { name: salesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+
+        Map<String, Object> invoice =
+                entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(parsed, "sales-invoices")), "SalesInvoice");
+        assertEquals("true", invoice.get("duplicable"));
+        assertEquals(List.of("Due"), invoice.get("duplicateReset"), "a reset is carried as the GENERATED property name");
+
+        List<Map<String, Object>> defaults = (List<Map<String, Object>>) invoice.get("duplicateDefaults");
+        assertEquals(3, defaults.size(), "every default reaches the template, in authored order");
+        assertEquals("Date", defaults.get(0)
+                                     .get("name"));
+        assertEquals("date", defaults.get(0)
+                                     .get("shape"),
+                "now on a date field renders as today in that field's shape");
+        assertEquals("Note", defaults.get(1)
+                                     .get("name"));
+        assertEquals("literal", defaults.get(1)
+                                        .get("shape"));
+        assertEquals("\"Copy\"", defaults.get(1)
+                                         .get("js"),
+                "a string literal reaches the page quoted, not bare");
+        assertEquals("month", defaults.get(2)
+                                      .get("shape"),
+                "a month field gets the YYYY-MM shape, not a full date");
+
+        // Both keys are structured, so they must be written as JSON attributes rather than dropped -
+        // what the .edm cannot say is lost on the next modeler save (#6826).
+        String edm = EdmIntentGenerator.buildEdmXmlForTest(parsed, "sales-invoices");
+        assertTrue(edm.contains("duplicateReset=\"[&quot;Due&quot;]\""), () -> "the .edm must carry the resets: " + edm);
+        assertTrue(edm.contains("duplicateDefaults=\"["), () -> "the .edm must carry the defaults: " + edm);
+    }
+
+    /** The boolean shorthand must keep generating exactly what it always did - nothing extra. */
+    @Test
+    void duplicableShorthandEmitsNoRules() {
+        String yaml = """
+                name: sales-invoices
+                entities:
+                  - name: SalesInvoice
+                    duplicable: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                  - name: SalesInvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal }
+                    relations:
+                      - { name: salesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                """;
+
+        Map<String, Object> invoice = entityByName(
+                entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales-invoices")), "SalesInvoice");
+
+        assertEquals("true", invoice.get("duplicable"));
+        assertNull(invoice.get("duplicateReset"));
+        assertNull(invoice.get("duplicateDefaults"));
+    }
+
     @Test
     void attachmentChildInjectsFileMetadataAndIsMarked() {
         String yaml = """
