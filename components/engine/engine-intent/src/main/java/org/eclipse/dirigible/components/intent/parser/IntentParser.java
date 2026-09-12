@@ -3745,6 +3745,7 @@ public final class IntentParser {
                             + "] is marked composition but only a manyToOne/oneToOne relation can be a composition");
                 }
                 validateWhenMasterDeleted(entity, relation, issues);
+                validateInheritedPersonalReadOnly(entity, relation, byName, issues);
                 boolean crossModel = relation.isCrossModel();
                 if (crossModel) {
                     // A cross-model relation references an entity owned by another intent model declared in
@@ -4649,6 +4650,50 @@ public final class IntentParser {
                 }
                 return;
             }
+        }
+    }
+
+    /**
+     * {@code personalReadOnly: true} on a relation that does NOT declare {@code personal: true}: the
+     * composition edge a child inherits its personal scope through, opting that child's personal
+     * surface out of writes while the parent's own stays writable (dirigible #7340). The scope still
+     * comes from the parent; the writes do not - which is what a user-authored header whose lines only
+     * an engine writes needs (a leave request whose day rows a delegate charges against an
+     * entitlement). Anywhere else the key would be carried nowhere, so it is refused rather than
+     * silently dropped: it must sit on a composition, on the entity's FIRST one (every later
+     * composition is emitted as a plain association, so nothing would read it), and on a child that
+     * really does inherit a personal surface through that parent.
+     *
+     * @param entity the entity declaring the relation
+     * @param relation the relation
+     * @param byName the declared entities of this model, by name
+     * @param issues the issue list to add to
+     */
+    private static void validateInheritedPersonalReadOnly(EntityIntent entity, RelationIntent relation,
+            java.util.Map<String, EntityIntent> byName, List<String> issues) {
+        if (!relation.isPersonalReadOnly() || relation.isPersonal()) {
+            return;
+        }
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        if (!relation.isComposition()) {
+            issues.add(subject + " declares personalReadOnly but neither personal: true nor composition: true - declare it alongside"
+                    + " personal: true to make this entity's own personal surface see-only, or on the composition relation the entity"
+                    + " inherits its personal scope through to make the inherited one see-only");
+            return;
+        }
+        for (RelationIntent candidate : entity.getRelations()) {
+            if (candidate.isComposition()) {
+                if (candidate != relation) {
+                    issues.add(subject + " declares personalReadOnly but the entity's owning composition is [" + candidate.getName()
+                            + "] - only the first composition carries the inherited personal scope, so declare it there");
+                    return;
+                }
+                break;
+            }
+        }
+        if (!hasPersonalSurface(byName, byName.get(relation.getTo()), new HashSet<>())) {
+            issues.add(subject + " declares personalReadOnly but its master [" + relation.getTo()
+                    + "] has no personal surface to inherit - there is no personal surface here to make see-only");
         }
     }
 

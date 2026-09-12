@@ -2185,6 +2185,48 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * {@code personalReadOnly: true} on the composition edge a child inherits its personal scope
+     * through (dirigible #7340) marks that edge see-only - the child's generated MyController refuses
+     * every write and its personal pages offer none - while the master's own personal surface, whose
+     * header the person really does author, stays writable.
+     */
+    @Test
+    void aCompositionChildCanBeSeeOnlyWhileItsMasterStaysWritable() {
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Employee
+                    identity: email
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                      - { name: email, type: string, required: true, unique: true, length: 320 }
+                  - name: VacationRequest
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 400 }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true }
+                  - name: VacationRequestItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: day, type: date }
+                    relations:
+                      - { name: Request, kind: manyToOne, to: VacationRequest, composition: true, required: true,
+                          personalReadOnly: true }
+                """;
+        List<Map<String, Object>> entities = entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "hr"));
+
+        Map<String, Object> child = propertyByName(entityByName(entities, "VacationRequestItem"), "Request");
+        assertEquals("true", child.get("relationshipPersonalReadOnly"), "the owning composition edge carries the see-only marker");
+        assertNull(child.get("relationshipPersonal"), "the child owns no personal relation - the scope still comes from the master");
+        // The master's own surface is untouched: it declares personal without personalReadOnly.
+        Map<String, Object> owner = propertyByName(entityByName(entities, "VacationRequest"), "Employee");
+        assertEquals("true", owner.get("relationshipPersonal"));
+        assertNull(owner.get("relationshipPersonalReadOnly"));
+    }
+
+    /**
      * {@code visibleTo:} is emitted as the model's own per-property read AND write roles - the pair the
      * generated controllers already enforce - so the allow-list reaches the runtime through the same
      * attributes a hand-modeled EDM would carry. Both sides get the same comma-separated list: a caller

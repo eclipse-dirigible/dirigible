@@ -787,7 +787,14 @@ serves the scoped reads but its create/update/delete return **403**, and the my 
 write affordance at all - no New on the list, no Save/Delete on the form or the document, and no
 Add on a child panel or on the document's items - for records the owner may view but never author
 (a leave-balance account, a payslip); the regular (power) controller still writes them normally.
-The regular controller is unaffected. Sensitivity propagates to derived fields automatically: a rollup target (`op: sum` /
+The regular controller is unaffected. The same key on a CHILD's **composition** relation makes only
+that child's inherited surface see-only while the parent it inherits the scope from stays writable -
+the scope still comes from the parent, the writes do not - which is the shape of a header the person
+authors whose lines only an engine writes (a leave request whose day rows a delegate charges against
+an entitlement): the child's `MyController` 403s and the parent's my/document page renders no Add on
+that items panel, no row actions and no Add on that child panel. It is refused anywhere it would be
+carried nowhere - on a plain association, on a second composition, or on a child whose master has no
+personal surface to inherit. Sensitivity propagates to derived fields automatically: a rollup target (`op: sum` /
 `latest`) whose `of:` child field is sensitive, and an `aggregate: true` master field fed by a
 same-named sensitive item field, are treated as sensitive whenever their entity has a personal
 surface (own `personal:` relation, or scope inherited through a composition parent chain) - the

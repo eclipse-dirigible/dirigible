@@ -170,7 +170,9 @@
               <span x-h-card-title x-text="child.label"></span>
               <div class="grow"></div>
 #if(!$personalReadOnly)
-              <button x-h-button data-variant="primary" data-size="sm" @click="addChild(child)">
+              <!-- A see-only child (its composition edge declares personalReadOnly) refuses the write
+                   with 403, so its panel offers no Add. -->
+              <button x-h-button data-variant="primary" data-size="sm" x-show="!child.readOnly" @click="addChild(child)">
                 <i role="img" x-h-lucide data-lucide="plus"></i>
                 <span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span>
               </button>

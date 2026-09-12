@@ -531,6 +531,34 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Payslip, kind: manyToOne, to: Payslip, composition: true, required: true }
 
+              # #7340: the CHILD opts the inherited personal surface out of writes while the master it
+              # inherits the scope from stays writable - a header the person authors whose lines only an
+              # engine writes. The items panel and the note panel of the my DOCUMENT must offer no Add
+              # (their own my controllers refuse every use of it with 403) while the header keeps
+              # Save/Delete, which is exactly the pairing the master-level flag cannot express.
+              - name: Timesheet
+                function: Document
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string, length: 20, function: DocumentTitle }
+                relations:
+                  - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
+              - name: TimesheetLine
+                function: DocumentItem
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: hours,  type: decimal }
+                relations:
+                  - { name: Timesheet, kind: manyToOne, to: Timesheet, composition: true, required: true, personalReadOnly: true }
+              # A NON-item composition child of the same writable master: its panel is the one the
+              # per-child readOnly flag gates, since the panel list is built at runtime.
+              - name: TimesheetNote
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: text, type: string, length: 200 }
+                relations:
+                  - { name: Timesheet, kind: manyToOne, to: Timesheet, composition: true, required: true, personalReadOnly: true }
+
               # The dead-Create family (found live 2026-07-29): a USER-ENTERED document title
               # (function: DocumentTitle without a number series) must render as an editable input
               # on the create page, and a required relation with init: (a DB-level default) must
@@ -2546,6 +2574,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // Positive control on the document shape too - the writable personal chat keeps its composer.
         String ticketMyDoc = contentOf("gen/emission/views/my/Ticket-document.html");
         assertTrue(ticketMyDoc.contains("sendMessage(chatDraft)"), "a writable personal document must still render the chat composer");
+
+        // #7340: the see-only flag on the CHILD's own composition edge. The master's personal surface
+        // stays writable (Save/Delete on the header) while the items panel and the note panel offer no
+        // Add - the pairing the master-level flag cannot express, and the window the abuse lived in: a
+        // DRAFT header is mutable by definition, so nothing else closed the child's write.
+        String lineMyController = contentOf("gen/emission/api/timesheet/TimesheetLineMyController.java");
+        assertTrue(lineMyController.contains("read-only on your personal surface") && lineMyController.contains("HttpStatus.FORBIDDEN"),
+                "a child whose composition edge declares personalReadOnly must refuse its personal writes with 403");
+        assertTrue(!lineMyController.contains("repository.save(entity)"),
+                "a see-only child must NOT emit a persisting create/update on its personal controller");
+        String timesheetMyDoc = contentOf("gen/emission/views/my/Timesheet-document.html");
+        assertTrue(timesheetMyDoc.contains("save()") && timesheetMyDoc.contains("deleteOpen = true"),
+                "the master's own personal surface stays writable - the header keeps Save and Delete");
+        assertTrue(
+                !timesheetMyDoc.contains("openItem(null)") && !timesheetMyDoc.contains("deleteItem(row)")
+                        && !timesheetMyDoc.contains("saveItem()"),
+                "a see-only items child must strip the items Add, the per-row Delete and the item dialog's Save");
+        assertTrue(timesheetMyDoc.contains("openItem(row)"), "a see-only items child must still open a line for reading");
+        // The non-item panel is built at runtime, so the refusal travels as the panel's own flag.
+        String timesheetMyDocPage = contentOf("gen/emission/js/components/pages/my/TimesheetMyDocumentPage.js");
+        assertTrue(timesheetMyDocPage.contains("readOnly: true"), "the panel of a see-only child must carry the refusal");
+        String claimMyFormPage = contentOf("gen/emission/js/components/pages/my/ClaimMyFormPage.js");
+        assertTrue(claimMyFormPage.contains("readOnly: false"), "a writable child's panel must keep offering its Add");
 
         // assignee: personal - the BPMN assigns the task to the start-time-resolved owner and the
         // trigger listener seeds that variable from the identity mapping.
