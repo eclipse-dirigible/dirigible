@@ -412,7 +412,7 @@ final class ModelParameterProcessor {
             property.put("widgetIsMajor", Boolean.FALSE);
         }
 
-        resolveDefaultValueLiterals(property);
+        resolveDefaultValueLiterals(property, entity);
 
         resolveWidgetLengths(property, entity, dataType);
         // After the widget flags: the seed is emitted in the shape the draft holds, and a numeric
@@ -447,8 +447,9 @@ final class ModelParameterProcessor {
      * property has a default".
      *
      * @param property the property
+     * @param entity the owning entity, to name the property in a refusal
      */
-    private static void resolveDefaultValueLiterals(Map<String, Object> property) {
+    private static void resolveDefaultValueLiterals(Map<String, Object> property, Map<String, Object> entity) {
         String defaultValue = str(property, "dataDefaultValue");
         if (defaultValue == null || defaultValue.isEmpty()) {
             return;
@@ -460,7 +461,8 @@ final class ModelParameterProcessor {
         if (Boolean.TRUE.equals(property.get("dataPrimaryKey")) || Boolean.TRUE.equals(property.get("dataAutoIncrement"))) {
             return;
         }
-        String expression = JavaLiterals.defaultValueExpression(str(property, "dataTypeJavaClass"), defaultValue);
+        String expression = JavaLiterals.defaultValueExpression(str(property, "dataTypeJavaClass"), defaultValue,
+                str(entity, "name") + "." + str(property, "name"));
         if (expression != null) {
             property.put("dataDefaultValueJavaLiteral", expression);
         }

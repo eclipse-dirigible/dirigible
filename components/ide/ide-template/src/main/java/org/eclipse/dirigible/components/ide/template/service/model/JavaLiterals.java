@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.ide.template.service.model;
 
+import java.util.function.Consumer;
+
 /**
  * Java literals for values a model carries as text.
  *
@@ -69,31 +71,63 @@ public final class JavaLiterals {
      * the property has no default that a Java literal can stand in for.
      *
      * <p>
-     * A numeric default is parsed from its authored text rather than inlined as a numeric literal, so
-     * an author's {@code "8.0"} on an integer column fails that one create instead of failing the whole
-     * generated build. A string default is read in either authoring shape ({@link AuthoredDefaults}),
-     * and both yield the string the column would hold. A date/time or binary column has no literal: its
-     * DEFAULT is emitted verbatim into the DDL and is typically a SQL expression ({@code CURRENT_DATE},
-     * {@code now()}).
+     * Every arm reads the authored text through {@link AuthoredDefaults}, so both authoring shapes -
+     * bare and SQL-quoted - yield the value the column would hold. Reading it in only one arm is how
+     * {@code defaultValue: "'20'"} on an integer column seeded {@code 20} in the item dialog and
+     * emitted {@code Integer.valueOf("'20'")} in the repository, a {@code NumberFormatException} on
+     * every create that relied on the default (dirigible #7293).
+     *
+     * <p>
+     * A numeric default is parsed from its text rather than inlined as a numeric literal - the same
+     * parse the generated expression performs, which is why it is run HERE: an unparsable numeric
+     * default is refused while the author is generating, naming the property, instead of compiling into
+     * an expression that throws on every create of that entity. A date/time or binary column has no
+     * literal: its DEFAULT is emitted verbatim into the DDL and is typically a SQL expression
+     * ({@code CURRENT_DATE}, {@code now()}).
      *
      * @param javaClass the property's Java class, as the parameter graph resolved it
      * @param defaultValue the authored default, as the model carries it
+     * @param property the property the default is authored on, for the refusal message
      * @return the Java expression, or null when there is none
+     * @throws IllegalArgumentException when a numeric property's default is not a value of its type
      */
-    public static String defaultValueExpression(String javaClass, String defaultValue) {
+    public static String defaultValueExpression(String javaClass, String defaultValue, String property) {
         if (javaClass == null || defaultValue == null || defaultValue.isEmpty()) {
             return null;
         }
+        String value = AuthoredDefaults.unquote(defaultValue);
         return switch (javaClass) {
-            case "java.math.BigDecimal" -> "new java.math.BigDecimal(\"" + escape(defaultValue) + "\")";
-            case "Double" -> "Double.valueOf(\"" + escape(defaultValue) + "\")";
-            case "Float" -> "Float.valueOf(\"" + escape(defaultValue) + "\")";
-            case "Long" -> "Long.valueOf(\"" + escape(defaultValue) + "\")";
-            case "Integer" -> "Integer.valueOf(\"" + escape(defaultValue) + "\")";
-            case "Short" -> "Short.valueOf(\"" + escape(defaultValue) + "\")";
+            case "java.math.BigDecimal" -> numericExpression("new java.math.BigDecimal", value, javaClass, property,
+                    java.math.BigDecimal::new);
+            case "Double" -> numericExpression("Double.valueOf", value, javaClass, property, Double::valueOf);
+            case "Float" -> numericExpression("Float.valueOf", value, javaClass, property, Float::valueOf);
+            case "Long" -> numericExpression("Long.valueOf", value, javaClass, property, Long::valueOf);
+            case "Integer" -> numericExpression("Integer.valueOf", value, javaClass, property, Integer::valueOf);
+            case "Short" -> numericExpression("Short.valueOf", value, javaClass, property, Short::valueOf);
             case "Boolean" -> AuthoredDefaults.readsAsTrue(defaultValue) ? "Boolean.TRUE" : "Boolean.FALSE";
-            case "String" -> "\"" + escape(AuthoredDefaults.unquote(defaultValue)) + "\"";
+            case "String" -> "\"" + escape(value) + "\"";
             default -> null;
         };
+    }
+
+    /**
+     * A numeric default as the factory call the generated code applies it through, refusing a text the
+     * very same factory cannot read.
+     *
+     * @param factory the factory the expression calls
+     * @param value the authored default, unquoted
+     * @param javaClass the property's Java class, for the refusal message
+     * @param property the property the default is authored on, for the refusal message
+     * @param parse the factory itself, run here on the authored text
+     * @return the factory call
+     */
+    private static String numericExpression(String factory, String value, String javaClass, String property, Consumer<String> parse) {
+        try {
+            parse.accept(value);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Property [" + property + "] declares the default [" + value
+                    + "], which is not a value of its type [" + javaClass + "] - every create applying it would fail.", ex);
+        }
+        return factory + "(\"" + escape(value) + "\")";
     }
 }

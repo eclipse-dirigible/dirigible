@@ -168,6 +168,50 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * The defect: one authored default reaches several generated languages, and the SQL-quoted shape
+     * was read in the Java String arm only - so an integer column's {@code '20'} seeded 20 in the item
+     * dialog and emitted {@code Integer.valueOf("'20'")} in the repository, a NumberFormatException on
+     * every create that relied on it (#7293). The two literals are asserted together because agreeing
+     * is the whole invariant.
+     */
+    @Test
+    void readsAQuotedNumericDefaultTheSameWayInBothLanguages() {
+        Map<String, Object> quantity = property("Quantity", "INTEGER");
+        quantity.put("dataDefaultValue", "'20'");
+        Map<String, Object> rate = property("VatRate", "DECIMAL");
+        rate.put("dataDefaultValue", "'20.00'");
+        Map<String, Object> billable = property("Billable", "BOOLEAN");
+        billable.put("widgetType", "CHECKBOX");
+        billable.put("dataDefaultValue", "'true'");
+        ModelParameterProcessor.process(model(entity("Line", "Lines", quantity, rate, billable)), parameters());
+
+        assertEquals("Integer.valueOf(\"20\")", quantity.get("dataDefaultValueJavaLiteral"));
+        assertEquals("20", quantity.get("dataDefaultValueJsLiteral"));
+        assertEquals("new java.math.BigDecimal(\"20.00\")", rate.get("dataDefaultValueJavaLiteral"));
+        assertEquals("20.00", rate.get("dataDefaultValueJsLiteral"));
+        assertEquals("Boolean.TRUE", billable.get("dataDefaultValueJavaLiteral"));
+        assertEquals("true", billable.get("dataDefaultValueJsLiteral"));
+    }
+
+    /**
+     * A numeric default the property's own type cannot read is refused while the author is generating,
+     * naming the property - it used to compile into an expression that threw on every create.
+     */
+    @Test
+    void refusesANumericDefaultThatIsNotAValueOfItsType() {
+        Map<String, Object> quantity = property("Quantity", "INTEGER");
+        quantity.put("dataDefaultValue", "8.0");
+        Map<String, Object> model = model(entity("Line", "Lines", quantity));
+
+        IllegalArgumentException refusal =
+                assertThrows(IllegalArgumentException.class, () -> ModelParameterProcessor.process(model, parameters()));
+
+        assertTrue(refusal.getMessage()
+                          .contains("Line.Quantity"),
+                "the refusal must name the property, got: " + refusal.getMessage());
+    }
+
+    /**
      * The key's presence is what the template reads as "this property has a default to seed", so a
      * property with none must leave it absent rather than null.
      */
