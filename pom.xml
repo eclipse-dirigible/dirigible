@@ -1044,7 +1044,7 @@
             <dependency>
                 <groupId>org.webjars.npm</groupId>
                 <artifactId>vue__reactivity</artifactId>
-                <version>3.2.0-beta.8</version>
+                <version>3.6.0-rc.4</version>
             </dependency>
             <dependency>
                 <groupId>org.webjars.npm</groupId>
