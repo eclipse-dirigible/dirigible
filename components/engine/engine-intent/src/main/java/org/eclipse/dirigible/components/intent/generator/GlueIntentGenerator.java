@@ -26,6 +26,7 @@ import org.eclipse.dirigible.components.intent.generator.WriterSupport.WriteFiel
 import org.eclipse.dirigible.components.intent.generator.WriterSupport.Writer;
 import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
+import org.eclipse.dirigible.components.intent.model.EscalateIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.GenerateChildIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
@@ -3033,12 +3034,26 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             "subject", "body", "document", "part", "parts", "from", "to");
 
     /**
+     * The extra locals a schedule's escalation ladder (issue #7276) declares in the same scope. Kept
+     * apart from {@link #CREATE_FROM_LOCALS} deliberately: they exist only where an {@code escalate:}
+     * block does, and folding them in would refuse a perfectly ordinary relation named {@code Level} on
+     * every create-from that never declares one.
+     */
+    private static final Set<String> ESCALATION_LOCALS =
+            Set.of(NotificationSupport.ESCALATION_LOCAL, "escalationCandidate", "overdueDays", "level");
+
+    /**
      * The first one-hop load whose local would collide with a name the template already declares, or
      * {@code null} when none does.
      */
     private static String collidingLocal(List<NotificationSupport.RelationLoad> loads) {
+        return collidingLocal(loads, CREATE_FROM_LOCALS);
+    }
+
+    /** The first load whose local is one of the given reserved names, or {@code null} when none is. */
+    private static String collidingLocal(List<NotificationSupport.RelationLoad> loads, Set<String> reserved) {
         for (NotificationSupport.RelationLoad load : loads) {
-            if (CREATE_FROM_LOCALS.contains(load.local())) {
+            if (reserved.contains(load.local())) {
                 return load.local();
             }
         }
@@ -4077,6 +4092,43 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return departures;
     }
 
+    /**
+     * The glue facts of a schedule's days-past-due escalation ladder (issue #7276): which entity holds
+     * the levels, which of its columns is the threshold, which date of the row the days are counted
+     * from, and where the chosen level is written on the generated record.
+     *
+     * <p>
+     * Everything here is resolved against LOCAL entities - the parser refuses a cross-model source and
+     * a cross-model generate target for exactly that reason - so a miss is a model that reached
+     * generation unvalidated, and the schedule is dropped loudly rather than emitting a ladder that
+     * does not compile.
+     *
+     * @return the template keys, or {@code null} when the ladder cannot be resolved (reported)
+     */
+    private static Map<String, Object> escalationFields(ScheduleIntent schedule, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentModel model, IntentGenerationContext context) {
+        EscalateIntent escalate = schedule.getEscalate();
+        EntityIntent ladder = escalate.getLadder() == null ? null : byName.get(escalate.getLadder());
+        if (ladder == null || escalate.getAfter() == null || escalate.getSince() == null || escalate.getInto() == null) {
+            reportDroppedGlue(context,
+                    "Schedule [" + schedule.getName() + "] escalate does not resolve: ladder [" + escalate.getLadder() + "], after ["
+                            + escalate.getAfter() + "], since [" + escalate.getSince() + "], into [" + escalate.getInto()
+                            + "] - the schedule was NOT generated");
+            return null;
+        }
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("escalationEntity", ladder.getName());
+        // The local the generated loop holds the chosen level in - the SAME name an
+        // {escalation.<field>} placeholder renders against, which is what keeps the two in step.
+        fields.put("escalationLocal", NotificationSupport.ESCALATION_LOCAL);
+        fields.put("escalationPerspective", IntentEntities.resolvePerspective(ladder.getName(), compositionParents, model));
+        fields.put("escalationKeyProperty", IntentEntities.keyFieldName(ladder));
+        fields.put("escalationAfterProperty", IntentNaming.pascalCase(escalate.getAfter()));
+        fields.put("escalationSinceProperty", IntentNaming.pascalCase(escalate.getSince()));
+        fields.put("escalationIntoProperty", IntentNaming.pascalCase(escalate.getInto()));
+        return fields;
+    }
+
     private static List<Map<String, Object>> buildSchedules(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> schedules = new ArrayList<>();
@@ -4110,7 +4162,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             boolean generates = schedule.getGenerate() != null;
-            if (!generates && schedule.getNotify() == null) {
+            boolean notifies = schedule.getNotify() != null;
+            if (!generates && !notifies) {
                 continue; // parser already reported "no notify/generate action"
             }
             if (!settings.shouldGenerate("schedules", schedule.getName())) {
@@ -4168,6 +4221,38 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.putAll(NotifySupport.attachmentFields(null));
             entry.putAll(NotifySupport.deepLinkFields(null, null));
             entry.putAll(NotifySupport.outcomeFields(null, null, compositionParents, IntentEntities.settingEntities(byName.values())));
+            // A tick may do BOTH (issue #7276) - create the record AND mail about it - so the two are
+            // flags rather than one `action`, which stays for a .glue written before the combined form.
+            entry.put("generates", generates);
+            entry.put("notifies", notifies);
+            entry.put("action", generates ? "generate" : "notify");
+            // The one-hop loads of both halves share the loop's locals: a `Customer.email` recipient and
+            // a `Customer: Customer` map source load the same row once.
+            List<NotificationSupport.RelationLoad> allLoads = new ArrayList<>();
+            // The escalation ladder (issue #7276): resolved BEFORE the generate, whose assignments and
+            // natural key both carry the chosen level.
+            EscalateIntent escalate = schedule.getEscalate();
+            Map<String, Object> escalation = null;
+            if (escalate != null) {
+                if (!generates || sourceCrossModel) {
+                    // The parser refuses both, precisely; a generation reached by another route drops the
+                    // schedule rather than emitting a ladder with nowhere to record what it applied.
+                    reportDroppedGlue(context,
+                            "Schedule [" + schedule.getName() + "] declares escalate"
+                                    + (generates
+                                            ? " on the cross-model source [" + entity + "], whose properties belong to the ["
+                                                    + schedule.getModel() + "] model"
+                                            : " without a generate to record the level it applies")
+                                    + " - the schedule was NOT generated");
+                    continue;
+                }
+                escalation = escalationFields(schedule, byName, compositionParents, model, context);
+                if (escalation == null) {
+                    continue; // reported above
+                }
+                entry.putAll(escalation);
+            }
+            entry.put("hasEscalation", escalation != null);
 
             if (generates) {
                 // Scheduled record generation: the queried row is the source, so its create-from maps the
@@ -4218,8 +4303,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                     + " - rename the relation, or map a direct property instead - the schedule was NOT generated");
                     continue;
                 }
+                if (escalation != null) {
+                    // The chosen level lands on the generated record. It is appended AFTER the authored
+                    // map / defaults so the natural key below reads it like any other assigned property -
+                    // which is what makes `unique: [Invoice, Level]` send each level exactly once.
+                    genFieldAssignments.add(assignment(String.valueOf(escalation.get("escalationIntoProperty")),
+                            NotificationSupport.ESCALATION_LOCAL + "." + escalation.get("escalationKeyProperty")));
+                }
                 entry.put("genFieldAssignments", genFieldAssignments);
-                entry.put("relationLoads", relationLoads(hopLoads));
+                allLoads.addAll(hopLoads);
                 // The natural key that makes a SECOND run of this job a no-op (issue #7070). Every tick
                 // used to create unconditionally, so a redeploy, a Quartz misfire recovery or an admin
                 // pressing Run in Monitoring minted a duplicate project-month / recurring invoice /
@@ -4251,14 +4343,18 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     // expansions convention) - the job template stays shape-only.
                     entry.put("genChildren", buildGenerateChildren(g.getChildren(), uses, model, byName, compositionParents, context, 1));
                 }
-            } else {
+            }
+            if (notifies) {
                 // The per-row action reuses the notification machinery against the queried row entity.
                 // For a cross-model source that entity is the OWNER's, so the row is projected from the
                 // owner's .model facts (#7030) - which is what lets a statement mail live in the model
                 // that owns the report rather than the one that owns the customer.
                 EntityIntent rowEntity = sourceCrossModel ? crossModelRow(entity, sourceTarget) : byName.get(entity);
-                NotificationSupport.Plan plan = NotificationSupport.plan(schedule.getNotify(), rowEntity, byName, compositionParents,
-                        crossModelLookup(model, context));
+                // The chosen escalation level is an extra scope the message text may read - the per-level
+                // wording ("a friendly reminder" vs "final notice") a flat schedule cannot express.
+                EntityIntent ladderEntity = escalate == null ? null : byName.get(escalate.getLadder());
+                NotificationSupport.Plan plan = NotificationSupport.plan(schedule.getNotify(), rowEntity, ladderEntity, byName,
+                        compositionParents, crossModelLookup(model, context));
                 if (plan == null) {
                     reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] notify recipient [" + schedule.getNotify()
                                                                                                                     .getTo()
@@ -4299,8 +4395,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 if (reportAttachment == null && NotifySupport.attachesReport(schedule.getNotify())) {
                     continue; // asked for the report but it cannot be scoped - reported above
                 }
-                entry.put("action", "notify");
-                entry.put("relationLoads", relationLoads(plan, attachment, reportAttachment));
+                allLoads.addAll(mergedLoads(plan, attachment, reportAttachment));
                 entry.put("toExpression", plan.toExpression());
                 entry.put("subjectExpression", plan.subjectExpression());
                 entry.put("bodyExpression", plan.bodyExpression());
@@ -4314,6 +4409,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.putAll(NotifySupport.outcomeFields(schedule.getNotify(), byName.get(entity), compositionParents,
                         IntentEntities.settingEntities(byName.values())));
             }
+            List<NotificationSupport.RelationLoad> loads = dedupeLoads(allLoads);
+            if (escalation != null) {
+                // The ladder block declares locals of its own in the loop's scope, so a relation hopped
+                // through under one of those names would shadow it and not compile.
+                String ladderCollision = collidingLocal(loads, ESCALATION_LOCALS);
+                if (ladderCollision != null) {
+                    reportDroppedGlue(context,
+                            "Schedule [" + schedule.getName() + "] hops through the relation [" + ladderCollision + "] of [" + entity
+                                    + "], whose name is one the escalation ladder already uses for a local of its own"
+                                    + " - rename the relation, or reference a direct property instead - the schedule was NOT generated");
+                    continue;
+                }
+            }
+            entry.put("relationLoads", relationLoads(loads));
             schedules.add(entry);
         }
         return schedules;
@@ -4954,6 +5063,24 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      */
     private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan, NotifySupport.PrintAttachment attachment,
             NotifySupport.ReportAttachment report) {
+        return relationLoads(mergedLoads(plan, attachment, report));
+    }
+
+    /**
+     * The one-hop loads a notify block needs, in first-use order and deduplicated by local: the message
+     * text's, then a print attachment's file-name ones, then a report attachment's bindings. Returned
+     * as the typed records (rather than the glue projection) so a caller that also has loads of its own
+     * - a schedule that both generates and notifies (issue #7276) - can merge before projecting: the
+     * generated loop declares each local ONCE, so the same relation reached by both halves must not be
+     * loaded twice.
+     *
+     * @param plan the translated notify block
+     * @param attachment the resolved print attachment, or {@code null}
+     * @param report the resolved report attachment, or {@code null}
+     * @return the merged loads, message-text ones first
+     */
+    private static List<NotificationSupport.RelationLoad> mergedLoads(NotificationSupport.Plan plan,
+            NotifySupport.PrintAttachment attachment, NotifySupport.ReportAttachment report) {
         List<NotificationSupport.RelationLoad> merged = new ArrayList<>(plan.loads());
         Set<String> declared = new LinkedHashSet<>();
         for (NotificationSupport.RelationLoad load : merged) {
@@ -4973,7 +5100,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
             }
         }
-        return relationLoads(merged);
+        return merged;
+    }
+
+    /** The loads with every repeated local dropped, keeping first-use order. */
+    private static List<NotificationSupport.RelationLoad> dedupeLoads(List<NotificationSupport.RelationLoad> loads) {
+        List<NotificationSupport.RelationLoad> unique = new ArrayList<>();
+        Set<String> declared = new LinkedHashSet<>();
+        for (NotificationSupport.RelationLoad load : loads) {
+            if (declared.add(load.local())) {
+                unique.add(load);
+            }
+        }
+        return unique;
     }
 
     private static List<Map<String, Object>> relationLoads(List<NotificationSupport.RelationLoad> resolved) {

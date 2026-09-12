@@ -1,14 +1,14 @@
 package gen.events.${javaGenFolderName};
 
 import java.util.List;
-#if($action != "generate")
+#if($notifies)
 import java.util.HashMap;
 import java.util.Map;
 #end
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.sdk.component.Component;
-#if($action != "generate")
+#if($notifies)
 import org.eclipse.dirigible.sdk.core.Configurations;
 import org.eclipse.dirigible.sdk.mail.Mail;
 #end
@@ -28,9 +28,9 @@ import gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspec
 #end
 
 /**
- * Runs the ${name} schedule: on each cron tick, query ${entity} and, per matching row, either notify
- * (mail) or generate a target record (create-from, saved through the target's generated repository so
- * its numbering / status init / calculated fields fire).
+ * Runs the ${name} schedule: on each cron tick, query ${entity} and, per matching row, notify (mail),
+ * generate a target record (create-from, saved through the target's generated repository so its
+ * numbering / status init / calculated fields fire), or BOTH - a tick that records what it sent.
  *
  * Generated from the intent schedules block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories. The mail sender comes from the
@@ -50,37 +50,82 @@ public class ${className}Job implements JobHandler {
     @Override
     public void run() {
         List<${entity}Entity> rows = new ${entity}Repository().findAll(${criteriaExpression});
-#if($action != "generate")
+        int failed = 0;
+#if($notifies)
         int sent = 0;
         int skipped = 0;
-        int failed = 0;
-#else
+#end
+#if($generates)
         int created = 0;
-        int failed = 0;
 #if($hasGenUnique)
         int existed = 0;
 #end
 #end
+#if($hasEscalation)
+        int notDue = 0;
+#end
         for (${entity}Entity entity : rows) {
-#if($action == "generate")
-            // ONE TRANSACTION PER SOURCE ROW, and the WHOLE row is FAIL-SOFT. The header, its children and
-            // their grandchildren were each written in a transaction of their own, so a tick that died
-            // halfway left a childless header behind - and with the `unique:` guard below finding exactly
-            // that header, every later run reported "already existed" and the row stayed incomplete
-            // forever (#7133). A refused row now leaves nothing behind, so the next tick really does
-            // complete what this one could not; and one failing row no longer aborts the loop, which used
-            // to leave every later matching row silently ungenerated and the summary line unlogged.
-            // The try opens HERE, before the row's relation loads and the guard's lookup (#7178): those
-            // read the database too, and a throw from either - a connection blip, a foreign key at a row a
-            // concurrent delete removed - aborted the tick exactly as a refused generation did, with the
-            // rows after it never generated and no line saying so. One bad row costs one `failed`.
+#if($notifies)
+            // Declared outside the try so the row's failure line can still name the recipient; null
+            // there says the row failed before one was resolved.
+            String to = null;
+#end
+            // ONE TRY PER SOURCE ROW, and the WHOLE row is FAIL-SOFT. A schedule tick is a batch - a
+            // dunning run mails every overdue invoice, a monthly run generates a timesheet per employee -
+            // and one bad row used to abort the loop, so every row after it was silently skipped and the
+            // next tick started over from the top. Each row is attempted, counted and logged with its own
+            // key, and the tick reports the totals.
+            //
+            // The try opens HERE, before the row's relation loads, the escalation lookup, the guard's
+            // lookup and the attachment render (#7178, #7233): those read the database too - a foreign
+            // key at a row a concurrent delete removed, a connection blip, a print template that fails
+            // for ONE document - and a throw from any of them used to abort the tick exactly as a refused
+            // generation or an unreachable mailbox did. One bad row costs one `failed`.
+            //
+            // A generation is written in ONE transaction per row (header, children and grandchildren
+            // together): each used to commit on its own, so a tick that died halfway left a childless
+            // header behind - and with the `unique:` guard finding exactly that header, every later run
+            // reported "already existed" and the row stayed incomplete forever (#7133). A refused row now
+            // leaves nothing behind, so the next tick really does complete what this one could not.
             try {
 #foreach($load in $relationLoads)
-                // A one-hop `relation.field` map source: the queried row's foreign key loads the related row,
-                // once per row, and the mapping below reads a field off it. Null-guarded - a nullable relation
-                // is a legitimate empty value, not a reason to skip the row.
+                // A one-hop `relation.field` source: the queried row's foreign key loads the related row,
+                // once per row, and the recipient / placeholder / mapping below reads a field off it.
+                // Null-guarded - a nullable relation is a legitimate empty value, not a reason to skip.
                 ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
 #end
+#if($hasEscalation)
+                // ESCALATION LADDER (intent `escalate:` - issue #7276). How overdue this row is decides
+                // WHICH level applies: the highest ${escalationEntity} whose ${escalationAfterProperty}
+                // threshold the row has passed, counted in whole days from its ${escalationSinceProperty}.
+                // A row that has passed none is left alone this tick rather than mailed at the bottom
+                // level - "not due yet" is a real answer, and it is counted so the log can say so.
+                // The ladder is a settings table (three rows for a dunning ladder), so it is read whole
+                // and the maximum picked here rather than ordered in the database.
+                // The pick is made into a mutable candidate and then FROZEN into the local the rest of
+                // the row reads: the generation below runs inside a lambda, which may only close over an
+                // effectively final variable - a level assigned in the loop is not one.
+                ${escalationEntityClass} escalationCandidate = null;
+                if (entity.${escalationSinceProperty} != null) {
+                    long overdueDays = java.time.temporal.ChronoUnit.DAYS.between(entity.${escalationSinceProperty},
+                            java.time.LocalDate.now());
+                    for (${escalationEntityClass} level : new ${escalationRepositoryClass}().findAll(Criteria.create())) {
+                        if (level.${escalationAfterProperty} == null || level.${escalationAfterProperty} > overdueDays) {
+                            continue;
+                        }
+                        if (escalationCandidate == null
+                                || level.${escalationAfterProperty} > escalationCandidate.${escalationAfterProperty}) {
+                            escalationCandidate = level;
+                        }
+                    }
+                }
+                if (escalationCandidate == null) {
+                    notDue++;
+                    continue;
+                }
+                final ${escalationEntityClass} ${escalationLocal} = escalationCandidate;
+#end
+#if($generates)
 #if($hasGenUnique)
                 // IDEMPOTENCY (intent `generate.unique:` - issues #7070, #7106). A tick used to create
                 // unconditionally, so running this job twice - a redeploy, a Quartz misfire recovery, an
@@ -92,6 +137,10 @@ public class ${className}Job implements JobHandler {
                 // ("one bill per template per month") is still keyed. Best-effort against two concurrent
                 // ticks, exactly as the event-driven create-from's guard is - a UNIQUE database key on the
                 // same columns is the durable backstop.
+#if($notifies)
+                // It gates the MAIL too (#7276): the send happens only where a record was written, so the
+                // same (row, level) is never mailed twice and the history is a record of what went out.
+#end
 #set($genUniqueValueTerms = 0)
 #foreach($u in $genUnique)
 #if($u.kind != "range")
@@ -205,27 +254,8 @@ public class ${className}Job implements JobHandler {
 #end
                 });
                 created++;
-            } catch (Exception ex) {
-                failed++;
-                LOG.error("Schedule ${name}: could not generate ${genToEntity} from ${entity} [{}]", entity.${attachKeyProperty}, ex);
-            }
-#else
-            // FAIL-SOFT PER ROW. A schedule tick is a batch - a dunning run mails every overdue
-            // invoice - and one unreachable mailbox used to abort the whole loop, so every row after it
-            // was silently never mailed and the next tick started over from the top. Each row is now
-            // attempted, counted and logged with its own key, and the tick reports the totals.
-            // The try opens HERE, before the row's relation loads and the attachment render (#7233):
-            // those read the database too - a foreign key at a row a concurrent delete removed, a
-            // connection blip, a print template that fails to render for ONE document - and a throw
-            // from any of them left the loop exactly as an unreachable mailbox once did, with the rows
-            // after it never mailed and no summary line saying so. One bad row costs one `failed`. The
-            // recipient is declared outside the try so the row's failure line can still name it; null
-            // there says the row failed before one was resolved.
-            String to = null;
-            try {
-#foreach($load in $relationLoads)
-                ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
 #end
+#if($notifies)
 #if($usesRecordUrl == "true")
                 // {recordUrl} - the deep link to the row this message is about. The ROUTE is composed HERE,
                 // in the layer that knows the generated application's URL layout; the intent layer
@@ -301,19 +331,30 @@ public class ${className}Job implements JobHandler {
 #if($notifyOutcomeProperty != "")
                 stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, null);
 #end
+#end
             } catch (Exception ex) {
                 failed++;
+#if($generates && $notifies)
+                LOG.error("Schedule ${name}: could not generate ${genToEntity} from ${entity} [{}] and mail it to [{}]",
+                        entity.${attachKeyProperty}, to, ex);
+#elseif($generates)
+                LOG.error("Schedule ${name}: could not generate ${genToEntity} from ${entity} [{}]", entity.${attachKeyProperty}, ex);
+#else
                 LOG.error("Schedule ${name}: could not mail ${entity} [{}] at [{}]", entity.${attachKeyProperty}, to, ex);
+#end
 #if($notifyOutcomeProperty != "")
                 stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, ex);
 #end
             }
-#end
         }
-#if($action != "generate")
-        LOG.info("Schedule ${name}: mailed [{}] of [{}] matching ${entity} row(s), no recipient [{}], failed [{}]", sent, rows.size(),
-                skipped, failed);
-#else
+#if($hasEscalation)
+        // "not due at any level" is a normal outcome of an escalating tick, not a failure: it is every
+        // row that has not yet aged past the bottom rung. Counted so "matched 40, created 3" reads as
+        // the ladder working rather than as a query that nearly missed.
+        LOG.info("Schedule ${name}: [{}] of [{}] matching ${entity} row(s) had passed no ${escalationEntity} threshold yet", notDue,
+                rows.size());
+#end
+#if($generates)
 #if($hasGenUnique)
         // "matched 40, created 0, already existed 40" is the line that says a re-run did nothing -
         // which is the whole point of the natural key, and is otherwise indistinguishable from a tick
@@ -325,6 +366,10 @@ public class ${className}Job implements JobHandler {
         LOG.info("Schedule ${name}: created [{}] ${genToEntity}(s) from [{}] matching ${entity} row(s), failed [{}]", created,
                 rows.size(), failed);
 #end
+#end
+#if($notifies)
+        LOG.info("Schedule ${name}: mailed [{}] of [{}] matching ${entity} row(s), no recipient [{}], failed [{}]", sent, rows.size(),
+                skipped, failed);
 #end
     }
 #if($attach == "report")

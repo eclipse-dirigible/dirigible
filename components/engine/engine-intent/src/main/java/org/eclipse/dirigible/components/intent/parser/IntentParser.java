@@ -37,6 +37,7 @@ import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSuppor
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
+import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.ScheduleSupport;
 import org.eclipse.dirigible.components.intent.generator.StatementSupport;
 import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
@@ -51,6 +52,7 @@ import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.PostIntent;
 import org.eclipse.dirigible.components.intent.model.PostingIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
+import org.eclipse.dirigible.components.intent.model.EscalateIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
@@ -241,6 +243,9 @@ public final class IntentParser {
     /** The {@code {record.<path>}} placeholders of a subject / body. */
     private static final java.util.regex.Pattern RECORD_PLACEHOLDER =
             java.util.regex.Pattern.compile("\\{(" + RECORD_SCOPE + "\\.[A-Za-z0-9_.]*)\\}");
+    /** The {@code {escalation.<field>}} placeholders of a subject / body (issue #7276). */
+    private static final java.util.regex.Pattern ESCALATION_PLACEHOLDER =
+            java.util.regex.Pattern.compile("\\{(" + NotificationSupport.ESCALATION_LOCAL + "\\.[A-Za-z0-9_.]*)\\}");
     /** A {@code {path}} placeholder of a notify subject / body - a field or a one-hop path. */
     private static final java.util.regex.Pattern NOTIFY_PLACEHOLDER =
             java.util.regex.Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?)\\}");
@@ -937,14 +942,15 @@ public final class IntentParser {
                 validateScheduleMoment(condition, source, "schedule [" + name + "]", issues);
                 validateWhereStatusValue(condition, source, "schedule [" + name + "]", issues);
             }
-            // A schedule performs exactly one per-row action: notify (mail) or generate (create-from).
+            // A schedule performs at least one per-row action: notify (mail), generate (create-from), or
+            // BOTH (issue #7276) - one tick that records what it sent, which is what a reminder history
+            // needs to be a record of the automated sends and not only of manual clicks.
             boolean hasNotify = schedule.getNotify() != null;
             boolean hasGenerate = schedule.getGenerate() != null;
-            if (hasNotify && hasGenerate) {
-                issues.add("schedule [" + name + "] has both notify and generate - a schedule performs exactly one per-row action");
-            } else if (!hasNotify && !hasGenerate) {
+            if (!hasNotify && !hasGenerate) {
                 issues.add("schedule [" + name + "] has no action (add a notify or a generate)");
-            } else if (hasNotify) {
+            }
+            if (hasNotify) {
                 if (crossModelSource) {
                     // The source's own properties are the OWNER's, resolved at GENERATION time against
                     // its .model (dirigible #7030) - the same split validation the where / map / generate
@@ -955,10 +961,197 @@ public final class IntentParser {
                 } else {
                     validateNotifyBlock(schedule.getNotify(), "schedule [" + name + "] notify", schedule.getEntity(), model, false, issues);
                 }
-            } else {
+            }
+            if (hasGenerate) {
                 validateScheduleGenerate(schedule, source, byName, entityNames, usesAliases, issues);
             }
+            if (hasNotify && hasGenerate && !schedule.getGenerate()
+                                                     .hasUnique()) {
+                // The natural key is ADVISORY for a generate-only schedule (every intent authored before
+                // it keeps generating what it did), but a combined tick has no such history: without it
+                // the same row is mailed again on every single tick, forever, and the record written
+                // beside each send says it was a new one. That is the failure the combined form exists to
+                // remove, so it is refused rather than advised.
+                issues.add("schedule [" + name + "] declares both notify and generate but no generate unique: natural key"
+                        + " - the key is what makes one (row, level) send once; without it every tick re-mails every matched ["
+                        + schedule.getEntity() + "] and writes another record beside it");
+            }
+            validateScheduleEscalate(schedule, source, byName, crossModelSource, issues);
+            validateEscalationPlaceholders(schedule, byName, issues);
         }
+    }
+
+    /**
+     * The {@code {escalation.<field>}} placeholders of a schedule's message (issue #7276) - the
+     * per-level wording the ladder exists to make possible.
+     *
+     * <p>
+     * An unresolvable placeholder degrades to its own literal text at generation, which for a dunning
+     * mail means the customer is sent the characters {@code {escalation.Name}} where the level's name
+     * should be. That is the silent failure this parser refuses everywhere else, so both ways of
+     * getting there - no ladder at all, and a field the ladder does not declare - are errors here.
+     */
+    private static void validateEscalationPlaceholders(ScheduleIntent schedule, Map<String, EntityIntent> byName, List<String> issues) {
+        NotificationIntent notify = schedule.getNotify();
+        if (notify == null) {
+            return;
+        }
+        List<String> paths = new ArrayList<>();
+        collectEscalationScopedPaths(notify.getSubject(), paths);
+        collectEscalationScopedPaths(notify.getBody(), paths);
+        if (paths.isEmpty()) {
+            return;
+        }
+        String subject = "schedule [" + schedule.getName() + "] notify";
+        EscalateIntent escalate = schedule.getEscalate();
+        if (escalate == null) {
+            issues.add(subject + " uses the " + NotificationSupport.ESCALATION_LOCAL + ". scope in [{" + paths.get(0)
+                    + "}] but the schedule declares no escalate: ladder - there is no level to read");
+            return;
+        }
+        EntityIntent ladder = escalate.getLadder() == null ? null : byName.get(escalate.getLadder());
+        if (ladder == null) {
+            return; // the ladder itself is already reported
+        }
+        for (String path : paths) {
+            String field = path.substring(NotificationSupport.ESCALATION_LOCAL.length() + 1);
+            if (field.isEmpty() || field.indexOf('.') >= 0 || fieldByName(ladder, field) == null) {
+                issues.add(subject + " placeholder [{" + path + "}] is not a field of the escalate ladder [" + ladder.getName()
+                        + "] - one field of the level, never a walk on");
+            }
+        }
+    }
+
+    /** The {@code {escalation.<field>}} placeholder paths of a subject / body. */
+    private static void collectEscalationScopedPaths(String text, List<String> paths) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        java.util.regex.Matcher matcher = ESCALATION_PLACEHOLDER.matcher(text);
+        while (matcher.find()) {
+            paths.add(matcher.group(1));
+        }
+    }
+
+    /**
+     * The days-past-due escalation ladder of a schedule (issue #7276): a row is placed at the HIGHEST
+     * level whose {@code after} threshold it has passed, that level lands on the generated record
+     * through {@code into}, and the record's natural key is what sends each level once.
+     *
+     * <p>
+     * The rules are the ones that make the ladder mean what it reads as. It needs a {@code generate}:
+     * without a record there is nothing that distinguishes a level already sent from one still due, so
+     * a {@code notify}-only escalation would re-send its top level on every tick - the exact behaviour
+     * the ladder is there to replace. It needs a LOCAL source, because the days are counted off a date
+     * of the queried row and a cross-model row's properties are the owner's. And {@code into} must be
+     * part of the {@code unique:} key: a key without the level identifies the FIRST reminder of a
+     * document and then skips it forever, so the second and final notices are seeded but never sent -
+     * which is precisely the symptom reported.
+     */
+    private static void validateScheduleEscalate(ScheduleIntent schedule, EntityIntent source, Map<String, EntityIntent> byName,
+            boolean crossModelSource, List<String> issues) {
+        EscalateIntent escalate = schedule.getEscalate();
+        if (escalate == null) {
+            return;
+        }
+        String subject = "schedule [" + schedule.getName() + "] escalate";
+        GeneratesIntent g = schedule.getGenerate();
+        if (g == null) {
+            issues.add(subject + " has no generate - an escalation records the level it applied on the generated record,"
+                    + " which is what sends each level once; add a generate with a unique: key naming the into: property");
+            return;
+        }
+        if (crossModelSource) {
+            issues.add(subject + " counts days off [" + escalate.getSince() + "] of the cross-model source [" + schedule.getEntity()
+                    + "], whose properties belong to the [" + schedule.getModel() + "] model - keep an escalating schedule"
+                    + " in the model that owns the row it ages");
+            return;
+        }
+        String ladder = escalate.getLadder();
+        EntityIntent ladderEntity = ladder == null ? null : byName.get(ladder);
+        if (ladderEntity == null) {
+            issues.add(subject + " ladder [" + ladder + "] is not an entity of this model");
+        }
+        FieldIntent after = ladderEntity == null || escalate.getAfter() == null ? null : fieldByName(ladderEntity, escalate.getAfter());
+        if (ladderEntity != null && after == null) {
+            issues.add(subject + " after [" + escalate.getAfter() + "] is not a field of the ladder [" + ladder + "]");
+        } else if (after != null && !"integer".equals(after.getType())) {
+            issues.add(subject + " after [" + escalate.getAfter() + "] is a [" + after.getType()
+                    + "] field - the threshold is a whole number of days, so it must be an integer");
+        }
+        FieldIntent since = source == null || escalate.getSince() == null ? null : fieldByName(source, escalate.getSince());
+        if (source != null && since == null) {
+            issues.add(subject + " since [" + escalate.getSince() + "] is not a field of the queried entity [" + schedule.getEntity()
+                    + "] - the days are counted off a date of the row");
+        } else if (since != null && !"date".equals(since.getType())) {
+            issues.add(subject + " since [" + escalate.getSince() + "] is a [" + since.getType()
+                    + "] field - the ladder counts whole days, so it is measured from a date");
+        }
+        String into = escalate.getInto();
+        if (into == null || into.isBlank()) {
+            issues.add(subject + " has no into - name the property of [" + g.getTo() + "] the chosen level is written to");
+            return;
+        }
+        boolean crossModelTarget = g.getUses() != null && !g.getUses()
+                                                            .isBlank();
+        EntityIntent target = crossModelTarget || g.getTo() == null ? null : byName.get(g.getTo());
+        if (crossModelTarget) {
+            issues.add(subject + " writes into [" + into + "] of the cross-model target [" + g.getTo()
+                    + "] - whether that property points at this model's ladder is known only to the [" + g.getUses()
+                    + "] model, so keep the history entity local");
+            return;
+        }
+        if (target != null) {
+            RelationIntent relation = toOneRelationNamed(target, into);
+            if (relation == null) {
+                issues.add(subject + " into [" + into + "] is not a to-one relation of [" + g.getTo() + "]");
+            } else if (ladder != null && !ladder.equals(relation.getTo())) {
+                issues.add(subject + " into [" + into + "] points at [" + relation.getTo() + "], not at the ladder [" + ladder + "]");
+            }
+        }
+        if (assignsProperty(g, into)) {
+            issues.add(subject + " into [" + into + "] is also assigned by the generate's map or defaults"
+                    + " - the escalation is what picks the level, so remove the other assignment");
+        }
+        if (!uniqueNames(g, into)) {
+            issues.add(subject + " into [" + into + "] is not part of the generate unique: key - without the level in the key"
+                    + " the first reminder of a row is what the guard finds forever, so no row is ever escalated;"
+                    + " key on the row's back-reference AND [" + into + "]");
+        }
+    }
+
+    /** Whether a generate block's {@code map} or {@code defaults} already writes the named property. */
+    private static boolean assignsProperty(GeneratesIntent g, String property) {
+        String target = IntentNaming.pascalCase(property);
+        return namesProperty(g.getMap(), target) || namesProperty(g.getDefaults(), target);
+    }
+
+    /** Whether a map's keys, read as target properties, include the given PascalCase property. */
+    private static boolean namesProperty(Map<String, String> assignments, String target) {
+        if (assignments == null) {
+            return false;
+        }
+        for (String key : assignments.keySet()) {
+            if (key != null && target.equals(IntentNaming.pascalCase(key))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the generate's {@code unique:} natural key names the given target property. */
+    private static boolean uniqueNames(GeneratesIntent g, String property) {
+        if (!g.hasUnique()) {
+            return false;
+        }
+        for (UniqueKeyIntent entry : g.getUnique()) {
+            if (entry != null && !entry.isRun() && entry.getProperty() != null && IntentNaming.pascalCase(property)
+                                                                                              .equals(IntentNaming.pascalCase(
+                                                                                                      entry.getProperty()))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1109,7 +1302,12 @@ public final class IntentParser {
             issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
                     + " use an on-demand generates action for document-to-document cloning");
         }
-        validateScheduleGenerateUnique(name, g, crossModel, byName, issues);
+        // The escalation writes its chosen level onto the target too (issue #7276), so the natural key
+        // may - and must - name it, although no map / defaults entry does.
+        validateScheduleGenerateUnique(name, g, crossModel, byName, schedule.getEscalate() == null ? null
+                : schedule.getEscalate()
+                          .getInto(),
+                issues);
         if (g.getChildren() != null) {
             validateGenerateChildren(name, g.getChildren(), 1, source, entityNames, usesAliases, issues);
         }
@@ -1140,7 +1338,7 @@ public final class IntentParser {
      * the first matching row would generate and every other row be skipped as if it had already run.
      */
     private static void validateScheduleGenerateUnique(String name, GeneratesIntent g, boolean crossModel, Map<String, EntityIntent> byName,
-            List<String> issues) {
+            String escalatedInto, List<String> issues) {
         if (!g.hasUnique()) {
             return;
         }
@@ -1158,6 +1356,9 @@ public final class IntentParser {
             if (key != null) {
                 assigned.add(key.toLowerCase(Locale.ROOT));
             }
+        }
+        if (escalatedInto != null && !escalatedInto.isBlank()) {
+            assigned.add(escalatedInto.toLowerCase(Locale.ROOT));
         }
         int properties = 0;
         boolean run = false;

@@ -30,7 +30,15 @@ import java.util.List;
  * reused {@link GeneratesIntent#getFrom()} is the schedule's {@link #entity}; item cloning is out
  * of scope here (use an on-demand {@code generates} action for document-to-document cloning).</li>
  * </ul>
- * Exactly one of {@code notify} / {@code generate} must be set.
+ * At least one of {@code notify} / {@code generate} must be set, and they may be declared
+ * <b>together</b> (issue #7276): one tick then both creates the record and mails about it, with the
+ * {@code generate}'s {@code unique:} natural key gating the send as well - so the history is a
+ * record of what was actually sent, and the same (document, level) is never mailed twice. A
+ * combined block without that key is refused: it would re-mail every matched row on every tick.
+ *
+ * <p>
+ * {@link #getEscalate()} adds the other half of real dunning - the days-past-due ladder that picks
+ * WHICH level a row is at, so the tick advances First -> Second -> Final as the document ages.
  */
 public class ScheduleIntent {
 
@@ -49,6 +57,12 @@ public class ScheduleIntent {
     private List<ScheduleConditionIntent> where = new ArrayList<>();
     private NotificationIntent notify;
     private GeneratesIntent generate;
+
+    /**
+     * Optional days-past-due escalation ladder (issue #7276). Requires {@link #generate} - the created
+     * record, keyed on the chosen level, is what makes a level go out once.
+     */
+    private EscalateIntent escalate;
 
     public String getName() {
         return name;
@@ -104,5 +118,13 @@ public class ScheduleIntent {
 
     public void setGenerate(GeneratesIntent generate) {
         this.generate = generate;
+    }
+
+    public EscalateIntent getEscalate() {
+        return escalate;
+    }
+
+    public void setEscalate(EscalateIntent escalate) {
+        this.escalate = escalate;
     }
 }

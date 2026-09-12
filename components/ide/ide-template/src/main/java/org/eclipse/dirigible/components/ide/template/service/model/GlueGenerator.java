@@ -398,15 +398,31 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindSchedule(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        boolean generates = "generate".equals(str(item, "action"));
+        // A tick may do BOTH (issue #7276). The flags are read from the descriptor when it carries them
+        // and fall back to the single `action` a .glue written before the combined form has, so such a
+        // job renders exactly what it always did.
+        boolean generates = item.containsKey("generates") ? truthy(item, "generates") : "generate".equals(str(item, "action"));
+        boolean notifies = item.containsKey("notifies") ? truthy(item, "notifies") : !"generate".equals(str(item, "action"));
         copy(context, item, "name", "className", "cron", "entity", "perspective", "criteriaExpression", "toExpression", "subjectExpression",
                 "bodyExpression", "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty",
                 "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport", "genToEntity", "genToPk", "genFieldAssignments",
                 // The scheduled generation's natural key (issue #7070). Absent on a .glue written
                 // before it existed, which `copy` turns into an absent context key - so the guard's
                 // `#if` is false and such a job renders byte-identically to what it always did.
-                "hasGenUnique", "genUnique");
+                "hasGenUnique", "genUnique",
+                // The days-past-due escalation ladder (issue #7276), likewise absent on an older .glue.
+                "hasEscalation", "escalationEntity", "escalationLocal", "escalationKeyProperty", "escalationAfterProperty",
+                "escalationSinceProperty", "escalationIntoProperty");
+        context.put("generates", generates);
+        context.put("notifies", notifies);
         context.put("javaPerspective", sanitize(item, "perspective"));
+        // The ladder is a LOCAL entity (the parser refuses a cross-model source and target for an
+        // escalation), so its generated classes live in this project's own gen folder.
+        String escalationPackage = "gen." + str(parameters, "javaGenFolderName") + ".data." + sanitize(item, "escalationPerspective") + ".";
+        context.put("escalationEntityClass",
+                truthy(item, "hasEscalation") ? escalationPackage + str(item, "escalationEntity") + "Entity" : "");
+        context.put("escalationRepositoryClass",
+                truthy(item, "hasEscalation") ? escalationPackage + str(item, "escalationEntity") + "Repository" : "");
         // The source's generation folder is the owner model's when the source is cross-model, else
         // this project's - always supplied, so a local source stays unchanged.
         context.put("sourceGenFolder",
