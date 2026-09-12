@@ -20,6 +20,7 @@ import org.eclipse.dirigible.components.engine.bpm.flowable.diagram.DirigiblePro
 import org.eclipse.dirigible.engine.java.runtime.ClientClassLoaderHolder;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.ProcessEngineConfiguration;
+import org.flowable.engine.impl.bpmn.parser.factory.DefaultListenerFactory;
 import org.flowable.spring.SpringProcessEngineConfiguration;
 import org.flowable.spring.boot.actuate.endpoint.ProcessEngineEndpoint;
 import org.flowable.spring.boot.actuate.info.FlowableInfoContributor;
@@ -127,7 +128,15 @@ public class BpmFlowableConfig {
         // error (message published for {error}) instead of dead-lettering; everything else is
         // untouched. The engine's initBehaviorFactory injects the expression manager into this factory
         // later.
-        config.setActivityBehaviorFactory(new ResilientActivityBehaviorFactory(new ResilientClassDelegateFactory()));
+        ResilientClassDelegateFactory classDelegateFactory = new ResilientClassDelegateFactory();
+        config.setActivityBehaviorFactory(new ResilientActivityBehaviorFactory(classDelegateFactory));
+
+        // The same ClassDelegate seam for the listener path: Flowable builds its own
+        // DefaultListenerFactory carrying a stock DefaultClassDelegateFactory, so a flowable:class
+        // execution or task listener would be instantiated reflectively and never reach the client bean
+        // container - a constructor collaborator fails, an @Inject field silently reads null (#7222).
+        // The engine keeps a pre-set listener factory and only injects the expression manager into it.
+        config.setListenerFactory(new DefaultListenerFactory(classDelegateFactory));
 
         return config;
     }

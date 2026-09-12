@@ -18,11 +18,18 @@ import org.flowable.engine.impl.bpmn.helper.ClassDelegateFactory;
 import org.flowable.engine.impl.bpmn.parser.FieldDeclaration;
 
 /**
- * Creates {@link ResilientClassDelegate}s for every {@code flowable:class} service task (the shape
- * of Flowable's own {@code DefaultClassDelegateFactory}), so the intent DSL's {@code onError} error
- * routing has its conversion hook on the one path all {@code delegate:} steps run through. Wired
- * into the engine by {@code BpmFlowableConfig} via a {@code ResilientActivityBehaviorFactory}
- * carrying this factory.
+ * Creates {@link ResilientClassDelegate}s for every {@code flowable:class} element (the shape of
+ * Flowable's own {@code DefaultClassDelegateFactory}), so the intent DSL's {@code onError} error
+ * routing has its conversion hook on the one path all {@code delegate:} steps run through, and so
+ * every client class the engine instantiates reaches the client bean container.
+ *
+ * <p>
+ * {@code BpmFlowableConfig} wires this one factory into both places Flowable creates a
+ * {@code ClassDelegate} from: the service-task path, through a
+ * {@code ResilientActivityBehaviorFactory} carrying it, and the execution- / task-listener path,
+ * through a {@code DefaultListenerFactory} carrying it - which is what the second {@code create}
+ * overload below serves. Without that second registration a {@code flowable:class} listener is
+ * built by stock reflection and its collaborators read {@code null} (#7222).
  */
 public class ResilientClassDelegateFactory implements ClassDelegateFactory {
 
