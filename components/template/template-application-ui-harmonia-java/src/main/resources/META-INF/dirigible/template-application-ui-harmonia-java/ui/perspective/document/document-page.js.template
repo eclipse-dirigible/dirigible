@@ -421,6 +421,10 @@ document.addEventListener('alpine:init', () => {
       });
 #end
 #end
+      // Create mode: the blank form plus whatever the URL and the depends-on prefills put in it is
+      // the state the user started from; anything typed after this is an unsaved change (#7359).
+      if (!this.isEdit && !this.isPreview) this.markPristine();
+
       // A custom action (a transition, a create-from, an action page) changes this document behind
       // the page's back: its status flips, its totals move, its panels gain rows. Re-read the header
       // so the status pill, the stepper and the transition buttons - which are filtered by the
@@ -477,7 +481,16 @@ document.addEventListener('alpine:init', () => {
       await this.ensureFilteredCurrent('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.widgetDropDownKey}', '${property.widgetDropDownValue}');
 #end
 #end
+      // The header now holds exactly what the server holds: that is the state every exit is compared
+      // against (issue #7359). Re-taken after every item change, which re-reads the header too.
+      this.markPristine();
       this.refreshIcons();
+    },
+
+    // Put the header back to what the server holds - the guard dialog's Discard when the user is
+    // STAYING on the document (the line dialog it was about to open saves against this header).
+    async reloadForm() {
+      await this.loadHeader();
     },
 
     async loadOptions() {
@@ -595,7 +608,14 @@ document.addEventListener('alpine:init', () => {
         const payload = this.toPayload();
         if (this.isEdit) {
           await App.services.api.put(this.apiPath + '/' + encodeURIComponent(this.id), payload);
-          this.backToList();
+          // Save STAYS on the document (issue #7359): saving and leaving were the same click, so a
+          // user who saved a header mid-session was thrown back to the list. Re-read it instead -
+          // the server's calculated fields and totals come back with it - and say it was saved. The
+          // way out is Back to list, which is now guarded. Create mode already worked this way.
+          await this.loadHeader();
+          await this.loadItems();
+          this.state = 'ready';
+          App.services.toast(T('$projectName:${tprefix}.messages.saved', 'Saved'), 'positive');
           return;
         } else {
           // Create the header, then stay on the document (now in edit mode) so items can be added.
@@ -604,6 +624,9 @@ document.addEventListener('alpine:init', () => {
           if (newId != null) {
             this.id = newId;
             this.mode = 'edit';
+            // The write landed, so there is nothing left to protect: clear the guard before the page
+            // navigates itself, or it would veto its own route change.
+            this.clearPristine();
             window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(newId) + '/edit');
             await this.loadHeader();
             await this.loadItems();
@@ -711,6 +734,7 @@ document.addEventListener('alpine:init', () => {
             await App.services.api.post(this.itemsDef.apiPath, body);
           }
         }
+        this.clearPristine();
         window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(newId) + '/edit');
       } catch (e) {
         this.applyApiError(e, { fallbackMessage: 'Could not duplicate the document.' });
@@ -1110,6 +1134,10 @@ document.addEventListener('alpine:init', () => {
     // right on first render.
     openRowDialog(row, preset) {
       if (!this.itemsEnabled || this.isPreview) return;
+      // A line is saved on its own, against the header AS THE SERVER HOLDS IT, and saving one
+      // re-reads the header - so starting a line with an unsaved header both hides the edit and
+      // leaves the user believing the whole document was saved (issue #7359). Ask first.
+      if (this.isDirty()) { this.confirmLeave(() => this.openRowDialog(row, preset), 'continue'); return; }
       this.draftError = null;
       this.draftFieldError = null;
       this.draftMode = row ? 'edit' : 'create';
@@ -1246,6 +1274,9 @@ document.addEventListener('alpine:init', () => {
     openFillDialog() {
       const col = this.fillDateColumn();
       if (!col) return;
+      // Same reason as openRowDialog - asked here so the answer reopens the FILL dialog, not the
+      // plain line dialog.
+      if (this.isDirty()) { this.confirmLeave(() => this.openFillDialog(), 'continue'); return; }
       this.openRowDialog(null);
       if (!this.rowDialogOpen) return;   // openRowDialog refused (preview / items disabled)
       this.draftMode = 'fill';
@@ -1303,7 +1334,13 @@ document.addEventListener('alpine:init', () => {
       return String(v).slice(0, 10);
     },
 
-    askDeleteRow(row) { if (this.isPreview) return; this.deleteTarget = row; this.deleteOpen = true; },
+    // Deleting a line re-reads the header (the totals move), which would take an unsaved header edit
+    // with it - so the dirty header is settled first (issue #7359).
+    askDeleteRow(row) {
+      if (this.isPreview) return;
+      if (this.isDirty()) { this.confirmLeave(() => this.askDeleteRow(row), 'continue'); return; }
+      this.deleteTarget = row; this.deleteOpen = true;
+    },
 
     async confirmDeleteRow() {
       if (!this.deleteTarget) return;
@@ -1328,7 +1365,9 @@ document.addEventListener('alpine:init', () => {
       return window.HarmoniaFormat.number(v, pattern);
     },
 
-    backToList() { window.PineconeRouter.navigate('/${name}'); },
+    // Every exit from the document goes through the guard: a dirty header is never dropped without
+    // being asked about (issue #7359). A clean one leaves silently, as before.
+    backToList() { this.guardExit(() => window.PineconeRouter.navigate('/${name}')); },
 
     // Preview -> the editable document for the same record.
     goEdit() { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(this.id) + '/edit'); },

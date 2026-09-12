@@ -147,6 +147,8 @@ document.addEventListener('alpine:init', () => {
           await this.loadItems();
           if (this.loadChildren) this.loadChildren();
           this.state = 'default';
+          // What the server holds is what every exit compares the buffer against (issue #7359).
+          this.markPristine();
         } catch (e) {
           this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not load the document.');
           this.state = 'error';
@@ -159,7 +161,15 @@ document.addEventListener('alpine:init', () => {
           if (v !== null) this.form[key] = v;
         }
         this.state = 'default';
+        // Create mode: the blank form plus the query-param prefills is where the user started;
+        // anything typed after this is an unsaved change (issue #7359).
+        this.markPristine();
       }
+    },
+
+    // The guard dialog's Discard when the user is STAYING on the page: re-read the document.
+    async reloadForm() {
+      await this.init();
     },
 
     queryParam(name) {
@@ -235,6 +245,9 @@ document.addEventListener('alpine:init', () => {
         if (this.mode === 'edit') {
           await App.services.api.put(this.apiPath + '/' + this.id, this.toPayload());
           await this.loadItems();
+          // The buffer is now what the server holds, and the user is told so (issue #7359).
+          this.markPristine();
+          App.services.toast(T('$projectName:${tprefix}.messages.saved', 'Saved'), 'positive');
         } else {
           const created = await App.services.api.post(this.apiPath, this.toPayload());
           const pk = created && (created.Id != null ? created.Id : created.id);
@@ -247,6 +260,8 @@ document.addEventListener('alpine:init', () => {
               window.history.replaceState(window.history.state, '', url);
             }
             await this.loadItems();
+            this.markPristine();
+            App.services.toast(T('$projectName:${tprefix}.messages.saved', 'Saved'), 'positive');
           }
         }
       } catch (e) {
@@ -370,6 +385,9 @@ document.addEventListener('alpine:init', () => {
     // `preset` seeds a CREATE draft with values the caller already knows (the day clicked on the items
     // calendar).
     async openItem(row, preset) {
+      // A line is saved on its own, against the header as the server holds it - so starting one with
+      // an unsaved header leaves the user believing the whole document was saved (issue #7359).
+      if (this.isDirty()) { this.confirmLeave(() => this.openItem(row, preset), 'continue'); return; }
       const d = this.def();
       await this.ensureItemOptions();
       this.itemMode = row ? 'edit' : 'create';
@@ -607,6 +625,7 @@ document.addEventListener('alpine:init', () => {
       try {
         await App.services.api.delete(this.apiPath + '/' + this.id);
         this.deleteOpen = false;
+        this.clearPristine();
         this.goBack();
       } catch (e) {
         this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not delete.');
@@ -616,7 +635,9 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    goBack() { this.navigate('/my/${name}'); },
+    // A document with unsaved header edits asks before it is abandoned (issue #7359); a clean one
+    // leaves silently, as before.
+    goBack() { this.guardExit(() => this.navigate('/my/${name}')); },
 #set($docChildren = [])
 #if($myChildren)
 #foreach($child in $myChildren)
@@ -726,11 +747,11 @@ document.addEventListener('alpine:init', () => {
 
     addChild(child) {
       if (child.readOnly) return;
-      this.navigate('/my/' + child.name + '/create?' + encodeURIComponent(child.fkProperty) + '='
-          + encodeURIComponent(this.id) + '&returnTo=' + encodeURIComponent('/my/${name}/' + this.id + '/edit'));
+      this.guardExit(() => this.navigate('/my/' + child.name + '/create?' + encodeURIComponent(child.fkProperty) + '='
+          + encodeURIComponent(this.id) + '&returnTo=' + encodeURIComponent('/my/${name}/' + this.id + '/edit')));
     },
     editChild(child, id) {
-      this.navigate('/my/' + child.name + '/' + id + '/edit?returnTo=' + encodeURIComponent('/my/${name}/' + this.id + '/edit'));
+      this.guardExit(() => this.navigate('/my/' + child.name + '/' + id + '/edit?returnTo=' + encodeURIComponent('/my/${name}/' + this.id + '/edit')));
     },
     onChildEventClick(child, e) {
       const id = e && e.detail && e.detail.event ? e.detail.event.id : null;
@@ -747,7 +768,7 @@ document.addEventListener('alpine:init', () => {
         if (e.detail.time) val += 'T' + e.detail.time;
         q += '&' + encodeURIComponent(child.calendar.start) + '=' + encodeURIComponent(val);
       }
-      this.navigate('/my/' + child.name + '/create' + q);
+      this.guardExit(() => this.navigate('/my/' + child.name + '/create' + q));
     },
 #end
   }));
