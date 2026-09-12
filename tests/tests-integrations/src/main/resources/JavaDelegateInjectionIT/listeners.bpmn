@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://www.flowable.org/processdef">
+  <!-- The listener half of the same seam: a flowable:class execution or task listener is created by
+       Flowable through its listener factory, which is a different registration from the service-task
+       one and was not wired to the client bean container (#7222). The instance stops at the user task
+       so both listeners have fired by the time the runtime variables are read. -->
+  <process id="java-delegate-listener-injection" name="Java listener injection" isExecutable="true">
+    <startEvent id="start"/>
+    <sequenceFlow id="lf1" sourceRef="start" targetRef="review"/>
+    <userTask id="review" name="Review">
+      <extensionElements>
+        <flowable:executionListener event="start" class="delegateinjection.CtorInjectedExecutionListener"/>
+        <flowable:taskListener event="create" class="delegateinjection.FieldInjectedTaskListener"/>
+      </extensionElements>
+    </userTask>
+    <sequenceFlow id="lf2" sourceRef="review" targetRef="end"/>
+    <endEvent id="end"/>
+  </process>
+</definitions>

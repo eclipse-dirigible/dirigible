@@ -25,11 +25,11 @@ import java.nio.file.Path;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.time.Duration;
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -78,7 +78,7 @@ class LocalRegistryWatcherShutdownTest {
         IRepository repository = mock(IRepository.class);
         when(repository.getInternalResourcePath(anyString())).thenReturn(registryPublic.toString());
 
-        LocalRegistryWatcher watcher = new LocalRegistryWatcher(repository, List.of());
+        LocalRegistryWatcher watcher = new LocalRegistryWatcher(repository, mock(SynchronizationWatcher.class));
         watcher.initialize();
         awaitWatching(watcher);
 

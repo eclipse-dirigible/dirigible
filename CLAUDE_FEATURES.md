@@ -434,7 +434,6 @@ Interfaces that are either explicit SPIs (intended for extension), or load-beari
 | `UserAccessVerifier` | Plug-in role / access verification. |
 | `CustomSecurityConfigurator` | Add Spring Security configuration without forking `BasicSecurityConfig`. |
 | `SynchronizationWalkerCallback` | Callback used by the initializer / registry walker. |
-| `LocalRegistryWatcherHandler` | Hook into local filesystem changes under the registry. |
 | `DataSourceLifecycleListener` | React to datasource registration / lifecycle. |
 
 #### CMS (`components/engine/engine-cms/`)

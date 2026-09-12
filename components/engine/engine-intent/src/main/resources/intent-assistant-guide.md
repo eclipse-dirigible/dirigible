@@ -2717,6 +2717,7 @@ Where the block can sit - the three places an intent acts, plus the standalone `
 | `serviceTask` `args.notify` | the process's trigger record | the flow reaches that step ("after Issue, mail it") |
 | `transitions[].notify` | the transitioned record | AFTER the status flip commits ("on Void, tell the customer") |
 | `schedules[].notify` | each matched row | on every cron tick, per row (dunning runs) |
+| `schedules[].notify` + `generate` | each matched row, once per natural key | a tick that mails AND records what it sent |
 | `notifications[]` | the event record | on the entity's create / update / delete |
 
 **Rules:** `attach` is `print` (the record the block is about - inside a fan-out, the ROW) or
@@ -2943,7 +2944,9 @@ processes:
 ### schedules - run on a cron and notify or generate records
 
 **Use when:** something must run **on a schedule** (cron), find records matching conditions, and, per
-matching row, perform **exactly one** per-row action: `notify` (email) or `generate` (create a record).
+matching row, perform a per-row action: `notify` (email), `generate` (create a record), or **both** -
+one tick that mails AND records what it sent (dunning). An `escalate:` ladder additionally picks
+WHICH level the row is at from how overdue it is.
 
 **notify** - e.g. "every morning, email members with overdue loans":
 
@@ -3128,6 +3131,75 @@ schedules:
           forEach: { days: workingDays }   # one child per working day of the period
           dayField: day
 ```
+
+**notify AND generate together - a tick that records what it sent.** A `notify` mails but leaves no
+trace, so a reminder history fed only by it fills from manual clicks and never from the automated
+sends. Declare both: per matched row the target record is created first and the mail goes out after
+it, in the same fail-soft try, and the `generate.unique:` key gates **both** - a row whose record
+already exists is skipped entirely, mail included. `unique:` is therefore **required** on a combined
+schedule (refused without it): without a key the tick re-mails every matched row every time it fires
+and writes another record beside each send.
+
+**`escalate:` - pick the level from a days-past-due ladder.** Real dunning is not one wording repeated
+weekly: it is First reminder -> Second reminder -> Final notice as the document ages, each sent once.
+The ladder is an ordinary entity of the model (the `function: Setting` table the module already has),
+the threshold an integer column on it, and the date the days are counted from a `date` field of the
+queried row:
+
+```yaml
+entities:
+  - name: ReminderLevel                      # the ladder, seeded First(3) / Second(14) / Final(30)
+    function: Setting
+    fields:
+      - { name: id,           type: integer, primaryKey: true, generated: true }
+      - { name: name,         type: string }
+      - { name: daysAfterDue, type: integer }
+      - { name: wording,      type: string, length: 500 }
+  - name: PaymentReminder                    # the HISTORY - what was actually sent, and at which level
+    fields:
+      - { name: id,     type: integer, primaryKey: true, generated: true }
+      - { name: sentOn, type: date }
+    relations:
+      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+      - { name: Level,        kind: manyToOne, to: ReminderLevel }
+
+schedules:
+  - name: overdue-invoice-reminders
+    cron: "0 0 8 * * MON"                    # every Monday at 08:00
+    entity: SalesInvoice
+    where:
+      - { field: Status, op: eq, value: OVERDUE }
+      - { field: dueOn,  op: lt, value: CURRENT_DATE }
+    escalate:
+      ladder: ReminderLevel                  # the levels
+      after: daysAfterDue                    # the integer threshold on the ladder
+      since: dueOn                           # the row's date the days are counted from
+      into: Level                            # where the chosen level is written on the target
+    generate:
+      to: PaymentReminder
+      unique: [SalesInvoice, Level]          # (document, level) - each level goes out ONCE
+      map: { SalesInvoice: id }
+      defaults: { sentOn: now }
+    notify:
+      to: contactEmail
+      subject: "Invoice {number} - {escalation.name}"
+      body: "{escalation.wording}"           # the level's own text - per-level wording
+      attach: print
+```
+
+- The level applied is the **highest** whose `after` threshold the row has passed
+  (`today - since >= after`). A row that has passed **none** is left for a later tick - not mailed at
+  the bottom rung - and the tick logs how many those were.
+- `escalate` requires a `generate`, and `into` must be a term of its `unique:` key. That is what makes
+  each level go out once: keyed on the document alone, the guard finds the FIRST reminder forever and
+  the seeded second and final notices are never applied. Both are refused at parse.
+- `{escalation.<field>}` reads **one field of the chosen level** in the subject and body - the
+  per-level wording. A field the ladder does not declare is an authoring error, not a placeholder that
+  mails its own braces to the customer.
+- `into` may not also be assigned by `map` / `defaults` (the escalation is what picks it), and an
+  escalating schedule must have a **local** source and a **local** generate target: the days are
+  counted off the row's own date, and whether the target property points at this model's ladder is
+  knowable only here.
 
 **Cross-model source (`model:`).** By default the `entity` is a **local** entity of this model. When
 the module that owns the CREATED rows is not where the source entity lives, add `model: <uses alias>`
@@ -3859,6 +3931,8 @@ or a seeded name.
 - "send the invoice / payslip / document itself to its customer or employee by e-mail" -> a **notify block with `attach: print`** (on a `serviceTask` step, a `transitions[]`, or a `schedules[]`)
 - "mail each customer their statement / activity list for the period" -> a **notify block with `attach: { report, bind }`** over a report whose `parameters:` scope it to the recipient (a `schedules[]` for the periodic run, a `transitions[]` for on demand)
 - "every day/hour, check X and notify" -> **schedules** (`notify`)
+- "dunning / payment reminders that escalate and are recorded" -> **schedules** with `notify` AND
+  `generate` plus an `escalate:` ladder (the record is what sends each level once)
 - "show whether the invoice / payslip / reminder actually went out, and react when it did not" -> **`outcome:` on the notify block** plus, for the reaction, `event: { onNotifyFailed: <Entity> }` on a `notifications:` / `integrations:` / `outbound:` entry or a process `trigger:`; the retry is an ordinary `transitions[]` button from the failure status carrying the same notify block
 - "on a schedule / every month, create a Y for each X / recurring invoices / auto-generate timesheets" -> **schedules** (`generate`)
 - "post / notify / create from a value a listener computes AFTER the record is inserted (a moving-average cost, a snapshot column, an external lookup)" -> declare a **`phases:`** entry on the entity and bind **`event: { onPhase: <Entity>, phase: <name> }`** - never `onCreate`, which races the listener

@@ -29,7 +29,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -38,17 +37,42 @@ import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
 /**
- * The Class LocalRegistryWatcher.
+ * Watches {@code /registry/public} <b>recursively</b> and marks the registry modified whenever
+ * something in it changes, so that the next synchronization pass actually runs.
+ *
+ * <p>
+ * {@link SynchronizationWatcher} - the thing {@code SynchronizationProcessor} asks before it does
+ * anything at all - registers the registry root and nothing below it, so a file written several
+ * folders deep produces no event and no pass is ever scheduled for it. A publish is covered
+ * ({@code SynchronizationWatcherPublisherHandler} forces a pass) and so is the external-folder copy
+ * ({@link RecursiveFolderWatcher} brackets and forces its own writes), but a writer that does
+ * neither used to be invisible for the life of the process - the shape of #7192, where a partial
+ * client-Java generation stayed installed with all its sources on disk. This watcher closes that
+ * gap generically: whatever writes the registry, the write is seen and a pass follows.
+ *
+ * <p>
+ * <b>It does not make
+ * {@link org.eclipse.dirigible.components.base.registry.RegistryMutationTracker} optional.</b> A
+ * pass is now scheduled while a multi-file write is still arriving, and only the bracket tells that
+ * pass to defer its cleanup instead of reaping artefacts whose sources have not landed yet. A
+ * component that writes the registry outside the publisher pipeline still brackets the write - what
+ * it no longer has to do is remember to announce it.
+ *
+ * <p>
+ * Marking is deliberately all this does. {@link SynchronizationWatcher#force()} sets a flag; which
+ * pass runs, when, and over what is the processor's decision, so a copy of a thousand files costs a
+ * thousand flag writes and one pass rather than a pass per file. The folders named by
+ * {@code DIRIGIBLE_REGISTRY_LOCAL_IGNORED_FOLDERS} (top level only) are neither watched nor marked.
  */
 @Component
 @Scope("singleton")
@@ -106,19 +130,18 @@ public class LocalRegistryWatcher implements DisposableBean {
     /** The repository. */
     private final IRepository repository;
 
-    /** The handlers. */
-    private final List<LocalRegistryWatcherHandler> handlers;
+    /** Told that the registry changed, so a synchronization pass is scheduled. */
+    private final SynchronizationWatcher synchronizationWatcher;
 
     /**
      * Instantiates a new local registry watcher.
      *
      * @param repository the repository
-     * @param handlers the handlers
+     * @param synchronizationWatcher the synchronization watcher
      */
-    @Autowired
-    public LocalRegistryWatcher(IRepository repository, List<LocalRegistryWatcherHandler> handlers) {
+    public LocalRegistryWatcher(IRepository repository, SynchronizationWatcher synchronizationWatcher) {
         this.repository = repository;
-        this.handlers = handlers;
+        this.synchronizationWatcher = synchronizationWatcher;
     }
 
     /**
@@ -149,15 +172,12 @@ public class LocalRegistryWatcher implements DisposableBean {
                 this.watchService = FileSystems.getDefault()
                                                .newWatchService();
 
-                // Initial sync before start watching
-                initialSync();
-
                 // Register watchers recursively
                 registerAll(sourceDir);
 
                 // Start actual watching
                 this.startWatching();
-            } catch (IOException | InterruptedException e) {
+            } catch (IOException e) {
                 logger.error("Error during initializing the Local Registry Watcher", e);
             }
         });
@@ -195,35 +215,6 @@ public class LocalRegistryWatcher implements DisposableBean {
         // Remove carriage return and newline characters to prevent log forging
         return folderName.replace("\r", "")
                          .replace("\n", "");
-    }
-
-    /**
-     * Perform initial sync of all files and folders.
-     *
-     * @throws IOException Signals that an I/O exception has occurred.
-     */
-    private void initialSync() throws IOException {
-        logger.info("Performing initial sync...");
-        Files.walkFileTree(sourceDir, new SimpleFileVisitor<>() {
-            @Override
-            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                if (isIgnored(dir)) {
-                    logger.debug("Skipping ignored directory: {}", dir);
-                    return FileVisitResult.SKIP_SUBTREE;
-                }
-                directoryRegistered(dir);
-                return FileVisitResult.CONTINUE;
-            }
-
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                if (!isIgnored(file)) {
-                    fileRegistered(file);
-                }
-                return FileVisitResult.CONTINUE;
-            }
-        });
-        logger.info("Initial sync complete.");
     }
 
     /**
@@ -289,10 +280,9 @@ public class LocalRegistryWatcher implements DisposableBean {
      * Start watching.
      *
      * @throws IOException Signals that an I/O exception has occurred.
-     * @throws InterruptedException the interrupted exception
      */
-    public void startWatching() throws IOException, InterruptedException {
-        logger.info("Recursively watching: " + sourceDir);
+    private void startWatching() throws IOException {
+        logger.info("Recursively watching: {}", sourceDir);
 
         watching = true;
         watchThread = Thread.currentThread();
@@ -352,43 +342,33 @@ public class LocalRegistryWatcher implements DisposableBean {
             for (WatchEvent<?> event : key.pollEvents()) {
                 WatchEvent.Kind<?> kind = event.kind();
 
-                if (kind == OVERFLOW)
+                if (kind == OVERFLOW) {
+                    // Events were dropped, so what changed is unknown - which is exactly when a pass
+                    // is most needed. Reconciling the whole registry is what a pass does anyway.
+                    registryChanged(dir, "overflow");
                     continue;
+                }
 
                 Path name = (Path) event.context();
                 Path sourcePath = dir.resolve(name);
 
-                if (kind == ENTRY_CREATE) {
-                    if (Files.isDirectory(sourcePath)) {
-                        // Register new directory
+                if (kind == ENTRY_CREATE && Files.isDirectory(sourcePath)) {
+                    // A folder and everything already inside it. Register FIRST, report second: a
+                    // file written into it before the registration produces no event of its own, and
+                    // is only covered because the pass this report schedules walks the subtree after
+                    // that file has landed. Reporting first would leave exactly that window open.
+                    try {
                         registerAll(sourcePath);
-                        // Also sync its contents
-                        try {
-                            Files.walkFileTree(sourcePath, new SimpleFileVisitor<>() {
-                                @Override
-                                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                                    fileCreated(file);
-                                    return FileVisitResult.CONTINUE;
-                                }
-
-                                @Override
-                                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                                    directoryCreated(dir);
-                                    return FileVisitResult.CONTINUE;
-                                }
-                            });
-                        } catch (IOException e) {
-                            logger.error("Failed to sync new folder: " + sourcePath, e);
-                        }
-                    } else {
-                        fileCreated(sourcePath);
+                    } catch (IOException e) {
+                        logger.error("Failed to watch the new registry folder: " + sourcePath, e);
                     }
-                } else if (kind == ENTRY_MODIFY) {
-                    if (!Files.isDirectory(sourcePath)) {
-                        fileModified(sourcePath);
-                    }
-                } else if (kind == ENTRY_DELETE) {
-                    fileDeleted(sourcePath);
+                    registryChanged(sourcePath, "created");
+                } else if (kind == ENTRY_MODIFY && Files.isDirectory(sourcePath)) {
+                    // A directory's own timestamp moves whenever a child is added or removed, and that
+                    // child's event is reported in its own right - reporting this one too is noise.
+                    logger.debug("Ignoring the modification of the directory: {}", sourcePath);
+                } else {
+                    registryChanged(sourcePath, kind == ENTRY_CREATE ? "created" : kind == ENTRY_DELETE ? "deleted" : "modified");
                 }
             }
 
@@ -396,118 +376,31 @@ public class LocalRegistryWatcher implements DisposableBean {
             if (!valid) {
                 keyToPathMap.remove(key);
                 if (keyToPathMap.isEmpty()) {
-                    break;
+                    // The registry root itself is gone, so there is nothing left to register against.
+                    // Say so: from here on a deep write schedules no pass until the watcher is
+                    // re-initialized, which is the very failure this watcher exists to prevent.
+                    logger.warn("Nothing left to watch under [{}] - the Local Registry Watcher is stopping."
+                            + " Registry changes will no longer schedule a synchronization pass.", sourceDir);
+                    return;
                 }
             }
         }
     }
 
     /**
-     * Directory registered.
+     * Reports a change under the registry, which marks the registry modified so the next
+     * synchronization pass runs. Ignored folders are not reported.
      *
-     * @param path the path
+     * @param path the path that changed
+     * @param change what happened to it, for the log
      */
-    private void directoryRegistered(Path path) {
-        if (!Files.isDirectory(path) || isIgnored(path)) {
+    private void registryChanged(Path path, String change) {
+        if (isIgnored(path)) {
+            logger.debug("Ignoring the {} entry: {}", change, path);
             return;
         }
-        for (LocalRegistryWatcherHandler handler : handlers) {
-            try {
-                handler.directoryRegistered(path);
-            } catch (Exception e) {
-                logger.error("Failed to handle registration of a directory: " + path, e);
-            }
-        }
-    }
-
-    /**
-     * File registered.
-     *
-     * @param path the path
-     */
-    private void fileRegistered(Path path) {
-        if (Files.isDirectory(path) || isIgnored(path)) {
-            return;
-        }
-        for (LocalRegistryWatcherHandler handler : handlers) {
-            try {
-                handler.fileRegistered(path);
-            } catch (Exception e) {
-                logger.error("Failed to handle registration of a file: " + path, e);
-            }
-        }
-    }
-
-    /**
-     * Directory created.
-     *
-     * @param path the path
-     */
-    private void directoryCreated(Path path) {
-        if (!Files.isDirectory(path) || isIgnored(path)) {
-            return;
-        }
-        for (LocalRegistryWatcherHandler handler : handlers) {
-            try {
-                handler.directoryCreated(path);
-            } catch (Exception e) {
-                logger.error("Failed to handle creation of a directory: " + path, e);
-            }
-        }
-    }
-
-    /**
-     * File created.
-     *
-     * @param path the path
-     */
-    private void fileCreated(Path path) {
-        if (Files.isDirectory(path) || isIgnored(path)) {
-            return;
-        }
-        for (LocalRegistryWatcherHandler handler : handlers) {
-            try {
-                handler.fileCreated(path);
-            } catch (Exception e) {
-                logger.error("Failed to handle creation of a file: " + path, e);
-            }
-        }
-    }
-
-    /**
-     * File modified.
-     *
-     * @param path the path
-     */
-    private void fileModified(Path path) {
-        if (Files.isDirectory(path) || isIgnored(path)) {
-            return;
-        }
-        for (LocalRegistryWatcherHandler handler : handlers) {
-            try {
-                handler.fileModified(path);
-            } catch (Exception e) {
-                logger.error("Failed to handle modification of a file: " + path, e);
-            }
-        }
-    }
-
-    /**
-     * File deleted.
-     *
-     * @param path the path
-     */
-    private void fileDeleted(Path path) {
-        if (Files.isDirectory(path) || isIgnored(path)) {
-            return;
-        }
-        for (LocalRegistryWatcherHandler handler : handlers) {
-            try {
-                handler.fileDeleted(path);
-            } catch (Exception e) {
-                logger.error("Failed to handle deletion of a file: " + path, e);
-            }
-        }
+        logger.debug("Registry entry {}: [{}] - scheduling a synchronization pass", change, path);
+        synchronizationWatcher.force();
     }
 
     /**
