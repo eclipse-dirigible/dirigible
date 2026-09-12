@@ -361,6 +361,26 @@ class ModelParameterProcessorTest {
     }
 
     @Test
+    void aCompareSplitsByItsGateToo() {
+        Map<String, Object> ungated = new LinkedHashMap<>();
+        ungated.put("kind", "compare");
+        Map<String, Object> gated = new LinkedHashMap<>();
+        gated.put("kind", "compare");
+        gated.put("status", "2");
+        Map<String, Object> entity = entity("VacationRequest", "Requests", property("Days", "DECIMAL"));
+        entity.put("checks", List.of(ungated, gated));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        // A comparison holds on every user write unless it names the status it is enforced at (#7338):
+        // "days > 0 before SUBMITTED" is the repository's, so the draft being filled in is not refused.
+        assertEquals(1, ModelValues.asList(entity.get("rowChecks"))
+                                   .size());
+        assertEquals(1, ModelValues.asList(entity.get("documentChecks"))
+                                   .size());
+    }
+
+    @Test
     void carriesEveryAuthoredMessageAsAnEscapedJavaLiteralToo() {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("kind", "compare");

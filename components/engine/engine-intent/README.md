@@ -133,11 +133,31 @@ first declared. Flag the lines child explicitly on a document that owns several 
 - name: SalesInvoice
   checks:
     - { kind: compare, field: due, op: ge, than: date, message: "Due cannot be before the invoice date" }
+    - { kind: compare, field: discountPercent, op: le, value: 100, message: "A discount cannot exceed 100%" }
+- name: VacationRequest
+  checks:
+    # ...and the same comparison gated: a zero-day draft is fine, submitting one is not
+    - { kind: compare, field: days, op: gt, value: 0, status: SUBMITTED,
+        message: "A request must cover at least one working day" }
 ```
 
-`compare` relates two values of the same row: `op:` is `ge` / `gt` / `le` / `lt` / `eq` / `ne`, both
-operands are the entity's own fields, and both must be dates, both timestamps or both numbers. An
-absent operand is not a violation - requiredness is its own declaration.
+`compare` relates a value of the row to a second one: `op:` is `ge` / `gt` / `le` / `lt` / `eq` /
+`ne`, the left operand is the entity's own field, and the right one is either another of its own
+fields (`than:`) or a literal (`value:`) - exactly one of the two, since a comparison has one
+right-hand side. An absent operand is not a violation - requiredness is its own declaration.
+
+The two operands must compare: both dates, both timestamps or both numbers. A `value:` is typed the
+same way by the field it is compared with - a number for a numeric field, and for a temporal one
+either a **moment** (`CURRENT_DATE` / `CURRENT_TIMESTAMP` / `NOW`, with at most one signed ISO-8601
+offset - the same vocabulary a schedule's `where:` carries, resolved against the clock of the write)
+or a quoted ISO-8601 date / instant. Quote a temporal literal: an unquoted `2026-01-01` is a date
+object to the YAML loader long before the intent sees it.
+
+A `compare` is row-level by default - enforced on every user write, in all three generated surfaces'
+controllers, as a 400 with the authored message. The optional `status:` gate is the routing, exactly
+as on `requiredWhen`: with one, the comparison is enforced by the repository when the record is
+persisted CARRYING that status, so the rule holds at the transition and the draft still being filled
+in is not refused. A gated comparison needs the entity's `function: EntityStatus` relation.
 
 `requiredWhen` is a value that is required only under a condition - the rule `required` cannot
 express, because the value is needed for one way of handling the record and meaningless for the

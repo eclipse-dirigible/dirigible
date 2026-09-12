@@ -130,16 +130,6 @@ public final class IntentParser {
     /** The comparisons a {@code checks: compare} entry may declare. */
     private static final Set<String> COMPARE_OPS = Set.of("ge", "gt", "le", "lt", "eq", "ne");
 
-    /**
-     * A field type a {@code checks: compare} entry may compare, as the family the generated comparison
-     * belongs to. Two fields compare only within one family: the generated code compares two temporals
-     * through {@code compareTo}, which needs the SAME class (a {@code LocalDate} does not compare to an
-     * {@code Instant}), and two numbers by value through {@code BigDecimal}, which is exact across the
-     * numeric widths. Everything else - a string, a boolean, a {@code month}/{@code week} label - is
-     * out of scope rather than silently ordered lexicographically.
-     */
-    private static final Map<String, String> COMPARE_FAMILIES = Map.of("date", "date", "timestamp", "timestamp", "integer", "number", "int",
-            "number", "long", "number", "decimal", "number", "double", "number");
     /** Numeric field types a sum roll-up (its field / {@code of} / capacity / balance) may use. */
     private static final Set<String> NUMERIC_TYPES = Set.of("integer", "int", "long", "decimal", "double");
     private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany", "subset");
@@ -5037,23 +5027,39 @@ public final class IntentParser {
     }
 
     /**
-     * A {@code compare} check relates two values of the SAME row - the shape a plain
+     * A {@code compare} check relates a value of the row to a second value - the shape a plain
      * {@code required}/{@code unique} cannot express and the reason a document could be saved with a
-     * due date behind its own date (dirigible #7095). Both operands must be the entity's own fields
-     * (never a relation - a comparison of two foreign keys means nothing), the operator is explicit,
-     * and the two types must land in the same comparison family so the generated comparison compiles
-     * and means what it says. It is row-level like {@code exactlyOne}, so it takes no {@code status}
-     * gate: a rule about two values of one row holds from the first save, not from a transition.
+     * due date behind its own date (dirigible #7095). The right-hand side is either another of the
+     * entity's own fields ({@code than}: never a relation - a comparison of two foreign keys means
+     * nothing) or a LITERAL ({@code value}, issue #7338 - the commonest business validation of all: "a
+     * quantity is positive", "a percentage is at most 100"), never both and never neither, since a
+     * comparison has exactly one right-hand side. The operator is explicit, and the right-hand side
+     * must land in the left field's own comparison family so the generated comparison compiles and
+     * means what it says.
+     *
+     * <p>
+     * Row-level by default, like {@code exactlyOne}: a rule about the values of one row holds from the
+     * first save. The optional {@code status} gate is the routing, as on {@code requiredWhen} - with
+     * one, the rule holds when the record is persisted carrying that status (the transition), so "days
+     * &gt; 0 before SUBMITTED" is declarable without forbidding the draft that is still being filled
+     * in.
      */
     private static void validateCompareCheck(EntityIntent entity, CheckIntent check, String subject, List<String> issues) {
         String field = check.getField();
         String than = check.getThan();
-        if (field == null || field.isBlank() || than == null || than.isBlank()) {
-            issues.add(subject + " requires `field` and `than`: the two own fields to compare");
+        boolean hasThan = than != null && !than.isBlank();
+        boolean hasValue = check.getValue() != null;
+        if (field == null || field.isBlank() || hasThan == hasValue) {
+            issues.add(subject + " requires `field` and exactly one right-hand side: `than` (another own field of [" + entity.getName()
+                    + "]) or `value` (a literal)");
             return;
         }
         if (check.getStatus() != null) {
-            issues.add(subject + " is row-level and cannot carry a `status` gate - it must hold on every write");
+            if (check.getStatus() <= 0) {
+                issues.add(subject + " status gate [" + check.getStatus() + "] is not an EntityStatus seed id");
+            } else if (!hasEntityStatusRelation(entity)) {
+                issues.add(subject + " requires the entity to declare a `function: EntityStatus` relation for the gate");
+            }
         }
         String op = check.getOp() == null ? null
                 : check.getOp()
@@ -5062,18 +5068,27 @@ public final class IntentParser {
         if (op == null || !COMPARE_OPS.contains(op)) {
             issues.add(subject + " requires `op`: one of ge, gt, le, lt, eq, ne (got [" + check.getOp() + "])");
         }
+        FieldIntent left = fieldByName(entity, field);
+        if (left == null) {
+            issues.add(subject + " field [" + field + "] is not a field of [" + entity.getName() + "]");
+            return;
+        }
+        if (hasValue) {
+            // The literal is typed by the field it is compared with, by the one rule the generator
+            // renders with - so nothing is refused here that would have generated, and nothing generates
+            // that was not refused here.
+            CheckSupport.CompareLiteral literal = CheckSupport.compareLiteral(left.getType(), check.getValue());
+            if (!literal.valid()) {
+                issues.add(subject + " " + literal.problem());
+            }
+            return;
+        }
         if (field.equalsIgnoreCase(than)) {
             issues.add(subject + " compares [" + field + "] with itself - the outcome cannot depend on the record");
         }
-        FieldIntent left = fieldByName(entity, field);
         FieldIntent right = fieldByName(entity, than);
-        if (left == null) {
-            issues.add(subject + " field [" + field + "] is not a field of [" + entity.getName() + "]");
-        }
         if (right == null) {
             issues.add(subject + " than [" + than + "] is not a field of [" + entity.getName() + "]");
-        }
-        if (left == null || right == null) {
             return;
         }
         String leftFamily = compareFamily(left);
@@ -5092,10 +5107,7 @@ public final class IntentParser {
 
     /** The comparison family of a field, or null when its type does not compare. */
     private static String compareFamily(FieldIntent field) {
-        return field.getType() == null ? null
-                : COMPARE_FAMILIES.get(field.getType()
-                                            .trim()
-                                            .toLowerCase(java.util.Locale.ROOT));
+        return CheckSupport.compareFamily(field.getType());
     }
 
     /** Whether the name matches (case-insensitively) a field or to-one relation of the entity. */

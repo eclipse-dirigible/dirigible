@@ -1396,6 +1396,65 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * A {@code compare} check against a LITERAL (dirigible #7338) reaches the templates as a Java
+     * EXPRESSION for the right-hand side, rendered in the shape the generated column carries - a
+     * {@code BigDecimal} for a number, a {@code LocalDate} for a date, an {@code Instant} for a
+     * timestamp - so the comparison compiles and is exact. The optional status gate reaches them as the
+     * gate status and the property that carries it, which is what routes the check to the repository
+     * instead of the controllers.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void compareChecksAgainstLiteralsEmitJavaExpressions() {
+        String yaml = """
+                name: leave
+                seeds:
+                  - name: request-statuses
+                    entity: RequestStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: SUBMITTED }
+                entities:
+                  - name: RequestStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: VacationRequest
+                    checks:
+                      - { kind: compare, field: days, op: gt, value: 0, status: SUBMITTED,
+                          message: "A request must cover at least one working day" }
+                      - { kind: compare, field: from, op: ge, value: "CURRENT_DATE", message: "Leave cannot start in the past" }
+                      - { kind: compare, field: filedAt, op: le, value: "CURRENT_TIMESTAMP+PT1H", message: "Not in the future" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: days, type: decimal }
+                      - { name: from, type: date }
+                      - { name: filedAt, type: timestamp }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: RequestStatus, function: EntityStatus }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "leave");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "VacationRequest").get("checks");
+        assertEquals(3, checks.size());
+        Map<String, Object> positive = checks.get(0);
+        assertEquals("Days", positive.get("field"));
+        assertEquals(">", positive.get("op"));
+        assertEquals("true", positive.get("numeric"));
+        assertEquals("new java.math.BigDecimal(\"0\")", positive.get("literal"));
+        assertNull(positive.get("than"), "a literal comparison has no second property");
+        assertEquals("2", positive.get("status"), "the gate routes the check to the repository");
+        assertEquals("Status", positive.get("statusProperty"));
+        Map<String, Object> notPast = checks.get(1);
+        assertEquals("false", notPast.get("numeric"));
+        assertEquals("java.time.LocalDate.now()", notPast.get("literal"));
+        assertNull(notPast.get("status"), "an ungated comparison stays the controllers' - every user write");
+        assertEquals("java.time.Instant.now().plus(java.time.Duration.parse(\"PT1H\"))", checks.get(2)
+                                                                                               .get("literal"),
+                "a timestamp column binds java.time.Instant, so the moment renders in THAT shape");
+    }
+
+    /**
      * A document check counts the document's LINES, even when the document owns several composition
      * children - a printed {@code function: Snapshot} copy, a payment allocation, a promotion. The
      * items child used to be whichever one a {@code HashMap} iteration yielded first, so an invoice's

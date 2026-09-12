@@ -2226,19 +2226,43 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                             .map(IntentNaming::pascalCase)
                                             .toList());
             } else if ("compare".equals(check.getKind())) {
-                // Two values of the same row, compared (#7095). The template gets the two PascalCased
-                // properties, the Java comparison operator the compareTo result is tested with, and
-                // whether the two are numbers - two temporals compare through compareTo, two numbers
-                // by value through BigDecimal so a decimal and a long still compare exactly.
+                // A value of the row compared with a second one (#7095) - another PascalCased property,
+                // or a LITERAL rendered as the Java expression the comparison evaluates (#7338). The
+                // template also gets the Java comparison operator the compareTo result is tested with and
+                // whether the comparison is numeric - a temporal compares through compareTo, a number by
+                // value through BigDecimal so a decimal and a long still compare exactly.
                 String comparison = compareOperator(check.getOp());
-                Boolean numeric = isNumericCompare(entity, check);
-                if (check.getField() == null || check.getThan() == null || comparison == null || numeric == null) {
+                FieldIntent left = fieldOf(entity, check.getField());
+                if (check.getField() == null || comparison == null || left == null) {
                     continue; // the parser already reported it
                 }
+                if (check.getValue() != null) {
+                    CheckSupport.CompareLiteral literal = CheckSupport.compareLiteral(left.getType(), check.getValue());
+                    if (!literal.valid()) {
+                        continue; // the parser already reported it
+                    }
+                    checkMap.put("literal", literal.javaExpression());
+                    checkMap.put("numeric", isNumericType(left.getType()) ? "true" : "false");
+                } else {
+                    Boolean numeric = isNumericCompare(entity, check);
+                    if (check.getThan() == null || numeric == null) {
+                        continue; // the parser already reported it
+                    }
+                    checkMap.put("than", IntentNaming.pascalCase(check.getThan()));
+                    checkMap.put("numeric", numeric ? "true" : "false");
+                }
                 checkMap.put("field", IntentNaming.pascalCase(check.getField()));
-                checkMap.put("than", IntentNaming.pascalCase(check.getThan()));
                 checkMap.put("op", comparison);
-                checkMap.put("numeric", numeric ? "true" : "false");
+                // The optional gate, as on requiredWhen: with one, the comparison is the repository's and
+                // holds when the record is persisted carrying that status, not on the draft before it.
+                if (check.getStatus() != null) {
+                    RelationIntent gate = entityStatusRelation(entity);
+                    if (gate == null) {
+                        continue; // the parser already reported it
+                    }
+                    checkMap.put("status", String.valueOf(check.getStatus()));
+                    checkMap.put("statusProperty", IntentNaming.pascalCase(gate.getName()));
+                }
             } else {
                 // The document's LINES - the shared resolution, so the guard counts the rows the
                 // document layout renders. Scanning for "some composition child" made a multi-child
