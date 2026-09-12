@@ -60,7 +60,7 @@ public class ${className}FileImport implements JobHandler {
 
     @Override
     public String cron() {
-        return "${cron}";
+        return "${cronJavaLiteral}";
     }
 
     @Override

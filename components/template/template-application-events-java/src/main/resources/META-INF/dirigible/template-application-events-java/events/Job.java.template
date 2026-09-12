@@ -44,7 +44,7 @@ public class ${className}Job implements JobHandler {
 
     @Override
     public String cron() {
-        return "${cron}";
+        return "${cronJavaLiteral}";
     }
 
     @Override

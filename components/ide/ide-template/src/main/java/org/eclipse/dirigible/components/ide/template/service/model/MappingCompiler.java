@@ -236,12 +236,11 @@ final class MappingCompiler {
      * @return the literal, quotes included
      */
     private static String javaString(Object value) {
-        String text = String.valueOf(value);
-        return "\"" + text.replace("\\", "\\\\")
-                          .replace("\"", "\\\"")
-                          .replace("\r\n", "\\n")
-                          .replace("\n", "\\n")
-                + "\"";
+        // Through the one escape, with the line separator normalised first so a CRLF keeps rendering
+        // as the single \n it always did (a lone CR used to survive raw and break the literal's line).
+        String text = String.valueOf(value)
+                            .replace("\r\n", "\n");
+        return "\"" + JavaLiterals.escape(text) + "\"";
     }
 
 }

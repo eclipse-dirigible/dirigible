@@ -45,7 +45,7 @@ public class ${className}Webhook {
     private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Webhook");
 #end
 
-    @Post("${path}")
+    @Post("${pathJavaLiteral}")
 #if($hasEnvelope)
     public String ingest(@Body java.util.Map<String, Object> envelope) {
 #{else}

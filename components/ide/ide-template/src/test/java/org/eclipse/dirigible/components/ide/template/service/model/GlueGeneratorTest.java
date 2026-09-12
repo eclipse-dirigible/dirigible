@@ -111,6 +111,38 @@ class GlueGeneratorTest {
                                       .containsEntry("hoisted", Boolean.FALSE);
     }
 
+    /**
+     * The authored descriptor values a glue template writes into a Java string literal - a setter's
+     * value, a series, a cron, a destination, a webhook path - reach it escaped, so a quote in any of
+     * them cannot end the literal and fail the compile of the whole generated module (#7295).
+     */
+    @Test
+    void derivesTheEscapedTwinOfAnAuthoredDescriptorValue() {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("value", "the \"issued\" one");
+        item.put("series", "C:\\Sales");
+        Map<String, Object> context = new LinkedHashMap<>();
+
+        GlueGenerator.copyJavaLiterals(context, item, "value", "series");
+
+        assertThat(context).containsEntry("valueJavaLiteral", "the \\\"issued\\\" one")
+                           .containsEntry("seriesJavaLiteral", "C:\\\\Sales");
+    }
+
+    /**
+     * A key the descriptor does not carry is REMOVED rather than emptied: the context starts as a copy
+     * of the generation parameters, and the template reads the key's absence.
+     */
+    @Test
+    void aKeyTheDescriptorDoesNotCarryIsRemoved() {
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("perDefaultJavaLiteral", "left over from another descriptor");
+
+        GlueGenerator.copyJavaLiterals(context, new LinkedHashMap<>(), "perDefault");
+
+        assertThat(context).doesNotContainKey("perDefaultJavaLiteral");
+    }
+
     private static Map<String, Object> cell(String name) {
         Map<String, Object> cell = new LinkedHashMap<>();
         cell.put("name", name);

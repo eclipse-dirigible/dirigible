@@ -406,9 +406,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($property.numberStampOnCreate)
         if (entity.${property.name} == null || entity.${property.name}.isBlank()) {
 #if($property.numberPer && $property.numberPer != "")
-            entity.${property.name} = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${property.numberSeries}", entity.${property.numberPer} == null ? null : String.valueOf(entity.${property.numberPer}));
+            entity.${property.name} = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${property.numberSeriesJavaLiteral}", entity.${property.numberPer} == null ? null : String.valueOf(entity.${property.numberPer}));
 #else
-            entity.${property.name} = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${property.numberSeries}");
+            entity.${property.name} = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${property.numberSeriesJavaLiteral}");
 #end
         }
 #end
@@ -938,13 +938,8 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     private static java.util.Map<String, String> lifecycleStatusNames() {
         java.util.Map<String, String> names = new java.util.HashMap<>();
-#if($lifecycleStatusNames)
-        for (String seeded : "${lifecycleStatusNames}".split(",")) {
-            int separator = seeded.indexOf('=');
-            if (separator > 0) {
-                names.put(seeded.substring(0, separator), seeded.substring(separator + 1));
-            }
-        }
+#foreach($seeded in $lifecycleStatusNameEntries)
+        names.put("${seeded.idJavaLiteral}", "${seeded.nameJavaLiteral}");
 #end
         return names;
     }
@@ -1364,16 +1359,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         StringBuilder label = new StringBuilder();
 #foreach($part in $labelParts)
 #if($part.kind == "literal")
-        label.append("${part.text}");
+        label.append("${part.textJavaLiteral}");
 #elseif($part.kind == "field")
-        label.append(formatLabelValue(entity.${part.property}, #if($part.format)"${part.format}"#{else}null#end));
+        label.append(formatLabelValue(entity.${part.property}, #if($part.format)"${part.formatJavaLiteral}"#{else}null#end));
 #else
         {
             var related = entity.${part.relation} == null ? null
                     : new ${part.repositoryClass}().findOne(entity.${part.relation})
                                                    .orElse(null);
             label.append(formatLabelValue(related == null ? null : related.${part.property},
-                    #if($part.format)"${part.format}"#{else}null#end));
+                    #if($part.format)"${part.formatJavaLiteral}"#{else}null#end));
         }
 #end
 #end

@@ -14,6 +14,7 @@ import java.time.Period;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
+import org.eclipse.dirigible.components.ide.template.service.model.JavaLiterals;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -222,8 +223,6 @@ public final class ScheduleSupport {
             return moment.javaExpression();
         }
         String text = value.toString();
-        return "\"" + text.replace("\\", "\\\\")
-                          .replace("\"", "\\\"")
-                + "\"";
+        return "\"" + JavaLiterals.escape(text) + "\"";
     }
 }
