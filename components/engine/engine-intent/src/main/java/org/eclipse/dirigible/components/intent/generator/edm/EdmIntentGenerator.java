@@ -597,6 +597,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putPartner(fkProperty, relation,
                         target == null || target.getIdentity() == null ? null : IntentNaming.pascalCase(target.getIdentity()),
                         target == null ? null : labelFieldName(target), true);
+                putInheritedPersonalReadOnly(fkProperty, relation, composition);
                 properties.add(fkProperty);
                 relations.add(relationLink(name, relation, target, targetPerspective));
             }
@@ -1915,6 +1916,24 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // personal pages can show "New/Edit <Doc> for <owner>". Falls back to the identity match field.
         p.put("relationshipIdentityLabel",
                 (targetIdentityLabel == null || targetIdentityLabel.isBlank()) ? targetIdentityProperty : targetIdentityLabel);
+    }
+
+    /**
+     * Emit the see-only marker on the composition edge a child inherits its personal scope through
+     * ({@code personalReadOnly: true} without {@code personal: true} - dirigible #7340). The parent's
+     * own personal surface stays writable; the child's generated {@code MyController} refuses every
+     * write with 403 and its personal pages render no write affordance. Only the entity's OWNING
+     * composition carries it - a later composition is emitted as a plain association, which is exactly
+     * what the {@code composition} flag here says, and the parser refuses the key on any other edge.
+     *
+     * @param p the FK property being emitted
+     * @param relation the relation
+     * @param composition whether this relation is the entity's owning composition edge
+     */
+    private static void putInheritedPersonalReadOnly(Map<String, Object> p, RelationIntent relation, boolean composition) {
+        if (composition && relation.isPersonalReadOnly() && !relation.isPersonal()) {
+            p.put("relationshipPersonalReadOnly", "true");
+        }
     }
 
     /**

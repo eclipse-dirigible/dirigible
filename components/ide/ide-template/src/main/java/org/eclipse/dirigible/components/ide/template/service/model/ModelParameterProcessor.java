@@ -85,6 +85,7 @@ final class ModelParameterProcessor {
             resolvePeriodLock(entities, parameters);
             inheritMasterLock(entities, parameters);
             inheritPersonalScope(entities, parameters);
+            resolveDocumentItemsScope(entities);
             inheritPartnerScope(entities, parameters);
             collectSensitiveProperties(entities);
             collectScopedChildren(entities);
@@ -934,11 +935,39 @@ final class ModelParameterProcessor {
             personalParent.put("personalProperty", parent.get("personalProperty"));
             personalParent.put("personalFkJavaClass", parent.get("personalFkJavaClass"));
             entity.put("personalParent", personalParent);
-            entity.put("personalReadOnly", truthy(parent, "personalReadOnly"));
+            // The scope comes from the parent; the writes need not. A child whose composition edge
+            // declares personalReadOnly (intent #7340) is see-only on the personal surface even though
+            // the parent it inherits the scope from is writable - the shape of a user-authored header
+            // whose lines only an engine writes.
+            entity.put("personalReadOnly", truthy(parent, "personalReadOnly") || truthy(parentFk, "relationshipPersonalReadOnly"));
             entity.put("personalIdentityProperty", parent.get("personalIdentityProperty"));
             entity.put("personalIdentityLabel", parent.get("personalIdentityLabel"));
             entity.put("personalIdentityEntityClass", parent.get("personalIdentityEntityClass"));
             entity.put("personalIdentityRepositoryClass", parent.get("personalIdentityRepositoryClass"));
+        }
+    }
+
+    /**
+     * Whether a document master's inline ITEMS panel is see-only on the personal surface - the master's
+     * own see-only flag, or the items child's own opt-out (intent #7340: {@code personalReadOnly} on
+     * the child's composition edge). The items panel lives on the MASTER's page, so the flag the
+     * document template gates Add / Fill Month / row delete / item save on has to be the master's, and
+     * a child that refuses the writes with 403 must not be offered them.
+     *
+     * <p>
+     * Derived here rather than emitted into the model, so a hand-authored {@code .edm} carrying the
+     * child's attribute gets the same page.
+     *
+     * @param entities every entity in the model
+     */
+    private static void resolveDocumentItemsScope(List<Map<String, Object>> entities) {
+        for (Map<String, Object> entity : entities) {
+            String itemsEntity = str(entity, "documentItemsEntity");
+            if (itemsEntity == null || itemsEntity.isEmpty()) {
+                continue;
+            }
+            Map<String, Object> items = findEntity(entities, itemsEntity);
+            entity.put("documentItemsReadOnly", truthy(entity, "personalReadOnly") || (items != null && truthy(items, "personalReadOnly")));
         }
     }
 
@@ -1028,12 +1057,12 @@ final class ModelParameterProcessor {
     private static void collectScopedChildren(List<Map<String, Object>> entities) {
         for (Map<String, Object> entity : entities) {
             if (entity.get("personalProperty") != null || entity.get("personalParent") != null) {
-                entity.put("myChildren", scopedChildren(entities, entity, "personalParent", "MyController", true));
+                entity.put("myChildren", scopedChildren(entities, entity, "personalParent", "MyController", true, "personalReadOnly"));
             }
         }
         for (Map<String, Object> entity : entities) {
             if (entity.get("partnerProperty") != null || entity.get("partnerParent") != null) {
-                entity.put("partnerChildren", scopedChildren(entities, entity, "partnerParent", "PartnerController", false));
+                entity.put("partnerChildren", scopedChildren(entities, entity, "partnerParent", "PartnerController", false, null));
             }
         }
     }
@@ -1046,10 +1075,12 @@ final class ModelParameterProcessor {
      * @param scopeKey the key naming the inherited scope
      * @param controllerSuffix the suffix of the scoped controller the panel talks to
      * @param withCalendar whether a child may render as a calendar panel
+     * @param readOnlyKey the child attribute marking the panel see-only, or null when the scope has no
+     *        such opt-out
      * @return the panel descriptors
      */
     private static List<Object> scopedChildren(List<Map<String, Object>> entities, Map<String, Object> parent, String scopeKey,
-            String controllerSuffix, boolean withCalendar) {
+            String controllerSuffix, boolean withCalendar, String readOnlyKey) {
         List<Object> children = new ArrayList<>();
         String parentName = str(parent, "name");
         for (Map<String, Object> child : entities) {
@@ -1070,6 +1101,9 @@ final class ModelParameterProcessor {
             // Whether this child has role-scoped columns at all: only then does the panel ask the
             // child's own scoped controller which of them the caller in front of it may not see.
             panel.put("restrictedFields", truthy(child, "hasRestrictedFields"));
+            // A see-only child (intent personalReadOnly) refuses the panel's Add with 403, so the panel
+            // must not offer it.
+            panel.put("readOnly", readOnlyKey != null && truthy(child, readOnlyKey));
             panel.put("columns", panelColumns(child, fkProperty));
             children.add(panel);
         }

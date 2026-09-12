@@ -1019,6 +1019,76 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * A composition child inherits its master's personal scope, and with dirigible #7340 it may opt
+     * that inherited surface out of WRITES on its own edge - the shape of a user-authored header whose
+     * lines only an engine writes. The master's own surface stays writable.
+     */
+    @Test
+    void aCompositionChildsOwnEdgeCanMakeTheInheritedPersonalSurfaceSeeOnly() {
+        Map<String, Object> owner = property("Employee", "INTEGER");
+        owner.put("widgetType", "DROPDOWN");
+        owner.put("relationshipEntityName", "Employee");
+        owner.put("relationshipEntityPerspectiveName", "hr");
+        owner.put("relationshipPersonal", "true");
+        owner.put("relationshipIdentityProperty", "Email");
+        Map<String, Object> request = entity("VacationRequest", "hr", property("Id", "INTEGER"), owner);
+
+        Map<String, Object> parentFk = compositionTo("VacationRequest", "hr");
+        parentFk.put("relationshipPersonalReadOnly", "true");
+        Map<String, Object> day = entity("VacationDay", "hr", property("Id", "INTEGER"), parentFk);
+
+        ModelParameterProcessor.process(model(request, day), javaParameters());
+
+        assertEquals(Boolean.TRUE, day.get("personalReadOnly"), "the child's own edge makes its personal surface see-only");
+        assertEquals(Boolean.FALSE, request.get("personalReadOnly"), "the master it inherits the scope from stays writable");
+    }
+
+    /** Without the marker the child inherits the master's writable personal surface, as before. */
+    @Test
+    void withoutTheMarkerTheChildInheritsTheMastersWritableSurface() {
+        Map<String, Object> owner = property("Employee", "INTEGER");
+        owner.put("widgetType", "DROPDOWN");
+        owner.put("relationshipEntityName", "Employee");
+        owner.put("relationshipEntityPerspectiveName", "hr");
+        owner.put("relationshipPersonal", "true");
+        owner.put("relationshipIdentityProperty", "Email");
+        Map<String, Object> request = entity("VacationRequest", "hr", property("Id", "INTEGER"), owner);
+        Map<String, Object> day = entity("VacationDay", "hr", property("Id", "INTEGER"), compositionTo("VacationRequest", "hr"));
+
+        ModelParameterProcessor.process(model(request, day), javaParameters());
+
+        assertEquals(Boolean.FALSE, day.get("personalReadOnly"));
+    }
+
+    /**
+     * The items panel lives on the MASTER's document page, so the flag the document template gates Add
+     * / Fill Month / row delete on is the master's - derived from the items child, which is what
+     * actually refuses the write.
+     */
+    @Test
+    void aSeeOnlyItemsChildMakesTheDocumentsItemsPanelSeeOnly() {
+        Map<String, Object> owner = property("Employee", "INTEGER");
+        owner.put("widgetType", "DROPDOWN");
+        owner.put("relationshipEntityName", "Employee");
+        owner.put("relationshipEntityPerspectiveName", "hr");
+        owner.put("relationshipPersonal", "true");
+        owner.put("relationshipIdentityProperty", "Email");
+        Map<String, Object> request = entity("VacationRequest", "hr", property("Id", "INTEGER"), owner);
+        request.put("layoutType", "MANAGE_DOCUMENT");
+        request.put("documentItemsEntity", "VacationDay");
+
+        Map<String, Object> parentFk = compositionTo("VacationRequest", "hr");
+        parentFk.put("relationshipPersonalReadOnly", "true");
+        Map<String, Object> day = entity("VacationDay", "hr", property("Id", "INTEGER"), parentFk);
+
+        ModelParameterProcessor.process(model(request, day), javaParameters());
+
+        assertEquals(Boolean.TRUE, request.get("documentItemsReadOnly"));
+        // ... and the panel the master renders for it carries the same refusal, so it offers no Add.
+        assertEquals(Boolean.TRUE, ((Map<String, Object>) ((List<Object>) request.get("myChildren")).get(0)).get("readOnly"));
+    }
+
+    /**
      * The inherited-lock metadata of a child entity.
      *
      * @param entity the child entity

@@ -306,10 +306,10 @@ document.addEventListener('alpine:init', () => {
       return column ? this.displayItem(row, column) : String(value);
     },
 
-    // A read-only personal surface (or an immutable document) still SHOWS the calendar - it just never
-    // opens the item dialog from it.
+    // A see-only items panel (the personal surface, or the items child's own personalReadOnly) - or an
+    // immutable document - still SHOWS the calendar; it just never opens the item dialog from it.
     itemsEditable() {
-      return #if($personalReadOnly)false#{else}#if($immutableStatusProperty || $immutableAlways || $periodLock)this.mutable === true#{else}true#end#end;
+      return #if($documentItemsReadOnly)false#{else}#if($immutableStatusProperty || $immutableAlways || $periodLock)this.mutable === true#{else}true#end#end;
     },
 
     onItemsEventClick(e) {
@@ -639,7 +639,10 @@ document.addEventListener('alpine:init', () => {
         columns: [#foreach($col in $child.columns){ name: '${col.name}', label: '${col.label}'#if($col.number), number: true#end#if($col.date), date: true#end }#if($foreach.hasNext), #end#end],
         // Role-scoped columns (intent `visibleTo:`): asked from the child's own scoped controller
         // on first load, so the panel drops what this caller is not served.
-        restrictedFields: #if($child.restrictedFields)true#{else}false#end },
+        restrictedFields: #if($child.restrictedFields)true#{else}false#end,
+        // A see-only child (its composition edge declares personalReadOnly): the panel shows its rows
+        // but never opens a create - the child's MyController refuses the write with 403.
+        readOnly: #if($child.readOnly)true#{else}false#end },
 #end
     ],
 
@@ -722,6 +725,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     addChild(child) {
+      if (child.readOnly) return;
       this.navigate('/my/' + child.name + '/create?' + encodeURIComponent(child.fkProperty) + '='
           + encodeURIComponent(this.id) + '&returnTo=' + encodeURIComponent('/my/${name}/' + this.id + '/edit'));
     },
@@ -733,6 +737,7 @@ document.addEventListener('alpine:init', () => {
       if (id) this.editChild(child, id);
     },
     onChildDateClick(child, e) {
+      if (child.readOnly) return;
       let q = '?' + encodeURIComponent(child.fkProperty) + '=' + encodeURIComponent(this.id)
             + '&returnTo=' + encodeURIComponent('/my/${name}/' + this.id + '/edit');
       const d = e && e.detail ? e.detail.date : null;
