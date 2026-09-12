@@ -691,6 +691,77 @@ class EdmIntentGeneratorTest {
         assertNull(entityByName(entities(model), "Customer").get("processDeleteGuards"));
     }
 
+    /**
+     * A status a {@code processes:} step writes is the FLOW's column: the trigger entity carries the
+     * guard its controllers refuse a direct create/update with, plus the one status a create may still
+     * name - the relation's {@code init:} (dirigible #7339). An entity whose status no flow writes is
+     * untouched.
+     */
+    @Test
+    void aProcessDrivenStatusIsEmittedAsWorkflowOwned() {
+        String yaml = """
+                name: vacations
+                entities:
+                  - name: RequestStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: VacationRequest
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: RequestStatus, function: EntityStatus, init: 1 }
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: RequestStatus, function: EntityStatus, init: 1 }
+                processes:
+                  - name: Approval
+                    trigger: { onCreate: VacationRequest }
+                    steps:
+                      - { name: decide, kind: userTask, args: { assignee: manager, form: DecideRequest } }
+                      - { name: approve, kind: serviceTask, args: { setRelationField: Status, value: 3 } }
+                      - { name: end, kind: end }
+                forms:
+                  - { name: DecideRequest, forEntity: VacationRequest, fields: [id], actions: [decide] }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "vacations");
+        Map<String, Object> request = entityByName(entities(model), "VacationRequest");
+        assertEquals("Status", request.get("workflowStatusProperty"));
+        assertEquals("1", request.get("workflowStatusInitial"));
+        // Same status nomenclature, no flow over it - an ordinary writable column.
+        assertNull(entityByName(entities(model), "Employee").get("workflowStatusProperty"));
+    }
+
+    /**
+     * A {@code transitions:} button does NOT claim the column: it is a user action over the status, and
+     * the construct that guards the other hand writes is {@code lifecycle:}, enforced in the repository
+     * - whose refusal would be observable from nowhere if the plain write were closed here.
+     */
+    @Test
+    void aTransitionAloneLeavesTheStatusWritable() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                transitions:
+                  - { name: void, forEntity: JournalEntry, from: [1], setStatus: 2, label: Void }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
+        assertNull(entityByName(entities(model), "JournalEntry").get("workflowStatusProperty"));
+    }
+
     @Test
     void immutableWhenEmitsStatusGuardAttributes() {
         String yaml = """
