@@ -212,6 +212,9 @@ public class ${name}MyController {
         }
 #end
 #end
+#if($workflowStatusProperty)
+        requireWorkflowStatusOnCreate(entity);
+#end
         // Validated LAST, on what will actually be written: the owner is forced above and the
         // sensitive / role-scoped fields are cleared, so validating earlier would judge a payload the
         // server has not finished deciding. Before the save, so a refused create never reaches the
@@ -240,6 +243,9 @@ public class ${name}MyController {
 #end
 #if($masterLock)
         requireMasterMutable(existing.${masterLock.fkProperty});
+#end
+#if($workflowStatusProperty)
+        applyWorkflowStatus(existing, entity);
 #end
 #if($periodLock)
         // The stored date is checked above; this refuses a move INTO a closed period.
@@ -482,6 +488,44 @@ public class ${name}MyController {
 #end
     }
 
+#end
+#if($workflowStatusProperty)
+
+    // Workflow-owned status (dirigible #7339). ${workflowStatusProperty} is derived state owned by the
+    // flow that moves it - a `processes:` step or a `transitions[]` button - the same way a roll-up
+    // target is owned by its roll-up. Those writers reach the repository through the targeted
+    // updateProperty / updateProperties primitives, never through this controller, so refusing the
+    // column here takes nothing away from them: it closes the plain create/update that would otherwise
+    // jump a record to any status it likes, with every check, task and side effect of the flow skipped.
+    private void requireWorkflowStatusOnCreate(${name}Entity entity) {
+        if (entity.${workflowStatusProperty} == null) {
+            // Nothing said: the record starts where the model says it starts (the relation's `init:`,
+            // applied by the repository), which is what every generated form posts.
+            return;
+        }
+#if($workflowStatusInitial)
+        if (String.valueOf(entity.${workflowStatusProperty}).equals("${workflowStatusInitial}")) {
+            return;
+        }
+#end
+        throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);
+    }
+
+    // An absent value is not a change - a caller PUTs the fields its form edits - so it is taken from
+    // the stored row rather than refused, which is also what stops a partial payload from erasing the
+    // status. A value that DIFFERS is a direct edit of the flow's column and is refused.
+    private void applyWorkflowStatus(${name}Entity stored, ${name}Entity entity) {
+        if (entity.${workflowStatusProperty} == null) {
+            entity.${workflowStatusProperty} = stored.${workflowStatusProperty};
+            return;
+        }
+        if (!java.util.Objects.equals(entity.${workflowStatusProperty}, stored.${workflowStatusProperty})) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);
+        }
+    }
+
+    private static final String WORKFLOW_STATUS_REFUSAL =
+            "'${workflowStatusProperty}' changes through the workflow, not a direct edit";
 #end
 #if($processDeleteGuards)
 
