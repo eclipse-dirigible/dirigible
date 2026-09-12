@@ -1049,7 +1049,7 @@
             <dependency>
                 <groupId>org.webjars.npm</groupId>
                 <artifactId>vue__shared</artifactId>
-                <version>3.2.0-beta.8</version>
+                <version>3.6.0-rc.4</version>
             </dependency>
             <!-- via bpmn-visualization (${bpmn-visualization.version}); strnum through fast-xml-parser -->
             <dependency>
