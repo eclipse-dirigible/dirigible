@@ -45,7 +45,10 @@
         "noDataTitle": "No data",
         "reportNoRows": "The {{name}} report returned no rows.",
         "detailSelectRecord": "Select a record to get a list of it's details.",
-        "immutable": "This record is read-only in its current status - corrections go through the workflow."
+        "immutable": "This record is read-only in its current status - corrections go through the workflow.",
+        "unsavedChanges": "Unsaved changes",
+        "unsavedChangesConfirm": "This form has changes that have not been saved yet.",
+        "saved": "Saved"
     },
     "defaults": {
         "yes": "Yes",
@@ -92,6 +95,10 @@
         "update": "Update",
         "delete": "Delete",
         "cancel": "Cancel",
+        "discard": "Discard",
+        "keepEditing": "Keep editing",
+        "saveAndLeave": "Save and leave",
+        "saveAndContinue": "Save and continue",
         "close": "Close",
         "items": "Items",
         "description": "Description",

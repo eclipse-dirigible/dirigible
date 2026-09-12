@@ -34,6 +34,8 @@
     <span x-h-badge class="shrink-0" data-variant="warning" x-show="!mutable" :title="T('$projectName:${tprefix}.messages.immutable', '#if($periodLock && !$immutableStatusProperty && !$immutableAlways)This record is read-only - its accounting period is closed; book the correction in an open period.#{else}This record is read-only in its current status - corrections go through the workflow.#end')" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
 #end
     <div x-h-toolbar-spacer></div>
+    <!-- Unsaved-changes marker (issue #7359): a dirty form used to look exactly like a saved one. -->
+    <span x-h-badge class="shrink-0" data-variant="warning" x-show="isDirty()" x-text="T('$projectName:${tprefix}.messages.unsavedChanges', 'Unsaved changes')"></span>
     <button x-h-button data-variant="transparent" @click="goBack()" x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
   </div>
 
@@ -224,9 +226,10 @@
       <button x-h-button data-variant="negative" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="deleteOpen = true"
               x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
       <div class="grow"></div>
+      <!-- The button says what it will do: leaving a dirty form discards the edit (issue #7359). -->
       <button x-h-button data-variant="transparent" @click="goBack()" :disabled="saving"
-              x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
-      <button x-h-button data-variant="primary"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end @click="save()" :disabled="saving">
+              x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
+      <button x-h-button data-variant="primary"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end @click="save()" :disabled="saving || (mode === 'edit' &amp;&amp; !isDirty())">
         <span x-show="saving" x-h-spinner></span>
         <span x-text="T('$projectName:${tprefix}.defaults.save', 'Save')"></span>
       </button>
@@ -253,4 +256,28 @@
       </div>
     </div>
   </div>
+  <!-- Unsaved-changes guard (issue #7359): the one dialog every exit from a dirty form goes
+       through - Back to list, Cancel/Discard, a sidebar entry, the browser Back button, and the
+       actions that would otherwise save something behind an unsaved header (a line item, a line
+       delete). "Save and continue" is the same first button when the user is staying on the page. -->
+  <div x-h-dialog-overlay :data-open="leaveOpen">
+    <div x-h-dialog>
+      <div x-h-dialog-header>
+        <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.messages.unsavedChanges', 'Unsaved changes')"></h2>
+        <button x-h-dialog-close @click="leaveKeepEditing()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+      </div>
+      <div x-h-dialog-content>
+        <p x-text="T('$projectName:${tprefix}.messages.unsavedChangesConfirm', 'This form has changes that have not been saved yet.')"></p>
+      </div>
+      <div x-h-dialog-footer>
+        <button type="button" x-h-button data-variant="outline" @click="leaveKeepEditing()" :disabled="leaveBusy" x-text="T('$projectName:${tprefix}.defaults.keepEditing', 'Keep editing')"></button>
+        <button type="button" x-h-button data-variant="negative" @click="leaveDiscard()" :disabled="leaveBusy" x-text="T('$projectName:${tprefix}.defaults.discard', 'Discard')"></button>
+        <button type="button" x-h-button data-variant="primary" @click="leaveSave()" :disabled="leaveBusy">
+          <span x-show="leaveBusy" x-h-spinner></span>
+          <span x-text="leaveIntent === 'continue' ? T('$projectName:${tprefix}.defaults.saveAndContinue', 'Save and continue') : T('$projectName:${tprefix}.defaults.saveAndLeave', 'Save and leave')"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
 </div>
