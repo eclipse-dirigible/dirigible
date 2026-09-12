@@ -1038,7 +1038,7 @@
             <dependency>
                 <groupId>org.webjars.npm</groupId>
                 <artifactId>ag-grid-community__infinite-row-model</artifactId>
-                <version>27.1.0</version>
+                <version>27.3.0</version>
             </dependency>
             <!-- via alpinejs (${alpinejs.version}) -->
             <dependency>
