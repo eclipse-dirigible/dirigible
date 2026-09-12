@@ -696,6 +696,24 @@ document.addEventListener('alpine:init', () => {
           '${docNumberProp}',
 #end
         ].forEach(f => { delete header[f]; });
+#if($duplicateReset)
+        // `duplicable.reset`: handed back to the create path, which fills each of these exactly as it
+        // would on a hand-made document (a calculatedActionOnCreate, a defaultValue) - a copied value
+        // would be respected by that rule and stick.
+#foreach($r in $duplicateReset)
+        delete header['${r}'];
+#end
+#end
+#if($duplicateDefaults)
+        // `duplicable.defaults`: constants the copy carries instead of the source's values.
+#foreach($d in $duplicateDefaults)
+#if($d.shape == "literal")
+        header['${d.name}'] = ${d.js};
+#else
+        header['${d.name}'] = this.todayAs('${d.shape}');
+#end
+#end
+#end
         const created = await App.services.api.post(this.apiPath, header);
         const newId = created && (created.${primaryKeysString} !== undefined ? created.${primaryKeysString} : created.id);
         if (newId == null) throw new Error('No id returned for the duplicated document.');
@@ -717,6 +735,25 @@ document.addEventListener('alpine:init', () => {
       } finally {
         this.state = 'ready';
       }
+    },
+
+    // Today in a date field's own shape, for a `duplicable.defaults` value of `now`. Built from the
+    // LOCAL calendar fields, never from toISOString(): that is UTC, so east of Greenwich every copy
+    // made after the evening cut-over would be dated yesterday.
+    todayAs(shape) {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      if (shape === 'month') return now.getFullYear() + '-' + pad(now.getMonth() + 1);
+      if (shape === 'week') {
+        // ISO-8601 week: Thursday of the current week decides both the week number and its year.
+        const thursday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        thursday.setDate(thursday.getDate() + 3 - ((thursday.getDay() + 6) % 7));
+        const firstThursday = new Date(thursday.getFullYear(), 0, 4);
+        firstThursday.setDate(firstThursday.getDate() + 3 - ((firstThursday.getDay() + 6) % 7));
+        const week = 1 + Math.round((thursday - firstThursday) / (7 * 24 * 60 * 60 * 1000));
+        return thursday.getFullYear() + '-W' + pad(week);
+      }
+      return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
     },
 #end
 

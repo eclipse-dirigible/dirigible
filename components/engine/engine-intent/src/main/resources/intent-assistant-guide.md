@@ -747,6 +747,33 @@ through the normal create path so the number (`calculatedActionOnCreate`), the i
 source's identity/system/status fields are dropped). Use it for documents users routinely copy
 (invoices, orders). It has no effect on non-document entities.
 
+Everything else is copied, which is wrong for exactly the fields a business rule says must be fresh:
+copied verbatim, "same invoice as last month" opens dated last month, due last month, with last
+month's tax event - and a `calculatedActionOnCreate` cannot repair it, because those fill an EMPTY
+value and respect a present one. Say so with the object form:
+
+```yaml
+- name: SalesInvoice
+  duplicable:
+    defaults: { date: now }        # constants written into the clone
+    reset: [due, taxEventDate]     # dropped, so the entity's own create-time rule refills them
+```
+
+`reset:` is for a field that HAS a create-time rule (a `calculatedActionOnCreate`, a `defaultValue`)
+and must be handed back to it; `defaults:` is for a field that has none, where the copy needs a value
+stated here. `now` is today in the field's own shape (a `date` field -> `YYYY-MM-DD`, a `month` field
+-> `YYYY-MM`, a `week` field -> `YYYY-Www`), the same token `generates.defaults` takes; any other
+value is a literal coerced to the property's type. Both keys name the entity's own fields and to-one
+relations - no `relation.field` paths.
+
+Refused at parse: a name that is neither a field nor a to-one relation of the entity; one that is
+already dropped anyway (the primary key, the `number:` field, the `function: EntityStatus` relation,
+a `readOnly` or an `aggregate` field) - naming it would let you believe you control something the
+Duplicate decided long before reading the block; the same name in both lists; `now` on a property
+that is not a date / month / week; and a `reset` on a **required** field with neither a
+`defaultValue` nor a create-time rule, which would make every duplicate fail on the server's own
+"field is required".
+
 **Control order (`order:`):** by default the generated UI controls (form inputs, list columns, detail
 rows) follow the declaration order - all fields first, then the to-one relations, so relations end up
 last. Give an entity an `order:` list of property names to sequence them explicitly, interleaving

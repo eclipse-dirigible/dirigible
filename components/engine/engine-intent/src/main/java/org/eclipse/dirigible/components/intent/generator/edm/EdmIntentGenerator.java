@@ -366,6 +366,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // current document (header + line items) into a new draft (see the document template).
                 if (entity.isDuplicable()) {
                     entityMap.put("duplicable", "true");
+                    // What the copy must NOT carry over from the source (#7358): the fields handed back
+                    // to the entity's own create-time rule, and the constants written into the clone.
+                    // Without them every ordinary user field rides along, so "same invoice as last
+                    // month" opens dated last month, due last month, with last month's tax event.
+                    List<String> resets = duplicateResets(entity);
+                    if (!resets.isEmpty()) {
+                        entityMap.put("duplicateReset", resets);
+                    }
+                    List<Map<String, Object>> constants = duplicateDefaults(entity);
+                    if (!constants.isEmpty()) {
+                        entityMap.put("duplicateDefaults", constants);
+                    }
                 }
                 // Chat items: render the line-items pane as a conversation thread instead of the editable
                 // table. Resolve which child property is the message body (and the optional internal
@@ -3523,6 +3535,101 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * out deterministically in a grid so re-generation is byte-stable.
      */
     @SuppressWarnings("unchecked")
+    /**
+     * The generated property names a Duplicate drops from the cloned header, in authored order. Each is
+     * handed back to the create path, which fills it exactly as it would on a hand-made document (a
+     * {@code calculatedActionOnCreate}, a {@code defaultValue}).
+     *
+     * @param entity the duplicable document master
+     * @return the PascalCase property names, never null
+     */
+    private static List<String> duplicateResets(EntityIntent entity) {
+        List<String> resets = new ArrayList<>();
+        for (String name : entity.getDuplicable()
+                                 .getReset()) {
+            if (notBlank(name)) {
+                resets.add(IntentNaming.pascalCase(name.trim()));
+            }
+        }
+        return resets;
+    }
+
+    /**
+     * The constants a Duplicate writes into the cloned header, as {@code {name, shape, js}} entries in
+     * authored order. {@code shape} is {@code date} / {@code month} / {@code week} for the {@code now}
+     * token - today in the field's own shape, rendered by the document page's {@code todayAs} helper
+     * against the LOCAL clock - and {@code literal} otherwise, where {@code js} carries the value
+     * already coerced to the property's type as a JavaScript literal.
+     *
+     * @param entity the duplicable document master
+     * @return the entries, never null
+     */
+    private static List<Map<String, Object>> duplicateDefaults(EntityIntent entity) {
+        List<Map<String, Object>> defaults = new ArrayList<>();
+        for (Map.Entry<String, String> assignment : entity.getDuplicable()
+                                                          .getDefaults()
+                                                          .entrySet()) {
+            String name = assignment.getKey();
+            String value = assignment.getValue();
+            if (!notBlank(name) || !notBlank(value)) {
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", IntentNaming.pascalCase(name.trim()));
+            String type = duplicateDefaultType(entity, name.trim());
+            if ("now".equals(value.trim())) {
+                entry.put("shape", "month".equals(type) || "week".equals(type) ? type : "date");
+                entry.put("js", "");
+            } else {
+                entry.put("shape", "literal");
+                entry.put("js", duplicateLiteral(value.trim(), type));
+            }
+            defaults.add(entry);
+        }
+        return defaults;
+    }
+
+    /**
+     * The authored type of the named field, or {@code integer} for a to-one relation (a default on a
+     * relation assigns its raw foreign key). Blank when the name resolves to neither - the parser has
+     * already refused that, so generation never has to.
+     */
+    private static String duplicateDefaultType(EntityIntent entity, String name) {
+        for (FieldIntent field : entity.getFields()) {
+            if (name.equalsIgnoreCase(field.getName())) {
+                return field.getType() == null ? ""
+                        : field.getType()
+                               .toLowerCase(Locale.ROOT);
+            }
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (name.equalsIgnoreCase(relation.getName())) {
+                return "integer";
+            }
+        }
+        return "";
+    }
+
+    /**
+     * A literal {@code duplicable.defaults} value as the JavaScript source the document page assigns: a
+     * number for a numeric property, {@code true} / {@code false} for a boolean, a quoted string
+     * otherwise. The property's declared type decides, not the value's shape - a string field holding
+     * {@code "01"} must stay the string it was authored as.
+     */
+    private static String duplicateLiteral(String value, String type) {
+        switch (type) {
+            case "integer":
+            case "long":
+            case "double":
+            case "decimal":
+                return value;
+            case "boolean":
+                return Boolean.toString(Boolean.parseBoolean(value));
+            default:
+                return STRUCTURED_JSON.toJson(value);
+        }
+    }
+
     private static String renderEdmXml(EdmDocument document) {
         Map<String, Object> body = (Map<String, Object>) document.modelJson.get("model");
         List<Map<String, Object>> entities = (List<Map<String, Object>>) body.get("entities");
@@ -4011,9 +4118,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * {@code transform-edm} rebuilds into {@code uniqueConstraints}. Emitting it here too would write
      * it twice and round-trip it as a duplicate.
      */
-    private static final Set<String> STRUCTURED_ATTRIBUTES =
-            Set.of("rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys", "relatedEntities", "scopedCalendars",
-                    "lifecycleStatusNameList", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
+    private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys",
+            "relatedEntities", "scopedCalendars", "lifecycleStatusNameList", "duplicateReset", "duplicateDefaults", "lookupColumns",
+            "languages", "widgets", "customActionLabels", "processTaskLabels");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value
