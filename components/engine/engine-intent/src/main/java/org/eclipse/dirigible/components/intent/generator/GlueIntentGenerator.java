@@ -5286,6 +5286,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("field", setter.field());
             entry.put("value", setter.value());
             entry.put("relation", setter.relation() ? "true" : "false");
+            // A clearField setter assigns null instead of a literal (#7386). Emitted only when it is
+            // one, so every other setter's descriptor stays byte-identical.
+            if (setter.clear()) {
+                entry.put("clear", "true");
+            }
             // The {error} token (whole-value, parser-enforced) reads the failure message the runtime
             // conversion published instead of assigning a literal. Emitted only when used, so every
             // other setter's descriptor stays byte-identical.

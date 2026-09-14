@@ -10,8 +10,9 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
 
 /**
- * Sets ${entity}.${field} for the ${process} process (a string field via setField, or a to-one
- * relation's FK to a seed id via setRelationField). Generated from the intent .glue file - do not edit;
+ * Sets ${entity}.${field} for the ${process} process (a string field via setField, its erasure via
+ * clearField, or a to-one relation's FK to a seed id via setRelationField). Generated from the intent
+ * .glue file - do not edit;
  * it is re-generated with the application. Runs
  * as a BPMN service task (flowable:delegateExpression="\${JavaTask}"): it persists the change as a
  * TARGETED single-column write (updateProperty) - only ${field} is in the UPDATE statement, so a
@@ -34,6 +35,10 @@ public class ${className} implements JavaDelegate {
         }
 #if($relation == "true")
         int updated = repository.updateProperty(((Number) key).${keyAccessor}(), "${field}", ${value});
+#elseif($clear == "true")
+        // clearField: the erasure twin of setField - the column goes back to empty, so a re-driven
+        // instance that now succeeds does not leave the previous failure's explanation standing.
+        int updated = repository.updateProperty(((Number) key).${keyAccessor}(), "${field}", null);
 #elseif($errorMessage == "true")
         // The {error} value: the failure message the resilience conversion published just before it
         // raised the caught BPMN error that routed the flow here (empty when nothing published it).

@@ -1284,9 +1284,10 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // setRelationField), so appendDelegateServiceTask stays unconditionally async.
         // Five service-task shapes:
         // - a generator-synthesized resolver carries a javaHandler (a client JavaDelegate FQN) -> JavaTask;
-        // - an author-declared serviceTask with a `setField` -> JavaTask bound to the <events
-        // pkg>.<Handler>
-        // JavaDelegate the glue generator emits (sets a field of the trigger entity to a literal value);
+        // - an author-declared serviceTask with a `setField` (or its `clearField` erasure twin) ->
+        // JavaTask bound to the <events pkg>.<Handler>
+        // JavaDelegate the glue generator emits (sets a field of the trigger entity to a literal value,
+        // or clears it);
         // - an author-declared serviceTask with a `setRelationField` -> JavaTask bound to the same
         // <events pkg>.<Handler> JavaDelegate (sets a to-one relation's FK to a seed id);
         // - an author-declared serviceTask with a `notify` block -> JavaTask bound to the generated
@@ -1306,6 +1307,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         }
         String javaHandler = stringArg(step, "javaHandler");
         String setField = stringArg(step, "setField");
+        String clearField = stringArg(step, "clearField");
         String setRelationField = stringArg(step, "setRelationField");
         String call = stringArg(step, "call");
         boolean sends = step.getArgs() != null && step.getArgs()
@@ -1315,7 +1317,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         if (javaHandler != null && !javaHandler.isBlank()) {
             java = true;
             handlerValue = javaHandler;
-        } else if (setField != null && !setField.isBlank() || setRelationField != null && !setRelationField.isBlank()) {
+        } else if (setField != null && !setField.isBlank() || clearField != null && !clearField.isBlank()
+                || setRelationField != null && !setRelationField.isBlank()) {
             java = true;
             handlerValue = eventsPackage + "." + SetFieldSupport.className(processName, step.getName());
         } else if (sends) {

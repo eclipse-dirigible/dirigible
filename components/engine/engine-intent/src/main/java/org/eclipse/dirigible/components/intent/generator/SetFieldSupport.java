@@ -42,6 +42,11 @@ import org.slf4j.LoggerFactory;
  * to the integer seed id, unquoted. It is allowed on a {@code serviceTask} (bound directly) or a
  * {@code userTask} (the BPMN runs the setter right after the task completes, like the writer).
  * <p>
+ * {@code clearField: errorMessage} is the erasure twin of {@code setField} (#7386): the same
+ * targeted write, assigning {@code null} instead of a literal, so a process can take back a field
+ * it wrote earlier - an error route's failure text that a re-driven, now successful instance would
+ * otherwise leave standing on a success status.
+ * <p>
  * Scope: {@code setField} assigns a literal to a {@code string}/{@code text} field; an expression
  * value is out of scope. {@code setRelationField} assigns an integer seed id to a
  * {@code manyToOne}/ {@code oneToOne} relation's FK (validated by the parser).
@@ -65,12 +70,15 @@ public final class SetFieldSupport {
      *        {@code longValue})
      * @param field the PascalCase property assigned (a string field for {@code setField}, or a to-one
      *        relation's FK property for {@code setRelationField})
-     * @param value the value assigned (a string literal, or a seed id for a relation FK)
+     * @param value the value assigned (a string literal, or a seed id for a relation FK); empty for a
+     *        {@code clearField}, which assigns nothing
      * @param relation {@code true} for a {@code setRelationField} (assign the FK to the integer
      *        {@code value}, unquoted); {@code false} for a {@code setField} (assign the quoted literal)
+     * @param clear {@code true} for a {@code clearField} (assign {@code null} - the erasure), which is
+     *        never a relation and carries no value
      */
     public record Setter(String process, String step, String className, String entity, String perspective, String keyProperty,
-            String keyAccessor, String field, String value, boolean relation) {
+            String keyAccessor, String field, String value, boolean relation, boolean clear) {
     }
 
     /** Every field setter across every process in the model. */
@@ -103,17 +111,25 @@ public final class SetFieldSupport {
                     }
                     String value = stringArg(step, "value");
                     setters.add(new Setter(process.getName(), step.getName(), className(process.getName(), step.getName()), triggerEntity,
-                            perspective, keyProp, keyAcc, IntentNaming.pascalCase(relField), value == null ? "" : value, true));
+                            perspective, keyProp, keyAcc, IntentNaming.pascalCase(relField), value == null ? "" : value, true, false));
                     continue;
                 }
                 // setField: set a string/text field to a literal value (serviceTask only).
                 if (!"serviceTask".equals(step.getKind())) {
                     continue;
                 }
+                // setField writes a literal; its clearField twin erases the same kind of field and
+                // carries no value (the parser refuses the two together).
                 String field = stringArg(step, "setField");
                 String value = stringArg(step, "value");
+                boolean clear = false;
                 if (field == null || field.isBlank()) {
-                    continue;
+                    field = stringArg(step, "clearField");
+                    if (field == null || field.isBlank()) {
+                        continue;
+                    }
+                    value = null;
+                    clear = true;
                 }
                 if (fieldOf(owner, field) == null) {
                     LOGGER.warn("Step [{}] in process [{}] sets unknown field [{}] of [{}] - skipping", LoggedValue.of(step.getName()),
@@ -121,7 +137,7 @@ public final class SetFieldSupport {
                     continue;
                 }
                 setters.add(new Setter(process.getName(), step.getName(), className(process.getName(), step.getName()), triggerEntity,
-                        perspective, keyProp, keyAcc, IntentNaming.pascalCase(field), value == null ? "" : value, false));
+                        perspective, keyProp, keyAcc, IntentNaming.pascalCase(field), value == null ? "" : value, false, clear));
             }
         }
         return setters;

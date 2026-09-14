@@ -159,9 +159,10 @@ public final class IntentParser {
      */
     private static final Map<String, Set<String>> STEP_ARGS_BY_KIND = Map.of("userTask",
             Set.of("assignee", "form", "timeout", "expire", "setRelationField", "value", "next"), "serviceTask",
-            Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next", "retry",
-                    "onError", "produces", "uses"),
-            "script", Set.of("setField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next"),
+            Set.of("setField", "clearField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next",
+                    "retry", "onError", "produces", "uses"),
+            "script",
+            Set.of("setField", "clearField", "setRelationField", "value", "call", "delegate", "fields", "javaHandler", "notify", "next"),
             "decision", Set.of("if", "then", "else", "next"), "wait", Set.of("onCreate", "onUpdate", "onTransition", "via", "when", "next"),
             "parallel", Set.of("branches", "next"), "end", Set.of("next"));
     /** Every arg the DSL knows, on any kind - anything else is a typo, not a misplacement. */
@@ -175,7 +176,7 @@ public final class IntentParser {
      * than adding a second, blunter line.
      */
     private static final Set<String> STEP_ARGS_CHECKED_BY_KIND_ELSEWHERE =
-            Set.of("setField", "setRelationField", "delegate", "notify", "timeout", "expire");
+            Set.of("setField", "clearField", "setRelationField", "delegate", "notify", "timeout", "expire");
     /**
      * Entity events a declarative-glue item (notification, integration, departure, process trigger) can
      * bind to. {@code onTransition} is the STATUS axis - a workflow setter, a {@code transitions:}
@@ -6818,10 +6819,11 @@ public final class IntentParser {
 
     /**
      * A {@code serviceTask} declaring {@code setField} must name a {@code string}/{@code text} field of
-     * the process's trigger entity and carry a {@code value} (the literal to assign). Any step may
-     * carry a {@code next} that routes its outgoing flow to a declared step or {@code end} (used to
-     * make two decision branches converge). Without these checks a typo would surface only at runtime.
-     * A {@code serviceTask} may instead declare a {@code notify} block - the step SENDS (see
+     * the process's trigger entity and carry a {@code value} (the literal to assign); its erasure twin
+     * {@code clearField} names the same kind of field and takes no value. Any step may carry a
+     * {@code next} that routes its outgoing flow to a declared step or {@code end} (used to make two
+     * decision branches converge). Without these checks a typo would surface only at runtime. A
+     * {@code serviceTask} may instead declare a {@code notify} block - the step SENDS (see
      * {@link #validateNotifyBlock}) - which is its whole work and therefore stands alone.
      */
     private static void validateSetFieldSteps(ProcessIntent process, String triggerEntity, Map<String, EntityIntent> byName,
@@ -6859,6 +6861,40 @@ public final class IntentParser {
                     }
                 }
             }
+            // The erasure twin (#7386). A blank `value` reads as "I forgot to fill this in" and is
+            // refused, so a process that had written a field - the error route's failure text is the
+            // case this comes from - could not take it back: re-driving a failed instance to success
+            // left the record in a success status still carrying the previous failure's explanation.
+            // The only erasure was a `delegate:` step whose whole body was one updateProperty(id,
+            // field, null) - Java for something the model otherwise expresses completely.
+            String clearField = stepArg(step, "clearField");
+            if (clearField != null && !clearField.isBlank()) {
+                if (!"serviceTask".equals(step.getKind())) {
+                    issues.add(
+                            "process [" + process.getName() + "] step [" + step.getName() + "] uses clearField but is not a serviceTask");
+                } else if (trigger == null) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] uses clearField but the process has no trigger entity to clear it on");
+                } else {
+                    FieldIntent field = fieldByName(trigger, clearField);
+                    if (field == null) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] clearField [" + clearField
+                                + "] is not a field of [" + triggerEntity + "]");
+                    } else if (field.getType() != null && !"string".equals(field.getType()) && !"text".equals(field.getType())) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] clearField [" + clearField
+                                + "] must be a string/text field (an erasure is the counterpart of a literal write)");
+                    }
+                    if (stepArg(step, "value") != null) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] clearField [" + clearField
+                                + "] takes no value - it erases the field; write one with setField");
+                    }
+                    if ((setField != null && !setField.isBlank())
+                            || (stepArg(step, "setRelationField") != null && !stepArg(step, "setRelationField").isBlank())) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName()
+                                + "] clearField cannot be combined with setField/setRelationField - a step writes one field, one way");
+                    }
+                }
+            }
             String setRelationField = stepArg(step, "setRelationField");
             if (setRelationField != null && !setRelationField.isBlank()) {
                 if (!"serviceTask".equals(step.getKind()) && !"userTask".equals(step.getKind())) {
@@ -6892,9 +6928,10 @@ public final class IntentParser {
                     issues.add("process [" + process.getName() + "] step [" + step.getName() + "] uses delegate but is not a serviceTask");
                 }
                 boolean hasCall = stepArg(step, "call") != null && !stepArg(step, "call").isBlank();
-                if ((setField != null && !setField.isBlank()) || (setRelationField != null && !setRelationField.isBlank()) || hasCall) {
+                if ((setField != null && !setField.isBlank()) || (clearField != null && !clearField.isBlank())
+                        || (setRelationField != null && !setRelationField.isBlank()) || hasCall) {
                     issues.add("process [" + process.getName() + "] step [" + step.getName()
-                            + "] delegate cannot be combined with setField/setRelationField/call");
+                            + "] delegate cannot be combined with setField/clearField/setRelationField/call");
                 }
                 Object fields = step.getArgs() == null ? null
                         : step.getArgs()
@@ -6926,10 +6963,11 @@ public final class IntentParser {
                     issues.add(stepSubject + " needs a trigger entity - the record the message is about");
                 } else {
                     boolean hasCall = stepArg(step, "call") != null && !stepArg(step, "call").isBlank();
-                    if ((setField != null && !setField.isBlank()) || (setRelationField != null && !setRelationField.isBlank()) || hasCall
+                    if ((setField != null && !setField.isBlank()) || (clearField != null && !clearField.isBlank())
+                            || (setRelationField != null && !setRelationField.isBlank()) || hasCall
                             || (delegate != null && !delegate.isBlank())) {
-                        issues.add(stepSubject + " cannot be combined with setField/setRelationField/call/delegate - give the send its own"
-                                + " serviceTask");
+                        issues.add(stepSubject + " cannot be combined with setField/clearField/setRelationField/call/delegate - give the"
+                                + " send its own serviceTask");
                     }
                     validateNotifyBlock(NotificationIntent.fromMap(notifyArg), stepSubject, triggerEntity, model, true, issues);
                 }
@@ -7283,8 +7321,8 @@ public final class IntentParser {
      * carrying a {@code function: EntityStatus} relation; {@code status} is a non-empty list of integer
      * ids (a bare integer is accepted); the optional {@code then} names the literal {@code end}
      * (terminate, the default) or a declared {@code serviceTask} cleanup carrying a {@code setField} /
-     * {@code setRelationField} (a non-interactive abort-only step - it must not be routed to from the
-     * main flow).
+     * {@code clearField} / {@code setRelationField} (a non-interactive abort-only step - it must not be
+     * routed to from the main flow).
      */
     private static void validateAbortOn(ProcessIntent process, String triggerEntity, Map<String, EntityIntent> byName,
             List<String> issues) {
@@ -7331,10 +7369,11 @@ public final class IntentParser {
                     issues.add("process [" + process.getName() + "] abortOn `then` references unknown step [" + then + "]");
                 } else if (!"serviceTask".equals(thenStep.getKind())) {
                     issues.add("process [" + process.getName() + "] abortOn `then` [" + then
-                            + "] must be a serviceTask cleanup (setField/setRelationField) or the literal `end` - an abort handler cannot wait on a user task");
-                } else if (stepArg(thenStep, "setField") == null && stepArg(thenStep, "setRelationField") == null) {
+                            + "] must be a serviceTask cleanup (setField/clearField/setRelationField) or the literal `end` - an abort handler cannot wait on a user task");
+                } else if (stepArg(thenStep, "setField") == null && stepArg(thenStep, "clearField") == null
+                        && stepArg(thenStep, "setRelationField") == null) {
                     issues.add("process [" + process.getName() + "] abortOn `then` [" + then
-                            + "] must set a field/relation (setField/setRelationField) - it runs unattended on the abort path");
+                            + "] must set or clear a field/relation (setField/clearField/setRelationField) - it runs unattended on the abort path");
                 } else if (isRoutedToFromMainFlow(process, then)) {
                     issues.add("process [" + process.getName() + "] abortOn `then` step [" + then
                             + "] is abort-only and must not be reachable from the main flow (remove it from the step chain / any next/then/else)");

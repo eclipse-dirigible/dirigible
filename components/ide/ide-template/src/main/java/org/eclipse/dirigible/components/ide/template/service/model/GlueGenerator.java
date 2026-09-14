@@ -354,7 +354,7 @@ class GlueGenerator {
      */
     private static void bindSetter(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "process", "className", "entity", "perspective", "keyProperty", "keyAccessor", "field", "value", "relation",
-                "errorMessage");
+                "clear", "errorMessage");
         copyJavaLiterals(context, item, "value");
         context.put("javaPerspective", sanitize(item, "perspective"));
     }

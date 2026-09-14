@@ -508,8 +508,10 @@ processes:
       - { name: end,      kind: end }
 ```
 
-Service-task shapes: `setField` / `setRelationField` (generated handlers), `call` (TS handler,
-deprecated), `delegate` (a reusable hand-written client `JavaDelegate` with injected `fields`).
+Service-task shapes: `setField` / `clearField` / `setRelationField` (generated handlers), `call` (TS
+handler, deprecated), `delegate` (a reusable hand-written client `JavaDelegate` with injected
+`fields`). `clearField: <field>` is the erasure twin of `setField` - it names a `string`/`text` field
+and takes no `value`, so a flow can take back a failure text it wrote earlier.
 Decisions may test `relation.field` paths (`customer.creditLimit > 10000`) - resolvers are
 generated. Tasks surface in the Inbox and inline on the record's page.
 

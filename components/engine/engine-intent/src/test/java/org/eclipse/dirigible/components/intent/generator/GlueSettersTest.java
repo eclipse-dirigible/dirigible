@@ -25,6 +25,10 @@ import org.junit.jupiter.api.Test;
  * {@code errorMessage: true} (the template then reads the failure-message process variable instead
  * of assigning a literal), and every other setter's descriptor stays exactly as before, so
  * already-written {@code .glue} files render unchanged.
+ *
+ * <p>
+ * ...and its erasure twin - dirigible #7386: a {@code clearField} step is a setter like any other,
+ * flagged {@code clear: true} so the template assigns {@code null} instead of a literal.
  */
 class GlueSettersTest {
 
@@ -52,6 +56,7 @@ class GlueSettersTest {
                           - { name: markDone, kind: serviceTask, args: { setField: state, value: DONE, next: end } }
                           - { name: recordFailure, kind: serviceTask, args: { setField: failureMessage, value: "{error}", next: markFailed } }
                           - { name: markFailed, kind: serviceTask, args: { setRelationField: Status, value: 3, next: end } }
+                          - { name: resetFailure, kind: serviceTask, args: { clearField: failureMessage, next: end } }
                     """;
 
     @Test
@@ -78,6 +83,25 @@ class GlueSettersTest {
 
         assertFalse(setter.containsKey("errorMessage"), "a relation setter assigns a seed id, never a message: " + setter);
         assertEquals("true", setter.get("relation"));
+    }
+
+    /** The erasure is a setter of the same collection - one descriptor, flagged. */
+    @Test
+    void aClearFieldSetterCarriesTheClearFlagAndNoValue() {
+        Map<String, Object> setter = setter("TenantProvisioningResetFailure");
+
+        assertEquals("true", setter.get("clear"), "the erasure must be flagged: " + setter);
+        assertEquals("FailureMessage", setter.get("field"));
+        assertEquals("false", setter.get("relation"));
+        assertEquals("", setter.get("value"), "a clearField assigns nothing: " + setter);
+        assertFalse(setter.containsKey("errorMessage"), "an erasure reads no failure message: " + setter);
+    }
+
+    /** A literal setter's descriptor gains no key, so pre-existing .glue files render unchanged. */
+    @Test
+    void aLiteralSetterCarriesNoClearKey() {
+        assertFalse(setter("TenantProvisioningMarkDone").containsKey("clear"),
+                "a literal setter must stay exactly as before: " + setter("TenantProvisioningMarkDone"));
     }
 
     private static Map<String, Object> setter(String className) {

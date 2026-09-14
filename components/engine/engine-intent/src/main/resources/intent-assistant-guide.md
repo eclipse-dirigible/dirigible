@@ -1427,6 +1427,19 @@ A user-task form with **more than one** completing action must be followed by a 
 (enforced at parse time); a **single**-action task (e.g. `issue`) flows on linearly - typically a
 `setField` status change, then the next user task - with no decision.
 
+**Clearing a field the flow wrote: `clearField`.** A `setField` needs a `value`, and a blank one is
+refused (it reads as "I forgot to fill this in"), so the erasure is its own key:
+`clearField: <field>`, naming a `string`/`text` field of the trigger entity and nothing else - no
+`value`, and never combined with `setField`/`setRelationField`. It writes the same targeted
+single-column update, assigning nothing. The case it exists for is the error route: the flow records
+the failure text with `setField: errorMessage, value: "{error}"`, and an instance re-driven to
+success would otherwise end in a success status still carrying the previous failure's explanation.
+
+```yaml
+  steps:
+    - { name: resetError, kind: serviceTask, args: { clearField: errorMessage, next: provision } }
+```
+
 **Setting a status modelled as a relation: `setRelationField`.** When the status is a plain
 `string`/`text` field, use `setField` as above. When the status is a **to-one relation** (a FK to a
 settings/nomenclature entity like `Status`), use `setRelationField: <Relation>, value: <id>` to set the
@@ -3483,7 +3496,7 @@ so before binding a reaction, check what the thing you care about publishes.
 | Fields a reviewer edited in a task form (`editable:`) | `-updated` | `onUpdate` |
 | `number: { stampOn: issue }` stamping the document number | `-updated` | `onUpdate` |
 | A maintained roll-up / aggregate / keyed total | `-updated` | `onUpdate` |
-| `setField` / `setRelationField` on a step | `-transitioned` | `postings:`, `generates` `event: { onTransition }`, `abortOn:` |
+| `setField` / `clearField` / `setRelationField` on a step | `-transitioned` | `postings:`, `generates` `event: { onTransition }`, `abortOn:` |
 | A `transitions:` button (void / cancel / reopen) | `-transitioned` | the same three |
 | `generates` `sourceStatus:` flipping the source | `-transitioned` | the same three |
 | `generates` `sourceStatusOnRetire:` returning the source | `-transitioned` | the same three (this is how the reissue re-fires) |
@@ -3927,6 +3940,7 @@ or a seeded name.
 | userTask timers | `timeout: { after: <ISO-8601 duration>, then: <step> }`, `expire: { until: <date/timestamp field>, then: <step> }` |
 | serviceTask `retry` | `{ count: <integer >= 1>, every: <ISO-8601 duration> }` - `delegate:` and non-fan-out `notify:` steps only |
 | serviceTask `onError` | a declared step or `end` - `delegate:` and non-fan-out `notify:` steps only; `{error}` (a whole-value `setField` value) is readable on the route |
+| serviceTask `clearField` | a `string`/`text` field of the trigger entity - erases it; takes no `value`, not combinable with `setField`/`setRelationField` |
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
