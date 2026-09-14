@@ -166,6 +166,188 @@ The endpoint switches the **thread-context classloader** to the user code's load
 and restores it in a `finally` block. This is essential for frameworks consulted from within user
 code (Jackson, JPA, logging) to resolve user types correctly.
 
+## Building a compiled module jar (AOT) - step by step
+
+The previous section describes what the runtime does with a compiled module. This one describes how
+to **produce** one from an ordinary Dirigible project, with nothing but a JDK, the platform's own
+runtime image, and `jar`. Nothing here is specific to any vendor or suite: the contract is three
+things in one jar, and any build tool can emit them.
+
+### What goes into the jar
+
+```
+<project>-<version>.jar
+├── META-INF/dirigible/<project>/.compiled        the marker: top-level class binary names, one per line
+├── META-INF/dirigible/<project>/**               the registry payload: every NON-.java file of the project
+│                                                  (.model/.edm/.csvim + CSVs, .bpmn, .form, .report, .extension,
+│                                                   generated UI, i18n, ...) - laid into registry/public/<project>/
+└── <package path>/*.class                        the compiled Java, at ordinary package paths
+```
+
+Rules:
+
+- **`<project>` is the registry project folder name** (the folder under `registry/public/`), and it
+  must be the same in the marker path, the payload path and the class packages the project's Java
+  uses. It is also the natural Maven `artifactId`.
+- **Ship no `.java`.** Source next to classes would make the registry synchronizer compile it again
+  and the two generations would clash on every FQN.
+- **A project with no Java ships without a marker**, not with an empty one. `ClasspathExpander`
+  lays its payload down regardless; `CompiledModuleClassProvider` only scans jars that carry a marker.
+- **Leave out build metadata** that is not runtime content (`package.json`, `project.json`, tests,
+  `node_modules`).
+- **The platform is not a dependency of the jar.** The runtime image provides every platform class;
+  the jar declares only its dependencies on OTHER compiled modules (below).
+
+### 1. Get the compile classpath from the runtime image
+
+Compile against the very jar the classes will load into - the pinned `dirigiblelabs/dirigible:<version>`
+image - never against a separately downloaded build. The Spring Boot fat jar is exploded once;
+`BOOT-INF/classes` plus `BOOT-INF/lib/*` is the SDK classpath.
+
+```bash
+VERSION=14.56.0
+cid=$(docker create dirigiblelabs/dirigible:$VERSION)
+docker cp "$cid:/dirigible.jar" platform.jar && docker rm -f "$cid"
+mkdir sdk && (cd sdk && jar xf ../platform.jar BOOT-INF/classes BOOT-INF/lib)
+SDK="$PWD/sdk/BOOT-INF/classes:$PWD/sdk/BOOT-INF/lib/*"
+```
+
+Keep `BOOT-INF/lib/*` as a **wildcard classpath entry**. The platform ships on the order of a
+thousand jars; spelled out one per entry the classpath exceeds the Linux per-argument limit
+(`MAX_ARG_STRLEN`, 128 KB) and `javac` fails with "Argument list too long". Use JDK 21, the platform's
+own compile level.
+
+### 2. Stage the marker and the payload
+
+Given a project checkout at `./myproject` (the folder that contains the `.model`, the generated
+`gen/` and hand-written `custom/` Java, and so on):
+
+```bash
+PROJECT=myproject
+OUT=build/$PROJECT
+PAYLOAD=$OUT/META-INF/dirigible/$PROJECT
+mkdir -p "$PAYLOAD"
+
+# the payload: everything that is not Java or build metadata
+rsync -a --exclude '*.java' --exclude test/ --exclude node_modules/ \
+      --exclude package.json --exclude project.json --exclude .npmrc "$PROJECT/" "$PAYLOAD/"
+
+# the marker: <package>.<file stem> for every top-level Java type (a public top-level type == its file)
+find "$PROJECT" -name '*.java' -not -path '*/test/*' | while read -r f; do
+  pkg=$(sed -n 's/^package \(.*\);/\1/p' "$f" | head -1)
+  echo "${pkg:+$pkg.}$(basename "$f" .java)"
+done | sort > "$PAYLOAD/.compiled"
+```
+
+Only write the marker when the `find` produced at least one class; a payload-only project skips it.
+
+### 3. Compile and assemble
+
+```bash
+# other compiled modules this project's Java imports go on the classpath too, one jar each
+javac -cp "$SDK:build/othermodule.jar" -d "$OUT" $(find "$PROJECT" -name '*.java' -not -path '*/test/*')
+
+jar cf "build/$PROJECT.jar" -C "$OUT" .
+
+# sanity: classes present, exactly one marker, no source
+jar tf "build/$PROJECT.jar" | grep -c '\.class$'
+jar tf "build/$PROJECT.jar" | grep -c "/$PROJECT/\.compiled$"      # 1
+jar tf "build/$PROJECT.jar" | grep -c '\.java$'                     # 0
+```
+
+Optionally stamp the platform version into the manifest (`jar cfm ... MANIFEST.MF`) so a published
+jar's compile target stays auditable - a jar and the runtime it loads into must be the same platform
+line.
+
+### 4. Modules that depend on each other
+
+When project B's Java imports project A's classes (a cross-model relation, a delegate reading
+another module's entities, a generated print feeder), B compiles against A's **compiled jar**, so:
+
+- **the dependency graph must be a DAG.** Two projects importing each other compile fine as registry
+  sources (one flat `javac` over all projects) and cannot be built at all as separate jars - neither
+  can be first. Break the cycle at the model level before adopting AOT.
+- **build leaf-first**: owners before consumers, each consumer seeing the platform plus only the jars
+  it actually references. A shared "all jars" directory on every module's classpath hides an
+  undeclared dependency until an image without that module fails to boot.
+- **derive the dependency list from the source**, not from the model alone: grep the project's Java
+  for `import <otherproject's package>` and union it with the model's declared cross-model
+  references. Hand-written code can import an owner the model never mentions.
+- **pin exact versions** when publishing to a Maven repository: a POM `<dependency>` per referenced
+  module at the version compiled against, never a range. The platform itself is NOT declared.
+
+A minimal POM for `mvn deploy:deploy-file`:
+
+```xml
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example.modules</groupId>
+  <artifactId>myproject</artifactId>
+  <version>1.4.0</version>
+  <packaging>jar</packaging>
+  <dependencies>
+    <dependency>
+      <groupId>com.example.modules</groupId>
+      <artifactId>othermodule</artifactId>
+      <version>2.1.0</version>
+    </dependency>
+  </dependencies>
+</project>
+```
+
+### 5. Put the jars on the classpath of an image
+
+The shipped image already launches through `PropertiesLauncher` with `-Dloader.path=/modules` and
+an empty `/modules`. A downstream image only copies jars in:
+
+```dockerfile
+FROM dirigiblelabs/dirigible:14.56.0
+COPY build/*.jar /modules/
+```
+
+Or mount them at run time: `docker run -v "$PWD/build:/modules" ... dirigiblelabs/dirigible:14.56.0`.
+The platform jar is consumed verbatim - do not explode it, do not add jars under `BOOT-INF/lib`.
+`LOADER_PATH` (comma-separated) relocates the directory if `/modules` is unsuitable.
+
+For a Maven-hosted set of modules, a two-stage Dockerfile resolves them first (`mvn
+dependency:copy-dependencies -DoutputDirectory=/modules` from an aggregator POM listing the module
+coordinates) and copies the result into the runtime stage. Resolve each version from the
+repository's `maven-metadata.xml` and pin it; GitHub Packages, for one, emits `<latest>` and no
+`<release>` element.
+
+Every project the image bundles must be delivered one way only: a project both dropped in as a jar
+and published from source produces the `FQN ... provided by BOTH` warning and the registry copy wins.
+Never put `DIRIGIBLE_DEPENDENCIES_DIR` (the resolved `project.json` Maven dependencies) on
+`loader.path` - see the previous section.
+
+### 6. Verify the boot
+
+Readiness is **functional**, never a log line. `Started ...Application` means the port is open, and
+`Processing synchronizers completed` fires **before** `ApplicationReadyEvent`, when the compiled
+classes register. Measured at either point the instance shows 0 registered classes and looks exactly
+like "the jars were ignored". Poll a REST endpoint one of the modules serves until it answers, then
+read the log:
+
+```bash
+until curl -sf -u admin:admin http://localhost:8080/services/java/myproject/<package path>/<Controller> >/dev/null; do sleep 5; done
+docker logs app > boot.log 2>&1
+
+grep -oE 'Registered \[[0-9]+\] class\(es\) from AOT' boot.log   # N must equal the SUM of all markers
+grep -ci 'JavaSourceCompiler' boot.log                           # 0 - nothing was compiled at boot
+grep -c 'Registered controller' boot.log                          # the REST surface is up
+grep -ciE 'CsvimProcessingException|Failed to import|Incompatible change|Table metadata was not found' boot.log   # 0
+```
+
+Assert the **exact** class count, the sum of every `.compiled` marker's non-comment lines across
+`/modules`, rather than a floor: a floor waves through an image where one jar was silently skipped
+(a class that fails `Class.forName` is logged as an ERROR naming its FQN - usually an owner jar the
+image does not bundle). A jar that builds is not evidence that it loads; the boot is.
+
+This flow was run end to end on `dirigiblelabs/dirigible:14.56.0` with real generated modules: a
+leaf module, then a consumer compiled against the leaf's jar (and failing with
+`package ... does not exist` when the leaf's jar was omitted), zero `javac` at boot, and the
+controllers served 200.
+
 ## Caveats / current limitations
 
 - **Sandboxing.** Loaded user code runs with the same JVM permissions as the platform — there is
