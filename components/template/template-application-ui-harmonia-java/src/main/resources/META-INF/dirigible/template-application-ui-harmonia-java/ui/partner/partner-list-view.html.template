@@ -8,15 +8,15 @@
     <span x-h-toolbar-title class="shrink-0" x-text="'My ' + T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}')"></span>
     <div x-h-toolbar-spacer></div>
     <button x-h-button data-variant="primary" @click="newEntity()">
-      <i role="img" x-h-lucide data-lucide="plus"></i>
+      <svg role="presentation" x-h-lucide data-lucide="plus"></svg>
       <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>
     </button>
     <!-- Export the own rows as CSV / print them (Save as PDF via the browser dialog). -->
     <button x-h-button data-variant="outline" data-size="sm" :disabled="items.length === 0" @click="exportCsv()">
-      <i role="img" x-h-lucide data-lucide="download"></i><span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>
+      <svg role="presentation" x-h-lucide data-lucide="download"></svg><span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>
     </button>
     <button x-h-button data-variant="outline" data-size="sm" :disabled="items.length === 0" @click="printList()">
-      <i role="img" x-h-lucide data-lucide="printer"></i><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
+      <svg role="presentation" x-h-lucide data-lucide="printer"></svg><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
     </button>
   </div>
 
@@ -25,7 +25,7 @@
   <div x-show="state === 'empty'" class="p-4" x-h-text.muted
        x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
 
-  <div x-show="state === 'default'" x-h-table-container.scroll class="bk-stretch">
+  <div x-show="state === 'default'" x-h-table-container.scroll>
     <table x-h-table data-borders="rows">
       <thead x-h-table-header>
         <tr x-h-table-row>

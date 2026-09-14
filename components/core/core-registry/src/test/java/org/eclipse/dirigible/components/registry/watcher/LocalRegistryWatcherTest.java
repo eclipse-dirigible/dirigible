@@ -117,6 +117,28 @@ class LocalRegistryWatcherTest {
         verifyNoInteractions(synchronizationWatcher);
     }
 
+    /**
+     * No synchronizer is ever keyed on {@code .js}/{@code .mjs} - the extensions the platform's
+     * TypeScript transpiler (esbuild/tsc) writes its compiled output as, next to every {@code .ts}
+     * source it recompiles. #7368: that write used to schedule a full pass for output that changes no
+     * artefact, on every transpile.
+     */
+    @Test
+    void aTranspiledJsFileSchedulesNothing(@TempDir Path root) throws IOException, InterruptedException {
+        Path registry = startWatching(root, "project");
+
+        Files.writeString(registry.resolve("project")
+                                  .resolve("index.mjs"),
+                "content");
+        Files.writeString(registry.resolve("project")
+                                  .resolve("index.js"),
+                "content");
+        // nothing to wait for, so give the watch service the time it would have needed to report it
+        Thread.sleep(5_000);
+
+        verifyNoInteractions(synchronizationWatcher);
+    }
+
     private Path startWatching(Path root, String existingFolder) throws IOException {
         Path registry = root.resolve("registry")
                             .resolve("public");

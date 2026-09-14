@@ -12,7 +12,7 @@
     <span x-h-toolbar-title class="shrink-0" x-text="T('database:explorer.title', 'Explorer')"></span>
     <div x-h-toolbar-spacer></div>
 
-    <div x-h-select data-filter="contains" class="w-64" x-show="state.datasources.length">
+    <div x-h-select class="w-3xs" x-show="state.datasources.length">
       <!-- x-model on x-h-select-input holds the VALUE; the input displays the matched option's
            label. It writes straight onto the store, so the handler only reacts to the change. -->
       <input x-h-select-input id="database-datasource" x-model="state.datasource"
@@ -47,7 +47,7 @@
     </div>
   </div>
 
-  <div x-show="state.datasources.length" x-h-split class="bk-stretch flex-1"
+  <div x-show="state.datasources.length" x-h-split class="flex-1"
        data-orientation="horizontal" data-variant="border">
 
     <!-- The metadata tree -->

@@ -243,12 +243,12 @@
         <ag-grid.version>27.1.0</ag-grid.version>
         <papaparse.version>5.5.3</papaparse.version>
         <bpmn-visualization.version>0.47.0</bpmn-visualization.version>
-        <i18next.version>25.3.0</i18next.version>
-        <alpinejs.version>3.15.11</alpinejs.version>
-        <harmonia.version>2.14.2</harmonia.version>
+        <i18next.version>26.3.6</i18next.version>
+        <alpinejs.version>3.16.3</alpinejs.version>
+        <harmonia.version>3.1.2</harmonia.version>
         <opensans.version>5.2.7</opensans.version>
-        <lucide.version>1.8.0</lucide.version>
-        <pinecone-router.version>7.5.2</pinecone-router.version>
+        <lucide.version>1.20.0</lucide.version>
+        <pinecone-router.version>7.6.0</pinecone-router.version>
         <!-- Tests -->
         <testcontainers.version>2.0.5</testcontainers.version>
         <selenide.version>7.18.1</selenide.version>
@@ -1040,17 +1040,6 @@
                 <artifactId>ag-grid-community__infinite-row-model</artifactId>
                 <version>27.1.0</version>
             </dependency>
-            <!-- via alpinejs (${alpinejs.version}) -->
-            <dependency>
-                <groupId>org.webjars.npm</groupId>
-                <artifactId>vue__reactivity</artifactId>
-                <version>3.2.0-beta.8</version>
-            </dependency>
-            <dependency>
-                <groupId>org.webjars.npm</groupId>
-                <artifactId>vue__shared</artifactId>
-                <version>3.2.0-beta.8</version>
-            </dependency>
             <!-- via bpmn-visualization (${bpmn-visualization.version}); strnum through fast-xml-parser -->
             <dependency>
                 <groupId>org.webjars.npm</groupId>
@@ -1067,7 +1056,23 @@
                 <artifactId>strnum</artifactId>
                 <version>2.3.0</version>
             </dependency>
-            <!-- via codbex__harmonia (${harmonia.version}) -->
+            <!-- The Harmonia stack (harmonia.version, alpinejs.version, lucide.version,
+                 pinecone-router.version, i18next.version) is bumped as one. When Harmonia is updated,
+                 update the pins below as well: read the ranges the new webjars declare (their poms) and
+                 pin the stable version each range means. Maven reads npm's "<X.Y.0-0" upper bound as
+                 "below X.Y.0", so an unpinned range can land on a pre-release. -->
+            <!-- via alpinejs (${alpinejs.version}): [3.5.40,3.6.0-0) -->
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>vue__reactivity</artifactId>
+                <version>3.5.42</version>
+            </dependency>
+            <dependency>
+                <groupId>org.webjars.npm</groupId>
+                <artifactId>vue__shared</artifactId>
+                <version>3.5.42</version>
+            </dependency>
+            <!-- via codbex__harmonia (${harmonia.version}): [1.8.0,2.0.0-0) -->
             <dependency>
                 <groupId>org.webjars.npm</groupId>
                 <artifactId>floating-ui__dom</artifactId>
@@ -1082,17 +1087,6 @@
                 <groupId>org.webjars.npm</groupId>
                 <artifactId>floating-ui__utils</artifactId>
                 <version>0.2.12</version>
-            </dependency>
-            <!-- via i18next (${i18next.version}); regenerator-runtime through babel__runtime -->
-            <dependency>
-                <groupId>org.webjars.npm</groupId>
-                <artifactId>babel__runtime</artifactId>
-                <version>8.0.0-alpha.6</version>
-            </dependency>
-            <dependency>
-                <groupId>org.webjars.npm</groupId>
-                <artifactId>regenerator-runtime</artifactId>
-                <version>0.14.1</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

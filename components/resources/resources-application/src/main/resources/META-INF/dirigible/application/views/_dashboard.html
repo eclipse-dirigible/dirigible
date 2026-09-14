@@ -22,7 +22,7 @@
          Clicking a tile opens the full report. Values come from the shared reports store. -->
     <div class="vbox gap-3" x-show="dashKpiReports().length > 0" x-cloak>
       <div class="hbox items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
-        <i role="img" x-h-lucide data-lucide="gauge" class="size-4"></i><span x-text="T('application-core:shell.dashboard.kpis', 'Key Indicators')"></span>
+        <svg role="presentation" x-h-lucide data-lucide="gauge" class="size-4"></svg><span x-text="T('application-core:shell.dashboard.kpis', 'Key Indicators')"></span>
       </div>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <template x-for="r in dashKpiReports()" :key="r.name">
@@ -32,7 +32,7 @@
                @keydown.enter.prevent="openReport(r)">
             <div x-h-card-header>
               <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-                <i role="img" x-h-lucide :data-lucide="r.widget.icon" class="size-4"></i><span x-text="$store.reports.widgetLabel(r)"></span>
+                <svg role="presentation" x-h-lucide :data-lucide="r.widget.icon" class="size-4"></svg><span x-text="$store.reports.widgetLabel(r)"></span>
               </div>
             </div>
             <div x-h-card-content>
@@ -45,28 +45,29 @@
                 </div>
               </template>
               <template x-if="r.widget.kind === 'list'">
-                <div class="overflow-x-auto">
+                <div>
                   <template x-if="!$store.reports.widgetState(r).loaded"><div x-h-skeleton class="w-full h-9"></div></template>
                   <p x-show="$store.reports.widgetState(r).error" x-h-text.muted class="text-3xl font-bold">—</p>
-                  <table x-show="$store.reports.widgetState(r).loaded && !$store.reports.widgetState(r).error" class="w-full text-sm">
-                    <thead>
-                      <tr>
-                        <template x-for="c in $store.reports.widgetColumns(r)" :key="c.alias">
-                          <th class="py-1 pr-3 text-left font-semibold text-muted-foreground"
-                              :class="$store.reports.widgetAlignClass(c)" x-text="c.label"></th>
-                        </template>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <template x-for="(row, i) in $store.reports.widgetRows(r)" :key="i">
-                        <tr>
+                  <div x-show="$store.reports.widgetState(r).loaded && !$store.reports.widgetState(r).error" x-h-table-container>
+                    <table x-h-table>
+                      <thead x-h-table-header>
+                        <tr x-h-table-row>
                           <template x-for="c in $store.reports.widgetColumns(r)" :key="c.alias">
-                            <td class="py-1 pr-3" :class="$store.reports.widgetAlignClass(c)" x-text="$store.reports.widgetCellText(r, row, c)"></td>
+                            <th x-h-table-head scope="col" :class="$store.reports.widgetAlignClass(c)" x-text="c.label"></th>
                           </template>
                         </tr>
-                      </template>
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody x-h-table-body>
+                        <template x-for="(row, i) in $store.reports.widgetRows(r)" :key="i">
+                          <tr x-h-table-row>
+                            <template x-for="c in $store.reports.widgetColumns(r)" :key="c.alias">
+                              <td x-h-table-cell :class="$store.reports.widgetAlignClass(c)" x-text="$store.reports.widgetCellText(r, row, c)"></td>
+                            </template>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </template>
             </div>
@@ -79,7 +80,7 @@
          above; the sidebar Reports section still lists them all). -->
     <div class="vbox gap-3" x-show="dashPreviewReports().length > 0" x-cloak>
       <div class="hbox items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
-        <i role="img" x-h-lucide data-lucide="bar-chart-3" class="size-4"></i><span x-text="T('application-core:shell.nav.reports', 'Reports')"></span>
+        <svg role="presentation" x-h-lucide data-lucide="chart-column" class="size-4"></svg><span x-text="T('application-core:shell.nav.reports', 'Reports')"></span>
       </div>
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <template x-for="r in dashPreviewReports()" :key="r.url">
@@ -87,12 +88,12 @@
             <div x-h-card-header>
               <h3 x-h-card-title class="hbox items-center gap-2 cursor-pointer"
                   @click="openReport(r)">
-                <i role="img" x-h-lucide data-lucide="bar-chart-3" class="size-4"></i><span x-text="$store.reports.displayLabel(r)"></span>
+                <svg role="presentation" x-h-lucide data-lucide="chart-column" class="size-4"></svg><span x-text="$store.reports.displayLabel(r)"></span>
               </h3>
               <div x-h-card-action>
                 <button x-h-button data-variant="transparent" data-size="icon-sm"
                         @click="openReport(r)" aria-label="Open report">
-                  <i role="img" x-h-lucide data-lucide="arrow-up-right"></i>
+                  <svg role="presentation" x-h-lucide data-lucide="arrow-up-right"></svg>
                 </button>
               </div>
             </div>

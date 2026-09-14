@@ -20,30 +20,33 @@
 <body x-data="adminApp" x-cloak class="hbox size-full">
 
     <!-- Entity navigation: every entity of the module, no grouping, no opinions. -->
-    <aside class="vbox gap-1 p-3 border-e overflow-y-auto shrink-0" style="width: 15rem;">
+    <aside class="vbox gap-1 p-3 border-r overflow-y-auto shrink-0" style="width: 15rem;">
         <div class="hbox items-center gap-2 pb-2">
-            <svg x-h-lucide role="img" data-lucide="wrench" class="size-4"></svg>
+            <svg x-h-lucide role="presentation" data-lucide="wrench" class="size-4"></svg>
             <span class="font-semibold" x-text="config.title"></span>
         </div>
-        <template x-for="e in config.entities" :key="e.name">
-            <button type="button" x-h-button :data-variant="selected && selected.name === e.name ? 'secondary' : 'transparent'"
-                    class="justify-start" @click="select(e)">
-                <span x-text="e.label"></span>
-            </button>
-        </template>
+        <ul x-h-list aria-label="Entities">
+            <template x-for="e in config.entities" :key="e.name">
+                <li x-h-list-item>
+                    <button type="button" x-h-list-item-button :aria-current="selected && selected.name === e.name" @click="select(e)">
+                        <span x-text="e.label"></span>
+                    </button>
+                </li>
+            </template>
+        </ul>
     </aside>
 
     <!-- The selected entity: flat table + record editor. -->
-    <main class="vbox grow overflow-hidden" x-show="selected">
+    <main class="vbox flex-1 overflow-hidden" x-show="selected">
         <div x-h-toolbar>
             <span x-h-toolbar-title x-text="selected ? selected.label : ''"></span>
-            <span class="text-sm opacity-70" x-text="total + ' record(s)'"></span>
-            <span class="grow"></span>
+            <span class="text-sm opacity-75" x-text="total + ' record(s)'"></span>
+            <span class="flex-1"></span>
             <button type="button" x-h-button data-variant="transparent" @click="load()" aria-label="Refresh">
-                <svg x-h-lucide role="img" data-lucide="refresh-cw" class="size-4"></svg>
+                <svg x-h-lucide role="presentation" data-lucide="refresh-cw" class="size-4"></svg>
             </button>
             <button type="button" x-h-button data-variant="primary" @click="startCreate()">
-                <svg x-h-lucide role="img" data-lucide="plus" class="size-4"></svg> New
+                <svg x-h-lucide role="presentation" data-lucide="plus" class="size-4"></svg> New
             </button>
         </div>
 
@@ -52,31 +55,33 @@
         </div>
 
         <!-- Every column, raw. Row click opens the editor. -->
-        <div class="grow overflow-auto p-3" x-show="!editing">
+        <div class="flex-1 overflow-auto p-3" x-show="!editing">
+            <div x-h-table-container>
             <table x-h-table>
-                <thead>
-                    <tr>
+                <thead x-h-table-header>
+                    <tr x-h-table-row>
                         <template x-for="p in (selected ? selected.properties : [])" :key="p.name">
                             <th x-h-table-head scope="col"><span x-text="p.name"></span></th>
                         </template>
                         <th x-h-table-head scope="col"></th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody x-h-table-body>
                     <template x-for="row in rows" :key="rowKey(row)">
                         <tr x-h-table-row data-hoverable="true" @click="startEdit(row)">
                             <template x-for="p in selected.properties" :key="p.name">
                                 <td x-h-table-cell><span class="admin-cell inline-block" x-text="display(p, row[p.name])"></span></td>
                             </template>
-                            <td x-h-table-cell class="text-end" @click.stop>
+                            <td x-h-table-cell class="text-right" @click.stop>
                                 <button type="button" x-h-button data-variant="transparent" aria-label="Delete" @click="remove(row)">
-                                    <svg x-h-lucide role="img" data-lucide="trash-2" class="size-4"></svg>
+                                    <svg x-h-lucide role="presentation" data-lucide="trash-2" class="size-4"></svg>
                                 </button>
                             </td>
                         </tr>
                     </template>
                 </tbody>
             </table>
+            </div>
             <div class="hbox items-center gap-2 pt-3" x-show="total > limit">
                 <button type="button" x-h-button data-variant="outline" :disabled="offset === 0" @click="page(-1)">Previous</button>
                 <span class="text-sm" x-text="(offset + 1) + ' - ' + Math.min(offset + limit, total) + ' of ' + total"></span>
@@ -85,20 +90,20 @@
         </div>
 
         <!-- The flat record editor: every column an input; read-only/system columns visible but disabled. -->
-        <div class="grow overflow-auto p-4" x-show="editing">
+        <div class="flex-1 overflow-auto p-4" x-show="editing">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" style="max-width: 60rem;">
                 <template x-for="p in (selected ? selected.properties : [])" :key="p.name">
                     <div x-h-field x-show="!(isNew && p.pk)">
                         <label x-h-label :for="'a_' + p.name">
                             <span x-text="p.name"></span>
                             <span class="text-negative" x-show="p.required && !p.readonly">*</span>
-                            <span class="opacity-60 text-xs" x-show="p.fk" x-text="'-> ' + p.fk"></span>
+                            <span class="opacity-50 text-xs" x-show="p.fk" x-text="'-> ' + p.fk"></span>
                         </label>
                         <template x-if="p.lookup">
-                            <div x-h-select data-filter="contains">
+                            <div x-h-select>
                                 <input x-h-select-input :id="'a_' + p.name" x-model="draft[p.name]" :disabled="p.readonly" :placeholder="'Select ' + p.name + '...'" />
                                 <div x-h-select-content>
-                                    <div x-h-select-search></div>
+                                    <div x-h-select-search data-filter="contains"></div>
                                     <div x-h-select-list>
                                         <template x-for="opt in (options[p.name] || [])" :key="opt.value">
                                             <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>

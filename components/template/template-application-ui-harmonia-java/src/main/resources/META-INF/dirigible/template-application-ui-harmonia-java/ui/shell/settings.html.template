@@ -9,7 +9,7 @@
     <span x-h-toolbar-title x-text="T('application-core:shell.nav.settings', 'Settings')"></span>
   </div>
 
-  <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
+  <div x-h-split class="flex-1" data-orientation="horizontal" data-variant="border">
 
     <!-- Master: the setting entities -->
     <div x-h-split-panel data-size="25%" data-min="200">
@@ -50,19 +50,22 @@
           <input x-h-input x-model="${dollar}store.formats.number" placeholder="#[[### ### ### ##0.00]]#" />
         </div>
         <div class="hbox gap-2">
-          <button x-h-button data-variant="emphasized" @click="${dollar}store.formats.apply()" x-text="T('application-core:shell.settings.apply', 'Apply')"></button>
+          <button x-h-button data-variant="primary" @click="${dollar}store.formats.apply()" x-text="T('application-core:shell.settings.apply', 'Apply')"></button>
           <button x-h-button data-variant="outline" @click="${dollar}store.formats.reset()" x-text="T('application-core:shell.settings.resetDefaults', 'Reset to defaults')"></button>
         </div>
         <span x-h-text.muted x-text="T('application-core:shell.settings.configFor', 'Configuration and nomenclature for ${projectName}.', { name: '${projectName}' })"></span>
+        <ul x-h-list :aria-label="T('application-core:shell.nav.settings', 'Settings')">
 #foreach($entity in $models)
 #if($entity.type == "SETTING")
-        <button x-h-button data-variant="outline" class="justify-start"
-                :data-state="selected === '${entity.name}' ? 'selected' : ''"
-                @click="select('${entity.name}', './views/${entity.perspectiveName}/${entity.name}-manage-list.html')">
-          <i role="img" x-h-lucide data-lucide="settings"></i><span x-text="T('$projectName:${tprefix}.t.${entity.dataName}', '${entity.name}')"></span>
-        </button>
+          <li x-h-list-item>
+            <button x-h-list-item-button :aria-current="selected === '${entity.name}'"
+                    @click="select('${entity.name}', './views/${entity.perspectiveName}/${entity.name}-manage-list.html')">
+              <svg role="presentation" x-h-lucide data-lucide="settings"></svg><span x-text="T('$projectName:${tprefix}.t.${entity.dataName}', '${entity.name}')"></span>
+            </button>
+          </li>
 #end
 #end
+        </ul>
       </div>
     </div>
 

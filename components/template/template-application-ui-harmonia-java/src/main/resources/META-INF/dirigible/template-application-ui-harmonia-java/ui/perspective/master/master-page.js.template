@@ -103,6 +103,19 @@ document.addEventListener('alpine:init', () => {
       return this.filteredMasters.slice(start, start + this.pageSize);
     },
     goPage(n) { this.page = Math.max(1, Math.min(n, this.pageCount)); this.refreshIcons(); },
+    // The page numbers the pager shows: first, last and the current page's neighbours, '...' over
+    // each gap - at most 7 entries, so a long list never renders a link per page.
+    pageWindow() {
+      const total = this.pageCount, current = this.page;
+      if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+      const start = Math.max(2, current - 1), end = Math.min(total - 1, current + 1);
+      const pages = [1];
+      if (start > 2) pages.push('...');
+      for (let p = start; p <= end; p++) pages.push(p);
+      if (end < total - 1) pages.push('...');
+      pages.push(total);
+      return pages;
+    },
 
     get filteredMasters() {
       if (!this.searchTerm) return this.masters;

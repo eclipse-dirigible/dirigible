@@ -19,6 +19,12 @@
       "user": "User",
       "logout": "Log out"
     },
+    "theme": {
+      "title": "Theme",
+      "light": "Light",
+      "dark": "Dark",
+      "auto": "Auto"
+    },
     "actAs": {
       "start": "Act as...",
       "enter": "Enter data as...",
@@ -116,9 +122,8 @@
       "noData": "No data",
       "noRows": "The {{name}} report returned no rows.",
       "total": "Total",
-      "prev": "Prev",
+      "prev": "Previous",
       "next": "Next",
-      "pageOf": "Page {{page}} / {{total}}",
       "any": "any",
       "yes": "yes",
       "no": "no",
@@ -133,6 +138,7 @@
       "hint": "The page you are looking for does not exist."
     },
     "settings": {
+      "title": "Settings",
       "selectSetting": "Select a setting",
       "selectSettingHint": "Choose a configuration entity on the left to manage it here.",
       "configFor": "Configuration & nomenclature for {{name}}.",

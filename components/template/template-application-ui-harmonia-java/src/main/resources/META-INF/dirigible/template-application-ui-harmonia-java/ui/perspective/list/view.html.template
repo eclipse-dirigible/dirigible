@@ -24,23 +24,23 @@
     <!-- The entity also renders on a calendar (intent `view: calendar|range`), which owns /${name};
          this list lives at /${name}/list. -->
     <button x-h-button data-variant="outline" data-size="sm" @click="goCalendar()">
-      <i role="img" x-h-lucide data-lucide="calendar"></i><span x-text="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')"></span>
+      <svg role="presentation" x-h-lucide data-lucide="calendar"></svg><span x-text="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')"></span>
     </button>
 #end
 #if($slotsView)
     <!-- The entity also renders as a slot picker (intent `view: slots`), which owns /${name};
          this browse page lives at /${name}/list. -->
     <button x-h-button data-variant="outline" data-size="sm" @click="goSlots()">
-      <i role="img" x-h-lucide data-lucide="clock"></i>
+      <svg role="presentation" x-h-lucide data-lucide="clock"></svg>
       <span x-text="T('$projectName:${tprefix}.defaults.slots', 'Slots')"></span>
     </button>
 #end
     <!-- Export the filtered rows as CSV / print them (Save as PDF via the browser dialog). -->
     <button x-h-button data-variant="outline" data-size="sm" :disabled="filteredItems.length === 0" @click="exportCsv()">
-      <i role="img" x-h-lucide data-lucide="download"></i><span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>
+      <svg role="presentation" x-h-lucide data-lucide="download"></svg><span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>
     </button>
     <button x-h-button data-variant="outline" data-size="sm" :disabled="filteredItems.length === 0" @click="printList()">
-      <i role="img" x-h-lucide data-lucide="printer"></i><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
+      <svg role="presentation" x-h-lucide data-lucide="printer"></svg><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
     </button>
     <!-- Developer-contributed page actions for this view (customActions extension point). -->
     <template x-for="action in $store.customActions.getActions(caView, 'page')" :key="action.id">
@@ -72,7 +72,7 @@
   <!-- Empty -->
   <div x-show="displayState === 'empty'" x-h-info-page class="p-4">
     <div x-h-info-page-header>
-      <div x-h-info-page-media.icon><i role="img" x-h-lucide data-lucide="inbox"></i></div>
+      <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="inbox"></svg></div>
       <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.noDataYet', 'No ${name} yet', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })"></div>
       <div x-h-info-page-description x-text="T('$projectName:${tprefix}.messages.noData', 'There is nothing to show here.')"></div>
     </div>
@@ -81,7 +81,7 @@
   <!-- Data: master-detail — the table shows only the major columns; selecting a row reveals the
        record's full property list (and its actionable process tasks) in the right-hand pane. -->
   <div x-show="displayState === 'default' || displayState === 'no-results'"
-       x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
+       x-h-split class="flex-1" data-orientation="horizontal" data-variant="border">
 
     <!-- Master: the records table -->
     <div x-h-split-panel data-size="60%" data-min="320">
@@ -95,9 +95,9 @@
                 <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isFloatType) class="text-right"#end#visibleGate($property) @click="cycleSort('${property.name}')">
                   <div class="hbox items-center justify-between">
                     <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${property.name}')"></span>
-                    <svg x-h-lucide role="img" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></svg>
-                    <svg x-h-lucide role="img" data-lucide="arrow-down"    class="size-4" x-show="isSortedDesc('${property.name}')"></svg>
-                    <svg x-h-lucide role="img" data-lucide="arrow-up-down" class="size-4" x-show="isUnsorted('${property.name}')"></svg>
+                    <svg x-h-lucide role="presentation" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></svg>
+                    <svg x-h-lucide role="presentation" data-lucide="arrow-down"    class="size-4" x-show="isSortedDesc('${property.name}')"></svg>
+                    <svg x-h-lucide role="presentation" data-lucide="arrow-up-down" class="size-4" x-show="isUnsorted('${property.name}')"></svg>
                   </div>
                 </th>
 #end
@@ -134,11 +134,29 @@
           </table>
         </div>
 
-        <div class="hbox items-center gap-2 p-2" x-show="totalPages > 1">
-          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)"><i role="img" x-h-lucide data-lucide="chevron-left"></i><span x-text="T('$projectName:${tprefix}.defaults.previous', 'Prev')"></span></button>
-          <span x-h-text.muted x-text="T('$projectName:${tprefix}.defaults.pageOf', 'Page {{page}} / {{total}}', { page: currentPage, total: totalPages })"></span>
-          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)"><span x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span><i role="img" x-h-lucide data-lucide="chevron-right"></i></button>
-        </div>
+## Pager: first / last / the current page's neighbours with an ellipsis over each gap (pageWindow).
+        <nav x-h-pagination class="w-fit! p-2" x-show="totalPages > 1">
+          <ul x-h-pagination-content>
+            <li x-h-pagination-item>
+              <a x-h-pagination-link.previous href="#" :aria-label="T('$projectName:${tprefix}.defaults.previous', 'Previous')" :aria-disabled="currentPage <= 1" :tabindex="currentPage <= 1 ? -1 : 0" @click.prevent="if (currentPage > 1) goPage(currentPage - 1)">
+                <svg x-h-lucide role="presentation" data-lucide="chevron-left"></svg>
+                <span x-h-pagination-link-label x-text="T('$projectName:${tprefix}.defaults.previous', 'Previous')"></span>
+              </a>
+            </li>
+            <template x-for="(p, i) in pageWindow()" :key="i">
+              <li x-h-pagination-item>
+                <template x-if="p === '...'"><span x-h-pagination-ellipsis></span></template>
+                <template x-if="p !== '...'"><a x-h-pagination-link="currentPage === p" href="#" @click.prevent="goPage(p)" x-text="p"></a></template>
+              </li>
+            </template>
+            <li x-h-pagination-item>
+              <a x-h-pagination-link.next href="#" :aria-label="T('$projectName:${tprefix}.defaults.next', 'Next')" :aria-disabled="currentPage >= totalPages" :tabindex="currentPage >= totalPages ? -1 : 0" @click.prevent="if (currentPage < totalPages) goPage(currentPage + 1)">
+                <span x-h-pagination-link-label x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span>
+                <svg x-h-lucide role="presentation" data-lucide="chevron-right"></svg>
+              </a>
+            </li>
+          </ul>
+        </nav>
       </div>
     </div>
 
@@ -163,7 +181,7 @@
         <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
           <template x-for="task in $store.processTasks.getTasks(selected)" :key="task.id">
             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
-              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="$store.processTasks.taskName(task)"></span>
+              <svg role="presentation" x-h-lucide data-lucide="inbox"></svg><span x-text="$store.processTasks.taskName(task)"></span>
             </button>
           </template>
         </div>
@@ -189,7 +207,7 @@
 #if(!$property.dataAutoIncrement && !$property.isHiddenProperty)
 #if($property.widgetLabel)#set($plabel = $property.widgetLabelJs)#else#set($plabel = $property.name)#end
 #if($property.isDateType)#set($isDate = "true")#else#set($isDate = "false")#end
-          <div class="vbox gap-0"#visibleGate($property)>
+          <div class="vbox"#visibleGate($property)>
             <span x-h-text.muted class="text-xs" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${plabel}')"></span>
 #if($property.widgetType == "DOCUMENT_STATUS")
             <span><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', selected?.${property.name}))" x-show="lookupText('${property.name}', selected?.${property.name})" x-text="lookupText('${property.name}', selected?.${property.name})"></span></span>

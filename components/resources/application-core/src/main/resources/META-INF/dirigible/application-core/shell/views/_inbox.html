@@ -22,29 +22,29 @@
     <span x-show="lastUpdated" x-h-text.muted x-text="T('application-core:shell.inbox.updated', 'Updated {{time}}', { time: fmtTime(lastUpdated) })"></span>
     <button x-h-button data-variant="transparent" data-size="icon-sm" :aria-pressed="autoRefresh"
             @click="toggleAuto()" :aria-label="autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh'">
-      <svg x-h-lucide role="img" data-lucide="pause" x-show="autoRefresh"></svg>
-      <svg x-h-lucide role="img" data-lucide="play" x-show="!autoRefresh"></svg>
+      <svg x-h-lucide role="presentation" data-lucide="pause" x-show="autoRefresh"></svg>
+      <svg x-h-lucide role="presentation" data-lucide="play" x-show="!autoRefresh"></svg>
     </button>
-    <button x-h-button data-variant="outline" data-size="sm" @click="refresh()"><i role="img" x-h-lucide data-lucide="refresh-cw"></i><span x-text="T('application-core:shell.inbox.refresh', 'Refresh')"></span></button>
+    <button x-h-button data-variant="outline" data-size="sm" @click="refresh()"><svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg><span x-text="T('application-core:shell.inbox.refresh', 'Refresh')"></span></button>
   </div>
 
   <!-- Act-as (delegated entry): while armed this Inbox serves the ACTING identity's tasks, so the
        real user's own assigned tasks are absent. Say it, and say how many — an empty list under a
        forgotten arming reads as a broken process (#6694). -->
   <div x-show="actAs.acting" x-cloak class="hbox items-center gap-2 px-3 py-1.5 text-sm"
-       style="background: var(--color-warning, #b45309); color: #fff;">
-    <i role="img" x-h-lucide data-lucide="user-round-cog"></i>
+       style="background: var(--warning); color: var(--warning-foreground);">
+    <svg role="presentation" x-h-lucide data-lucide="user-round-cog"></svg>
     <span x-text="actAs.hiddenTasks
         ? T('application-core:shell.inbox.actAsHidden', 'Acting as {{person}} — {{count}} of your own tasks are hidden', { person: actAs.acting, count: actAs.hiddenTasks })
         : T('application-core:shell.inbox.actAsServing', 'Acting as {{person}} — this Inbox serves their tasks, not yours', { person: actAs.acting })"></span>
     <div class="flex-1"></div>
     <button x-h-button data-size="sm" data-variant="outline" @click="exitActAs()"
-            style="border-color:#fff; color:#fff; background:transparent;">
+            style="border-color: var(--warning-foreground); color: var(--warning-foreground); background: transparent;">
       <span x-text="T('application-core:shell.actAs.exit', 'Exit')"></span>
     </button>
   </div>
 
-  <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
+  <div x-h-split class="flex-1" data-orientation="horizontal" data-variant="border">
 
     <!-- Master: the task list -->
     <div x-h-split-panel data-size="20%" data-min="280">
@@ -59,14 +59,14 @@
           <button x-h-button data-variant="outline" data-size="icon-sm" class="shrink-0" @click="toggleSort()"
                   :aria-label="sortDir === 'desc' ? T('application-core:shell.inbox.sortNewestFirst', 'Newest first') : T('application-core:shell.inbox.sortOldestFirst', 'Oldest first')"
                   :title="sortDir === 'desc' ? T('application-core:shell.inbox.sortNewestFirst', 'Newest first') : T('application-core:shell.inbox.sortOldestFirst', 'Oldest first')">
-            <svg x-h-lucide role="img" data-lucide="arrow-down-wide-narrow" x-show="sortDir === 'desc'"></svg>
-            <svg x-h-lucide role="img" data-lucide="arrow-up-narrow-wide" x-show="sortDir === 'asc'"></svg>
+            <svg x-h-lucide role="presentation" data-lucide="arrow-down-wide-narrow" x-show="sortDir === 'desc'"></svg>
+            <svg x-h-lucide role="presentation" data-lucide="arrow-up-narrow-wide" x-show="sortDir === 'asc'"></svg>
           </button>
         </div>
 
         <div x-show="filtered.length === 0" x-h-info-page class="p-4">
           <div x-h-info-page-header>
-            <div x-h-info-page-media.icon><i x-h-lucide data-lucide="inbox" role="img" aria-label="inbox"></i></div>
+            <div x-h-info-page-media.icon><svg x-h-lucide data-lucide="inbox" role="img" aria-label="inbox"></svg></div>
             <div x-h-info-page-title x-text="T('application-core:shell.inbox.noTasks', 'No tasks')"></div>
             <div x-h-info-page-description x-text="actAs.acting
                 ? T('application-core:shell.inbox.noTasksActAsHint', 'You are acting as {{person}} and this list is theirs. Exit to see your own tasks.', { person: actAs.acting })
@@ -124,12 +124,12 @@
         <div x-show="selected && !selected.mine" class="vbox gap-3 items-start p-4">
           <div x-h-info-page>
             <div x-h-info-page-header>
-              <div x-h-info-page-media.icon><i x-h-lucide data-lucide="inbox" role="img" aria-label="inbox"></i></div>
+              <div x-h-info-page-media.icon><svg x-h-lucide data-lucide="inbox" role="img" aria-label="inbox"></svg></div>
               <div x-h-info-page-title x-text="T('application-core:shell.inbox.claimTask', 'Claim this task')"></div>
               <div x-h-info-page-description x-text="T('application-core:shell.inbox.claimHint', 'This task is available to your group. Claim it to open and complete its form.')"></div>
             </div>
           </div>
-          <button x-h-button data-variant="primary" :disabled="busy" @click="claim(selected)"><i role="img" x-h-lucide data-lucide="hand"></i><span x-text="T('application-core:shell.inbox.claimOpen', 'Claim & open')"></span></button>
+          <button x-h-button data-variant="primary" :disabled="busy" @click="claim(selected)"><svg role="presentation" x-h-lucide data-lucide="hand"></svg><span x-text="T('application-core:shell.inbox.claimOpen', 'Claim & open')"></span></button>
         </div>
 
         <!-- Claimed + has a form: render the standalone form inline. -->

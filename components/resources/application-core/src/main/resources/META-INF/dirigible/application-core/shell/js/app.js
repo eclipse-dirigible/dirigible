@@ -73,19 +73,18 @@ window.App = {
 };
 
 /**
- * A transient message about something the user just did ("Saved"), over Harmonia's own notification
- * overlay. Deliberately NOT the notifications store's announce(): that also writes an entry into the
- * bell, which is right for the outcome of an action the user launched and wrong for an ordinary save
- * - the bell would fill up with them. Missing overlay degrades to the console.
+ * A transient message about something the user just did ("Saved"), through the notifications store's
+ * toast() - the public $notifications magic the shell attached, never Harmonia's private store.
+ * Deliberately NOT announce(): that also writes an entry into the bell, which is right for the
+ * outcome of an action the user launched and wrong for an ordinary save - the bell would fill up
+ * with them. A missing store or overlay degrades to the console.
  */
 App.services.toast = function (message, variant) {
-  try {
-    const toasts = window.Alpine && Alpine.store('_h_notifications');
-    if (toasts && typeof toasts.push === 'function') {
-      toasts.push(undefined, 'toast', 'top-right', 4000, { message: message, variant: variant || 'information' });
-      return;
-    }
-  } catch (e) { /* fall through to the console */ }
+  const store = window.Alpine && Alpine.store('notifications');
+  if (store && typeof store.toast === 'function') {
+    store.toast(message, variant);
+    return;
+  }
   console.log('[toast] ' + message);
 };
 

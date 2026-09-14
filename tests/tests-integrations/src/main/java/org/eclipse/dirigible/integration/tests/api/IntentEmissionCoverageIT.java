@@ -614,7 +614,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
 
               # documentItemsLayout: chat - the document master's line-items child renders as a
-              # conversation thread (x-h-chat bubbles + a composer) instead of the editable table;
+              # conversation thread (x-h-bubble messages + a composer) instead of the editable table;
               # the body maps to the messageBody field, author/timestamp to the child's audit columns.
               # The personal owner makes it a personal root too: the PERSONAL document must render
               # the SAME chat thread (never the generic items table), through the personal items
@@ -3056,10 +3056,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(escalating.contains("target.Level = escalation.Id;"), "the level is written onto the history row: " + escalating);
         assertTrue(escalating.contains(".eq(\"Level\", keyLevel)"),
                 "the level is part of the key that sends each level once: " + escalating);
+        // #7365 - and the order of the row body is the whole claim of the combined form. The guard runs
+        // first, then the recipient is resolved (a row with nobody to mail must not leave a history row
+        // behind), then the record is written and the mail sent as the LAST act of the SAME unit of
+        // work - so a delivery that fails rolls the record back and the next tick retries it, instead of
+        // leaving a record the guard reads as "already sent".
         int escalatingGuard = escalating.indexOf("BillReminderRepository().findAll(Criteria.create()");
-        int escalatingSend = escalating.indexOf("Mail.send(");
-        assertTrue(escalatingGuard > 0 && escalatingSend > escalatingGuard,
-                "the natural key gates the send as well as the write: " + escalating);
+        int escalatingRecipient = escalating.indexOf("if (to == null || to.isBlank())");
+        int escalatingUnit = escalating.indexOf("UnitOfWork.run(");
+        int escalatingSend = escalating.indexOf("mail(from, recipient, subject, parts);");
+        int escalatingCreated = escalating.indexOf("created++;");
+        assertTrue(
+                escalatingGuard > 0 && escalatingRecipient > escalatingGuard && escalatingUnit > escalatingRecipient
+                        && escalatingSend > escalatingUnit && escalatingCreated > escalatingSend,
+                "the natural key gates the send, the recipient is resolved before anything is written, and the send is the"
+                        + " unit of work's last act: " + escalating);
+        // One counter and one summary line: created and mailed cannot diverge once they are one unit,
+        // and `failed` counts rows - reporting it in a generate line and again in a notify line made a
+        // tick with one bad row read as two.
+        assertFalse(escalating.contains("sent++;"), "the combined form counts rows created-and-mailed, not sends: " + escalating);
+        assertTrue(
+                escalating.contains("created and mailed [{}] BillReminder(s)")
+                        && !escalating.contains("mailed [{}] of [{}] matching Bill row(s)"),
+                "the combined form logs ONE summary line: " + escalating);
 
         // month widget: the YYYY-MM field renders the Harmonia month picker on BOTH writable
         // surfaces - the power form and the personal form (my-shell parity).
@@ -3085,15 +3104,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // documentItemsLayout: chat - the .model marker is resolved (body property from the child's
         // messageBody field), and the Harmonia document view + page render the items pane as an
-        // x-h-chat thread with an append-message composer instead of the editable table.
+        // x-h-bubble thread with an append-message composer instead of the editable table.
         String intentModel = contentOf("emission.model");
         assertTrue(intentModel.contains("\"documentItemsLayout\": \"chat\""), "documentItemsLayout: chat must reach the .model");
         assertTrue(intentModel.contains("\"chatBodyProperty\": \"Body\""), "the chat body property must be resolved into the .model");
         assertTrue(intentModel.contains("\"chatInternalProperty\": \"Internal\""),
                 "the chat internal-flag property must be resolved into the .model");
-        // The thread is composed from shipped Harmonia primitives (a role="log" bubble list + a
-        // textarea composer bound to chatDraft) - the x-h-chat component is a later swap-in (TODO in
-        // the template), so assert the primitives that render the chat, not that directive.
+        // The thread is composed from shipped Harmonia components (a role="log" list of x-h-bubble
+        // messages + an input-group composer whose textarea binds chatDraft), so assert the
+        // primitives that render the chat rather than one directive.
         String ticketDoc = contentOf("gen/emission/views/Ticket/Ticket-document.html");
         assertTrue(ticketDoc.contains("role=\"log\""),
                 "documentItemsLayout: chat must emit the conversation thread (role=log) into the document view");

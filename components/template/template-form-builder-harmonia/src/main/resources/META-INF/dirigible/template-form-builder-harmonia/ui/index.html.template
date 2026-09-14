@@ -6,6 +6,11 @@
 #set($SQ = "'")
 #set($BS = '\')
 #set($ESCSQ = "${BS}${SQ}")
+## A .form button's "state" is a BlimpKit vocabulary; only a Harmonia x-h-button variant may reach
+## data-variant (an unknown value is silently the default look there, so it is never passed through).
+## The three BlimpKit-only states map to their Harmonia counterparts, the rest share their names.
+#set($buttonVariantAliases = {"emphasized": "primary", "ghost": "outline", "attention": "warning"})
+#set($buttonVariants = ["primary", "positive", "negative", "warning", "information", "outline", "transparent", "link"])
 ## Every author-facing label resolves through this form's own catalog (i18n/<locale>/<form>.form.json,
 ## key <tprefix>.t.<id>), falling back to the English literal baked in here. The id was assigned to
 ## the model by the catalog-emitting generation pass, so nothing is derived at runtime - and a label
@@ -20,28 +25,28 @@
              A relation.field control's model is the resolver-set name/value variable, so e.g. listing
              `customer.name` shows the customer's name here rather than the raw FK id. A number is
              formatted with its pattern (grouped, fixed decimals); other values render as-is. -->
-        <div class="vbox gap-0">
+        <div class="vbox">
           <span x-h-text.muted class="text-xs"#tlabel($el)>$!el.label</span>
 #if($el.controlId == "input-number")
-          <span x-h-text class="text-sm break-words" x-text="fmtNumber(model.$el.model, '$!el.pattern')"></span>
+          <span x-h-text class="text-sm wrap-break-word" x-text="fmtNumber(model.$el.model, '$!el.pattern')"></span>
 #elseif($el.controlId == "input-date" || $el.controlId == "input-datetime-local" || $el.controlId == "input-time" || $el.controlId == "input-month")
-          <span x-h-text class="text-sm break-words" x-text="fmtDate(model.$el.model, '$el.controlId')"></span>
+          <span x-h-text class="text-sm wrap-break-word" x-text="fmtDate(model.$el.model, '$el.controlId')"></span>
 #else
-          <span x-h-text class="text-sm break-words" x-text="(model.$el.model === null || model.$el.model === undefined || model.$el.model === '') ? '—' : model.$el.model"></span>
+          <span x-h-text class="text-sm wrap-break-word" x-text="(model.$el.model === null || model.$el.model === undefined || model.$el.model === '') ? '—' : model.$el.model"></span>
 #end
         </div>
 #elseif($el.controlId == "header")
-        <h1 x-h-text.h3 class="mb-2 col-span-full text-2xl font-semibold tracking-tight"#tlabel($el)>$!el.label</h1>
+        <h1 x-h-text.h3 class="mb-2 col-span-12 text-2xl font-semibold tracking-tight"#tlabel($el)>$!el.label</h1>
 #elseif($el.controlId == "paragraph")
-        <p x-h-text class="col-span-full"#tlabel($el)>$!el.label</p>
+        <p x-h-text class="col-span-12"#tlabel($el)>$!el.label</p>
 #elseif($el.controlId == "line")
-        <hr x-h-separator class="col-span-full" />
+        <hr x-h-separator class="col-span-12" />
 #elseif($el.controlId == "spacer")
         <div class="flex-1"></div>
 #elseif($el.controlId == "link")
         <a x-h-button data-variant="link" href="$!el.url"#tlabel($el)>$!el.label</a>
 #elseif($el.controlId == "input-textarea")
-        <div x-h-field class="col-span-full">
+        <div x-h-field class="col-span-12">
           <label x-h-label for="$el.id"#tlabel($el)>$!el.label</label>
           <textarea x-h-textarea id="$el.id" rows="4" x-model="model.$el.model"#if($el.readonly) readonly#end></textarea>
         </div>
@@ -64,12 +69,12 @@
                appends a span that owns the interaction), so an unselectable relation renders as text.
                On a task form the read-only branch above already claimed it; this is the non-task case,
                where there is no process context and the model holds whatever the form was given. -->
-          <span x-h-text class="text-sm break-words" x-text="relationLabel('$el.model')"></span>
+          <span x-h-text class="text-sm wrap-break-word" x-text="relationLabel('$el.model')"></span>
 #else
-          <div x-h-select data-filter="contains">
+          <div x-h-select>
             <input x-h-select-input id="$el.id" x-model="model.$el.model" />
             <div x-h-select-content>
-              <div x-h-select-search></div>
+              <div x-h-select-search data-filter="contains"></div>
               <div x-h-select-list>
                 <template x-for="opt in (relationOptions['$el.model'] || [])" :key="opt.value">
                   <div x-h-select-option="opt.label" :data-value="String(opt.value)"></div>
@@ -134,7 +139,7 @@
           <input x-h-input type="color" id="$el.id" x-model="model.$el.model"#if($el.readonly) readonly#end />
         </div>
 #elseif($el.controlId == "button")
-        <button x-h-button#if($el.type == "emphasized") data-variant="primary"#elseif($el.type) data-variant="$el.type"#end type="button"#if($el.callback) @click="run('$el.callback')"#elseif($el.isSubmit) @click="submit()"#end#tlabel($el)>$!el.label</button>
+        <button x-h-button#if($buttonVariantAliases.containsKey($el.type)) data-variant="$buttonVariantAliases.get($el.type)"#elseif($buttonVariants.contains($el.type)) data-variant="$el.type"#end type="button"#if($el.callback) @click="run('$el.callback')"#elseif($el.isSubmit) @click="submit()"#end#tlabel($el)>$!el.label</button>
 #else
         <!-- TODO (forms v2): widget '$!el.controlId' not yet rendered in Harmonia -->
         <div x-h-field>
@@ -203,13 +208,13 @@
         <div x-h-card-content style="flex: 1 1 auto; display: flex; flex-direction: column;">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
 #if($metadata.steps && $metadata.steps.size() > 0)
-        <hr class="col-span-full mb-4" style="border: none; border-top: 1px solid var(--border);" />
+        <hr class="col-span-12 mb-4" style="border: none; border-top: 1px solid var(--border);" />
         <!-- Document status flow, extracted from the intent (the bound entity's function: EntityStatus
              relation -> the status entity's non-terminal seeds, in order). Read-only (non-interactive);
              active step = the current status name (model.$metadata.statusVar).
              `label` stays the untranslated seed name because it is what the record's status value is
              MATCHED against; `title` is the same name resolved through the catalog and is what shows. -->
-        <nav x-h-step-indicator="([#foreach($s in $metadata.steps){ label: '$s.label.replace($SQ, $ESCSQ)' }#if($foreach.hasNext), #end#end]).findIndex(s => s.label === model.${metadata.statusVar}) + 1" data-orientation="horizontal" class="col-span-full mb-4">
+        <nav x-h-step-indicator="([#foreach($s in $metadata.steps){ label: '$s.label.replace($SQ, $ESCSQ)' }#if($foreach.hasNext), #end#end]).findIndex(s => s.label === model.${metadata.statusVar}) + 1" data-orientation="horizontal" class="col-span-12 mb-4">
           <template x-for="(step, i) in [#foreach($s in $metadata.steps){ label: '$s.label.replace($SQ, $ESCSQ)', title: #if($s.translation)T('${projectName}:${tprefix}.t.${s.translation.replace($SQ, $ESCSQ)}', '$s.label.replace($SQ, $ESCSQ)')#{else}'$s.label.replace($SQ, $ESCSQ)'#end, description: #if($s.description)'$s.description.replace($SQ, $ESCSQ)'#{else}''#end }#if($foreach.hasNext), #end#end]" :key="step.label">
             <div x-h-step-indicator-item="i + 1">
               <button x-h-step-indicator-trigger data-non-interactive="true" type="button">
@@ -223,13 +228,13 @@
             </div>
           </template>
         </nav>
-        <hr class="col-span-full mb-4" style="border: none; border-top: 1px solid var(--border);" />
+        <hr class="col-span-12 mb-4" style="border: none; border-top: 1px solid var(--border);" />
 #end
 #foreach($element in $form)
 #if($element.controlId == "container-hbox")
 ## action row: rendered as the bottom-pinned footer below (outside the detail grid)
 #elseif($element.controlId == "container-vbox")
-        <div class="vbox gap-3 col-span-full">
+        <div class="vbox gap-3 col-span-12">
 #foreach($child in $element.children)
 #leaf($child)
 #end
@@ -254,13 +259,13 @@
       <div x-h-field-group>
 #foreach($element in $form)
 #if($element.controlId == "container-hbox")
-        <div class="hbox gap-3 items-end col-span-full mt-2">
+        <div class="hbox gap-3 items-end col-span-12 mt-2">
 #foreach($child in $element.children)
 #leaf($child)
 #end
         </div>
 #elseif($element.controlId == "container-vbox")
-        <div class="vbox gap-3 col-span-full">
+        <div class="vbox gap-3 col-span-12">
 #foreach($child in $element.children)
 #leaf($child)
 #end
