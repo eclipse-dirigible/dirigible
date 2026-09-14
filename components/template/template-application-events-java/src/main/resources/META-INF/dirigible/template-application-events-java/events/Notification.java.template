@@ -80,6 +80,9 @@ public class ${className}Notification implements MessageHandler {
 #end
             String to = ${toExpression};
             if (to == null || to.isBlank()) {
+#if($notifyOutcomeProperty != "")
+                stampNotifySkipped(entity.${notifyOutcomeKeyProperty});
+#end
                 return;
             }
             String subject = ${subjectExpression};
@@ -210,18 +213,33 @@ public class ${className}Notification implements MessageHandler {
      * refuses every authored write, and it must not also lose the reason its mail did not go out.
      */
     private static void stampNotifyOutcome(Object id, Exception failure) {
+        writeNotifyOutcome(id, failure == null ? "sent" : "failed: " + notifyFailureReason(failure),
+                failure == null ? null : "${projectName}-${notifyOutcomePerspective}-${notifyOutcomeEntity}-notifyFailed");
+    }
+
+    /**
+     * Record that this delivery had nobody to mail - the notify block's `outcome: ${notifyOutcomeProperty}`
+     * field. `skipped` is its own value, distinct from `failed`: a record with no recipient is a data
+     * problem to surface (a customer row with no e-mail address), not a delivery that broke, so it fires
+     * no "-notifyFailed" event - only the stamp a list filter reads. Without it the field stays empty,
+     * indistinguishable from a record the handler never ran for - the very state the outcome field exists
+     * to remove (#7369).
+     */
+    private static void stampNotifySkipped(Object id) {
+        writeNotifyOutcome(id, "skipped", null);
+    }
+
+    private static void writeNotifyOutcome(Object id, String value, String eventTopic) {
         if (id == null) {
             return;
         }
-        String value = failure == null ? "sent" : "failed: " + notifyFailureReason(failure);
         // Truncated HERE, to the length the parser holds the field to: a column that truncates does it
         // in the database, where nothing reports what was cut.
         if (value.length() > ${notifyOutcomeLength}) {
             value = value.substring(0, ${notifyOutcomeLength});
         }
         try {
-            new ${notifyOutcomeRepositoryClass}().updateProperties(id, java.util.Map.of("${notifyOutcomeProperty}", value),
-                    failure == null ? null : "${projectName}-${notifyOutcomePerspective}-${notifyOutcomeEntity}-notifyFailed");
+            new ${notifyOutcomeRepositoryClass}().updateProperties(id, java.util.Map.of("${notifyOutcomeProperty}", value), eventTopic);
         } catch (Exception ex) {
             LOG.error("Could not record the delivery outcome [{}] on ${notifyOutcomeEntity} [{}]", value, id, ex);
         }

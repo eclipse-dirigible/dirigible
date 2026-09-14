@@ -751,6 +751,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: title,      type: string, length: 200 }
                   - { name: state,      type: string, length: 20 }
                   - { name: validUntil, type: date }
+                  # #7369: where the step-bound notification below records what its delivery did. A
+                  # literal recipient never resolves to blank, so the runtime never hits the skip
+                  # branch - it is here so the Notification template's `skipped` stamp is COMPILED at
+                  # publish, the same proof the other three notify templates get from their outcomes.
+                  - { name: notifyOutcome, type: string, length: 128, readOnly: true }
                 relations:
                   - { name: replies, kind: oneToMany, to: RfqReply }
               - name: RfqReply
@@ -1344,6 +1349,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 to: ops@example.com
                 subject: "RFQ {title} awaits review"
                 body: "A reviewer must handle it."
+                outcome: notifyOutcome
 
             integrations:
               - name: pushRfqReplied
@@ -2814,6 +2820,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String stepNotification = contentOf("gen/events/emission/RfqReviewPendingNotification.java");
         assertTrue(stepNotification.contains("-step-RfqFlow-review-reached"),
                 "a step-bound notification must bind to the topic its emitter publishes to");
+        // #7369: a record with no recipient must stamp `skipped`, not leave the outcome empty (which
+        // reads as "never processed"). This is the Notification template - the one the issue names -
+        // and the whole point is that the field is filled on the no-recipient path, not only on
+        // sent/failed. Compiled at publish like the rest of this class.
+        assertTrue(stepNotification.contains("stampNotifySkipped(entity.Id)"),
+                "a notify with no recipient must stamp `skipped` on the record, got: " + stepNotification);
         String stepIntegration = contentOf("gen/events/emission/PushRfqRepliedIntegration.java");
         assertTrue(stepIntegration.contains("-step-RfqFlow-markReplied-completed"),
                 "a step-bound integration must bind to the topic its emitter publishes to");
@@ -3024,6 +3036,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         int dunningCatch = dunning.indexOf("} catch (Exception ex) {");
         assertTrue(dunningTry > 0 && dunningTry < dunningLoad && dunningLoad < dunningRender && dunningRender < dunningCatch,
                 "the row's loads and the attachment render must run inside the fail-soft try: " + dunning);
+        // #7369: a queried row with no recipient stamps `skipped` on that row before it is skip-counted,
+        // so the outcome column tells a row the job passed over apart from one it never reached.
+        assertTrue(dunning.contains("stampNotifySkipped(entity.Id)"),
+                "a schedule row with no recipient must stamp `skipped` on that row, got: " + dunning);
 
         // #7276 - the escalating dunning tick that records what it sent. The ladder lookup, the level
         // written onto the history row AND into the natural key, and the guard that skips the send for
@@ -3399,6 +3415,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "only the FAILURE may announce itself, and it must ride the write into the outbox, got: " + sendBill);
         assertTrue(sendBill.contains("\"{\\\"record\\\": \" + Json.stringify(source) + \", \\\"notify\\\": \""),
                 "a transition that mails must report the delivery outcome in its response, got: " + sendBill);
+        // #7369: the no-recipient branch stamps `skipped` too, so the outcome field is never empty for
+        // a record the handler actually processed.
+        assertTrue(sendBill.contains("stampNotifySkipped(entity.Id)"),
+                "a transition whose recipient resolves to nothing must stamp `skipped`, got: " + sendBill);
 
         // The feeder resolves the LINE-ITEM to-one relations per row - an items-table column renders
         // {{Unit}} (the target's label, through the repository so the translation overlay applies) or
