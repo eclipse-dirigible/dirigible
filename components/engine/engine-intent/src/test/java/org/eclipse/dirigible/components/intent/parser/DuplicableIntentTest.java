@@ -156,10 +156,25 @@ class DuplicableIntentTest {
     }
 
     @Test
-    void resettingARequiredRelationIsAccepted() {
-        // A relation carries no create-time rule to check, and a copy that deliberately asks for a new
-        // counterparty is a legitimate thing to author.
-        EntityIntent invoice = entity(IntentParser.parse(objectForm("reset: [customer]")), "SalesInvoice");
+    void resettingARequiredRelationWithNoInitIsRejected() {
+        // The same rule as the field branch, one branch over (#7366): the create path has to be able to
+        // fill what the reset hands back to it, or every Duplicate fails at the create.
+        assertIssue(objectForm("reset: [customer]"), "would make every duplicate fail");
+    }
+
+    @Test
+    void resettingARequiredRelationThatDeclaresAnInitIsAccepted() {
+        String withInit = objectForm("reset: [customer]").replace("to: Customer, required: true", "to: Customer, required: true, init: 1");
+        EntityIntent invoice = entity(IntentParser.parse(withInit), "SalesInvoice");
+
+        assertEquals(List.of("customer"), invoice.getDuplicable()
+                                                 .getReset());
+    }
+
+    @Test
+    void resettingAnOptionalRelationIsAccepted() {
+        String optional = objectForm("reset: [customer]").replace("to: Customer, required: true", "to: Customer");
+        EntityIntent invoice = entity(IntentParser.parse(optional), "SalesInvoice");
 
         assertEquals(List.of("customer"), invoice.getDuplicable()
                                                  .getReset());

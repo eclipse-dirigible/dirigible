@@ -679,7 +679,9 @@ public final class IntentParser {
                 issues.add(subject + " names [" + name + "] - the status of a copy is the lifecycle's initial one and never copied");
                 return;
             }
-            if (!isReset) {
+            if (isReset) {
+                validateDuplicableReset(subject, name, relation, issues);
+            } else {
                 validateDuplicableDefault(subject, name, "integer", value, issues);
             }
             return;
@@ -699,6 +701,18 @@ public final class IntentParser {
         if (field.isRequired() && !filled) {
             issues.add(subject + " names required field [" + name + "], which has no defaultValue and no create-time rule - resetting it"
                     + " would make every duplicate fail; give it a defaults: value or a create-time rule");
+        }
+    }
+
+    /**
+     * The relation half of the same rule: a {@code reset} hands the relation back to the create path,
+     * so a required to-one that declares no {@code init:} would make every duplicate fail with the
+     * server's own "field is required".
+     */
+    private static void validateDuplicableReset(String subject, String name, RelationIntent relation, List<String> issues) {
+        if (relation.isRequired() && !hasText(relation.getInit())) {
+            issues.add(subject + " names required relation [" + name + "], which declares no init: - resetting it would make every"
+                    + " duplicate fail; give it a defaults: value or an init:");
         }
     }
 
