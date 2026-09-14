@@ -37,34 +37,42 @@
          choice through the shared theme store (Harmonia.setColorScheme). -->
   </head>
 
-  <body class="vbox size-full" x-data="app">
+  <body class="vbox size-full bg-sidebar" x-data="app">
 
-    <div x-h-sheet-overlay="isOpen">
-      <div x-h-sheet data-align="left" x-ref="overlay"></div>
+    <!-- Narrow-screen drawer. appShell.js moves the ONE sidebar element between this sheet and its
+         wide-screen slot below at the 1024px breakpoint. -->
+    <div x-h-sheet-overlay="showSidebarSheet">
+      <div x-h-sheet data-align="left" x-ref="sidebarSheet"></div>
     </div>
 
     <!-- x-cloak hides the shell until Alpine + Harmonia upgrade the markup, so the host iframe never
          flashes the raw, un-styled chrome (sidebar/components) before init. -->
-    <div x-cloak x-h-split class="size-full" data-orientation="horizontal" data-variant="border">
+    <div x-cloak class="hbox size-full">
 
-      <!-- Sidebar panel -->
-      <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="256" data-min="200"
-           data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
-        <div x-h-sidebar x-ref="sidebar" style="--sidebar-width: 100%">
-          <div x-h-sidebar-header>
-            <div class="hbox items-center gap-2 p-1">
+      <!-- Wide-screen home of the sidebar - a plain flex slot, not a resizable panel: the sidebar has
+           one right width (--sidebar-width) and nothing here benefits from dragging it. -->
+      <div x-ref="sidebarSlot" class="vbox shrink-0">
+        <div x-h-sidebar x-ref="sidebar" data-borderless="true">
+          <div x-h-sidebar-header data-borderless="true">
+            <div x-h-sidebar-header-item>
               <!-- Brand icon (template appIcon param / intent icon / default). A value containing '/' or
                    '.' is treated as an image URL (custom SVG/PNG, e.g. /services/web/<project>/logo.svg
                    or a data: URI); otherwise it is a Lucide icon name. -->
 #if($appIcon.contains("/") || $appIcon.contains("."))
-              <img src="${appIcon}" alt="${appTitle}" class="size-5" />
+              <img src="${appIcon}" alt="" aria-hidden="true" class="size-8 rounded-control" />
 #else
-              <svg role="presentation" x-h-lucide data-lucide="${appIcon}" class="size-5 text-primary"></svg>
+              <svg role="presentation" x-h-lucide data-lucide="${appIcon}" class="size-8 text-primary"></svg>
 #end
-              <span class="font-bold"#if($appDescription && $appDescription != '') title="${appDescription}"#end>${appTitle}</span>
+              <div class="vbox min-w-0">
+                <span class="truncate">${appTitle}</span>
+#if($appDescription && $appDescription != '')
+                <span class="truncate text-sm font-normal text-muted-foreground">${appDescription}</span>
+#end
+              </div>
             </div>
           </div>
-          <div x-h-sidebar-content>
+          <!-- x-h-sidebar carries no landmark role of its own, so the navigation says what it is. -->
+          <nav x-h-sidebar-content :aria-label="T('application-core:shell.nav.application', 'Application')">
             <!-- Application: the built-in shell sections. -->
             <div x-h-sidebar-group>
               <div x-h-sidebar-group-label x-text="T('application-core:shell.nav.application', 'Application')"></div>
@@ -78,6 +86,10 @@
                   <li x-h-sidebar-menu-item>
                     <button x-h-sidebar-menu-nav :data-active="isActive('/inbox')" @click="navigate('/inbox')">
                       <svg role="presentation" x-h-lucide data-lucide="inbox"></svg><span x-text="T('application-core:shell.nav.inbox', 'Inbox')"></span>
+                      <!-- The open BPM task count, from the same store the bell and the record pages read. -->
+                      <span x-h-sidebar-menu-badge x-show="$store.processTasks.tasks.length" role="img"
+                            :aria-label="$store.processTasks.tasks.length + ' open tasks'"
+                            x-text="$store.processTasks.tasks.length"></span>
                     </button>
                   </li>
                   <li x-h-sidebar-menu-item>
@@ -150,12 +162,12 @@
                 </ul>
               </div>
             </div>
-          </div>
+          </nav>
 #set($hasSettings = false)
 #foreach($entity in $models)#if($entity.type == "SETTING")#set($hasSettings = true)#end#end
 #if($hasSettings)
           <!-- Settings pinned to the sidebar footer (bottom-left), like codbex-athena-app. -->
-          <div x-h-sidebar-footer>
+          <div x-h-sidebar-footer data-borderless="true">
             <nav :aria-label="T('application-core:shell.nav.settings', 'Settings')">
               <ul x-h-sidebar-menu>
                 <li x-h-sidebar-menu-item>
@@ -170,18 +182,21 @@
         </div>
       </div>
 
-      <!-- Main panel -->
-      <div x-h-split-panel>
-        <div class="vbox size-full">
+      <!-- Content column. min-w-0 is load-bearing: a flex item defaults to min-width:auto, so a long
+           truncated line inside would refuse to shrink and scroll the whole document sideways.
+           Narrow and embedded drop the gutter and the card chrome and use the full width. -->
+      <div class="min-w-0 flex-1 overflow-hidden" :class="isSmallScreen || embedded ? '' : 'p-2'">
+        <main class="vbox size-full overflow-hidden bg-background"
+              :class="isSmallScreen || embedded ? '' : 'rounded-xl border shadow-sm'">
           <!-- Top bar (breadcrumb + notifications + theme + user) - hidden in embedded mode so an FK
                "Add" iframe dialog shows just the form, no shell chrome. -->
           <div x-h-toolbar data-variant="transparent" x-cloak x-show="!embedded">
-            <button x-show="hiddenPanels.left && !embedded" x-h-button data-variant="transparent"
+            <button x-show="isSmallScreen && !embedded" x-h-button data-variant="transparent"
                     aria-label="Navigation" @click="openSideNav()" data-size="icon">
               <svg role="presentation" x-h-lucide data-lucide="menu"></svg>
             </button>
             <nav x-h-breadcrumb data-overflow="scroll"
-                 :data-variant="hiddenPanels.left ? 'outline' : 'default'" data-size="md">
+                 :data-variant="isSmallScreen ? 'outline' : 'default'" data-size="md">
               <ol x-h-breadcrumb-list>
                 <li x-h-breadcrumb-item>
                   <span x-show="isDashboard" x-h-breadcrumb-page aria-label="Home">
@@ -254,21 +269,16 @@
               </ol>
             </div>
 
-            <!-- Logged-in user: a Lucide avatar; the dropdown shows the user name and Log out. -->
-            <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
-                    :aria-label="$store.currentUser.name || 'Account'">
-              <svg role="presentation" x-h-lucide data-lucide="circle-user"></svg>
-            </button>
+            <!-- Logged-in user: an avatar carrying the user's initials; the dropdown names them and
+                 offers Log out. x-h-menu-label is a legal direct child of the menu, so the identity
+                 line needs no presentational li wrapper. -->
+            <button id="user-menu-trigger" x-h-avatar x-h-menu-trigger.dropdown
+                    :aria-label="$store.currentUser.name || 'Account'"
+                    x-text="$store.currentUser.initials"></button>
             <ul x-h-menu aria-label="User menu" data-align="bottom-end">
-              <!-- A ul only takes li children: the identity tile rides in a presentational one. -->
-              <li role="presentation">
-                <div x-h-tile class="mb-1">
-                  <div x-h-tile-media><svg role="presentation" x-h-lucide data-lucide="circle-user" class="size-6"></svg></div>
-                  <div x-h-tile-content>
-                    <div x-h-tile-title x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></div>
-                  </div>
-                </div>
-              </li>
+              <div x-h-menu-label>
+                <span x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></span>
+              </div>
               <div x-h-menu-separator></div>
               <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
                 <svg role="presentation" x-h-lucide data-lucide="log-out"></svg> <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
@@ -276,10 +286,18 @@
             </ul>
           </div>
 
+          <!-- Route progress: the router is fetching the next view's fragment. The zero-height
+               positioning parent keeps the bar from shifting the page it sits above. -->
+          <div class="relative">
+            <div class="absolute top-0 left-0 z-20 w-full rounded-none" x-show="routeLoading" x-cloak>
+              <div x-h-progress="0" data-loading="true" aria-label="Loading page"></div>
+            </div>
+          </div>
+
           <div id="app" class="size-full overflow-auto flex-1">
             <!-- Pinecone Router renders the matched view fragment here. -->
           </div>
-        </div>
+        </main>
       </div>
 
     </div>

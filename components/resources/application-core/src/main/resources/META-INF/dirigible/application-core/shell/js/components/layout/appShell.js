@@ -27,8 +27,16 @@ document.addEventListener('alpine:init', () => {
   });
 
   Alpine.data('app', () => ({
-    hiddenPanels: { left: true },
-    isOpen: false,
+    // Narrow viewport (below the 1024px breakpoint). The sidebar then lives in the x-h-sheet drawer
+    // and the content frame drops its gutter and card chrome to use the full width.
+    isSmallScreen: false,
+
+    // The narrow-screen sidebar drawer, two-way bound to the x-h-sheet-overlay.
+    showSidebarSheet: false,
+
+    // A route template is being fetched - drives the toolbar's indefinite progress bar.
+    routeLoading: false,
+
     currentPath: '',
 
     // Embedded mode: when this SPA is hosted inside the shared application shell (the platform
@@ -46,32 +54,27 @@ document.addEventListener('alpine:init', () => {
       // the shared store - a store has no component scope of its own to reach the magic from.
       Alpine.store('notifications').attachToaster(this.$notifications);
       try { this.embedded = new URLSearchParams(window.location.search).has('embedded'); } catch (e) { /* no URL */ }
-      if (this.embedded) this.hiddenPanels.left = true;
       const getPath = () => {
         const p = window.PineconeRouter.context?.path || '/';
         return p === '/' ? '/dashboard' : p;
       };
       this.currentPath = getPath();
-      window.addEventListener('popstate', () => {
-        this.currentPath = getPath();
-        this.refreshIcons();
-      });
+      window.addEventListener('popstate', () => { this.currentPath = getPath(); });
+      document.addEventListener('pinecone:start', () => { this.routeLoading = true; });
+      document.addEventListener('pinecone:fetch-error', () => { this.routeLoading = false; });
       document.addEventListener('pinecone:end', () => {
+        this.routeLoading = false;
         this.currentPath = getPath();
-        this.refreshIcons();
       });
 
       this._bp = Harmonia.getBreakpointListener((isNarrow) => {
-        // Embedded mode keeps the sidebar hidden regardless of width (the shared shell owns nav).
-        this.hiddenPanels.left = this.embedded ? true : isNarrow;
-        if (isNarrow) {
-          this.$refs.overlay.appendChild(this.$refs.sidebar);
-        } else {
-          this.$refs.sidebarPanel.appendChild(this.$refs.sidebar);
-        }
+        this.isSmallScreen = isNarrow;
+        // The sidebar is ONE element, moved between its wide-screen slot and the drawer. Embedded
+        // mode has no navigation of its own (the host shell owns it), so it parks in the drawer -
+        // which is closed, and whose trigger is hidden - at every width.
+        const home = isNarrow || this.embedded ? this.$refs.sidebarSheet : this.$refs.sidebarSlot;
+        home.appendChild(this.$refs.sidebar);
       }, 1024);
-
-      this.refreshIcons();
     },
 
     destroy() {
@@ -145,14 +148,8 @@ document.addEventListener('alpine:init', () => {
       this.closeSideNav();
     },
 
-    openSideNav() { this.isOpen = true; },
+    openSideNav() { this.showSidebarSheet = true; },
 
-    closeSideNav() {
-      if (window.matchMedia('(max-width: 1024px)').matches) this.isOpen = false;
-    },
-
-    // No-op: Lucide icons now render via the x-h-lucide directive (harmonia-lucide bundle), which
-    // upgrades icons on init and inside dynamically loaded views - no manual createIcons scan needed.
-    refreshIcons() {},
+    closeSideNav() { this.showSidebarSheet = false; },
   }));
 }, { once: true });
