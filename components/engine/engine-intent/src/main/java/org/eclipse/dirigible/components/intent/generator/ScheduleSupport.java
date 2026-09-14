@@ -63,7 +63,7 @@ public final class ScheduleSupport {
         public enum Shape {
             /** A calendar day - {@code java.time.LocalDate}. */
             DATE,
-            /** A date and a time - {@code java.time.LocalDateTime}. */
+            /** A date and a time - {@code java.time.Instant}, the shape a timestamp column carries. */
             TIMESTAMP
         }
 
@@ -120,15 +120,37 @@ public final class ScheduleSupport {
         }
 
         /**
-         * @return the Java expression the generated job evaluates at each firing
+         * The Java expression the generated job evaluates at each firing, in the shape the queried COLUMN
+         * carries - which is what makes the comparison bind at all.
+         *
+         * <p>
+         * A {@code date} field generates as a {@code java.time.LocalDate} and a {@code timestamp} one -
+         * including the {@code audit: true} columns a staleness sweep looks at - as a
+         * {@code java.time.Instant}, never a {@code LocalDateTime}; handing Hibernate the wrong one fails
+         * the query at every tick rather than matching nothing (issue #7384). The parser holds the moment's
+         * own shape to the field's, so the shape alone decides here.
+         *
+         * <p>
+         * A calendar amount has no fixed length in seconds ({@code P1M} is a month, {@code P7D} seven
+         * calendar days across a daylight-saving boundary), so on a timestamp it is applied on the calendar
+         * of the run's own zone and handed back as the instant the column holds - the meaning a
+         * {@code Duration} could not express at all.
+         *
+         * @return the expression
          */
         public String javaExpression() {
-            String now = shape == Shape.DATE ? "java.time.LocalDate.now()" : "java.time.LocalDateTime.now()";
-            if (duration == null) {
-                return now;
+            String movement = forward ? ".plus(" : ".minus(";
+            if (shape == Shape.DATE) {
+                return duration == null ? "java.time.LocalDate.now()"
+                        : "java.time.LocalDate.now()" + movement + "java.time.Period.parse(\"" + duration + "\"))";
             }
-            String amount = (timeBased() ? "java.time.Duration.parse(\"" : "java.time.Period.parse(\"") + duration + "\")";
-            return now + (forward ? ".plus(" : ".minus(") + amount + ")";
+            if (duration == null) {
+                return "java.time.Instant.now()";
+            }
+            if (timeBased()) {
+                return "java.time.Instant.now()" + movement + "java.time.Duration.parse(\"" + duration + "\"))";
+            }
+            return "java.time.ZonedDateTime.now()" + movement + "java.time.Period.parse(\"" + duration + "\")).toInstant()";
         }
 
         /**

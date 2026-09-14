@@ -1182,6 +1182,26 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   subject: "Bill {note} - {escalation.name}"
                   body: "{escalation.wording}"
 
+              # #7384: the staleness sweep - the flagship use of a relative moment (#6764) - reads the
+              # `audit: true` CreatedAt column, which generates as a java.time.Instant. Emitted as a
+              # LocalDateTime, Hibernate refused to bind it and the tick threw before reading a single
+              # row, so this one is TRIGGERED below rather than only compiled: the bind is what the run
+              # proves, and it happens whether or not the query matches. Both renderings of a timestamp
+              # moment are on the same tick - the time amount (an Instant offset by a Duration) and the
+              # calendar one (a month, which has no fixed length in seconds and is applied on the
+              # calendar of the run's own zone). The cron is the 1st of January at 06:00, so nothing
+              # else ever fires it, and nothing is a month old inside a test run, so it mails nobody.
+              - name: stale-claims
+                cron: "0 0 6 1 1 ?"
+                entity: Claim
+                where:
+                  - { field: CreatedAt, op: lt, value: "CURRENT_TIMESTAMP-PT30M" }
+                  - { field: UpdatedAt, op: ge, value: "CURRENT_TIMESTAMP-P1M" }
+                notify:
+                  to: Person.email
+                  subject: "Claim {note} has not moved"
+                  body: "Still open: {recordUrl}"
+
             processes:
               # assignee: personal - the confirm task lands in exactly the owner's Inbox (the IT
               # runs as admin, mapped by the Person seed below).
@@ -3044,6 +3064,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         int escalatingSend = escalating.indexOf("Mail.send(");
         assertTrue(escalatingGuard > 0 && escalatingSend > escalatingGuard,
                 "the natural key gates the send as well as the write: " + escalating);
+
+        // #7384 - the staleness sweep queries the `audit: true` timestamp columns, which generate as
+        // java.time.Instant. A moment rendered as a LocalDateTime compiles (Criteria takes an Object)
+        // and then fails the BIND at every tick, so the emission is pinned here and the tick is run in
+        // assertRuntimeEnforcement() - neither half proves the shape on its own.
+        String stale = contentOf("gen/events/emission/StaleClaimsJob.java");
+        assertTrue(stale.contains(".lt(\"CreatedAt\", java.time.Instant.now().minus(java.time.Duration.parse(\"PT30M\")))"),
+                "a time offset on a timestamp column must render in that column's own shape: " + stale);
+        assertTrue(stale.contains(".ge(\"UpdatedAt\", java.time.ZonedDateTime.now().minus(java.time.Period.parse(\"P1M\")).toInstant())"),
+                "a calendar amount stays a calendar amount and still arrives as the instant the column carries: " + stale);
+        assertFalse(stale.contains("java.time.LocalDateTime"),
+                "no timestamp comparison may reach the query as a LocalDateTime - Hibernate refuses to bind it: " + stale);
 
         // month widget: the YYYY-MM field renders the Harmonia month picker on BOTH writable
         // surfaces - the power form and the personal form (my-shell parity).
@@ -5390,6 +5422,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertResolveTransitionRuntime();
         assertGeneratesStepAxisRuntime();
         assertGeneratesItemsRuleRuntime();
+        assertStalenessSweepRuntime();
+    }
+
+    /**
+     * The staleness sweep really runs (#7384): a {@code where} moment must reach the query in the shape
+     * the queried COLUMN carries, and the {@code audit: true} timestamp columns this construct exists
+     * to query are {@code java.time.Instant}s.
+     *
+     * <p>
+     * Nothing below this layer can show it. {@code Criteria} takes an {@code Object}, so a
+     * {@code LocalDateTime} compiles; Hibernate then refuses to bind it and the tick throws before it
+     * reads a row, which is why triggering the job - the Jobs perspective's play button, run
+     * synchronously on the Java engine - is the assertion: a 200 cannot come back without the whole
+     * query having been built and bound. The schedule's own cron never fires inside a test run.
+     */
+    private void assertStalenessSweepRuntime() {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("[]")
+                                                 .when()
+                                                 .post("/services/jobs/trigger/gen.events.emission.StaleClaimsJob")
+                                                 .then()
+                                                 .statusCode(200),
+                30);
     }
 
     /**

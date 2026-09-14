@@ -855,7 +855,9 @@ Exactly one offset on one token - a moment vocabulary, not an expression languag
 happens in the queried field's own shape, so a `date` field takes `CURRENT_DATE` and a date-only amount
 (`P7D`/`P1M`/`P1Y`) while a `timestamp` field takes `CURRENT_TIMESTAMP` and any amount; a mismatched
 token, a time offset on a date, a second offset, or a moment on a non-temporal field is an authoring
-error rather than a query that silently never matches.
+error rather than a query that silently never matches. That shape is the Java one the generated column
+carries - `java.time.LocalDate` for a `date`, `java.time.Instant` for a `timestamp`, the `audit: true`
+`CreatedAt`/`UpdatedAt` columns a sweep usually reads included.
 
 ## integrations - outbound HTTP
 

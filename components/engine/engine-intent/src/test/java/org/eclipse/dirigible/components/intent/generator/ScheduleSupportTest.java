@@ -52,7 +52,7 @@ class ScheduleSupportTest {
     @Test
     void numbersAndTimestampTokensRenderWithoutQuotes() {
         ScheduleIntent s = schedule(List.of(cond("quantity", "gt", 1), cond("changedAt", "ge", "CURRENT_TIMESTAMP")));
-        assertEquals("Criteria.create().gt(\"Quantity\", 1).ge(\"ChangedAt\", java.time.LocalDateTime.now())",
+        assertEquals("Criteria.create().gt(\"Quantity\", 1).ge(\"ChangedAt\", java.time.Instant.now())",
                 ScheduleSupport.criteriaExpression(s));
     }
 
@@ -60,24 +60,49 @@ class ScheduleSupportTest {
     void aRelativeMomentOffsetsTheTokenAgainstTheRunsClock() {
         ScheduleIntent s = schedule(List.of(cond("updatedAt", "lt", "CURRENT_TIMESTAMP-PT30M"), cond("sentOn", "lt", "CURRENT_DATE-P7D")));
         assertEquals(
-                "Criteria.create().lt(\"UpdatedAt\", java.time.LocalDateTime.now().minus(java.time.Duration.parse(\"PT30M\")))"
+                "Criteria.create().lt(\"UpdatedAt\", java.time.Instant.now().minus(java.time.Duration.parse(\"PT30M\")))"
                         + ".lt(\"SentOn\", java.time.LocalDate.now().minus(java.time.Period.parse(\"P7D\")))",
                 ScheduleSupport.criteriaExpression(s));
     }
 
     @Test
     void theForwardFormIsAdmittedSymmetrically() {
-        ScheduleIntent s = schedule(List.of(cond("dueOn", "le", "CURRENT_DATE+P7D")));
-        assertEquals("Criteria.create().le(\"DueOn\", java.time.LocalDate.now().plus(java.time.Period.parse(\"P7D\")))",
+        ScheduleIntent s = schedule(List.of(cond("dueOn", "le", "CURRENT_DATE+P7D"), cond("changedAt", "le", "CURRENT_TIMESTAMP+PT1H"),
+                cond("closedAt", "le", "CURRENT_TIMESTAMP+P1M")));
+        assertEquals(
+                "Criteria.create().le(\"DueOn\", java.time.LocalDate.now().plus(java.time.Period.parse(\"P7D\")))"
+                        + ".le(\"ChangedAt\", java.time.Instant.now().plus(java.time.Duration.parse(\"PT1H\")))"
+                        + ".le(\"ClosedAt\", java.time.ZonedDateTime.now().plus(java.time.Period.parse(\"P1M\")).toInstant())",
                 ScheduleSupport.criteriaExpression(s));
+    }
+
+    /**
+     * A moment is rendered in the shape the queried COLUMN carries, and a {@code timestamp} column -
+     * declared, or one of the {@code audit: true} ones a staleness sweep is for - is a
+     * {@code java.time.Instant} (#7384).
+     *
+     * <p>
+     * Nothing downstream catches getting this wrong: {@code Criteria} takes an {@code Object}, so a
+     * {@code LocalDateTime} compiles and publishes, and only the tick itself fails - on the bind,
+     * before a single row is read, every time the job fires.
+     */
+    @Test
+    void aTimestampMomentIsRenderedInTheColumnsOwnInstantShape() {
+        ScheduleIntent s = schedule(List.of(cond("CreatedAt", "lt", "CURRENT_TIMESTAMP-PT30M"), cond("UpdatedAt", "ge", "NOW")));
+        String criteria = ScheduleSupport.criteriaExpression(s);
+        assertEquals("Criteria.create().lt(\"CreatedAt\", java.time.Instant.now().minus(java.time.Duration.parse(\"PT30M\")))"
+                + ".ge(\"UpdatedAt\", java.time.Instant.now())", criteria);
+        assertFalse(criteria.contains("LocalDateTime"), "a LocalDateTime is not assignable to the Instant the column binds");
     }
 
     @Test
     void aCalendarAmountOnATimestampStaysACalendarAmount() {
-        // P1M is a month, not 30 days - a Period on a LocalDateTime keeps that meaning, which a
-        // Duration could not express at all.
+        // P1M is a month, not 30 days - a Period keeps that meaning, which a Duration could not express
+        // at all - so it is applied on the calendar of the run's own zone and handed back as the instant
+        // the timestamp column carries.
         ScheduleIntent s = schedule(List.of(cond("changedAt", "lt", "CURRENT_TIMESTAMP-P1M")));
-        assertEquals("Criteria.create().lt(\"ChangedAt\", java.time.LocalDateTime.now().minus(java.time.Period.parse(\"P1M\")))",
+        assertEquals(
+                "Criteria.create().lt(\"ChangedAt\", java.time.ZonedDateTime.now().minus(java.time.Period.parse(\"P1M\")).toInstant())",
                 ScheduleSupport.criteriaExpression(s));
     }
 
