@@ -1182,6 +1182,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   subject: "Bill {note} - {escalation.name}"
                   body: "{escalation.wording}"
 
+              # #7385: the operations mailbox a sweep reports to differs per environment, so the
+              # address is a configuration KEY read at send time rather than a literal. It never fires
+              # here (the 1st of January at 06:00); it is in this fixture so the Configurations.get
+              # recipient is COMPILED by the publish below - a String expression where the templates
+              # used to paste a quoted literal.
+              - name: stuck-bills
+                cron: "0 0 6 1 1 *"
+                entity: Bill
+                where:
+                  - { field: dueOn, op: lt, value: CURRENT_DATE }
+                notify:
+                  to: "@config:BILLING_OPS_EMAIL"
+                  subject: "Bill {note} has not moved"
+                  body: "It may need an operator."
+
             processes:
               # assignee: personal - the confirm task lands in exactly the owner's Inbox (the IT
               # runs as admin, mapped by the Person seed below).
@@ -3044,6 +3059,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         int escalatingSend = escalating.indexOf("Mail.send(");
         assertTrue(escalatingGuard > 0 && escalatingSend > escalatingGuard,
                 "the natural key gates the send as well as the write: " + escalating);
+
+        // #7385 - an operations mailbox named by configuration. The recipient must be a lookup read at
+        // send time, not the key quoted as an address: emitted as a literal, the mail went to
+        // `@config:BILLING_OPS_EMAIL` and the only trace anywhere was the delivery failure.
+        String stuck = contentOf("gen/events/emission/StuckBillsJob.java");
+        assertTrue(stuck.contains("to = org.eclipse.dirigible.sdk.core.Configurations.get(\"BILLING_OPS_EMAIL\")"),
+                "a @config: recipient must resolve through the configuration facade at send time: " + stuck);
+        assertFalse(stuck.contains("\"@config:BILLING_OPS_EMAIL\""), "the key must never reach the job as the address: " + stuck);
 
         // month widget: the YYYY-MM field renders the Harmonia month picker on BOTH writable
         // surfaces - the power form and the personal form (my-shell parity).

@@ -213,6 +213,12 @@ not as an apology.
   **cross-model** - `partner.email` where `partner` targets an entity owned by another `uses` model
   resolves against the owner's model (the generated listener imports the owner's Entity/Repository),
   exactly like a cross-model dropdown. Multi-hop paths are not supported.
+- **A recipient the ENVIRONMENT supplies: `to: "@config:OPS_EMAIL"`.** An operations mailbox - the one
+  a staleness sweep or a failure notice reports to - is not a property of any record and differs per
+  deployment, so name the configuration KEY and the address is read at send time (the same `@config:`
+  reference an integration's `url:` and a payload value take). Prefer it to a hard-coded address for
+  anything addressed to "us" rather than to a counterparty, or the model becomes environment-specific.
+  The key must not be empty; a key that is unset at run time is simply a row with nobody to mail.
 - **The notify block is ONE shape reused at four call sites** - a `notifications[]` entry, a
   `schedules[].notify`, a `transitions[].notify`, and a `serviceTask`'s `args.notify`. Everywhere it is
   `to` / `subject` / `body` (+ `channel: email`), with `{field}` / `{relation.field}` interpolation in
@@ -2675,7 +2681,7 @@ notifications:
 ```
 
 **Rules:** exactly one event of the event axis; `channel` is `email`; `to` follows the recipient rule
-(literal / field / one-hop `relation.field`).
+(literal / `@config:KEY` / field / one-hop `relation.field`).
 
 ### send a document by e-mail - `attach: print` on any notify block
 
@@ -3936,6 +3942,7 @@ or a seeded name.
 | notification `channel` | `email` |
 | notify `attach` | `print` (the record the block is about - inside a fan-out, the ROW), `recordPrint` (a fan-out's anchor record, rendered once); whichever is rendered must be a document. Or the map form `{ report: <name>, bind: { <parameter>: <field> } }` - a rendered REPORT, scoped to the recipient by its own parameters |
 | notify `forEach` | a declared entity with exactly ONE to-one relation back to the record (one message per row; every bare path resolves against the row, `{record.<field>}` against the anchor record) - on `transitions[].notify` and `serviceTask` `args.notify` only |
+| notify `to` | a literal address, `@config:<KEY>` (read from configuration at send time - use it for an operations mailbox), a direct field, or a one-hop `relation.field` (cross-model allowed); never multi-hop, never `record.`-scoped |
 | notify block sites | `notifications[]`, `schedules[].notify`, `transitions[].notify`, `serviceTask` `args.notify` |
 | notify `outcome` | a `string` field (length >= 64) of the record the message is about - a fan-out's ROW - stamped `sent` / `failed: <reason>`; a failure publishes `<Entity>-notifyFailed` |
 | schedule `where` `op` | `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `like` |

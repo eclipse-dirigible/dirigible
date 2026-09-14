@@ -110,6 +110,18 @@ public final class NotificationSupport {
      */
     public static final String ESCALATION_LOCAL = "escalation";
 
+    /**
+     * The {@code @config:KEY} prefix a recipient may carry instead of an address (issue #7385) - the
+     * same authoring sugar an integration's {@code url:} and a declared payload value already take. The
+     * mailbox an operations notice goes to differs per environment, so the model names the
+     * configuration KEY and the address is read at send time; without it the address had to be
+     * hard-coded and the model became environment-specific.
+     */
+    public static final String CONFIG_PREFIX = "@config:";
+
+    /** The Java expression a {@link #CONFIG_PREFIX} recipient resolves to, less the quoted key. */
+    private static final String CONFIG_EXPRESSION = "org.eclipse.dirigible.sdk.core.Configurations.get(";
+
     private NotificationSupport() {}
 
     /**
@@ -284,7 +296,8 @@ public final class NotificationSupport {
      * {@code transitions[].notify}, a {@code serviceTask}'s {@code args.notify} - where there is no
      * event map because the call site itself IS the event.
      *
-     * @param to the recipient: a literal address, a direct field, or a one-hop {@code relation.field}
+     * @param to the recipient: an {@code @config:KEY} reference, a literal address, a direct field, or
+     *        a one-hop {@code relation.field}
      * @param subject the subject, with {@code {field}} / {@code {relation.field}} placeholders
      * @param body the body, with the same placeholders
      * @param when an optional guard - a comparison, a list of them, or {@code null} for none
@@ -306,7 +319,8 @@ public final class NotificationSupport {
      * recipient may not be record-scoped - a fan-out sends to its rows - so a record-scoped {@code to}
      * stays unresolvable and the caller drops the block instead of mailing one address N times.
      *
-     * @param to the recipient: a literal address, a direct field, or a one-hop {@code relation.field}
+     * @param to the recipient: an {@code @config:KEY} reference, a literal address, a direct field, or
+     *        a one-hop {@code relation.field}
      * @param subject the subject, with {@code {field}} / {@code {relation.field}} /
      *        {@code {record.field}} placeholders
      * @param body the body, with the same placeholders
@@ -474,12 +488,23 @@ public final class NotificationSupport {
             return usesInboxUrl;
         }
 
-        /** A single value (the {@code to} recipient): literal, direct field, or relation.field. */
+        /**
+         * A single value (the {@code to} recipient): an {@code @config:KEY} reference, a literal, a direct
+         * field, or a relation.field.
+         */
         String value(String raw) {
             if (raw == null || raw.isBlank()) {
                 return "null";
             }
             String trimmed = raw.trim();
+            if (trimmed.startsWith(CONFIG_PREFIX)) {
+                // Read at send time, inside the sending tenant's configuration scope, exactly as
+                // {appUrl} is. Fully qualified because the expression lands in four different events
+                // templates and not all of them import the facade.
+                return CONFIG_EXPRESSION + quote(trimmed.substring(CONFIG_PREFIX.length())
+                                                        .trim())
+                        + ")";
+            }
             if (trimmed.contains("@") || !PATH.matcher(trimmed)
                                               .matches()) {
                 return quote(trimmed);
