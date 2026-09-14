@@ -2548,9 +2548,12 @@ class IntentEngineIT extends IntegrationTest {
         int days = job.indexOf("java.time.temporal.ChronoUnit.DAYS.between(entity.DueDate", loop);
         int notDue = job.indexOf("notDue++;", loop);
         int guard = job.indexOf("PaymentReminderRepository().findAll(Criteria.create()", loop);
+        int recipient = job.indexOf("if (to == null || to.isBlank())", loop);
         int create = job.indexOf("UnitOfWork.run(", loop);
-        int send = job.indexOf("Mail.send(", loop);
-        assertTrue(loop > 0 && ladder > 0 && days > 0 && notDue > 0 && guard > 0 && create > 0 && send > 0, "got: " + job);
+        // #7365: the send is the unit of work's last act, so it is the unchecked `mail(...)` call
+        // inside the lambda - `Mail.send` itself lives in that helper, below the loop.
+        int send = job.indexOf("mail(from, recipient, subject, parts);", loop);
+        assertTrue(loop > 0 && ladder > 0 && days > 0 && notDue > 0 && guard > 0 && recipient > 0 && create > 0 && send > 0, "got: " + job);
         // The ladder is read first: which level a row is at decides both what is written and what is
         // said, so it cannot be resolved after either.
         assertTrue(ladder < days && days < notDue && notDue < guard, "the level is picked before the idempotency guard: " + job);
@@ -2571,6 +2574,17 @@ class IntentEngineIT extends IntegrationTest {
         // The guard gates the MAIL as well: it `continue`s before the send, in the same try.
         int existed = job.indexOf("existed++;", loop);
         assertTrue(guard < existed && existed < create && create < send, "an already-sent level skips the send too: " + job);
+        // #7365 - the order the combined form's claim rests on. The recipient is resolved BEFORE
+        // anything is written, so a row with nobody to mail leaves no history row saying a reminder
+        // went out; and the send is the LAST act of the unit that writes the record, so a delivery
+        // that fails rolls the record back and the next tick retries it, instead of leaving a record
+        // the guard reads as "already sent" and skips for good.
+        assertTrue(existed < recipient && recipient < create, "the recipient is resolved after the guard and before the write: " + job);
+        int closesUnit = job.indexOf("});", create);
+        int created = job.indexOf("created++;", loop);
+        assertTrue(send < closesUnit && closesUnit < created, "the send rides the unit of work it writes the record in: " + job);
+        assertTrue(job.contains("throw new IllegalStateException(reason, ex);"),
+                "a failed delivery leaves the lambda unchecked, so the record it was about is rolled back: " + job);
         // Per-level wording: the message reads the level it is at.
         assertTrue(job.contains("escalation.Name") && job.contains("escalation.Wording"),
                 "the message must be able to read the level's own text: " + job);
@@ -2582,10 +2596,13 @@ class IntentEngineIT extends IntegrationTest {
                 "no second try wraps only one half: " + job);
         assertTrue(job.contains("could not generate PaymentReminder from Invoice [{}] and mail it to [{}]"),
                 "a failed row names both halves it could not complete: " + job);
-        // Both summaries are reported - what was created, what was mailed, and what was not due yet.
+        // ONE summary line (#7365): created and mailed are one number because they are one unit, and
+        // `failed` counts rows - reported in a generate line AND a notify line, a tick with one bad row
+        // read as two. The rows no level applied to keep their own line.
         assertTrue(job.contains("had passed no ReminderLevel threshold yet"), "the tick reports the rows no level applied to: " + job);
-        assertTrue(job.contains("created [{}] PaymentReminder(s)") && job.contains("mailed [{}] of [{}] matching Invoice row(s)"),
-                "the tick reports both halves: " + job);
+        assertTrue(job.contains("created and mailed [{}] PaymentReminder(s)"), "the tick reports what it created and mailed: " + job);
+        assertTrue(!job.contains("mailed [{}] of [{}] matching Invoice row(s)") && !job.contains("sent++;"),
+                "the combined tick does not count or report the two halves separately: " + job);
     }
 
     @Test

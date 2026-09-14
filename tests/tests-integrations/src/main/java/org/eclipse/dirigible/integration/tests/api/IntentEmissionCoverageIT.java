@@ -3040,10 +3040,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(escalating.contains("target.Level = escalation.Id;"), "the level is written onto the history row: " + escalating);
         assertTrue(escalating.contains(".eq(\"Level\", keyLevel)"),
                 "the level is part of the key that sends each level once: " + escalating);
+        // #7365 - and the order of the row body is the whole claim of the combined form. The guard runs
+        // first, then the recipient is resolved (a row with nobody to mail must not leave a history row
+        // behind), then the record is written and the mail sent as the LAST act of the SAME unit of
+        // work - so a delivery that fails rolls the record back and the next tick retries it, instead of
+        // leaving a record the guard reads as "already sent".
         int escalatingGuard = escalating.indexOf("BillReminderRepository().findAll(Criteria.create()");
-        int escalatingSend = escalating.indexOf("Mail.send(");
-        assertTrue(escalatingGuard > 0 && escalatingSend > escalatingGuard,
-                "the natural key gates the send as well as the write: " + escalating);
+        int escalatingRecipient = escalating.indexOf("if (to == null || to.isBlank())");
+        int escalatingUnit = escalating.indexOf("UnitOfWork.run(");
+        int escalatingSend = escalating.indexOf("mail(from, recipient, subject, parts);");
+        int escalatingCreated = escalating.indexOf("created++;");
+        assertTrue(
+                escalatingGuard > 0 && escalatingRecipient > escalatingGuard && escalatingUnit > escalatingRecipient
+                        && escalatingSend > escalatingUnit && escalatingCreated > escalatingSend,
+                "the natural key gates the send, the recipient is resolved before anything is written, and the send is the"
+                        + " unit of work's last act: " + escalating);
+        // One counter and one summary line: created and mailed cannot diverge once they are one unit,
+        // and `failed` counts rows - reporting it in a generate line and again in a notify line made a
+        // tick with one bad row read as two.
+        assertFalse(escalating.contains("sent++;"), "the combined form counts rows created-and-mailed, not sends: " + escalating);
+        assertTrue(
+                escalating.contains("created and mailed [{}] BillReminder(s)")
+                        && !escalating.contains("mailed [{}] of [{}] matching Bill row(s)"),
+                "the combined form logs ONE summary line: " + escalating);
 
         // month widget: the YYYY-MM field renders the Harmonia month picker on BOTH writable
         // surfaces - the power form and the personal form (my-shell parity).
