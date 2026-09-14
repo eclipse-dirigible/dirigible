@@ -10521,6 +10521,39 @@
           }
         ]
       }
+    },
+    {
+      "changeSet": {
+        "id": "drop-legacy-UK_DIRIGIBLE_DATA_TABLE_CONSTRAINTS_ID-schema-qualified",
+        "author": "dirigible",
+        "comment": "Corrects the 14.56.0 legacy sweeps (#7370): they read information_schema without a schema filter and dropped without qualifying the table, so on a database that holds those tables in more than one schema the lookup and the ALTER TABLE could address different schemas - dropping the wrong constraint or failing - and the H2 variant collapsed its match to MAX(...), dropping at most one constraint per table and silently leaving a second. Those released sweeps are immutable (their checksums are on every deployed instance), so the correction is this new changeset rather than an edit. A CustomTaskChange because the operation is not portably expressible in changelog SQL - PostgreSQL needs a DO loop to drop more than one and H2 has no procedural SQL at all - while JDBC schema-qualifies AND drops every match once, for both databases. It drops every UNIQUE constraint on CONSTRAINTS_ID it finds in the current schema; a schema with none yields no rows, so the change is a no-op and the changelog stays idempotent. Gated to H2 and PostgreSQL - MSSQL has no CI leg, exactly as the original sweeps.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "or": [
+              {
+                "dbms": {
+                  "type": "h2"
+                }
+              },
+              {
+                "dbms": {
+                  "type": "postgresql"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "customChange": {
+              "class": "org.eclipse.dirigible.components.core.liquibase.DropLegacyConstraintsIdUniqueIndexChange"
+            }
+          }
+        ]
+      }
     }
   ]
 }

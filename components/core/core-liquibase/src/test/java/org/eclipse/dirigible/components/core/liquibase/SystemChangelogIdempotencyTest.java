@@ -74,6 +74,61 @@ class SystemChangelogIdempotencyTest {
         }
     }
 
+    /**
+     * The corrective sweep for the legacy {@code CONSTRAINTS_ID} unique index (#7370) must drop EVERY
+     * such constraint in the CURRENT schema and touch no other schema. A legacy {@code hbm2ddl}
+     * deployment carries the index under Hibernate's own name; the released 14.56.0 sweep dropped at
+     * most one per table (H2) and looked it up without a schema filter, so this plants two of them in
+     * the current schema plus one of the same shape in another schema, re-arms the corrective
+     * changeset, and asserts both current-schema indexes are gone while the other schema's survives.
+     */
+    @Test
+    void theLegacyConstraintsIdUniqueIndexIsDroppedInFullAndSchemaQualified() throws Exception {
+        JdbcDataSource dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:system-changelog-legacy-uk;DB_CLOSE_DELAY=-1");
+
+        runChangelog(dataSource);
+
+        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
+            // Two Hibernate-named unique indexes on one table - the case the released H2 sweep left half done.
+            statement.execute("ALTER TABLE DIRIGIBLE_DATA_TABLE_UNIQUES ADD CONSTRAINT UKLEGACYA UNIQUE(CONSTRAINTS_ID)");
+            statement.execute("ALTER TABLE DIRIGIBLE_DATA_TABLE_UNIQUES ADD CONSTRAINT UKLEGACYB UNIQUE(CONSTRAINTS_ID)");
+            // The same table, same index shape, in ANOTHER schema - what the unqualified lookup could reach
+            // across.
+            statement.execute("CREATE SCHEMA OTHER");
+            statement.execute("CREATE TABLE OTHER.DIRIGIBLE_DATA_TABLE_UNIQUES (ID INT, CONSTRAINTS_ID INT)");
+            statement.execute("ALTER TABLE OTHER.DIRIGIBLE_DATA_TABLE_UNIQUES ADD CONSTRAINT UKOTHER UNIQUE(CONSTRAINTS_ID)");
+            // Re-arm the corrective changeset (the ledger stays non-empty, so this is a normal re-run).
+            statement.execute(
+                    "DELETE FROM DATABASECHANGELOG WHERE ID = 'drop-legacy-UK_DIRIGIBLE_DATA_TABLE_CONSTRAINTS_ID-schema-qualified'");
+
+            assertTrue(uniqueConstraintsOnConstraintsId(statement, "PUBLIC", "DIRIGIBLE_DATA_TABLE_UNIQUES") == 2,
+                    "both planted legacy indexes must be present before the corrective sweep");
+            assertTrue(uniqueConstraintsOnConstraintsId(statement, "OTHER", "DIRIGIBLE_DATA_TABLE_UNIQUES") == 1,
+                    "the other schema's index must be present before the corrective sweep");
+        }
+
+        runChangelog(dataSource);
+
+        try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
+            assertTrue(uniqueConstraintsOnConstraintsId(statement, "PUBLIC", "DIRIGIBLE_DATA_TABLE_UNIQUES") == 0,
+                    "every legacy index in the current schema must be dropped, not just one");
+            assertTrue(uniqueConstraintsOnConstraintsId(statement, "OTHER", "DIRIGIBLE_DATA_TABLE_UNIQUES") == 1,
+                    "an index of the same shape in another schema must be untouched");
+        }
+    }
+
+    private static int uniqueConstraintsOnConstraintsId(Statement statement, String schema, String table) throws Exception {
+        try (ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc"
+                + " JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE k ON k.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA"
+                + " AND k.CONSTRAINT_NAME = tc.CONSTRAINT_NAME AND k.TABLE_NAME = tc.TABLE_NAME"
+                + " WHERE tc.CONSTRAINT_TYPE = 'UNIQUE' AND tc.TABLE_SCHEMA = '" + schema + "' AND tc.TABLE_NAME = '" + table
+                + "' AND UPPER(k.COLUMN_NAME) = 'CONSTRAINTS_ID'")) {
+            rs.next();
+            return rs.getInt(1);
+        }
+    }
+
     private void runChangelog(DataSource dataSource) throws Exception {
         SpringLiquibase liquibase = new LiquibaseSystemConfig().liquibaseSystemDB(dataSource);
         liquibase.setResourceLoader(new DefaultResourceLoader());

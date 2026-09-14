@@ -52,7 +52,9 @@ public class ${className}Job implements JobHandler {
         List<${entity}Entity> rows = new ${entity}Repository().findAll(${criteriaExpression});
         int failed = 0;
 #if($notifies)
+#if(!$generates)
         int sent = 0;
+#end
         int skipped = 0;
 #end
 #if($generates)
@@ -87,6 +89,10 @@ public class ${className}Job implements JobHandler {
             // header behind - and with the `unique:` guard finding exactly that header, every later run
             // reported "already existed" and the row stayed incomplete forever (#7133). A refused row now
             // leaves nothing behind, so the next tick really does complete what this one could not.
+            //
+            // When the tick both records and mails, the SEND is part of that unit and runs last (#7365),
+            // and the recipient is resolved BEFORE anything is written - so a row with nobody to mail is
+            // counted as such without leaving a history row claiming a message that was never addressed.
             try {
 #foreach($load in $relationLoads)
                 // A one-hop `relation.field` source: the queried row's foreign key loads the related row,
@@ -139,7 +145,8 @@ public class ${className}Job implements JobHandler {
                 // same columns is the durable backstop.
 #if($notifies)
                 // It gates the MAIL too (#7276): the send happens only where a record was written, so the
-                // same (row, level) is never mailed twice and the history is a record of what went out.
+                // same (row, level) is never mailed twice. The record is written and the message sent in
+                // ONE unit (#7365), so a row it skips really was mailed - the guard is read as history.
 #end
 #set($genUniqueValueTerms = 0)
 #foreach($u in $genUnique)
@@ -185,6 +192,84 @@ public class ${className}Job implements JobHandler {
                     continue;
                 }
 #end
+#end
+#if($notifies)
+#if($usesRecordUrl == "true")
+                // {recordUrl} - the deep link to the row this message is about. The ROUTE is composed HERE,
+                // in the layer that knows the generated application's URL layout; the intent layer
+                // contributes only the entity and its key, which is what keeps it path-agnostic.
+                String recordUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
+                        + "/services/web/${projectName}/gen/${genFolderName}/index.html#/${recordUrlEntity}/" + entity.${recordUrlKeyProperty}
+                        + "/edit";
+#end
+#if($usesInboxUrl == "true")
+                // {inboxUrl} - the deep link to the recipient's process Inbox.
+                String inboxUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
+                        + "/services/web/${projectName}/gen/${genFolderName}/index.html#/inbox";
+#end
+                to = ${toExpression};
+                if (to == null || to.isBlank()) {
+                    // A row with nobody to mail is a legitimate no-op, but it is COUNTED: "matched 40,
+                    // mailed 12" is the line that says a query is wider than the addresses behind it.
+                    skipped++;
+                    continue;
+                }
+                // The send may run inside the generation's unit-of-work lambda, which can only close
+                // over an effectively final local; `to` is assigned here, so the frozen copy is what the
+                // message is addressed with. `to` itself stays the one the row's failure line names.
+                final String recipient = to;
+                String subject = ${subjectExpression};
+                String body = ${bodyExpression};
+                Map part = new HashMap();
+                part.put("type", "text");
+                part.put("contentType", "text/plain");
+                part.put("text", body);
+                List<Map> parts = new java.util.ArrayList<>();
+                parts.add(part);
+#if($attach == "print")
+                // attach: print - render THIS row's own print template to PDF server-side (the generated
+                // feeder assembles the { document, items } payload) and attach it, so a periodic notice
+                // carries the document itself (a reminder with the invoice, not just about it).
+#if($attachLanguageFkProperty != "")
+                ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                        : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+#end
+                Map document = new HashMap();
+                document.put("type", "attachment");
+                document.put("contentType", "application/pdf");
+                document.put("fileName", ${attachFileNameExpression});
+                document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
+                        new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
+                parts.add(document);
+#elseif($attach == "report")
+                // attach: { report, bind } - run the declared report scoped to THIS recipient and attach the
+                // rendered PDF. The bindings ARE the report's parameters, which is what makes the rows this
+                // recipient's own: a customer statement is a period of rows, not one record's document.
+#if($attachLanguageFkProperty != "")
+                ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                        : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+#end
+                Map<String, Object> reportFilter = new HashMap<>();
+#foreach($binding in $attachReportBindings)
+                reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));
+#end
+                Map<String, Object> reportData = new HashMap<>();
+                // The bound values double as the rendered header, so the PDF states which slice it is - a
+                // table of rows never does.
+                reportData.put("document", reportFilter);
+                reportData.put("items", new gen.${attachReportGenFolder}.data.${attachReportPerspective}.${attachReport}Repository()
+                        .findAll(null, null, reportFilter));
+                Map document = new HashMap();
+                document.put("type", "attachment");
+                document.put("contentType", "application/pdf");
+                document.put("fileName", ${attachFileNameExpression});
+                document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", ${attachLanguageExpression},
+                        org.eclipse.dirigible.sdk.utils.Json.stringify(reportData)));
+                parts.add(document);
+#end
+                String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
+#end
+#if($generates)
                 org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.run(() -> {
                     gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity target =
                             new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity();
@@ -252,85 +337,26 @@ public class ${className}Job implements JobHandler {
                     }
 #end
 #end
+#if($notifies)
+                    // THE SEND RIDES THE UNIT (#7365). It used to follow the commit, so a mail that could
+                    // not go out - an SMTP blink, an unreachable MX, a refused relay - left the record
+                    // behind anyway; the `unique:` guard then found exactly that record on the next tick
+                    // and skipped the row, mail included. The reminder was never retried and the history
+                    // said it had been sent. Sending as the unit's last act makes the record mean what the
+                    // combined form claims: a failed send rolls the record back, so the next tick sees an
+                    // unsent row and completes it. The remaining window is a commit that fails AFTER a
+                    // successful send, which costs a duplicate message rather than a lost one.
+                    mail(from, recipient, subject, parts);
+#end
                 });
                 created++;
 #end
-#if($notifies)
-#if($usesRecordUrl == "true")
-                // {recordUrl} - the deep link to the row this message is about. The ROUTE is composed HERE,
-                // in the layer that knows the generated application's URL layout; the intent layer
-                // contributes only the entity and its key, which is what keeps it path-agnostic.
-                String recordUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
-                        + "/services/web/${projectName}/gen/${genFolderName}/index.html#/${recordUrlEntity}/" + entity.${recordUrlKeyProperty}
-                        + "/edit";
-#end
-#if($usesInboxUrl == "true")
-                // {inboxUrl} - the deep link to the recipient's process Inbox.
-                String inboxUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
-                        + "/services/web/${projectName}/gen/${genFolderName}/index.html#/inbox";
-#end
-                to = ${toExpression};
-                if (to == null || to.isBlank()) {
-                    // A row with nobody to mail is a legitimate no-op, but it is COUNTED: "matched 40,
-                    // mailed 12" is the line that says a query is wider than the addresses behind it.
-                    skipped++;
-                    continue;
-                }
-                String subject = ${subjectExpression};
-                String body = ${bodyExpression};
-                Map part = new HashMap();
-                part.put("type", "text");
-                part.put("contentType", "text/plain");
-                part.put("text", body);
-                List<Map> parts = new java.util.ArrayList<>();
-                parts.add(part);
-#if($attach == "print")
-                // attach: print - render THIS row's own print template to PDF server-side (the generated
-                // feeder assembles the { document, items } payload) and attach it, so a periodic notice
-                // carries the document itself (a reminder with the invoice, not just about it).
-#if($attachLanguageFkProperty != "")
-                ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
-                        : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
-#end
-                Map document = new HashMap();
-                document.put("type", "attachment");
-                document.put("contentType", "application/pdf");
-                document.put("fileName", ${attachFileNameExpression});
-                document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
-                        new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
-                parts.add(document);
-#elseif($attach == "report")
-                // attach: { report, bind } - run the declared report scoped to THIS recipient and attach the
-                // rendered PDF. The bindings ARE the report's parameters, which is what makes the rows this
-                // recipient's own: a customer statement is a period of rows, not one record's document.
-#if($attachLanguageFkProperty != "")
-                ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
-                        : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
-#end
-                Map<String, Object> reportFilter = new HashMap<>();
-#foreach($binding in $attachReportBindings)
-                reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));
-#end
-                Map<String, Object> reportData = new HashMap<>();
-                // The bound values double as the rendered header, so the PDF states which slice it is - a
-                // table of rows never does.
-                reportData.put("document", reportFilter);
-                reportData.put("items", new gen.${attachReportGenFolder}.data.${attachReportPerspective}.${attachReport}Repository()
-                        .findAll(null, null, reportFilter));
-                Map document = new HashMap();
-                document.put("type", "attachment");
-                document.put("contentType", "application/pdf");
-                document.put("fileName", ${attachFileNameExpression});
-                document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", ${attachLanguageExpression},
-                        org.eclipse.dirigible.sdk.utils.Json.stringify(reportData)));
-                parts.add(document);
-#end
-                String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
-                Mail.send(from, new String[] {to}, new String[0], new String[0], subject, parts);
+#if($notifies && !$generates)
+                Mail.send(from, new String[] {recipient}, new String[0], new String[0], subject, parts);
                 sent++;
+#end
 #if($notifyOutcomeProperty != "")
                 stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, null);
-#end
 #end
             } catch (Exception ex) {
                 failed++;
@@ -354,7 +380,18 @@ public class ${className}Job implements JobHandler {
         LOG.info("Schedule ${name}: [{}] of [{}] matching ${entity} row(s) had passed no ${escalationEntity} threshold yet", notDue,
                 rows.size());
 #end
-#if($generates)
+#if($generates && $notifies)
+        // ONE line for the combined form (#7365): `failed` counts rows, not halves, and reporting it in
+        // both a generate and a notify summary made a tick with one bad row read as two. Created and
+        // mailed are one number because they are one unit - a record exists only where the mail went out.
+#if($hasGenUnique)
+        LOG.info("Schedule ${name}: created and mailed [{}] ${genToEntity}(s) from [{}] matching ${entity} row(s),"
+                + " already existed [{}], no recipient [{}], failed [{}]", created, rows.size(), existed, skipped, failed);
+#else
+        LOG.info("Schedule ${name}: created and mailed [{}] ${genToEntity}(s) from [{}] matching ${entity} row(s),"
+                + " no recipient [{}], failed [{}]", created, rows.size(), skipped, failed);
+#end
+#elseif($generates)
 #if($hasGenUnique)
         // "matched 40, created 0, already existed 40" is the line that says a re-run did nothing -
         // which is the whole point of the natural key, and is otherwise indistinguishable from a tick
@@ -366,8 +403,7 @@ public class ${className}Job implements JobHandler {
         LOG.info("Schedule ${name}: created [{}] ${genToEntity}(s) from [{}] matching ${entity} row(s), failed [{}]", created,
                 rows.size(), failed);
 #end
-#end
-#if($notifies)
+#elseif($notifies)
         LOG.info("Schedule ${name}: mailed [{}] of [{}] matching ${entity} row(s), no recipient [{}], failed [{}]", sent, rows.size(),
                 skipped, failed);
 #end
@@ -383,6 +419,36 @@ public class ${className}Job implements JobHandler {
      */
     private static String reportValue(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+#end
+#if($generates && $notifies)
+
+    /**
+     * Send the message from inside the generation's unit of work, as an unchecked call.
+     *
+     * <p>
+     * A send is the last act of the unit that wrote the record the message is about (#7365), so a
+     * delivery that fails has to travel out of the lambda and roll that record back - otherwise the
+     * record survives, the `unique:` guard reads it as "already sent" on the next tick, and the message
+     * is lost for good. {@code Mail.send} throws a checked exception, which a {@code Runnable} cannot,
+     * so it is rethrown unchecked - carrying the original message, because the outcome stamp and the
+     * row's failure line both report it, and the cause, because the log records the stack.
+     *
+     * @param from the configured sender
+     * @param to the resolved recipient
+     * @param subject the rendered subject
+     * @param parts the rendered body and any attachment
+     */
+    private static void mail(String from, String to, String subject, List<Map> parts) {
+        try {
+            Mail.send(from, new String[] {to}, new String[0], new String[0], subject, parts);
+        } catch (Exception ex) {
+            String reason = ex.getMessage() == null || ex.getMessage()
+                                                         .isBlank() ? ex.getClass()
+                                                                        .getSimpleName()
+                    : ex.getMessage();
+            throw new IllegalStateException(reason, ex);
+        }
     }
 #end
 #if($notifyOutcomeProperty != "")

@@ -73,6 +73,13 @@ import org.springframework.stereotype.Component;
  * pass runs, when, and over what is the processor's decision, so a copy of a thousand files costs a
  * thousand flag writes and one pass rather than a pass per file. The folders named by
  * {@code DIRIGIBLE_REGISTRY_LOCAL_IGNORED_FOLDERS} (top level only) are neither watched nor marked.
+ *
+ * <p>
+ * Nor is a {@code .js}/{@code .mjs} write, wherever it lands (#7368): no synchronizer is ever keyed
+ * on those extensions, so the platform's TypeScript transpiler - which rewrites its compiled output
+ * next to every {@code .ts} source on the first request after a publish, and again on every
+ * {@code tsc --watch} re-transpile - stopped otherwise scheduling a full pass for output that
+ * changes no artefact.
  */
 @Component
 @Scope("singleton")
@@ -80,6 +87,17 @@ public class LocalRegistryWatcher implements DisposableBean {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(LocalRegistryWatcher.class);
+
+    /**
+     * Extensions no synchronizer ever keys on - TypeScript/JavaScript user code is loaded on demand by
+     * {@code engine-javascript}, never reconciled by a pass (see the synchronizer-model doc). A write
+     * of one of these is therefore never a registry change worth scheduling a pass for, regardless of
+     * who makes it: the esbuild/tsc transpiler rewrites its output next to every {@code .ts} source it
+     * compiles (#7368 - the first transpile after a publish, and every {@code tsc --watch}
+     * re-transpile, otherwise scheduled a full synchronization pass for output that changes no
+     * artefact), and neither does a hand-edited {@code .js}/{@code .mjs} file.
+     */
+    private static final Set<String> UNWATCHED_EXTENSIONS = Set.of(".mjs", ".js");
 
     /** How long destroy() waits for the watch loop to leave before closing the service. */
     private static final long SHUTDOWN_TIMEOUT_SECONDS = 5;
@@ -251,6 +269,15 @@ public class LocalRegistryWatcher implements DisposableBean {
      * @throws IOException Signals that an I/O exception has occurred.
      */
     private void registerAll(final Path start) throws IOException {
+        if (isIgnored(start)) {
+            // A top-level ignored folder created at runtime reaches here directly (the walk's own
+            // isIgnored guard below only protects a folder that already existed when its ANCESTOR
+            // was registered) - without this, it would be watched for the rest of its life and every
+            // write inside it would force a synchronization pass, honouring the ignore list only for
+            // folders that happened to exist at boot.
+            logger.debug("Skipping ignored directory registration: {}", start);
+            return;
+        }
         register(start);
         Files.walkFileTree(start, new SimpleFileVisitor<>() {
             @Override
@@ -389,18 +416,32 @@ public class LocalRegistryWatcher implements DisposableBean {
 
     /**
      * Reports a change under the registry, which marks the registry modified so the next
-     * synchronization pass runs. Ignored folders are not reported.
+     * synchronization pass runs. Ignored folders and unwatched extensions are not reported.
      *
      * @param path the path that changed
      * @param change what happened to it, for the log
      */
     private void registryChanged(Path path, String change) {
-        if (isIgnored(path)) {
+        if (isIgnored(path) || hasUnwatchedExtension(path)) {
             logger.debug("Ignoring the {} entry: {}", change, path);
             return;
         }
         logger.debug("Registry entry {}: [{}] - scheduling a synchronization pass", change, path);
         synchronizationWatcher.force();
+    }
+
+    /**
+     * Whether the given path's file name ends in an {@link #UNWATCHED_EXTENSIONS extension no
+     * synchronizer ever keys on}.
+     *
+     * @param path the path that changed
+     * @return true if the path's extension is never a synchronizer artefact
+     */
+    private static boolean hasUnwatchedExtension(Path path) {
+        String name = path.getFileName()
+                          .toString();
+        return UNWATCHED_EXTENSIONS.stream()
+                                   .anyMatch(name::endsWith);
     }
 
     /**

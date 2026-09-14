@@ -1182,6 +1182,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   subject: "Bill {note} - {escalation.name}"
                   body: "{escalation.wording}"
 
+              # #7385: the operations mailbox a sweep reports to differs per environment, so the
+              # address is a configuration KEY read at send time rather than a literal. It never fires
+              # here (the 1st of January at 06:00); it is in this fixture so the Configurations.get
+              # recipient is COMPILED by the publish below - a String expression where the templates
+              # used to paste a quoted literal.
+              - name: stuck-bills
+                cron: "0 0 6 1 1 *"
+                entity: Bill
+                where:
+                  - { field: dueOn, op: lt, value: CURRENT_DATE }
+                notify:
+                  to: "@config:BILLING_OPS_EMAIL"
+                  subject: "Bill {note} has not moved"
+                  body: "It may need an operator."
+
               # #7384: the staleness sweep - the flagship use of a relative moment (#6764) - reads the
               # `audit: true` CreatedAt column, which generates as a java.time.Instant. Emitted as a
               # LocalDateTime, Hibernate refused to bind it and the tick threw before reading a single
@@ -3060,10 +3075,37 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(escalating.contains("target.Level = escalation.Id;"), "the level is written onto the history row: " + escalating);
         assertTrue(escalating.contains(".eq(\"Level\", keyLevel)"),
                 "the level is part of the key that sends each level once: " + escalating);
+        // #7365 - and the order of the row body is the whole claim of the combined form. The guard runs
+        // first, then the recipient is resolved (a row with nobody to mail must not leave a history row
+        // behind), then the record is written and the mail sent as the LAST act of the SAME unit of
+        // work - so a delivery that fails rolls the record back and the next tick retries it, instead of
+        // leaving a record the guard reads as "already sent".
         int escalatingGuard = escalating.indexOf("BillReminderRepository().findAll(Criteria.create()");
-        int escalatingSend = escalating.indexOf("Mail.send(");
-        assertTrue(escalatingGuard > 0 && escalatingSend > escalatingGuard,
-                "the natural key gates the send as well as the write: " + escalating);
+        int escalatingRecipient = escalating.indexOf("if (to == null || to.isBlank())");
+        int escalatingUnit = escalating.indexOf("UnitOfWork.run(");
+        int escalatingSend = escalating.indexOf("mail(from, recipient, subject, parts);");
+        int escalatingCreated = escalating.indexOf("created++;");
+        assertTrue(
+                escalatingGuard > 0 && escalatingRecipient > escalatingGuard && escalatingUnit > escalatingRecipient
+                        && escalatingSend > escalatingUnit && escalatingCreated > escalatingSend,
+                "the natural key gates the send, the recipient is resolved before anything is written, and the send is the"
+                        + " unit of work's last act: " + escalating);
+        // One counter and one summary line: created and mailed cannot diverge once they are one unit,
+        // and `failed` counts rows - reporting it in a generate line and again in a notify line made a
+        // tick with one bad row read as two.
+        assertFalse(escalating.contains("sent++;"), "the combined form counts rows created-and-mailed, not sends: " + escalating);
+        assertTrue(
+                escalating.contains("created and mailed [{}] BillReminder(s)")
+                        && !escalating.contains("mailed [{}] of [{}] matching Bill row(s)"),
+                "the combined form logs ONE summary line: " + escalating);
+
+        // #7385 - an operations mailbox named by configuration. The recipient must be a lookup read at
+        // send time, not the key quoted as an address: emitted as a literal, the mail went to
+        // `@config:BILLING_OPS_EMAIL` and the only trace anywhere was the delivery failure.
+        String stuck = contentOf("gen/events/emission/StuckBillsJob.java");
+        assertTrue(stuck.contains("to = org.eclipse.dirigible.sdk.core.Configurations.get(\"BILLING_OPS_EMAIL\")"),
+                "a @config: recipient must resolve through the configuration facade at send time: " + stuck);
+        assertFalse(stuck.contains("\"@config:BILLING_OPS_EMAIL\""), "the key must never reach the job as the address: " + stuck);
 
         // #7384 - the staleness sweep queries the `audit: true` timestamp columns, which generate as
         // java.time.Instant. A moment rendered as a LocalDateTime compiles (Criteria takes an Object)

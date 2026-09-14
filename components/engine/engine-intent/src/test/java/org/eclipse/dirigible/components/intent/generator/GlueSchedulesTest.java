@@ -570,6 +570,36 @@ class GlueSchedulesTest {
         assertTrue(s.containsKey("toExpression"));
     }
 
+    @Test
+    void aConfiguredOperationsMailboxReachesTheJobAsALookupNotAsTheKey() {
+        // Issue #7385: the operations mailbox a sweep reports to differs per environment, so the model
+        // names the configuration key. Emitted as the literal it used to be, the job mailed
+        // `@config:OPS_EMAIL` and the only trace was the delivery failure.
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Order
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: status, type: integer }
+                schedules:
+                  - name: stuckOrders
+                    cron: "0 */5 * * * ?"
+                    entity: Order
+                    where:
+                      - { field: status, op: eq, value: 2 }
+                    notify:
+                      to: "@config:OPS_EMAIL"
+                      subject: "Order {id} has not moved"
+                      body: "It may need an operator."
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(model)
+                                                   .get(0);
+        assertEquals("notify", s.get("action"));
+        assertEquals("org.eclipse.dirigible.sdk.core.Configurations.get(\"OPS_EMAIL\")", s.get("toExpression"));
+    }
+
 
     @SuppressWarnings("unchecked")
     @Test

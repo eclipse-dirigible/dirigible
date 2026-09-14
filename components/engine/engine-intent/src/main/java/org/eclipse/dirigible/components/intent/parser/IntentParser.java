@@ -679,7 +679,9 @@ public final class IntentParser {
                 issues.add(subject + " names [" + name + "] - the status of a copy is the lifecycle's initial one and never copied");
                 return;
             }
-            if (!isReset) {
+            if (isReset) {
+                validateDuplicableReset(subject, name, relation, issues);
+            } else {
                 validateDuplicableDefault(subject, name, "integer", value, issues);
             }
             return;
@@ -699,6 +701,18 @@ public final class IntentParser {
         if (field.isRequired() && !filled) {
             issues.add(subject + " names required field [" + name + "], which has no defaultValue and no create-time rule - resetting it"
                     + " would make every duplicate fail; give it a defaults: value or a create-time rule");
+        }
+    }
+
+    /**
+     * The relation half of the same rule: a {@code reset} hands the relation back to the create path,
+     * so a required to-one that declares no {@code init:} would make every duplicate fail with the
+     * server's own "field is required".
+     */
+    private static void validateDuplicableReset(String subject, String name, RelationIntent relation, List<String> issues) {
+        if (relation.isRequired() && !hasText(relation.getInit())) {
+            issues.add(subject + " names required relation [" + name + "], which declares no init: - resetting it would make every"
+                    + " duplicate fail; give it a defaults: value or an init:");
         }
     }
 
@@ -3175,13 +3189,14 @@ public final class IntentParser {
     /**
      * The reusable <b>notify block</b> - the one shape authored by a {@code notifications[]} entry, a
      * {@code schedules[].notify}, a {@code transitions[].notify} and a {@code serviceTask}'s
-     * {@code args.notify}. Checks the channel, the recipient rule (a literal address, a direct field or
-     * a one-hop {@code relation.field} - the generator resolves a single to-one relation by FK id), and
-     * the {@code attach} switch: {@code print} renders the {@code .print} template of the record the
-     * block is about (inside a fan-out, the ROW), {@code recordPrint} renders the fan-out's anchor
-     * record instead - one document mailed to many recipients. Whichever is rendered must be a
-     * printable document master (a line-items child, hence a generated print feeder); anything else
-     * would generate a mail that claims an attachment it cannot produce.
+     * {@code args.notify}. Checks the channel, the recipient rule (a literal address, an
+     * {@code @config:KEY} reference read at send time, a direct field or a one-hop
+     * {@code relation.field} - the generator resolves a single to-one relation by FK id), and the
+     * {@code attach} switch: {@code print} renders the {@code .print} template of the record the block
+     * is about (inside a fan-out, the ROW), {@code recordPrint} renders the fan-out's anchor record
+     * instead - one document mailed to many recipients. Whichever is rendered must be a printable
+     * document master (a line-items child, hence a generated print feeder); anything else would
+     * generate a mail that claims an attachment it cannot produce.
      *
      * @param notify the block, may be {@code null} (nothing to validate)
      * @param subject the message prefix identifying the call site
@@ -3202,6 +3217,17 @@ public final class IntentParser {
         String to = notify.getTo();
         if (to == null || to.isBlank()) {
             issues.add(subject + " has no recipient (to)");
+        } else if (to.trim()
+                     .startsWith(NotificationSupport.CONFIG_PREFIX)) {
+            // An operations mailbox differs per environment, so the address may name a configuration
+            // KEY read at send time (#7385). An empty one is refused here: it would resolve to nothing
+            // on every environment, which reads exactly like a record with nobody to mail.
+            if (to.trim()
+                  .substring(NotificationSupport.CONFIG_PREFIX.length())
+                  .isBlank()) {
+                issues.add(subject + " recipient [" + to.trim()
+                        + "] has an empty @config: key - name the configuration key the address is read from");
+            }
         } else if (!to.contains("@") && to.chars()
                                           .filter(c -> c == '.')
                                           .count() >= 2) {
