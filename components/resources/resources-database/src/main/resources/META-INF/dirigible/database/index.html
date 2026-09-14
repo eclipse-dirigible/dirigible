@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <!--
   Copyright (c) 2010-2026 Eclipse Dirigible contributors
   SPDX-License-Identifier: EPL-2.0
@@ -11,7 +11,6 @@
 -->
 <!-- data-brand-title: services/branding.js sets the tab title to the instance brand name. -->
 <html lang="en" data-brand-title>
-
   <head>
     <meta charset="UTF-8" />
     <!-- Placeholder favicon, replaced at runtime by services/branding.js (DIRIGIBLE_BRANDING_FAVICON). -->
@@ -25,7 +24,6 @@
   </head>
 
   <body class="vbox size-full" x-data="app">
-
     <!-- Narrow-viewport drawer host. -->
     <div x-h-sheet-overlay="isOpen">
       <div x-h-sheet data-align="left" x-ref="overlay"></div>
@@ -33,11 +31,9 @@
 
     <!-- x-cloak hides the shell until Alpine + Harmonia upgrade the markup (no raw-chrome flash). -->
     <div x-cloak x-h-split class="size-full" data-orientation="horizontal" data-variant="border">
-
       <!-- Sidebar -->
-      <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="280" data-min="220"
-           data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
-        <div x-h-sidebar x-ref="sidebar">
+      <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="256" data-min="220" data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
+        <div x-h-sidebar x-ref="sidebar" style="--sidebar-width: 100%">
           <div x-h-sidebar-header>
             <div class="hbox items-center gap-2 p-1">
               <img :src="$store.branding.logo" :alt="$store.branding.name" class="size-5" />
@@ -88,14 +84,12 @@
       <div x-h-split-panel>
         <div class="vbox size-full">
           <div x-h-toolbar data-variant="transparent" x-cloak>
-            <button x-show="hiddenPanels.left" x-h-button data-variant="transparent"
-                    aria-label="Navigation" @click="openSideNav()" data-size="icon">
+            <button x-show="hiddenPanels.left" x-h-button data-variant="transparent" aria-label="Navigation" @click="openSideNav()" data-size="icon">
               <svg role="presentation" x-h-lucide data-lucide="menu"></svg>
             </button>
             <span x-h-toolbar-title class="shrink-0" x-text="T('database:shell.title', 'Database')"></span>
             <div x-h-toolbar-spacer></div>
-            <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
-                    :aria-label="T('application-core:shell.theme.title', 'Theme')" :title="T('application-core:shell.theme.title', 'Theme')">
+            <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm" :aria-label="T('application-core:shell.theme.title', 'Theme')" :title="T('application-core:shell.theme.title', 'Theme')">
               <svg x-h-lucide role="presentation" :data-lucide="$store.theme.icon"></svg>
             </button>
             <ul x-h-menu aria-label="Theme" data-align="bottom-end">
@@ -113,8 +107,7 @@
               </li>
             </ul>
 
-            <button id="user-menu-trigger" x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
-                    :aria-label="$store.currentUser.name || 'Account'">
+            <button id="user-menu-trigger" x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm" :aria-label="$store.currentUser.name || 'Account'">
               <svg role="presentation" x-h-lucide data-lucide="circle-user"></svg>
             </button>
             <ul x-h-menu aria-label="User menu" data-align="bottom-end">
@@ -153,7 +146,6 @@
           <div id="app" class="size-full overflow-auto flex-1"></div>
         </div>
       </div>
-
     </div>
 
     <!-- Routes -->
@@ -195,5 +187,4 @@
     <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
     <script src="/webjars/codbex__harmonia/dist/harmonia-lucide.min.js"></script>
   </body>
-
 </html>

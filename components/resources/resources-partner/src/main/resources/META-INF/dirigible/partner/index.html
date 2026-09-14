@@ -11,7 +11,7 @@
     SPDX-License-Identifier: EPL-2.0
 
 -->
-<!DOCTYPE html>
+<!doctype html>
 <!--
   Copyright (c) 2010-2026 Eclipse Dirigible contributors
   SPDX-License-Identifier: EPL-2.0
@@ -23,7 +23,6 @@
 -->
 <!-- data-brand-title: services/branding.js sets the tab title to the instance brand name. -->
 <html lang="en" data-brand-title>
-
   <head>
     <meta charset="UTF-8" />
     <!-- Placeholder favicon, replaced at runtime by services/branding.js (DIRIGIBLE_BRANDING_FAVICON). -->
@@ -37,7 +36,6 @@
   </head>
 
   <body class="vbox size-full" x-data="app">
-
     <!-- Narrow-viewport drawer host. -->
     <div x-h-sheet-overlay="isOpen">
       <div x-h-sheet data-align="left" x-ref="overlay"></div>
@@ -45,11 +43,9 @@
 
     <!-- x-cloak hides the shell until Alpine + Harmonia upgrade the markup (no raw-chrome flash). -->
     <div x-cloak x-h-split class="size-full" data-orientation="horizontal" data-variant="border">
-
       <!-- Sidebar -->
-      <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="280" data-min="220"
-           data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
-        <div x-h-sidebar x-ref="sidebar">
+      <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="256" data-min="220" data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
+        <div x-h-sidebar x-ref="sidebar" style="--sidebar-width: 100%">
           <!-- Instance brand mark (DIRIGIBLE_BRANDING_LOGO / _NAME / _SUBTITLE via the `branding` store),
                the Harmonia counterpart of the AngularJS shell header. With 2+ projections declared
                (the application-projections extension point) it becomes the Harmonia
@@ -154,8 +150,7 @@
       <div x-h-split-panel>
         <div class="vbox size-full">
           <div x-h-toolbar data-variant="transparent" x-cloak>
-            <button x-show="hiddenPanels.left" x-h-button data-variant="transparent"
-                    aria-label="Navigation" @click="openSideNav()" data-size="icon">
+            <button x-show="hiddenPanels.left" x-h-button data-variant="transparent" aria-label="Navigation" @click="openSideNav()" data-size="icon">
               <svg role="presentation" x-h-lucide data-lucide="menu"></svg>
             </button>
             <span x-h-toolbar-title x-text="T('application-core:shell.nav.partnerPortal', 'Partner Portal')"></span>
@@ -163,8 +158,7 @@
             <!-- Theme: light / dark / auto through the shared `theme` store. Harmonia applies the saved
                  colour scheme (or the OS scheme in auto mode) itself and keeps every same-origin frame
                  and tab in sync. -->
-            <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
-                    :aria-label="T('application-core:shell.theme.title', 'Theme')" :title="T('application-core:shell.theme.title', 'Theme')">
+            <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm" :aria-label="T('application-core:shell.theme.title', 'Theme')" :title="T('application-core:shell.theme.title', 'Theme')">
               <svg x-h-lucide role="presentation" :data-lucide="$store.theme.icon"></svg>
             </button>
             <ul x-h-menu aria-label="Theme" data-align="bottom-end">
@@ -191,14 +185,14 @@
               <div x-h-toolbar data-size="sm">
                 <span x-h-toolbar-title class="shrink-0" x-text="T('application-core:shell.notifications.title', 'Notifications') + ' (' + $store.notifications.unreadCount + ')'"></span>
                 <div x-h-toolbar-spacer></div>
-                <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.notifications.markAllRead()"
-                        title="Mark all as read" aria-label="Mark all as read"><svg role="presentation" x-h-lucide data-lucide="check-check"></svg></button>
+                <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.notifications.markAllRead()" title="Mark all as read" aria-label="Mark all as read">
+                  <svg role="presentation" x-h-lucide data-lucide="check-check"></svg>
+                </button>
               </div>
               <div x-show="$store.notifications.items.length === 0" x-h-text.muted class="p-3 text-sm" x-text="T('application-core:shell.notifications.caughtUp', 'You\u2019re all caught up.')"></div>
               <ol x-show="$store.notifications.items.length" x-h-notification-list>
                 <template x-for="n in $store.notifications.items" :key="n.id">
-                  <li x-h-notification class="hbox" :data-unread="n.unread ? 'true' : 'false'"
-                      :class="n.task ? 'cursor-pointer' : ''" @click="openNotification(n)">
+                  <li x-h-notification class="hbox" :data-unread="n.unread ? 'true' : 'false'" :class="n.task ? 'cursor-pointer' : ''" @click="openNotification(n)">
                     <div x-h-notification-media><svg x-h-icon data-icon="circle-info" class="size-5" role="img" aria-label="info"></svg></div>
                     <div class="vbox flex-1">
                       <h1 x-h-notification-title x-text="n.title"></h1>
@@ -210,8 +204,7 @@
             </div>
 
             <!-- Logged-in user: avatar; the dropdown shows the user name and Log out. -->
-            <button id="user-menu-trigger" x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
-                    :aria-label="$store.currentUser.name || 'Account'">
+            <button id="user-menu-trigger" x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm" :aria-label="$store.currentUser.name || 'Account'">
               <svg role="presentation" x-h-lucide data-lucide="circle-user"></svg>
             </button>
             <ul x-h-menu aria-label="User menu" data-align="bottom-end">
@@ -239,9 +232,7 @@
                 </li>
               </template>
               <div x-h-menu-separator></div>
-              <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
-                <svg role="presentation" x-h-lucide data-lucide="log-out"></svg> <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
-              </li>
+              <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()"><svg role="presentation" x-h-lucide data-lucide="log-out"></svg> <span x-text="T('application-core:shell.user.logout', 'Log out')"></span></li>
             </ul>
           </div>
 
@@ -250,26 +241,23 @@
           <div id="app" x-show="!hostedUrl" class="size-full overflow-auto flex-1">
             <!-- Pinecone Router renders the matched built-in view fragment here. -->
           </div>
-          <div x-show="hostedUrl" class="flex-1 size-full" style="position: relative;">
-            <iframe :src="hostedUrl" title="Application" @load="onIframeLoad($event)"
-                    style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
+          <div x-show="hostedUrl" class="flex-1 size-full" style="position: relative">
+            <iframe :src="hostedUrl" title="Application" @load="onIframeLoad($event)" style="position: absolute; inset: 0; width: 100%; height: 100%; border: 0"></iframe>
           </div>
         </div>
       </div>
-
     </div>
 
     <!-- App-wide BPM task form dialog (driven by the processTasks store). Opened from a task
          notification in the bell popover; the store re-fetches on close so badges update. -->
     <div x-h-dialog-overlay :data-open="$store.processTasks.formOpen">
-      <div x-h-dialog style="width: 92vw; max-width: 1100px;">
+      <div x-h-dialog style="width: 92vw; max-width: 1100px">
         <div x-h-dialog-header>
           <h2 x-h-dialog-title x-text="T($store.processTasks.formTitleKey, $store.processTasks.formTitle)"></h2>
           <button x-h-dialog-close @click="$store.processTasks.closeForm()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
         <div x-h-dialog-content>
-          <iframe x-show="$store.processTasks.formOpen" :src="$store.processTasks.formUrl"
-                  title="Task form" style="width:100%; height:70vh; border:0;"></iframe>
+          <iframe x-show="$store.processTasks.formOpen" :src="$store.processTasks.formUrl" title="Task form" style="width: 100%; height: 70vh; border: 0"></iframe>
         </div>
       </div>
     </div>
@@ -278,14 +266,13 @@
          The contributed action page is shown in an iframe; it posts harmonia.form.close to dismiss and
          the store then raises harmonia:action-done so the originating view refreshes. -->
     <div x-h-dialog-overlay :data-open="$store.customActions.dialogOpen">
-      <div x-h-dialog style="width: 92vw; max-width: 1100px;">
+      <div x-h-dialog style="width: 92vw; max-width: 1100px">
         <div x-h-dialog-header>
           <h2 x-h-dialog-title x-text="$store.customActions.dialogTitle"></h2>
           <button x-h-dialog-close @click="$store.customActions.closeDialog()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
         <div x-h-dialog-content>
-          <iframe x-show="$store.customActions.dialogOpen" :src="$store.customActions.dialogUrl"
-                  title="Action" style="width:100%; height:70vh; border:0;"></iframe>
+          <iframe x-show="$store.customActions.dialogOpen" :src="$store.customActions.dialogUrl" title="Action" style="width: 100%; height: 70vh; border: 0"></iframe>
         </div>
       </div>
     </div>
@@ -299,7 +286,10 @@
           <button x-h-dialog-close @click="$store.customActions.cancelConfirm()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
         <div x-h-dialog-content>
-          <p x-h-text.muted x-text="T('application-core:shell.customActions.confirmBody', 'Run {{name}} for the selected record? This creates or changes data.', { name: ($store.customActions.confirmAction && $store.customActions.confirmAction.label) || '' })"></p>
+          <p
+            x-h-text.muted
+            x-text="T('application-core:shell.customActions.confirmBody', 'Run {{name}} for the selected record? This creates or changes data.', { name: ($store.customActions.confirmAction && $store.customActions.confirmAction.label) || '' })"
+          ></p>
         </div>
         <div x-h-dialog-footer>
           <button x-h-button data-variant="transparent" @click="$store.customActions.cancelConfirm()" :disabled="$store.customActions.confirmBusy" x-text="T('application-core:shell.customActions.confirmCancel', 'Cancel')"></button>
@@ -348,7 +338,9 @@
                     <div x-h-input-number><input type="number" step="any" x-model.number="s.promptValues[col.name]" :data-prompt-field="col.name" /></div>
                   </template>
                   <template x-if="col.widget === 'CHECKBOX'">
-                    <div class="hbox items-center"><span x-h-checkbox><input type="checkbox" x-model="s.promptValues[col.name]" /></span></div>
+                    <div class="hbox items-center">
+                      <span x-h-checkbox><input type="checkbox" x-model="s.promptValues[col.name]" /></span>
+                    </div>
                   </template>
                   <template x-if="col.widget === 'DATE'">
                     <div x-h-date-picker>
@@ -450,5 +442,4 @@
     <!-- Lucide icons render via the x-h-lucide directive (harmonia-lucide bundle above): it upgrades
          icons on init and inside router-swapped views, so no manual createIcons scan is needed. -->
   </body>
-
 </html>

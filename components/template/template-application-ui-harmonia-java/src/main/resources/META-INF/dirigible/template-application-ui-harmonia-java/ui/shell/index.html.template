@@ -50,7 +50,7 @@
       <!-- Sidebar panel -->
       <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="256" data-min="200"
            data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
-        <div x-h-sidebar x-ref="sidebar">
+        <div x-h-sidebar x-ref="sidebar" style="--sidebar-width: 100%">
           <div x-h-sidebar-header>
             <div class="hbox items-center gap-2 p-1">
               <!-- Brand icon (template appIcon param / intent icon / default). A value containing '/' or
