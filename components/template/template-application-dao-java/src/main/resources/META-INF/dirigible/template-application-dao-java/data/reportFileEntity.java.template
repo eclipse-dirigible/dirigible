@@ -196,7 +196,7 @@ public class ${name}Repository {
         parameters.add(parameter("language", "VARCHAR", language()));
 #end
 #foreach($parameter in $parameters)
-        parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", "${parameter.initial}")));
+        parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", "${parameter.initialJavaLiteral}")));
 #end
         return parameters;
     }

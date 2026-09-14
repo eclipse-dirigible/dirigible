@@ -105,8 +105,14 @@ public class EntityIntent {
      * draft and opens it. The clone creates through the normal REST create path, so the number
      * ({@code calculatedActionOnCreate}), the initial status ({@code init}) and calculated fields are
      * reassigned by the server. Absent (the default) → no Duplicate action.
+     *
+     * <p>
+     * Authored either as the shorthand {@code duplicable: true} or as the object form
+     * {@code duplicable: { defaults: {...}, reset: [...] }}, which says which fields the copy must NOT
+     * carry over from the source (the invoice's date, due date and tax-event date). The parser
+     * normalizes the shorthand to an empty object, so both arrive here as this type.
      */
-    private Boolean duplicable;
+    private DuplicateIntent duplicable;
     /**
      * Optional explicit ordering of the generated UI controls (form inputs, list columns, detail rows)
      * by property name - fields and to-one relations interleaved, in the given order. Names match the
@@ -618,10 +624,10 @@ public class EntityIntent {
      * ({@code duplicable: true}).
      */
     public boolean isDuplicable() {
-        return Boolean.TRUE.equals(duplicable);
+        return duplicable != null;
     }
 
-    public Boolean getDuplicable() {
+    public DuplicateIntent getDuplicable() {
         return duplicable;
     }
 
@@ -641,7 +647,7 @@ public class EntityIntent {
         this.locksWithMaster = locksWithMaster;
     }
 
-    public void setDuplicable(Boolean duplicable) {
+    public void setDuplicable(DuplicateIntent duplicable) {
         this.duplicable = duplicable;
     }
 

@@ -17,9 +17,13 @@ import java.util.List;
  * <ul>
  * <li>{@code exactlyOne} (row-level): exactly one of {@link #fields} is non-null on the record (a
  * journal line is either debit or credit) - enforced on every user write;</li>
- * <li>{@code compare} (row-level): {@link #field} compared to {@link #than} with {@link #op} - two
- * values of the SAME row that must stand in a relation to each other (a due date not before the
- * document date, a validity end not before its start) - enforced on every user write;</li>
+ * <li>{@code compare}: {@link #field} compared with {@link #op} either to {@link #than} - another
+ * value of the SAME row that it must stand in a relation to (a due date not before the document
+ * date, a validity end not before its start) - or to a {@link #value} LITERAL (a quantity greater
+ * than zero, a percentage at most 100, a date not in the past). Row-level by default, so it is
+ * enforced on every user write; with a {@link #status} gate it is the repository's, and holds when
+ * the record is persisted carrying that status - "days &gt; 0 before SUBMITTED" rather than on the
+ * first draft;</li>
  * <li>{@code requiredWhen}: {@link #field} - the record's own field, or a one-hop
  * {@code Relation.field} - must carry a value while {@link #when} holds (an e-mailed invoice needs
  * the customer's address). Enforced on every user write, or, with a {@link #status} gate, when the
@@ -58,6 +62,17 @@ public class CheckIntent {
     private String op;
     /** {@code compare}: the record's own field on the right of the comparison. */
     private String than;
+    /**
+     * {@code compare}: a LITERAL on the right of the comparison, the alternative to {@link #than}
+     * (issue #7338) - exactly one of the two, since a comparison has one right-hand side. Typed by the
+     * field it is compared with: a number for a numeric field, and for a temporal one either a moment
+     * ({@code CURRENT_DATE}, {@code CURRENT_TIMESTAMP}, {@code NOW}, with at most one signed ISO-8601
+     * offset - the vocabulary a schedule's {@code where:} already carries, resolved against the clock
+     * of the write) or a quoted ISO-8601 date/instant. This is what makes "a quantity is positive", "a
+     * percentage is at most 100" and "a date is not in the past" declarations rather than a hand-edited
+     * {@code validate()} or a calculation that throws.
+     */
+    private Object value;
     /** {@code itemsSumEqual}: the two numeric item fields whose sums must be equal. */
     private List<String> over;
     /** {@code itemsMin}: the minimum number of items. */
@@ -201,6 +216,14 @@ public class CheckIntent {
 
     public String getThan() {
         return than;
+    }
+
+    public Object getValue() {
+        return value;
+    }
+
+    public void setValue(Object value) {
+        this.value = value;
     }
 
     public void setThan(String than) {

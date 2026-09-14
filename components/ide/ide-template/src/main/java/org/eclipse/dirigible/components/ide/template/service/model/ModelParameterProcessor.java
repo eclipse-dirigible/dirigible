@@ -85,6 +85,7 @@ final class ModelParameterProcessor {
             resolvePeriodLock(entities, parameters);
             inheritMasterLock(entities, parameters);
             inheritPersonalScope(entities, parameters);
+            resolveDocumentItemsScope(entities);
             inheritPartnerScope(entities, parameters);
             collectSensitiveProperties(entities);
             collectScopedChildren(entities);
@@ -124,6 +125,7 @@ final class ModelParameterProcessor {
         entity.put("referencedProjections", new ArrayList<>());
         splitChecks(entity, parameters);
         resolveUniqueConstraintLiterals(entity);
+        resolveLifecycleStatusNames(entity);
         resolveDataOrder(entity);
 
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
@@ -222,8 +224,13 @@ final class ModelParameterProcessor {
             String kind = str(check, "kind");
             resolveMessageLiteral(check);
             resolveCheckPathLoads(check, parameters);
-            if ("exactlyOne".equals(kind) || "compare".equals(kind)) {
+            if ("exactlyOne".equals(kind)) {
                 rowChecks.add(check);
+            } else if ("compare".equals(kind)) {
+                // A comparison is row-level unless it names the status it is enforced at - the same
+                // routing requiredWhen has: without a gate it holds on every user write, with one it is
+                // the repository's, so "days > 0 before SUBMITTED" does not forbid the draft (#7338).
+                (str(check, "status") == null || str(check, "status").isEmpty() ? rowChecks : documentChecks).add(check);
             } else if ("guard".equals(kind)) {
                 guardChecks.add(check);
             } else if ("requiredWhen".equals(kind) || "forbidWhen".equals(kind)) {
@@ -289,6 +296,59 @@ final class ModelParameterProcessor {
                 constraint.put("nameJavaLiteral", JavaLiterals.escape(name));
             }
         }
+    }
+
+    /**
+     * Normalizes the seeded status names a lifecycle refusal quotes into the escaped entries the
+     * generated repository builds its lookup map from.
+     *
+     * <p>
+     * The names used to travel as one {@code id=name,} join that the template split back apart at
+     * class-init time (#7295). A status name is authored prose: a comma in one shifted every following
+     * entry, and a quote or a backslash ended the Java literal the join was written into and failed the
+     * compile of the whole generated module. The model now carries the pairs structurally; a
+     * {@code .model} written before that still carries the join and is read back here, so nothing
+     * regenerates differently for a name that never held a separator.
+     *
+     * @param entity the entity
+     */
+    private static void resolveLifecycleStatusNames(Map<String, Object> entity) {
+        List<Object> entries = new ArrayList<>();
+        for (Map<String, Object> declared : asMaps(entity.get("lifecycleStatusNameList"))) {
+            addLifecycleStatusName(entries, str(declared, "id"), str(declared, "name"));
+        }
+        if (entries.isEmpty()) {
+            String joined = str(entity, "lifecycleStatusNames");
+            if (joined != null && !joined.isEmpty()) {
+                for (String seeded : joined.split(",")) {
+                    int separator = seeded.indexOf('=');
+                    if (separator > 0) {
+                        addLifecycleStatusName(entries, seeded.substring(0, separator), seeded.substring(separator + 1));
+                    }
+                }
+            }
+        }
+        if (!entries.isEmpty()) {
+            entity.put("lifecycleStatusNameEntries", entries);
+        }
+    }
+
+    /**
+     * Adds one seeded status name, escaped for the Java literal the generated repository writes it
+     * into.
+     *
+     * @param entries the entries collected so far
+     * @param id the status id
+     * @param name the seeded name
+     */
+    private static void addLifecycleStatusName(List<Object> entries, String id, String name) {
+        if (id == null || id.isEmpty() || name == null || name.isEmpty()) {
+            return;
+        }
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("idJavaLiteral", JavaLiterals.escape(id));
+        entry.put("nameJavaLiteral", JavaLiterals.escape(name));
+        entries.add(entry);
     }
 
     /**
@@ -376,6 +436,20 @@ final class ModelParameterProcessor {
         // class). Escaped once here, the same way widgetPatternJs is, so every template can write
         // '${property.widgetLabelJs}' instead of '${property.widgetLabel}' without re-deriving it.
         property.put("widgetLabelJs", JsLiterals.escape(str(property, "widgetLabel")));
+        // The authored description is the property's @Documentation argument in the generated entity -
+        // a Java string literal, so a quote in it ({@code Customer's "trade" name}) would end that
+        // literal and fail the compile of the whole generated module (#7295). The raw value stays for
+        // the form's own description paragraph, which is HTML text.
+        String description = str(property, "description");
+        if (description != null) {
+            property.put("descriptionJavaLiteral", JavaLiterals.escape(description));
+        }
+        // The series a document number is allocated from: authored free text ("Sales Invoice"), written
+        // into the allocator call as a literal by both the repository and the numbering delegate.
+        String numberSeries = str(property, "numberSeries");
+        if (numberSeries != null) {
+            property.put("numberSeriesJavaLiteral", JavaLiterals.escape(numberSeries));
+        }
 
         String name = str(property, "name");
         if ("ProcessId".equals(name)) {
@@ -412,7 +486,7 @@ final class ModelParameterProcessor {
             property.put("widgetIsMajor", Boolean.FALSE);
         }
 
-        resolveDefaultValueLiterals(property);
+        resolveDefaultValueLiterals(property, entity);
 
         resolveWidgetLengths(property, entity, dataType);
         // After the widget flags: the seed is emitted in the shape the draft holds, and a numeric
@@ -447,8 +521,9 @@ final class ModelParameterProcessor {
      * property has a default".
      *
      * @param property the property
+     * @param entity the owning entity, to name the property in a refusal
      */
-    private static void resolveDefaultValueLiterals(Map<String, Object> property) {
+    private static void resolveDefaultValueLiterals(Map<String, Object> property, Map<String, Object> entity) {
         String defaultValue = str(property, "dataDefaultValue");
         if (defaultValue == null || defaultValue.isEmpty()) {
             return;
@@ -460,7 +535,8 @@ final class ModelParameterProcessor {
         if (Boolean.TRUE.equals(property.get("dataPrimaryKey")) || Boolean.TRUE.equals(property.get("dataAutoIncrement"))) {
             return;
         }
-        String expression = JavaLiterals.defaultValueExpression(str(property, "dataTypeJavaClass"), defaultValue);
+        String expression = JavaLiterals.defaultValueExpression(str(property, "dataTypeJavaClass"), defaultValue,
+                str(entity, "name") + "." + str(property, "name"));
         if (expression != null) {
             property.put("dataDefaultValueJavaLiteral", expression);
         }
@@ -864,11 +940,39 @@ final class ModelParameterProcessor {
             personalParent.put("personalProperty", parent.get("personalProperty"));
             personalParent.put("personalFkJavaClass", parent.get("personalFkJavaClass"));
             entity.put("personalParent", personalParent);
-            entity.put("personalReadOnly", truthy(parent, "personalReadOnly"));
+            // The scope comes from the parent; the writes need not. A child whose composition edge
+            // declares personalReadOnly (intent #7340) is see-only on the personal surface even though
+            // the parent it inherits the scope from is writable - the shape of a user-authored header
+            // whose lines only an engine writes.
+            entity.put("personalReadOnly", truthy(parent, "personalReadOnly") || truthy(parentFk, "relationshipPersonalReadOnly"));
             entity.put("personalIdentityProperty", parent.get("personalIdentityProperty"));
             entity.put("personalIdentityLabel", parent.get("personalIdentityLabel"));
             entity.put("personalIdentityEntityClass", parent.get("personalIdentityEntityClass"));
             entity.put("personalIdentityRepositoryClass", parent.get("personalIdentityRepositoryClass"));
+        }
+    }
+
+    /**
+     * Whether a document master's inline ITEMS panel is see-only on the personal surface - the master's
+     * own see-only flag, or the items child's own opt-out (intent #7340: {@code personalReadOnly} on
+     * the child's composition edge). The items panel lives on the MASTER's page, so the flag the
+     * document template gates Add / Fill Month / row delete / item save on has to be the master's, and
+     * a child that refuses the writes with 403 must not be offered them.
+     *
+     * <p>
+     * Derived here rather than emitted into the model, so a hand-authored {@code .edm} carrying the
+     * child's attribute gets the same page.
+     *
+     * @param entities every entity in the model
+     */
+    private static void resolveDocumentItemsScope(List<Map<String, Object>> entities) {
+        for (Map<String, Object> entity : entities) {
+            String itemsEntity = str(entity, "documentItemsEntity");
+            if (itemsEntity == null || itemsEntity.isEmpty()) {
+                continue;
+            }
+            Map<String, Object> items = findEntity(entities, itemsEntity);
+            entity.put("documentItemsReadOnly", truthy(entity, "personalReadOnly") || (items != null && truthy(items, "personalReadOnly")));
         }
     }
 
@@ -958,12 +1062,12 @@ final class ModelParameterProcessor {
     private static void collectScopedChildren(List<Map<String, Object>> entities) {
         for (Map<String, Object> entity : entities) {
             if (entity.get("personalProperty") != null || entity.get("personalParent") != null) {
-                entity.put("myChildren", scopedChildren(entities, entity, "personalParent", "MyController", true));
+                entity.put("myChildren", scopedChildren(entities, entity, "personalParent", "MyController", true, "personalReadOnly"));
             }
         }
         for (Map<String, Object> entity : entities) {
             if (entity.get("partnerProperty") != null || entity.get("partnerParent") != null) {
-                entity.put("partnerChildren", scopedChildren(entities, entity, "partnerParent", "PartnerController", false));
+                entity.put("partnerChildren", scopedChildren(entities, entity, "partnerParent", "PartnerController", false, null));
             }
         }
     }
@@ -976,10 +1080,12 @@ final class ModelParameterProcessor {
      * @param scopeKey the key naming the inherited scope
      * @param controllerSuffix the suffix of the scoped controller the panel talks to
      * @param withCalendar whether a child may render as a calendar panel
+     * @param readOnlyKey the child attribute marking the panel see-only, or null when the scope has no
+     *        such opt-out
      * @return the panel descriptors
      */
     private static List<Object> scopedChildren(List<Map<String, Object>> entities, Map<String, Object> parent, String scopeKey,
-            String controllerSuffix, boolean withCalendar) {
+            String controllerSuffix, boolean withCalendar, String readOnlyKey) {
         List<Object> children = new ArrayList<>();
         String parentName = str(parent, "name");
         for (Map<String, Object> child : entities) {
@@ -1000,6 +1106,9 @@ final class ModelParameterProcessor {
             // Whether this child has role-scoped columns at all: only then does the panel ask the
             // child's own scoped controller which of them the caller in front of it may not see.
             panel.put("restrictedFields", truthy(child, "hasRestrictedFields"));
+            // A see-only child (intent personalReadOnly) refuses the panel's Add with 403, so the panel
+            // must not offer it.
+            panel.put("readOnly", readOnlyKey != null && truthy(child, readOnlyKey));
             panel.put("columns", panelColumns(child, fkProperty));
             children.add(panel);
         }
@@ -1257,8 +1366,38 @@ final class ModelParameterProcessor {
                 part.put("repositoryClass", foreignKey.get("targetRepositoryClass"));
                 kept.add(part);
             }
+            for (Object part : kept) {
+                resolveLabelPartLiterals(asMap(part));
+            }
             entity.put("labelParts", kept);
             entity.put("hasLabel", Boolean.TRUE);
+        }
+    }
+
+    /**
+     * Derives the escaped twins of a label part's authored text, for the generated name computation
+     * that writes them into Java string literals.
+     *
+     * <p>
+     * A label pattern is prose an author writes around the fields it interpolates - a quote in a
+     * literal segment, or in a format, is interpolated verbatim into the {@code computeName} body,
+     * where it ends the literal it is written into and fails the compile of every generated class of
+     * the module (#7295, the #7241 class). The raw value stays for the surfaces that render it as text;
+     * only the Java site reads the twin.
+     *
+     * @param part the label part
+     */
+    private static void resolveLabelPartLiterals(Map<String, Object> part) {
+        if (part == null) {
+            return;
+        }
+        String text = str(part, "text");
+        if (text != null) {
+            part.put("textJavaLiteral", JavaLiterals.escape(text));
+        }
+        String format = str(part, "format");
+        if (format != null) {
+            part.put("formatJavaLiteral", JavaLiterals.escape(format));
         }
     }
 
@@ -1339,21 +1478,15 @@ final class ModelParameterProcessor {
     private static void resolveWidgetLiterals(Map<String, Object> property) {
         String widgetPattern = str(property, "widgetPattern");
         if (widgetPattern != null && !widgetPattern.isEmpty()) {
-            property.put("widgetPatternJs", "'" + widgetPattern.replace("\\", "\\\\")
-                                                               .replace("'", "\\'")
-                    + "'");
+            property.put("widgetPatternJs", "'" + JsLiterals.escape(widgetPattern) + "'");
             // The same expression as the body of a Java string literal, without the quotes: an
             // unescaped backslash would make the generated controller fail to compile, and the
             // client Java batch is all-or-nothing.
-            property.put("widgetPatternJava", widgetPattern.replace("\\", "\\\\")
-                                                           .replace("\"", "\\\""));
+            property.put("widgetPatternJava", JavaLiterals.escape(widgetPattern));
         }
         if (property.get("widgetOptionsFilterBy") != null && property.containsKey("widgetOptionsFilterValue")) {
             String raw = String.valueOf(property.get("widgetOptionsFilterValue"));
-            property.put("widgetOptionsFilterValueJs", raw.matches("-?\\d+(\\.\\d+)?") ? raw
-                    : "'" + raw.replace("\\", "\\\\")
-                               .replace("'", "\\'")
-                            + "'");
+            property.put("widgetOptionsFilterValueJs", raw.matches("-?\\d+(\\.\\d+)?") ? raw : "'" + JsLiterals.escape(raw) + "'");
         }
     }
 

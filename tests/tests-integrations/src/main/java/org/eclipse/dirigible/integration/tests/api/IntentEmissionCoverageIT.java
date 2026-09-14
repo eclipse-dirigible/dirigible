@@ -231,6 +231,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # the two comparison families the generated code emits differently.
                   - { kind: compare, field: due,  op: ge, than: date,  message: 'A "due" date is never before the entry date' }
                   - { kind: compare, field: paid, op: le, than: debit, message: "Paid cannot exceed the debit total" }
+                  # ...and the same comparison against a LITERAL (#7338) - the commonest validation of
+                  # all, which had no declaration at all before and was hand-edited into the generated
+                  # controller (where the next regeneration silently dropped it).
+                  - { kind: compare, field: paid, op: ge, value: 0, message: "A paid amount cannot be negative" }
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: date,   type: date, required: true }
@@ -266,6 +270,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # surfaces). The condition names a seeded status by name, like every other guard.
                   - { kind: requiredWhen, field: Party.name, when: "Status == POSTED",
                       message: "A posted document must name its counterparty" }
+                  # compare against a literal, GATED (#7338): the amount must be positive by the time
+                  # the document is posted - not while it is still a draft being filled in. The gate is
+                  # the routing, exactly as on requiredWhen: with one, the rule is the repository's.
+                  - { kind: compare, field: amount, op: gt, value: 0, status: POSTED,
+                      message: "A posted document must carry a positive amount" }
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: date,   type: date, required: true }
@@ -457,10 +466,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - name: Claim
                 audit: true
                 history: true
-                label: "{note} ({Person.name}) {period|yyyy MMMM}"
+                # The label's literal segments carry a quote, as authored prose does. Every one of
+                # them is written into the generated computeName() as a Java literal, so an
+                # unescaped one ends that literal and fails the compile of the whole module (#7295).
+                label: "the \\"{note}\\" ({Person.name}) {period|yyyy MMMM}"
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
-                  - { name: note, type: string, length: 200 }
+                  # description: reaches the generated entity as an @Documentation argument - a Java
+                  # string literal, so the quote here is the #7295 assertion.
+                  - { name: note, type: string, length: 200, description: 'The claim''s "short" note' }
                   # a boolean: a real checkbox on the power form AND on the personal one (#7103)
                   - { name: urgent, type: boolean }
                   - { name: period, type: month }
@@ -530,6 +544,34 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: amount, type: decimal }
                 relations:
                   - { name: Payslip, kind: manyToOne, to: Payslip, composition: true, required: true }
+
+              # #7340: the CHILD opts the inherited personal surface out of writes while the master it
+              # inherits the scope from stays writable - a header the person authors whose lines only an
+              # engine writes. The items panel and the note panel of the my DOCUMENT must offer no Add
+              # (their own my controllers refuse every use of it with 403) while the header keeps
+              # Save/Delete, which is exactly the pairing the master-level flag cannot express.
+              - name: Timesheet
+                function: Document
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string, length: 20, function: DocumentTitle }
+                relations:
+                  - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
+              - name: TimesheetLine
+                function: DocumentItem
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: hours,  type: decimal }
+                relations:
+                  - { name: Timesheet, kind: manyToOne, to: Timesheet, composition: true, required: true, personalReadOnly: true }
+              # A NON-item composition child of the same writable master: its panel is the one the
+              # per-child readOnly flag gates, since the panel list is built at runtime.
+              - name: TimesheetNote
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: text, type: string, length: 200 }
+                relations:
+                  - { name: Timesheet, kind: manyToOne, to: Timesheet, composition: true, required: true, personalReadOnly: true }
 
               # The dead-Create family (found live 2026-07-29): a USER-ENTERED document title
               # (function: DocumentTitle without a number series) must render as an editable input
@@ -667,6 +709,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Roster, kind: manyToOne, to: Roster, composition: true, required: true }
                   - { name: Person, kind: manyToOne, to: Person }
 
+              # #7358: the Duplicate cloned the header verbatim, so a copy kept the source's dates. The
+              # object form of `duplicable` is what the generated document page has to render - one
+              # delete per reset, one assignment per default, and `now` in the field's own shape.
+              - name: Reorder
+                function: Document
+                duplicable:
+                  defaults: { orderedOn: now, period: now, comment: "Copy" }
+                  reset: [note]
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: reference, type: string, length: 40, function: DocumentTitle }
+                  - { name: orderedOn, type: date, required: true }
+                  - { name: period,    type: month }
+                  - { name: note,      type: string, length: 100 }
+                  - { name: comment,   type: string, length: 100 }
+              - name: ReorderItem
+                function: DocumentItem
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: quantity, type: decimal }
+                relations:
+                  - { name: Reorder, kind: manyToOne, to: Reorder, composition: true, required: true }
+
               # partner: the EXTERNAL-partner mirror of personal - PartnerTicket is owned by a Person
               # (reusing identity: email; the admin seed maps the IT user), with a sensitive field.
               - name: PartnerTicket
@@ -785,6 +850,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # is fail-soft, so without this the mail that never left was a log line and nothing
                   # else - and this instance has no SMTP, which is exactly the case being asserted.
                   - { name: sendOutcome, type: string, length: 128, readOnly: true }
+                  # #7276: the date the dunning ladder below counts days from.
+                  - { name: dueOn, type: date }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person }
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
@@ -806,6 +873,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Bill,   kind: manyToOne, to: Bill, required: true }
                   - { name: Person, kind: manyToOne, to: Person }
+
+              # #7276 dunning: the escalation LADDER (a settings table of levels and their
+              # days-past-due thresholds) and the HISTORY the scheduled run writes - what was
+              # actually sent, and at which level.
+              - name: ReminderLevel
+                function: Setting
+                fields:
+                  - { name: id,           type: integer, primaryKey: true, generated: true }
+                  - { name: name,         type: string }
+                  - { name: daysAfterDue, type: integer }
+                  - { name: wording,      type: string, length: 500 }
+              - name: BillReminder
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: sentOn, type: date }
+                relations:
+                  - { name: Bill,  kind: manyToOne, to: Bill, required: true }
+                  - { name: Level, kind: manyToOne, to: ReminderLevel }
 
               # keyed cross-entity aggregate: a signed ledger summed per (Person, Unit) into a
               # materialised total row keyed by the same two FKs. Ledger.amount is SENSITIVE and
@@ -1073,6 +1158,30 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   languageFrom: Person.locale
                   outcome: sendOutcome
 
+              # #7276: a tick that BOTH records and mails, escalating by how overdue the bill is. It
+              # never fires here (the 1st of January at 07:00); it is in this fixture so the combined
+              # job - the ladder lookup, the level written into the natural key, the guard that gates
+              # the send - is COMPILED by the publish below, which is the only proof it builds.
+              - name: bill-dunning
+                cron: "0 0 7 1 1 *"
+                entity: Bill
+                where:
+                  - { field: dueOn, op: lt, value: CURRENT_DATE }
+                escalate:
+                  ladder: ReminderLevel
+                  after: daysAfterDue
+                  since: dueOn
+                  into: Level
+                generate:
+                  to: BillReminder
+                  unique: [Bill, Level]
+                  map: { Bill: id }
+                  defaults: { sentOn: now }
+                notify:
+                  to: Person.email
+                  subject: "Bill {note} - {escalation.name}"
+                  body: "{escalation.wording}"
+
             processes:
               # assignee: personal - the confirm task lands in exactly the owner's Inbox (the IT
               # runs as admin, mapped by the Person seed below).
@@ -1107,7 +1216,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - name: ShipmentFlow
                 trigger: { onCreate: Shipment }
                 steps:
-                  - { name: dispatch, kind: serviceTask, args: { setField: note, value: DISPATCHED, next: settle } }
+                  # The written value is authored prose and is emitted as a Java string literal, so
+                  # the quote in it is the #7295 assertion on the setter delegate.
+                  - { name: dispatch, kind: serviceTask, args: { setField: note, value: 'DISPATCHED "in full"', next: settle } }
                   - { name: settle,   kind: serviceTask, args: { setField: note, value: SETTLED, next: end } }
                   - { name: end, kind: end }
 
@@ -1534,6 +1645,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 parameters:
                   - { name: minTotal, target: totalCost, op: ge, initial: "0" }
                   - { name: note, target: note, op: like }
+              # A report parameter's `initial:` is authored prose bound on every call, and the
+              # generated repository writes it into a Java string literal - a quote in it used to
+              # end that literal and fail the compile of the whole module (#7295). Its own report,
+              # because the fallback narrows every unparameterized call by construction.
+              - name: ClaimNotes
+                source: Claim
+                dimensions: [note]
+                measures: ["count(*)"]
+                parameters:
+                  - { name: search, target: note, op: like, initial: 'O''Neil "the" note' }
               # kind: statement (#6938): the line classification is emitted as a generated
               # <REPORT>_LINES .view artifact - published with the project and provisioned by the
               # ViewsSynchronizer AFTER the tables - and the .report keeps a thin windowed join over
@@ -1878,6 +1999,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(entryController.contains(
                 "!(new java.math.BigDecimal(entity.Paid.toString()).compareTo(new java.math.BigDecimal(entity.Debit.toString())) <= 0)"),
                 "checks: compare over two numbers must compare by value through BigDecimal, got: " + entryController);
+        // ...and a comparison against a LITERAL (#7338) renders the right-hand side as a Java
+        // expression in the column's own shape - one operand to null-guard, not two.
+        assertTrue(
+                entryController.contains("if (entity.Paid != null\n") && entryController.contains(
+                        "!(new java.math.BigDecimal(entity.Paid.toString()).compareTo(new java.math.BigDecimal(\"0\")) >= 0)"),
+                "checks: compare against a numeric literal must compare by value through BigDecimal, got: " + entryController);
         String snapshotController = contentOf("gen/emission/api/snapshot/SnapshotController.java");
         assertTrue(snapshotController.contains("requireMutable") && snapshotController.contains("append-only"),
                 "immutable: true must emit the unconditional append-only gate in the REST controller");
@@ -1996,8 +2123,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // actually fires is asserted over REST in assertRuntimeEnforcement.
         assertFalse(docController.contains("java.util.Objects.equals(entity.Status, 2)"),
                 "a to-one guard must not be a boxed equality against an int literal, got: " + docController);
-        assertFalse(contentOf("gen/emission/data/doc/DocRepository.java").contains("A posted document must name its counterparty"),
+        String docGateRepository = contentOf("gen/emission/data/doc/DocRepository.java");
+        assertFalse(docGateRepository.contains("A posted document must name its counterparty"),
                 "an ungated check is not the repository's - a gate it does not carry cannot be tested there");
+        // ...while a GATED comparison against a literal (#7338) is the repository's, guarded on the
+        // status the document is being persisted with - so a draft may still carry nothing.
+        assertTrue(
+                docGateRepository.contains("if (entity.Status != null && entity.Status == 2)")
+                        && docGateRepository.contains(
+                                "!(new java.math.BigDecimal(entity.Amount.toString()).compareTo(new java.math.BigDecimal(\"0\")) > 0)")
+                        && docGateRepository.contains("A posted document must carry a positive amount"),
+                "a gated checks: compare must be enforced by the repository at its gate status, got: " + docGateRepository);
 
         String entryRepository = contentOf("gen/emission/data/entry/EntryRepository.java");
         assertTrue(entryRepository.contains("An entry needs at least one \\\"line\\\""),
@@ -2547,6 +2683,44 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String ticketMyDoc = contentOf("gen/emission/views/my/Ticket-document.html");
         assertTrue(ticketMyDoc.contains("sendMessage(chatDraft)"), "a writable personal document must still render the chat composer");
 
+        // #7340: the see-only flag on the CHILD's own composition edge. The master's personal surface
+        // stays writable (Save/Delete on the header) while the items panel and the note panel offer no
+        // Add - the pairing the master-level flag cannot express, and the window the abuse lived in: a
+        // DRAFT header is mutable by definition, so nothing else closed the child's write.
+        String lineMyController = contentOf("gen/emission/api/timesheet/TimesheetLineMyController.java");
+        assertTrue(lineMyController.contains("read-only on your personal surface") && lineMyController.contains("HttpStatus.FORBIDDEN"),
+                "a child whose composition edge declares personalReadOnly must refuse its personal writes with 403");
+        assertTrue(!lineMyController.contains("repository.save(entity)"),
+                "a see-only child must NOT emit a persisting create/update on its personal controller");
+        String timesheetMyDoc = contentOf("gen/emission/views/my/Timesheet-document.html");
+        assertTrue(timesheetMyDoc.contains("save()") && timesheetMyDoc.contains("deleteOpen = true"),
+                "the master's own personal surface stays writable - the header keeps Save and Delete");
+        assertTrue(
+                !timesheetMyDoc.contains("openItem(null)") && !timesheetMyDoc.contains("deleteItem(row)")
+                        && !timesheetMyDoc.contains("saveItem()"),
+                "a see-only items child must strip the items Add, the per-row Delete and the item dialog's Save");
+        assertTrue(timesheetMyDoc.contains("openItem(row)"), "a see-only items child must still open a line for reading");
+        // The non-item panel is built at runtime, so the refusal travels as the panel's own flag.
+        String timesheetMyDocPage = contentOf("gen/emission/js/components/pages/my/TimesheetMyDocumentPage.js");
+        assertTrue(timesheetMyDocPage.contains("readOnly: true"), "the panel of a see-only child must carry the refusal");
+        String claimMyFormPage = contentOf("gen/emission/js/components/pages/my/ClaimMyFormPage.js");
+        assertTrue(claimMyFormPage.contains("readOnly: false"), "a writable child's panel must keep offering its Add");
+
+        // #7358: what a Duplicate does NOT copy. Without the object form every ordinary user field
+        // rides along, so "same document as last month" opens dated last month - and a
+        // calculatedActionOnCreate cannot repair it, since it fills an empty value and respects a
+        // present one.
+        String reorderDoc = contentOf("gen/emission/js/components/pages/Reorder/ReorderDocumentPage.js");
+        assertTrue(reorderDoc.contains("delete header['Note'];"), "a duplicable reset must be dropped from the cloned header");
+        assertTrue(reorderDoc.contains("header['OrderedOn'] = this.todayAs('date');"),
+                "now on a date field must be written as today in that field's shape");
+        assertTrue(reorderDoc.contains("header['Period'] = this.todayAs('month');"),
+                "now on a month field must be the YYYY-MM shape, not a full date");
+        assertTrue(reorderDoc.contains("header['Comment'] = \"Copy\";"), "a literal default must reach the page quoted");
+        assertTrue(reorderDoc.contains("todayAs(shape)") && reorderDoc.contains("now.getFullYear() + '-' + pad(now.getMonth() + 1)"),
+                "todayAs must build from the LOCAL calendar fields - toISOString is UTC, so a copy made in the evening"
+                        + " east of Greenwich would be dated yesterday");
+
         // assignee: personal - the BPMN assigns the task to the start-time-resolved owner and the
         // trigger listener seeds that variable from the identity mapping.
         String bpmn = contentOf("ClaimConfirm.bpmn");
@@ -2851,6 +3025,26 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(dunningTry > 0 && dunningTry < dunningLoad && dunningLoad < dunningRender && dunningRender < dunningCatch,
                 "the row's loads and the attachment render must run inside the fail-soft try: " + dunning);
 
+        // #7276 - the escalating dunning tick that records what it sent. The ladder lookup, the level
+        // written onto the history row AND into the natural key, and the guard that skips the send for
+        // a level already sent all have to COMPILE against the generated entities: `escalation` is a
+        // typed local read for a `long` comparison and for an Integer foreign key, and the publish +
+        // client-Java javac below is the first thing that proves it.
+        String escalating = contentOf("gen/events/emission/BillDunningJob.java");
+        assertTrue(
+                escalating.contains("ReminderLevelEntity escalationCandidate = null;")
+                        && escalating.contains("ReminderLevelEntity escalation = escalationCandidate;"),
+                "the chosen level is a typed, effectively final local of the row's try: " + escalating);
+        assertTrue(escalating.contains("java.time.temporal.ChronoUnit.DAYS.between(entity.DueOn"),
+                "how overdue the row is decides the level: " + escalating);
+        assertTrue(escalating.contains("target.Level = escalation.Id;"), "the level is written onto the history row: " + escalating);
+        assertTrue(escalating.contains(".eq(\"Level\", keyLevel)"),
+                "the level is part of the key that sends each level once: " + escalating);
+        int escalatingGuard = escalating.indexOf("BillReminderRepository().findAll(Criteria.create()");
+        int escalatingSend = escalating.indexOf("Mail.send(");
+        assertTrue(escalatingGuard > 0 && escalatingSend > escalatingGuard,
+                "the natural key gates the send as well as the write: " + escalating);
+
         // month widget: the YYYY-MM field renders the Harmonia month picker on BOTH writable
         // surfaces - the power form and the personal form (my-shell parity).
         assertTrue(contentOf("gen/emission/views/Claim/Claim-form.html").contains("x-h-month-picker"),
@@ -3113,6 +3307,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // right, which it can only do if the manifest says which fields and which operator (#7095).
         assertTrue(testManifest.contains("\"field\": \"Due\"") && testManifest.contains("\"than\": \"Date\""),
                 "the manifest must carry the entity's compare checks so the sample record satisfies them");
+        // ...including the literal ones (#7338): a sample value that fails the declared comparison
+        // fails the generated app test just as surely, so the runner needs the literal to steer by.
+        assertTrue(testManifest.contains("\"field\": \"Paid\"") && testManifest.contains("\"value\": 0"),
+                "the manifest must carry a compare check's literal right-hand side too");
 
         // transitions: the server half is a controller that guards the source status + the when
         // guard (409) and flips ONLY the status column via the targeted updateProperty; the client
@@ -3136,8 +3334,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // other writer (a REST update, a workflow setter, a glue action) free to jump anywhere.
         String docRepository = contentOf("gen/emission/data/doc/DocRepository.java");
         assertTrue(docRepository.contains("\"1>2,2>3\".split(\",\")"), "the lifecycle must emit the whole legal edge set");
-        assertTrue(docRepository.contains("1=DRAFT,2=POSTED,3=CANCELLED"),
-                "the seeded status names must ride along so a rejection names statuses, not positional ids");
+        // The names ride along as INDIVIDUAL escaped literals, not as one `id=name,` join: a status
+        // name is authored prose, and a comma in one shifted every entry after it while a quote broke
+        // the literal the join was written into (#7295).
+        assertTrue(docRepository.contains("names.put(\"1\", \"DRAFT\");") && docRepository.contains("names.put(\"3\", \"CANCELLED\");"),
+                "the seeded status names must ride along so a rejection names statuses, not positional ids: " + docRepository);
         assertTrue(docRepository.contains("enforceLifecycle(entity);"), "a full-row update must be validated against the graph");
         assertTrue(docRepository.contains("enforceLifecycleMove(lifecyclePrevious, entity.Status);"),
                 "a targeted write (transition button, workflow setter) must be validated against the graph too");
@@ -3393,6 +3594,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // must parse it back to a temporal - otherwise the label degrades to the raw "2026-07".
         assertTrue(claimRepository.contains("YearMonth.parse"),
                 "a |format token on a month field must parse the YYYY-MM string back to a temporal");
+        // Every authored string the generated Java writes into a string literal is ESCAPED on the way
+        // in (#7295, the #7241/#7154 class): a label's literal segments here, the field description
+        // the entity's @Documentation carries, the series a number is allocated from, the seeded
+        // status names a lifecycle refusal quotes, a setter's written value and a report parameter's
+        // bound fallback. The module javac's as a whole, so an unescaped one of them fails EVERY
+        // generated class - these assertions say which value each site wrote, not merely that it did.
+        assertTrue(claimRepository.contains("label.append(\"the \\\"\");"),
+                "a label's literal segment must reach computeName escaped: " + claimRepository);
+        assertTrue(contentOf("gen/emission/data/claim/ClaimEntity.java").contains("@Documentation(\"The claim's \\\"short\\\" note\")"),
+                "an authored field description must reach @Documentation escaped");
+        assertTrue(contentOf("gen/events/emission/ShipmentFlowDispatch.java").contains("\"DISPATCHED \\\"in full\\\"\""),
+                "a setField value must reach the setter delegate escaped");
+        String claimNotesRepository = contentOf("gen/claimnotes/data/reports/ClaimNotesRepository.java");
+        assertTrue(claimNotesRepository.contains("value(filter, \"search\", \"O'Neil \\\"the\\\" note\")"),
+                "an authored report parameter initial must be bound escaped: " + claimNotesRepository);
+
         // A workflow setter/writer targeted write keeps the stored display Name current: the label
         // repository OVERRIDES updateProperties to recompute it on that path too.
         assertTrue(claimRepository.contains("public int updateProperties(") && claimRepository.contains("computeName(entity)"),
@@ -4141,6 +4358,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200));
 
+        // checks: compare against a LITERAL, at runtime (#7338) - a negative paid amount is refused
+        // with the authored message, zero passes (`ge` is inclusive), and the creates above carry no
+        // Paid at all: an absent operand is not a violation here either.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-15\",\"Paid\":-1,\"Account\":2}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", containsString("A paid amount cannot be negative")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-15\",\"Paid\":0,\"Account\":2}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController")
+                                                 .then()
+                                                 .statusCode(200));
+
         // A valid DRAFT entry on the leaf account.
         AtomicInteger created = new AtomicInteger();
         restAssuredExecutor.execute(() -> created.set(given().contentType("application/json")
@@ -4643,6 +4877,35 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200));
 
+        // ...and the GATED comparison against a literal (#7338): a zero-amount document is a perfectly
+        // good DRAFT, and is refused only when the write carries the POSTED status - the gate is the
+        // whole point, and a check that fired on the draft would be the itemsMin mis-authoring that
+        // refused every submission in the field.
+        AtomicInteger gatedCompare = new AtomicInteger();
+        restAssuredExecutor.execute(() -> gatedCompare.set(given().contentType("application/json")
+                                                                  .body("{\"Date\":\"2026-01-19\",\"Amount\":0,\"Party\":1}")
+                                                                  .when()
+                                                                  .post(API + "/doc/DocController")
+                                                                  .then()
+                                                                  .statusCode(200)
+                                                                  .extract()
+                                                                  .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + gatedCompare.get()
+                                                         + ",\"Date\":\"2026-01-19\",\"Amount\":0,\"Status\":2,\"Party\":1}")
+                                                 .when()
+                                                 .put(API + "/doc/DocController/" + gatedCompare.get())
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", containsString("A posted document must carry a positive amount")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + gatedCompare.get()
+                                                         + ",\"Date\":\"2026-01-19\",\"Amount\":25,\"Status\":2,\"Party\":1}")
+                                                 .when()
+                                                 .put(API + "/doc/DocController/" + gatedCompare.get())
+                                                 .then()
+                                                 .statusCode(200));
+
         // postings: posting a Doc creates the balanced Entry (async handler - poll)...
         AtomicInteger doc = new AtomicInteger();
         restAssuredExecutor.execute(() -> doc.set(given().contentType("application/json")
@@ -4807,9 +5070,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                               .body("Person", equalTo(1))
                                                               .body("Rate", nullValue())
                                                               // label: the stored display name computed on write -
-                                                              // "{note} ({Person.name}) {period|yyyy MMMM}"; the month
-                                                              // value formats through the pattern, never the raw 2026-07.
-                                                              .body("Name", equalTo("spoofed (Admin) 2026 July"))
+                                                              // the \"{note}\" ({Person.name}) {period|yyyy MMMM}; the
+                                                              // month value formats through the pattern, never the raw
+                                                              // 2026-07, and the pattern's own quotes survive the Java
+                                                              // literal they are written into (#7295).
+                                                              .body("Name", equalTo("the \"spoofed\" (Admin) 2026 July"))
                                                               .extract()
                                                               .path("Id")));
 
@@ -4839,7 +5104,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("Note", equalTo("edited"))
                                                  .body("Person", equalTo(1))
                                                  .body("Rate", equalTo(50.0F))
-                                                 .body("Name", equalTo("edited (Admin)")));
+                                                 .body("Name", equalTo("the \"edited\" (Admin)")));
 
         // The personal-assignee task landed in the owner's (admin's) Inbox - assigned, not just
         // claimable (the trigger + BPMN chain resolved the identity mapping at start time).

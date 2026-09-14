@@ -291,6 +291,94 @@ class EdmIntentGeneratorTest {
         assertEquals("MANAGE_DETAILS", entityByName(entities, "SalesInvoiceItem").get("layoutType"));
     }
 
+    /**
+     * #7358: a Duplicate copied every ordinary user field, so "same invoice as last month" opened dated
+     * last month, due last month, with last month's tax event. The object form of {@code duplicable}
+     * says which fields the copy resets and which it assigns, and both halves have to reach the
+     * document template - and survive the {@code .edm} round-trip, or an unrelated modeler save would
+     * silently put the defect back.
+     */
+    @Test
+    void duplicableObjectFormEmitsTheResetsAndTheDefaults() {
+        String yaml = """
+                name: sales-invoices
+                entities:
+                  - name: SalesInvoice
+                    duplicable:
+                      defaults: { date: now, note: "Copy", period: now }
+                      reset: [due]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date, required: true }
+                      - { name: due, type: date, calculatedActionOnCreate: custom.DueDate }
+                      - { name: note, type: string }
+                      - { name: period, type: month }
+                  - name: SalesInvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal }
+                    relations:
+                      - { name: salesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+
+        Map<String, Object> invoice =
+                entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(parsed, "sales-invoices")), "SalesInvoice");
+        assertEquals("true", invoice.get("duplicable"));
+        assertEquals(List.of("Due"), invoice.get("duplicateReset"), "a reset is carried as the GENERATED property name");
+
+        List<Map<String, Object>> defaults = (List<Map<String, Object>>) invoice.get("duplicateDefaults");
+        assertEquals(3, defaults.size(), "every default reaches the template, in authored order");
+        assertEquals("Date", defaults.get(0)
+                                     .get("name"));
+        assertEquals("date", defaults.get(0)
+                                     .get("shape"),
+                "now on a date field renders as today in that field's shape");
+        assertEquals("Note", defaults.get(1)
+                                     .get("name"));
+        assertEquals("literal", defaults.get(1)
+                                        .get("shape"));
+        assertEquals("\"Copy\"", defaults.get(1)
+                                         .get("js"),
+                "a string literal reaches the page quoted, not bare");
+        assertEquals("month", defaults.get(2)
+                                      .get("shape"),
+                "a month field gets the YYYY-MM shape, not a full date");
+
+        // Both keys are structured, so they must be written as JSON attributes rather than dropped -
+        // what the .edm cannot say is lost on the next modeler save (#6826).
+        String edm = EdmIntentGenerator.buildEdmXmlForTest(parsed, "sales-invoices");
+        assertTrue(edm.contains("duplicateReset=\"[&quot;Due&quot;]\""), () -> "the .edm must carry the resets: " + edm);
+        assertTrue(edm.contains("duplicateDefaults=\"["), () -> "the .edm must carry the defaults: " + edm);
+    }
+
+    /** The boolean shorthand must keep generating exactly what it always did - nothing extra. */
+    @Test
+    void duplicableShorthandEmitsNoRules() {
+        String yaml = """
+                name: sales-invoices
+                entities:
+                  - name: SalesInvoice
+                    duplicable: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                  - name: SalesInvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal }
+                    relations:
+                      - { name: salesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                """;
+
+        Map<String, Object> invoice = entityByName(
+                entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales-invoices")), "SalesInvoice");
+
+        assertEquals("true", invoice.get("duplicable"));
+        assertNull(invoice.get("duplicateReset"));
+        assertNull(invoice.get("duplicateDefaults"));
+    }
+
     @Test
     void attachmentChildInjectsFileMetadataAndIsMarked() {
         String yaml = """
@@ -691,6 +779,77 @@ class EdmIntentGeneratorTest {
         assertNull(entityByName(entities(model), "Customer").get("processDeleteGuards"));
     }
 
+    /**
+     * A status a {@code processes:} step writes is the FLOW's column: the trigger entity carries the
+     * guard its controllers refuse a direct create/update with, plus the one status a create may still
+     * name - the relation's {@code init:} (dirigible #7339). An entity whose status no flow writes is
+     * untouched.
+     */
+    @Test
+    void aProcessDrivenStatusIsEmittedAsWorkflowOwned() {
+        String yaml = """
+                name: vacations
+                entities:
+                  - name: RequestStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: VacationRequest
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: RequestStatus, function: EntityStatus, init: 1 }
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: RequestStatus, function: EntityStatus, init: 1 }
+                processes:
+                  - name: Approval
+                    trigger: { onCreate: VacationRequest }
+                    steps:
+                      - { name: decide, kind: userTask, args: { assignee: manager, form: DecideRequest } }
+                      - { name: approve, kind: serviceTask, args: { setRelationField: Status, value: 3 } }
+                      - { name: end, kind: end }
+                forms:
+                  - { name: DecideRequest, forEntity: VacationRequest, fields: [id], actions: [decide] }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "vacations");
+        Map<String, Object> request = entityByName(entities(model), "VacationRequest");
+        assertEquals("Status", request.get("workflowStatusProperty"));
+        assertEquals("1", request.get("workflowStatusInitial"));
+        // Same status nomenclature, no flow over it - an ordinary writable column.
+        assertNull(entityByName(entities(model), "Employee").get("workflowStatusProperty"));
+    }
+
+    /**
+     * A {@code transitions:} button does NOT claim the column: it is a user action over the status, and
+     * the construct that guards the other hand writes is {@code lifecycle:}, enforced in the repository
+     * - whose refusal would be observable from nowhere if the plain write were closed here.
+     */
+    @Test
+    void aTransitionAloneLeavesTheStatusWritable() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                transitions:
+                  - { name: void, forEntity: JournalEntry, from: [1], setStatus: 2, label: Void }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
+        assertNull(entityByName(entities(model), "JournalEntry").get("workflowStatusProperty"));
+    }
+
     @Test
     void immutableWhenEmitsStatusGuardAttributes() {
         String yaml = """
@@ -791,8 +950,16 @@ class EdmIntentGeneratorTest {
         Map<String, Object> entry = entityByName(entities(model), "JournalEntry");
         assertEquals("Status", entry.get("lifecycleStatusProperty"));
         assertEquals("1>2,1>3,2>4", entry.get("lifecycleEdges"));
-        // The seeded names ride along so a rejection reads "cannot move from POSTED to DRAFT".
-        assertEquals("1=DRAFT,2=POSTED,3=CANCELLED,4=VOIDED", entry.get("lifecycleStatusNames"));
+        // The seeded names ride along so a rejection reads "cannot move from POSTED to DRAFT" - as
+        // STRUCTURED pairs, because a name is authored prose and the `id=name,` join it used to be
+        // mis-parsed on a comma and broke the generated Java literal on a quote (#7295).
+        List<Map<String, Object>> statusNames = (List<Map<String, Object>>) entry.get("lifecycleStatusNameList");
+        assertEquals(List.of("1", "2", "3", "4"), statusNames.stream()
+                                                             .map(name -> name.get("id"))
+                                                             .toList());
+        assertEquals(List.of("DRAFT", "POSTED", "CANCELLED", "VOIDED"), statusNames.stream()
+                                                                                   .map(name -> name.get("name"))
+                                                                                   .toList());
         // With a declared start, a record cannot be CREATED mid-lifecycle either.
         assertEquals("1", entry.get("lifecycleInitialStatus"));
         // An entity without a lifecycle carries none of it.
@@ -1393,6 +1560,65 @@ class EdmIntentGeneratorTest {
         Map<String, Object> numbers = checks.get(1);
         assertEquals("<=", numbers.get("op"));
         assertEquals("true", numbers.get("numeric"));
+    }
+
+    /**
+     * A {@code compare} check against a LITERAL (dirigible #7338) reaches the templates as a Java
+     * EXPRESSION for the right-hand side, rendered in the shape the generated column carries - a
+     * {@code BigDecimal} for a number, a {@code LocalDate} for a date, an {@code Instant} for a
+     * timestamp - so the comparison compiles and is exact. The optional status gate reaches them as the
+     * gate status and the property that carries it, which is what routes the check to the repository
+     * instead of the controllers.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void compareChecksAgainstLiteralsEmitJavaExpressions() {
+        String yaml = """
+                name: leave
+                seeds:
+                  - name: request-statuses
+                    entity: RequestStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: SUBMITTED }
+                entities:
+                  - name: RequestStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: VacationRequest
+                    checks:
+                      - { kind: compare, field: days, op: gt, value: 0, status: SUBMITTED,
+                          message: "A request must cover at least one working day" }
+                      - { kind: compare, field: from, op: ge, value: "CURRENT_DATE", message: "Leave cannot start in the past" }
+                      - { kind: compare, field: filedAt, op: le, value: "CURRENT_TIMESTAMP+PT1H", message: "Not in the future" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: days, type: decimal }
+                      - { name: from, type: date }
+                      - { name: filedAt, type: timestamp }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: RequestStatus, function: EntityStatus }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "leave");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "VacationRequest").get("checks");
+        assertEquals(3, checks.size());
+        Map<String, Object> positive = checks.get(0);
+        assertEquals("Days", positive.get("field"));
+        assertEquals(">", positive.get("op"));
+        assertEquals("true", positive.get("numeric"));
+        assertEquals("new java.math.BigDecimal(\"0\")", positive.get("literal"));
+        assertNull(positive.get("than"), "a literal comparison has no second property");
+        assertEquals("2", positive.get("status"), "the gate routes the check to the repository");
+        assertEquals("Status", positive.get("statusProperty"));
+        Map<String, Object> notPast = checks.get(1);
+        assertEquals("false", notPast.get("numeric"));
+        assertEquals("java.time.LocalDate.now()", notPast.get("literal"));
+        assertNull(notPast.get("status"), "an ungated comparison stays the controllers' - every user write");
+        assertEquals("java.time.Instant.now().plus(java.time.Duration.parse(\"PT1H\"))", checks.get(2)
+                                                                                               .get("literal"),
+                "a timestamp column binds java.time.Instant, so the moment renders in THAT shape");
     }
 
     /**
@@ -2182,6 +2408,48 @@ class EdmIntentGeneratorTest {
         // The confidential field is flagged for the personal-surface scrub; a plain one is not.
         assertEquals("true", propertyByName(entityByName(entities, "VacationRequest"), "DailyRate").get("sensitiveProperty"));
         assertNull(propertyByName(entityByName(entities, "VacationRequest"), "Note").get("sensitiveProperty"));
+    }
+
+    /**
+     * {@code personalReadOnly: true} on the composition edge a child inherits its personal scope
+     * through (dirigible #7340) marks that edge see-only - the child's generated MyController refuses
+     * every write and its personal pages offer none - while the master's own personal surface, whose
+     * header the person really does author, stays writable.
+     */
+    @Test
+    void aCompositionChildCanBeSeeOnlyWhileItsMasterStaysWritable() {
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Employee
+                    identity: email
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                      - { name: email, type: string, required: true, unique: true, length: 320 }
+                  - name: VacationRequest
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 400 }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true }
+                  - name: VacationRequestItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: day, type: date }
+                    relations:
+                      - { name: Request, kind: manyToOne, to: VacationRequest, composition: true, required: true,
+                          personalReadOnly: true }
+                """;
+        List<Map<String, Object>> entities = entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "hr"));
+
+        Map<String, Object> child = propertyByName(entityByName(entities, "VacationRequestItem"), "Request");
+        assertEquals("true", child.get("relationshipPersonalReadOnly"), "the owning composition edge carries the see-only marker");
+        assertNull(child.get("relationshipPersonal"), "the child owns no personal relation - the scope still comes from the master");
+        // The master's own surface is untouched: it declares personal without personalReadOnly.
+        Map<String, Object> owner = propertyByName(entityByName(entities, "VacationRequest"), "Employee");
+        assertEquals("true", owner.get("relationshipPersonal"));
+        assertNull(owner.get("relationshipPersonalReadOnly"));
     }
 
     /**

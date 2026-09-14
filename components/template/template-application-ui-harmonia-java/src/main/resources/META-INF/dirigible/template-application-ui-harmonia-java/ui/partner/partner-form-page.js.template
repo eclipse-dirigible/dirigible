@@ -93,6 +93,8 @@ document.addEventListener('alpine:init', () => {
 #end
 #end
           this.state = 'default';
+          // What the server holds is what every exit compares the buffer against (issue #7359).
+          this.markPristine();
         } catch (e) {
           this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not load the record.');
           this.state = 'error';
@@ -109,7 +111,15 @@ document.addEventListener('alpine:init', () => {
           if (v !== null) this.form[key] = v;
         }
         this.state = 'default';
+        // Create mode: the blank form plus the query-param prefills is where the user started;
+        // anything typed after this is an unsaved change (issue #7359).
+        this.markPristine();
       }
+    },
+
+    // The guard dialog's Discard when the user is STAYING on the page: re-read the record.
+    async reloadForm() {
+      await this.init();
     },
 
     queryParam(name) {
@@ -197,6 +207,9 @@ document.addEventListener('alpine:init', () => {
         } else {
           await App.services.api.post(this.apiPath, this.toPayload());
         }
+        // The write landed, so there is nothing left to protect - clear the guard before the page
+        // navigates itself, or it would veto its own route change (issue #7359).
+        this.clearPristine();
         this.goBack();
       } catch (e) {
         this.applyApiError(e, 'Could not save.');
@@ -210,6 +223,7 @@ document.addEventListener('alpine:init', () => {
       try {
         await App.services.api.delete(this.apiPath + '/' + this.id);
         this.deleteOpen = false;
+        this.clearPristine();
         this.goBack();
       } catch (e) {
         this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not delete.');
@@ -219,7 +233,11 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    goBack() {
+    // A form with unsaved edits asks before it is abandoned (issue #7359); a clean one leaves
+    // silently, as before. Back and Cancel both come through here.
+    goBack() { this.guardExit(() => this.leavePage()); },
+
+    leavePage() {
       const returnTo = this.queryParam('returnTo');
       if (returnTo) { this.navigate(returnTo); return; }
 #if($partnerParent)
@@ -312,11 +330,11 @@ document.addEventListener('alpine:init', () => {
     },
 
     addChild(child) {
-      this.navigate('/partner/' + child.name + '/create?' + encodeURIComponent(child.fkProperty) + '='
-          + encodeURIComponent(this.id) + '&returnTo=' + encodeURIComponent('/partner/${name}/' + this.id + '/edit'));
+      this.guardExit(() => this.navigate('/partner/' + child.name + '/create?' + encodeURIComponent(child.fkProperty) + '='
+          + encodeURIComponent(this.id) + '&returnTo=' + encodeURIComponent('/partner/${name}/' + this.id + '/edit')));
     },
     editChild(child, id) {
-      this.navigate('/partner/' + child.name + '/' + id + '/edit?returnTo=' + encodeURIComponent('/partner/${name}/' + this.id + '/edit'));
+      this.guardExit(() => this.navigate('/partner/' + child.name + '/' + id + '/edit?returnTo=' + encodeURIComponent('/partner/${name}/' + this.id + '/edit')));
     },
     onChildEventClick(child, e) {
       const id = e && e.detail && e.detail.event ? e.detail.event.id : null;
@@ -331,7 +349,7 @@ document.addEventListener('alpine:init', () => {
         q += '&' + encodeURIComponent(child.calendar.start) + '='
            + encodeURIComponent(d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()));
       }
-      this.navigate('/partner/' + child.name + '/create' + q);
+      this.guardExit(() => this.navigate('/partner/' + child.name + '/create' + q));
     },
 #end
   }));

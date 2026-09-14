@@ -51,16 +51,37 @@ export function sampleRecord(entity) {
   for (const set of entity.exactlyOne ?? []) {
     for (const name of set.slice(1)) delete record[name];
   }
-  // a compare check relates two of the record's own fields, and the sample values above are
-  // per-type constants - so two dates come out EQUAL and a strict comparison (gt/lt/ne) would be
-  // rejected with 400. Derive the left operand from the right, by the smallest step that satisfies
-  // the declared operator (equality satisfies ge/le/eq).
+  // a compare check relates the record's own field to a second value - another of its fields, or a
+  // literal - and the sample values above are per-type constants, so two dates come out EQUAL and a
+  // strict comparison (gt/lt/ne) would be rejected with 400, just as a sample quantity of 7 fails a
+  // `le 5`. Derive the left operand from whichever right-hand side the check names, by the smallest
+  // step that satisfies the declared operator (equality satisfies ge/le/eq).
   for (const check of entity.compare ?? []) {
-    if (!(check.field in record) || record[check.than] == null) continue;
+    if (!(check.field in record)) continue;
     const type = (entity.fields ?? []).find((f) => f.name === check.field)?.type;
-    record[check.field] = shifted(record[check.than], type, STEPS[check.op] ?? 0);
+    const right = 'than' in check ? record[check.than] : literalValue(check.value, type);
+    if (right == null) continue;
+    record[check.field] = shifted(right, type, STEPS[check.op] ?? 0);
   }
   return record;
+}
+
+// The right-hand side of a compare check declared as a literal. A moment (CURRENT_DATE /
+// CURRENT_TIMESTAMP / NOW) resolves against the runner's own clock, in the field's shape; a moment
+// carrying an offset is left alone - the sample record keeps its constant and the check is simply
+// not steered, which is safe for the ge/le/eq that a stale sample still satisfies.
+function literalValue(value, type) {
+  if (typeof value !== 'string') return value;
+  const now = new Date();
+  switch (value.trim()) {
+    case 'CURRENT_DATE':
+      return type === 'date' ? now.toISOString().slice(0, 10) : now.toISOString().replace(/\.\d{3}Z$/, 'Z');
+    case 'CURRENT_TIMESTAMP':
+    case 'NOW':
+      return now.toISOString().replace(/\.\d{3}Z$/, 'Z');
+    default:
+      return /^(CURRENT_DATE|CURRENT_TIMESTAMP|NOW)[+-]/.test(value.trim()) ? null : value;
+  }
 }
 
 // How far the left operand of a compare check has to move off the right one to satisfy it.

@@ -2479,6 +2479,116 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void a_dunning_schedule_records_what_it_sent_and_escalates_by_days_past_due() {
+        // Issue #7276. A `schedules[].notify` could mail but not RECORD, and could not tell a document
+        // three days overdue from one ninety days overdue - so a reminder history filled only from
+        // manual clicks, and a seeded Second reminder / Final notice was never applied by the system.
+        // One tick now does both: it picks the level off a days-past-due ladder, writes the history row
+        // with that level on it, and mails the level's own wording - with the generate's `unique:` key
+        // gating the SEND too, so each (invoice, level) goes out exactly once.
+        String yaml = """
+                name: billing
+                entities:
+                  - name: ReminderLevel
+                    function: Setting
+                    fields:
+                      - { name: id,           type: integer, primaryKey: true, generated: true }
+                      - { name: name,         type: string }
+                      - { name: daysAfterDue, type: integer }
+                      - { name: wording,      type: string, length: 500 }
+                  - name: Customer
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: email, type: string }
+                  - name: Invoice
+                    function: Document
+                    fields:
+                      - { name: id,      type: integer, primaryKey: true, generated: true }
+                      - { name: dueDate, type: date }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: PaymentReminder
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: sentOn, type: date }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                      - { name: Level,   kind: manyToOne, to: ReminderLevel }
+                schedules:
+                  - name: overdue-dunning
+                    cron: "0 0 8 * * MON"
+                    entity: Invoice
+                    where:
+                      - { field: dueDate, op: lt, value: CURRENT_DATE }
+                    escalate:
+                      ladder: ReminderLevel
+                      after: daysAfterDue
+                      since: dueDate
+                      into: Level
+                    generate:
+                      to: PaymentReminder
+                      unique: [Invoice, Level]
+                      map: { Invoice: id }
+                      defaults: { sentOn: now }
+                    notify:
+                      to: Customer.email
+                      subject: "Invoice {id} - {escalation.name}"
+                      body: "{escalation.wording}"
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "billing.glue");
+
+        String job = codeOf("gen/events/billing/OverdueDunningJob.java");
+        int loop = job.indexOf("for (InvoiceEntity entity : rows) {");
+        int ladder = job.indexOf("ReminderLevelEntity escalationCandidate = null;", loop);
+        int days = job.indexOf("java.time.temporal.ChronoUnit.DAYS.between(entity.DueDate", loop);
+        int notDue = job.indexOf("notDue++;", loop);
+        int guard = job.indexOf("PaymentReminderRepository().findAll(Criteria.create()", loop);
+        int create = job.indexOf("UnitOfWork.run(", loop);
+        int send = job.indexOf("Mail.send(", loop);
+        assertTrue(loop > 0 && ladder > 0 && days > 0 && notDue > 0 && guard > 0 && create > 0 && send > 0, "got: " + job);
+        // The ladder is read first: which level a row is at decides both what is written and what is
+        // said, so it cannot be resolved after either.
+        assertTrue(ladder < days && days < notDue && notDue < guard, "the level is picked before the idempotency guard: " + job);
+        // The highest threshold the row has PASSED - not the first, and not the bottom rung for a row
+        // that has passed none: that row is left for a later tick.
+        assertTrue(job.contains("if (level.DaysAfterDue == null || level.DaysAfterDue > overdueDays) {"),
+                "a level whose threshold is not reached yet is skipped: " + job);
+        assertTrue(job.contains("if (escalationCandidate == null"), "the highest passed threshold wins: " + job);
+        // Frozen into the local the write and the message both read: the generation runs inside a
+        // lambda, which may only close over an effectively final variable.
+        assertTrue(job.contains("ReminderLevelEntity escalation = escalationCandidate;"),
+                "the chosen level is frozen before the lambda closes over it: " + job);
+        // The chosen level lands on the history row AND in the natural key - the key is what makes the
+        // same (invoice, level) send once, so a Monday tick that already sent the second reminder does
+        // not send it again while the invoice ages towards the final notice.
+        assertTrue(job.contains("target.Level = escalation.Id;"), "the chosen level is written onto the history row: " + job);
+        assertTrue(job.contains(".eq(\"Level\", keyLevel)"), "the level is part of the guard's natural key: " + job);
+        // The guard gates the MAIL as well: it `continue`s before the send, in the same try.
+        int existed = job.indexOf("existed++;", loop);
+        assertTrue(guard < existed && existed < create && create < send, "an already-sent level skips the send too: " + job);
+        // Per-level wording: the message reads the level it is at.
+        assertTrue(job.contains("escalation.Name") && job.contains("escalation.Wording"),
+                "the message must be able to read the level's own text: " + job);
+        // One row, one try, one failure count - the combined tick keeps the fail-soft shape of both.
+        int tryOpens = job.indexOf("try {", loop);
+        int catches = job.indexOf("} catch (Exception ex) {", loop);
+        assertTrue(tryOpens < ladder && catches > send, "one try encloses the level lookup, the write and the send: " + job);
+        assertTrue(job.indexOf("try {", tryOpens + 1) < 0 || job.indexOf("try {", tryOpens + 1) > catches,
+                "no second try wraps only one half: " + job);
+        assertTrue(job.contains("could not generate PaymentReminder from Invoice [{}] and mail it to [{}]"),
+                "a failed row names both halves it could not complete: " + job);
+        // Both summaries are reported - what was created, what was mailed, and what was not due yet.
+        assertTrue(job.contains("had passed no ReminderLevel threshold yet"), "the tick reports the rows no level applied to: " + job);
+        assertTrue(job.contains("created [{}] PaymentReminder(s)") && job.contains("mailed [{}] of [{}] matching Invoice row(s)"),
+                "the tick reports both halves: " + job);
+    }
+
+    @Test
     void an_event_notification_keeps_its_relation_loads_and_attachment_render_inside_the_fail_soft_try() {
         // Issue #7290 (the single-record twin of #7233/#7278): the per-row try above covers a
         // SCHEDULE's notify branch. A notifications: entry (one record, no loop) had the identical gap

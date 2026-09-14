@@ -97,8 +97,8 @@ One Spring-singleton container, rebuilt per `ClientClassLoader` generation.
   use the platform-internal `BeanProvider` (that's core-only; `JavaRepository.store()` uses it because
   it is platform code).
 - **`createUnmanaged(Class)` wires a client class the container does NOT own** — today exactly one
-  thing: a client `JavaDelegate`, which Flowable instantiates itself and which therefore never becomes
-  a bean (#7058). Same rules as a `@Component` (constructor / field `@Inject` / collection, by type
+  family: a client class **Flowable** instantiates itself and which therefore never becomes a bean —
+  a `JavaDelegate` (#7058) and a `flowable:class` execution / task listener (#7222). Same rules as a `@Component` (constructor / field `@Inject` / collection, by type
   with the parameter or field name disambiguating, `@PostConstruct`), resolved against the **live**
   singletons — it constructs no bean, so a cycle is impossible on this path — and the instance is
   **not registered** (it never appears in `get` / `getAll` / `instanceOf`, and a failure here is not a
@@ -245,7 +245,7 @@ then `JavaClassRegistry` + `JavaHandler.handle`. A `JavaHandler` that is also `@
 as the container-built (injected) singleton; a plain `JavaHandler` (no `@Component`) is instantiated per
 request via its no-arg constructor.
 
-## `JavaDelegate` (BPMN service tasks) — injected, but never a bean
+## `JavaDelegate` and BPMN listeners — injected, but never a bean
 
 A client `JavaDelegate` is created by **Flowable**, not by the container, so it is not a `@Component`
 and must not be annotated as one: that would build a fully-injected singleton the engine never runs,
@@ -260,6 +260,23 @@ through `ClientBeanFactory.createUnmanaged` (see the container section):
   evicts the process-definition cache on every client rebuild, which is what re-wires it against the
   new generation.
 - **`${JavaTask}` + a `handler` field** — `DirigibleJavaCallDelegate`, fresh per execution.
+
+**The same is true of a `flowable:class` execution or task listener, and it takes a SECOND engine
+registration (#7222).** A listener is not created by the activity-behaviour factory: Flowable's
+`ProcessEngineConfigurationImpl.initListenerFactory` builds its own `DefaultListenerFactory` carrying a
+stock `DefaultClassDelegateFactory`, and `createClassDelegateExecutionListener` /
+`createClassDelegateTaskListener` call **that**. So configuring only
+`setActivityBehaviorFactory(new ResilientActivityBehaviorFactory(new ResilientClassDelegateFactory()))`
+left the listener path on plain reflection — a constructor collaborator failed to instantiate and an
+`@Inject` field silently read `null`, the #7058 symptom one artefact type over. `BpmFlowableConfig`
+therefore also does `setListenerFactory(new DefaultListenerFactory(classDelegateFactory))` with the
+**same** factory instance (the engine keeps a pre-set listener factory and only injects the expression
+manager into it), so both listener kinds come out as `ResilientClassDelegate`s and share
+`instantiateDelegate`. What a listener does **not** get is the intent step resilience: `execute` is the
+service-task entry point and Flowable's `notify` paths never reach it, so a listener failure keeps the
+stock behaviour — a listener is not a step, and nothing in the DSL emits one. Pinned by
+`ResilientListenerFactoryTest` (both listener kinds, plus the defect case) and
+`JavaDelegateInjectionIT.both_listener_kinds_wire_their_collaborators`.
 
 A delegate annotated `@Component` is reported at **publish** as a Problems entry on its source
 (`ComponentContainer.wiringWarnings()`), not as a WARN per step execution — see the container section.

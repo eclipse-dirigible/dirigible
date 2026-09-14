@@ -355,6 +355,7 @@ class GlueGenerator {
     private static void bindSetter(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "process", "className", "entity", "perspective", "keyProperty", "keyAccessor", "field", "value", "relation",
                 "errorMessage");
+        copyJavaLiterals(context, item, "value");
         context.put("javaPerspective", sanitize(item, "perspective"));
     }
 
@@ -398,15 +399,32 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindSchedule(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        boolean generates = "generate".equals(str(item, "action"));
+        // A tick may do BOTH (issue #7276). The flags are read from the descriptor when it carries them
+        // and fall back to the single `action` a .glue written before the combined form has, so such a
+        // job renders exactly what it always did.
+        boolean generates = item.containsKey("generates") ? truthy(item, "generates") : "generate".equals(str(item, "action"));
+        boolean notifies = item.containsKey("notifies") ? truthy(item, "notifies") : !"generate".equals(str(item, "action"));
         copy(context, item, "name", "className", "cron", "entity", "perspective", "criteriaExpression", "toExpression", "subjectExpression",
                 "bodyExpression", "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty",
                 "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport", "genToEntity", "genToPk", "genFieldAssignments",
                 // The scheduled generation's natural key (issue #7070). Absent on a .glue written
                 // before it existed, which `copy` turns into an absent context key - so the guard's
                 // `#if` is false and such a job renders byte-identically to what it always did.
-                "hasGenUnique", "genUnique");
+                "hasGenUnique", "genUnique",
+                // The days-past-due escalation ladder (issue #7276), likewise absent on an older .glue.
+                "hasEscalation", "escalationEntity", "escalationLocal", "escalationKeyProperty", "escalationAfterProperty",
+                "escalationSinceProperty", "escalationIntoProperty");
+        copyJavaLiterals(context, item, "cron");
+        context.put("generates", generates);
+        context.put("notifies", notifies);
         context.put("javaPerspective", sanitize(item, "perspective"));
+        // The ladder is a LOCAL entity (the parser refuses a cross-model source and target for an
+        // escalation), so its generated classes live in this project's own gen folder.
+        String escalationPackage = "gen." + str(parameters, "javaGenFolderName") + ".data." + sanitize(item, "escalationPerspective") + ".";
+        context.put("escalationEntityClass",
+                truthy(item, "hasEscalation") ? escalationPackage + str(item, "escalationEntity") + "Entity" : "");
+        context.put("escalationRepositoryClass",
+                truthy(item, "hasEscalation") ? escalationPackage + str(item, "escalationEntity") + "Repository" : "");
         // The source's generation folder is the owner model's when the source is cross-model, else
         // this project's - always supplied, so a local source stays unchanged.
         context.put("sourceGenFolder",
@@ -482,6 +500,7 @@ class GlueGenerator {
      */
     private static void bindInbound(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "path");
+        copyJavaLiterals(context, item, "path");
         context.put("javaPerspective", sanitize(item, "perspective"));
         bindArrival(item, context);
     }
@@ -496,6 +515,7 @@ class GlueGenerator {
      */
     private static void bindInboundMessage(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "destination", "listenerKind");
+        copyJavaLiterals(context, item, "destination");
         context.put("javaPerspective", sanitize(item, "perspective"));
         bindArrival(item, context);
     }
@@ -510,6 +530,7 @@ class GlueGenerator {
      */
     private static void bindInboundFile(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "folder", "cron");
+        copyJavaLiterals(context, item, "cron");
         context.put("javaPerspective", sanitize(item, "perspective"));
         bindArrival(item, context);
     }
@@ -551,6 +572,7 @@ class GlueGenerator {
     private static void bindOutbound(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "topicSuffix", "destination", "channel", "producerMethod",
                 "guardExpression", "hasGuard", "hasPayload", "payloadFields");
+        copyJavaLiterals(context, item, "destination");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
     }
@@ -988,6 +1010,7 @@ class GlueGenerator {
         // an event topic is built from the raw perspective (the sanitized form is the Java package).
         // perDefault: the partition a null FK falls back to (the relation's init:, #7101).
         copy(context, item, "entity", "masterPk", "field", "series", "per", "perDefault", "perspective");
+        copyJavaLiterals(context, item, "series", "perDefault");
         context.put("javaPerspective", sanitize(item, "perspective"));
     }
 
@@ -1305,6 +1328,32 @@ class GlueGenerator {
                 target.put(key, source.get(key));
             } else {
                 target.remove(key);
+            }
+        }
+    }
+
+    /**
+     * Copies the escaped twin of each named descriptor value, for the templates that write it into a
+     * Java string literal.
+     *
+     * <p>
+     * Every one of these is authored: a setter's value, a series name, a cron expression, a queue or
+     * topic name, a webhook path. Interpolated verbatim, a quote or a backslash in any of them ends the
+     * literal it is written into and fails the compile of the whole generated module - not just the one
+     * class carrying it (#7295, the #7241 class). A key the descriptor does not carry is removed rather
+     * than emptied, so the template's {@code #if} reads its absence exactly as it reads the raw key's.
+     *
+     * @param target the template context
+     * @param source the descriptor
+     * @param keys the keys whose twins to derive
+     */
+    static void copyJavaLiterals(Map<String, Object> target, Map<String, Object> source, String... keys) {
+        for (String key : keys) {
+            String value = str(source, key);
+            if (value == null) {
+                target.remove(key + "JavaLiteral");
+            } else {
+                target.put(key + "JavaLiteral", JavaLiterals.escape(value));
             }
         }
     }

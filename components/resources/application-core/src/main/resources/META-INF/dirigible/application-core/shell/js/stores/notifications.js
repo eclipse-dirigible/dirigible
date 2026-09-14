@@ -85,6 +85,24 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    /**
+     * Show a transient toast WITHOUT a bell entry: an ordinary confirmation ("Saved") the bell must
+     * not fill up with. announce() stays for the outcome of an action the user launched. Same public
+     * $notifications magic, same `toast` template; degrades to the console until a toaster is attached.
+     */
+    toast(message, variant) {
+      variant = variant || 'information';
+      if (!this._toaster) {
+        console.log('[toast] ' + message);
+        return;
+      }
+      try {
+        this._toaster.add({ template: 'toast', position: 'top-right', timeout: 4000, data: { message, variant } });
+      } catch (e) {
+        console.warn('notifications: could not raise the toast for "' + message + '"', e);
+      }
+    },
+
     markAllRead() { this.items.forEach(n => { n.unread = false; }); },
     remove(id) { this.items = this.items.filter(n => n.id !== id); },
     clear() { this.items = []; },

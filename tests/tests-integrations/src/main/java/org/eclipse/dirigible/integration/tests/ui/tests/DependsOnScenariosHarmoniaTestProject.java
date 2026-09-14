@@ -86,10 +86,12 @@ class DependsOnScenariosHarmoniaTestProject extends BaseTestProject {
         openCreateForm("/Customer");
         selectInCombobox("Select Country...", "Bulgaria");
         assertComboboxShows("Sofia");
+        discardChanges();
 
         openCreateForm("/Customer");
         selectInCombobox("Select Country...", "Italy");
         assertComboboxShows("Rome");
+        discardChanges();
     }
 
     /**
@@ -101,11 +103,13 @@ class DependsOnScenariosHarmoniaTestProject extends BaseTestProject {
         selectInCombobox("Select Product...", "Product A");
         assertComboboxShows("Kg");
         assertInputValue("f_Price", "11");
+        discardChanges();
 
         openCreateForm("/SalesOrderItem");
         selectInCombobox("Select Product...", "Product B");
         assertComboboxShows("Liter");
         assertInputValue("f_Price", "20");
+        discardChanges();
     }
 
     /**
@@ -118,15 +122,32 @@ class DependsOnScenariosHarmoniaTestProject extends BaseTestProject {
         selectInCombobox("Select Customer...", "Customer A");
         assertComboboxShows("Payment 1");
         assertInputValue("f_Amount", "101");
+        discardChanges();
 
         openCreateForm("/SalesOrderPayment");
         selectInCombobox("Select Customer...", "Customer B");
         assertComboboxShows("Payment 2");
         assertInputValue("f_Amount", "201");
+        discardChanges();
     }
 
     private void openCreateForm(String entityRoute) {
         browser.openPath(BASE_URI + entityRoute + "/create");
+    }
+
+    /**
+     * Leave the form the scenario just filled in, the way a user does. Picking a value makes the form
+     * dirty, and since dirigible #7359 an exit from a dirty form is vetoed and asks first - a hash
+     * navigation to the next scenario's form included, because the SPA never leaves the document. So
+     * each scenario ends on the guard dialog's Discard, which is also what keeps the scenarios
+     * independent: the next one starts from a form the guard is not holding.
+     * <p>
+     * The dialog's Discard is addressed by its variant: while the form is dirty the footer Cancel is
+     * relabelled "Discard" too, and only the dialog's is the negative one.
+     */
+    private void discardChanges() {
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Back to list");
+        browser.clickOnElementByAttributePatternAndText("button", "data-variant", "negative", "Discard");
     }
 
     // Open an x-h-select by its placeholder (Harmonia hides the bound input and renders a visible

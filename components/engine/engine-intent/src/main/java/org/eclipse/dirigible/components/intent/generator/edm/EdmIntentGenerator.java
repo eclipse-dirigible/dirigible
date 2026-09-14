@@ -366,6 +366,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // current document (header + line items) into a new draft (see the document template).
                 if (entity.isDuplicable()) {
                     entityMap.put("duplicable", "true");
+                    // What the copy must NOT carry over from the source (#7358): the fields handed back
+                    // to the entity's own create-time rule, and the constants written into the clone.
+                    // Without them every ordinary user field rides along, so "same invoice as last
+                    // month" opens dated last month, due last month, with last month's tax event.
+                    List<String> resets = duplicateResets(entity);
+                    if (!resets.isEmpty()) {
+                        entityMap.put("duplicateReset", resets);
+                    }
+                    List<Map<String, Object>> constants = duplicateDefaults(entity);
+                    if (!constants.isEmpty()) {
+                        entityMap.put("duplicateDefaults", constants);
+                    }
                 }
                 // Chat items: render the line-items pane as a conversation thread instead of the editable
                 // table. Resolve which child property is the message body (and the optional internal
@@ -597,6 +609,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putPartner(fkProperty, relation,
                         target == null || target.getIdentity() == null ? null : IntentNaming.pascalCase(target.getIdentity()),
                         target == null ? null : labelFieldName(target), true);
+                putInheritedPersonalReadOnly(fkProperty, relation, composition);
                 properties.add(fkProperty);
                 relations.add(relationLink(name, relation, target, targetPerspective));
             }
@@ -629,6 +642,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             putPeriod(entityMap, entity);
             putProcessDeleteGuards(entityMap, entity, model);
+            putWorkflowStatus(entityMap, entity, model);
             putLifecycle(entityMap, entity, model);
             if (entity.getHierarchy() != null && !entity.getHierarchy()
                                                         .isBlank()) {
@@ -1918,6 +1932,24 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * Emit the see-only marker on the composition edge a child inherits its personal scope through
+     * ({@code personalReadOnly: true} without {@code personal: true} - dirigible #7340). The parent's
+     * own personal surface stays writable; the child's generated {@code MyController} refuses every
+     * write with 403 and its personal pages render no write affordance. Only the entity's OWNING
+     * composition carries it - a later composition is emitted as a plain association, which is exactly
+     * what the {@code composition} flag here says, and the parser refuses the key on any other edge.
+     *
+     * @param p the FK property being emitted
+     * @param relation the relation
+     * @param composition whether this relation is the entity's owning composition edge
+     */
+    private static void putInheritedPersonalReadOnly(Map<String, Object> p, RelationIntent relation, boolean composition) {
+        if (composition && relation.isPersonalReadOnly() && !relation.isPersonal()) {
+            p.put("relationshipPersonalReadOnly", "true");
+        }
+    }
+
+    /**
      * Emit the partner-owner attributes for a relation that declares {@code partner: true} - the exact
      * mirror of {@link #putPersonal} for the external Partner shell. The generated partner REST
      * controller scopes reads by this FK against the logged-in partner's identity record and forces it
@@ -2226,19 +2258,43 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                             .map(IntentNaming::pascalCase)
                                             .toList());
             } else if ("compare".equals(check.getKind())) {
-                // Two values of the same row, compared (#7095). The template gets the two PascalCased
-                // properties, the Java comparison operator the compareTo result is tested with, and
-                // whether the two are numbers - two temporals compare through compareTo, two numbers
-                // by value through BigDecimal so a decimal and a long still compare exactly.
+                // A value of the row compared with a second one (#7095) - another PascalCased property,
+                // or a LITERAL rendered as the Java expression the comparison evaluates (#7338). The
+                // template also gets the Java comparison operator the compareTo result is tested with and
+                // whether the comparison is numeric - a temporal compares through compareTo, a number by
+                // value through BigDecimal so a decimal and a long still compare exactly.
                 String comparison = compareOperator(check.getOp());
-                Boolean numeric = isNumericCompare(entity, check);
-                if (check.getField() == null || check.getThan() == null || comparison == null || numeric == null) {
+                FieldIntent left = fieldOf(entity, check.getField());
+                if (check.getField() == null || comparison == null || left == null) {
                     continue; // the parser already reported it
                 }
+                if (check.getValue() != null) {
+                    CheckSupport.CompareLiteral literal = CheckSupport.compareLiteral(left.getType(), check.getValue());
+                    if (!literal.valid()) {
+                        continue; // the parser already reported it
+                    }
+                    checkMap.put("literal", literal.javaExpression());
+                    checkMap.put("numeric", isNumericType(left.getType()) ? "true" : "false");
+                } else {
+                    Boolean numeric = isNumericCompare(entity, check);
+                    if (check.getThan() == null || numeric == null) {
+                        continue; // the parser already reported it
+                    }
+                    checkMap.put("than", IntentNaming.pascalCase(check.getThan()));
+                    checkMap.put("numeric", numeric ? "true" : "false");
+                }
                 checkMap.put("field", IntentNaming.pascalCase(check.getField()));
-                checkMap.put("than", IntentNaming.pascalCase(check.getThan()));
                 checkMap.put("op", comparison);
-                checkMap.put("numeric", numeric ? "true" : "false");
+                // The optional gate, as on requiredWhen: with one, the comparison is the repository's and
+                // holds when the record is persisted carrying that status, not on the draft before it.
+                if (check.getStatus() != null) {
+                    RelationIntent gate = entityStatusRelation(entity);
+                    if (gate == null) {
+                        continue; // the parser already reported it
+                    }
+                    checkMap.put("status", String.valueOf(check.getStatus()));
+                    checkMap.put("statusProperty", IntentNaming.pascalCase(gate.getName()));
+                }
             } else {
                 // The document's LINES - the shared resolution, so the guard counts the rows the
                 // document layout renders. Scanning for "some composition child" made a multi-child
@@ -2566,6 +2622,82 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The status column a FLOW owns (dirigible #7339): {@code workflowStatusProperty} = the
+     * {@code function: EntityStatus} FK, emitted when a {@code processes:} step is what moves it, and
+     * {@code workflowStatusInitial} = the status a record may still be CREATED in ({@code init:}).
+     *
+     * <p>
+     * Without it the generated controllers treat that FK as an ordinary writable column, so a plain
+     * {@code PUT} carrying {@code "Status": 3} moves a document straight into APPROVED with the whole
+     * flow bypassed - no check ran, no task was ever raised, nothing the flow charges was charged, and
+     * the document reads approved. The column is derived state owned by the flow, exactly as a roll-up
+     * target is derived state owned by the roll-up; the flow's own writers never come through a
+     * controller (a {@code setRelationField} step and a {@code transitions[]} endpoint reach the
+     * repository through the targeted {@code updateProperty}/{@code updateProperties} primitives), so
+     * refusing it here costs them nothing.
+     *
+     * <p>
+     * Derived rather than declared: a model that states a flow over the status has already said who
+     * owns it. Scalars, so both reach the {@code .edm} twin as attributes like
+     * {@code immutableStatusValues}.
+     *
+     * @param entityMap the entity's model map
+     * @param entity the authored entity
+     * @param model the whole intent - the processes are declared beside the entities, not on them
+     */
+    private static void putWorkflowStatus(Map<String, Object> entityMap, EntityIntent entity, IntentModel model) {
+        RelationIntent status = entityStatusRelation(entity);
+        if (status == null || entity.getName() == null || !writesStatus(entity, status, model)) {
+            return;
+        }
+        entityMap.put("workflowStatusProperty", IntentNaming.pascalCase(status.getName()));
+        if (status.getInit() != null && status.getInit()
+                                              .matches("-?\\d+")) {
+            // The one value a create may still carry: the status the record starts in. Anything else is
+            // a jump into the middle of the flow, and so is a create that names a status with no start
+            // declared at all.
+            entityMap.put("workflowStatusInitial", status.getInit());
+        }
+    }
+
+    /**
+     * Whether a declared flow is what writes this entity's status: a {@code setRelationField} step of a
+     * process THIS entity triggers.
+     *
+     * <p>
+     * A {@code transitions:} button deliberately does NOT claim the column. It is a user action over
+     * the status - the declared way a person moves it by hand - and the construct that guards every
+     * OTHER hand write is the state machine, {@code lifecycle:}, enforced in the repository precisely
+     * because writers other than the button exist. Claiming the column here would leave an unmodeled
+     * move reachable from nowhere and the state machine's refusal observable from nowhere: a different
+     * feature removed rather than this one delivered. A process is the other statement - a status a
+     * flow computes is not a value anybody hands in.
+     *
+     * @param entity the authored entity
+     * @param status its {@code function: EntityStatus} relation
+     * @param model the whole intent
+     * @return true when the status is the flow's to write
+     */
+    private static boolean writesStatus(EntityIntent entity, RelationIntent status, IntentModel model) {
+        String statusProperty = IntentNaming.pascalCase(status.getName());
+        for (ProcessIntent process : model.getProcesses()) {
+            if (!entity.getName()
+                       .equals(TriggerSupport.triggerEntity(process))) {
+                continue;
+            }
+            for (StepIntent step : process.getSteps()) {
+                Object written = step.getArgs()
+                                     .get("setRelationField");
+                if (written != null && statusProperty.equals(IntentNaming.pascalCase(String.valueOf(written)
+                                                                                           .trim()))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * The two halves of date-based immutability, each emitted on the entity that DECLARES it.
      *
      * <p>
@@ -2633,16 +2765,23 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         entityMap.put("lifecycleStatusProperty", IntentNaming.pascalCase(status.getName()));
         entityMap.put("lifecycleEdges", String.join(",", edges));
-        List<String> names = new ArrayList<>();
+        // The seeded names a refusal quotes, as a STRUCTURED list rather than the `id=name,` join this
+        // used to carry (#7295): a name is authored prose, and a comma in one silently mis-parsed the
+        // join while a quote or a backslash broke the Java literal the template writes it into. A
+        // `.model` written before this still carries the join, which the parameter pass reads back.
+        List<Map<String, Object>> names = new ArrayList<>();
         for (Map.Entry<Integer, String> seeded : LifecycleStages.seededStatuses(model, status.getTo())
                                                                 .entrySet()) {
             if (seeded.getValue() != null && !seeded.getValue()
                                                     .isBlank()) {
-                names.add(seeded.getKey() + "=" + seeded.getValue());
+                Map<String, Object> name = new LinkedHashMap<>();
+                name.put("id", String.valueOf(seeded.getKey()));
+                name.put("name", seeded.getValue());
+                names.add(name);
             }
         }
         if (!names.isEmpty()) {
-            entityMap.put("lifecycleStatusNames", String.join(",", names));
+            entityMap.put("lifecycleStatusNameList", names);
         }
         if (status.getInit() != null && status.getInit()
                                               .matches("-?\\d+")) {
@@ -3420,6 +3559,101 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * out deterministically in a grid so re-generation is byte-stable.
      */
     @SuppressWarnings("unchecked")
+    /**
+     * The generated property names a Duplicate drops from the cloned header, in authored order. Each is
+     * handed back to the create path, which fills it exactly as it would on a hand-made document (a
+     * {@code calculatedActionOnCreate}, a {@code defaultValue}).
+     *
+     * @param entity the duplicable document master
+     * @return the PascalCase property names, never null
+     */
+    private static List<String> duplicateResets(EntityIntent entity) {
+        List<String> resets = new ArrayList<>();
+        for (String name : entity.getDuplicable()
+                                 .getReset()) {
+            if (notBlank(name)) {
+                resets.add(IntentNaming.pascalCase(name.trim()));
+            }
+        }
+        return resets;
+    }
+
+    /**
+     * The constants a Duplicate writes into the cloned header, as {@code {name, shape, js}} entries in
+     * authored order. {@code shape} is {@code date} / {@code month} / {@code week} for the {@code now}
+     * token - today in the field's own shape, rendered by the document page's {@code todayAs} helper
+     * against the LOCAL clock - and {@code literal} otherwise, where {@code js} carries the value
+     * already coerced to the property's type as a JavaScript literal.
+     *
+     * @param entity the duplicable document master
+     * @return the entries, never null
+     */
+    private static List<Map<String, Object>> duplicateDefaults(EntityIntent entity) {
+        List<Map<String, Object>> defaults = new ArrayList<>();
+        for (Map.Entry<String, String> assignment : entity.getDuplicable()
+                                                          .getDefaults()
+                                                          .entrySet()) {
+            String name = assignment.getKey();
+            String value = assignment.getValue();
+            if (!notBlank(name) || !notBlank(value)) {
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", IntentNaming.pascalCase(name.trim()));
+            String type = duplicateDefaultType(entity, name.trim());
+            if ("now".equals(value.trim())) {
+                entry.put("shape", "month".equals(type) || "week".equals(type) ? type : "date");
+                entry.put("js", "");
+            } else {
+                entry.put("shape", "literal");
+                entry.put("js", duplicateLiteral(value.trim(), type));
+            }
+            defaults.add(entry);
+        }
+        return defaults;
+    }
+
+    /**
+     * The authored type of the named field, or {@code integer} for a to-one relation (a default on a
+     * relation assigns its raw foreign key). Blank when the name resolves to neither - the parser has
+     * already refused that, so generation never has to.
+     */
+    private static String duplicateDefaultType(EntityIntent entity, String name) {
+        for (FieldIntent field : entity.getFields()) {
+            if (name.equalsIgnoreCase(field.getName())) {
+                return field.getType() == null ? ""
+                        : field.getType()
+                               .toLowerCase(Locale.ROOT);
+            }
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (name.equalsIgnoreCase(relation.getName())) {
+                return "integer";
+            }
+        }
+        return "";
+    }
+
+    /**
+     * A literal {@code duplicable.defaults} value as the JavaScript source the document page assigns: a
+     * number for a numeric property, {@code true} / {@code false} for a boolean, a quoted string
+     * otherwise. The property's declared type decides, not the value's shape - a string field holding
+     * {@code "01"} must stay the string it was authored as.
+     */
+    private static String duplicateLiteral(String value, String type) {
+        switch (type) {
+            case "integer":
+            case "long":
+            case "double":
+            case "decimal":
+                return value;
+            case "boolean":
+                return Boolean.toString(Boolean.parseBoolean(value));
+            default:
+                return STRUCTURED_JSON.toJson(value);
+        }
+    }
+
     private static String renderEdmXml(EdmDocument document) {
         Map<String, Object> body = (Map<String, Object>) document.modelJson.get("model");
         List<Map<String, Object>> entities = (List<Map<String, Object>>) body.get("entities");
@@ -3909,7 +4143,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * it twice and round-trip it as a duplicate.
      */
     private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys",
-            "relatedEntities", "scopedCalendars", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
+            "relatedEntities", "scopedCalendars", "lifecycleStatusNameList", "duplicateReset", "duplicateDefaults", "lookupColumns",
+            "languages", "widgets", "customActionLabels", "processTaskLabels");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

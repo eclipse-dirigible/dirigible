@@ -59,6 +59,133 @@ function basePage() {
     destroy() {
       (this._actionDoneHandlers || []).forEach((listener) => window.removeEventListener('harmonia:action-done', listener));
       this._actionDoneHandlers = [];
+      // The two files are cached by the browser independently, so a page may be running this one
+      // against a previous app.js - which must not turn every destroy into an exception.
+      if (App.leaveGuard) App.leaveGuard.release(this);
+    },
+
+    // ===== Unsaved changes (issue #7359) =========================================================
+    // A form page takes a snapshot of what it loaded (markPristine) and is DIRTY while its buffer
+    // differs from it. Every exit - the page's own Back / Cancel, a sidebar entry, the browser's
+    // Back button, a reload - then goes through guardExit / App.leaveGuard instead of dropping the
+    // edit silently. A page that never calls markPristine (a list, a report) is never dirty and
+    // everything here stays inert.
+    //
+    // The comparison is over the SAVE PAYLOAD, not `form`: toPayload already normalizes dates,
+    // dropdown ids to strings and a multiselect to its csv, so a value that only LOOKS different
+    // (3 vs "3") does not read as an edit.
+
+    // The payload as it was last known to be saved, serialized. null = nothing to protect.
+    pristine: null,
+    // The guard dialog's own state. `leaveIntent` is 'leave' (an exit) or 'continue' (the user is
+    // staying on the page but starting something that would save behind the dirty header).
+    leaveOpen: false,
+    leaveIntent: 'leave',
+    leaveBusy: false,
+    leaveProceed: null,
+
+    dirtySnapshot() {
+      try {
+        return JSON.stringify(typeof this.toPayload === 'function' ? this.toPayload() : this.form);
+      } catch (e) {
+        console.error('[leaveGuard] could not snapshot the form', e);
+        return null;
+      }
+    },
+
+    // Declare the current buffer saved. Called after a load and after every successful save; the page
+    // registers with the shared guard from here, so the guard is armed exactly while a form is open.
+    markPristine() {
+      this.pristine = this.dirtySnapshot();
+      if (App.leaveGuard) App.leaveGuard.register(this);
+    },
+
+    // Stop guarding (the page is about to navigate itself after a successful write, or the user
+    // discarded). Not a getter - see the note at the top of baseFormPage about spread and getters.
+    clearPristine() {
+      this.pristine = null;
+      if (App.leaveGuard) App.leaveGuard.release(this);
+    },
+
+    isDirty() {
+      if (this.pristine === null) return false;
+      // A read-only surface cannot be edited, so it can never be dirty: preview, and a document the
+      // immutability pre-check reported closed (its inputs are disabled).
+      if (this.isPreview === true || this.mutable === false) return false;
+      const snapshot = this.dirtySnapshot();
+      // A snapshot that could not be taken says nothing about the buffer - reporting it as an edit
+      // would put the dialog in front of every exit for the rest of the session.
+      return snapshot !== null && snapshot !== this.pristine;
+    },
+
+    /**
+     * Run `proceed` unless the form has unsaved changes - then ask first. `intent` is 'leave' (the
+     * default) or 'continue' for an action that stays on the page (opening the line-item dialog,
+     * whose save would otherwise commit a line under a header the server has never seen).
+     */
+    guardExit(proceed, intent) {
+      if (!this.isDirty()) {
+        proceed();
+        return;
+      }
+      this.confirmLeave(proceed, intent);
+    },
+
+    /** Raise the guard dialog. Also the entry point the shared router guard calls. */
+    confirmLeave(proceed, intent) {
+      this.leaveProceed = proceed;
+      this.leaveIntent = intent || 'leave';
+      this.leaveOpen = true;
+    },
+
+    leaveKeepEditing() {
+      this.leaveOpen = false;
+      this.leaveProceed = null;
+    },
+
+    /**
+     * Discard: leave without saving. On an exit there is nothing to restore - the page is going away
+     * - so the snapshot is simply dropped; when the user is STAYING ('continue') the buffer is put
+     * back to what the server holds, which is what makes the line save honest again.
+     */
+    async leaveDiscard() {
+      const proceed = this.leaveProceed;
+      this.leaveOpen = false;
+      this.leaveProceed = null;
+      if (this.leaveIntent === 'continue' && typeof this.reloadForm === 'function') {
+        this.leaveBusy = true;
+        try {
+          await this.reloadForm();
+        } catch (e) {
+          console.error('[leaveGuard] could not restore the form', e);
+        } finally {
+          this.leaveBusy = false;
+        }
+      } else {
+        this.clearPristine();
+      }
+      if (proceed) proceed();
+    },
+
+    /**
+     * Save, then do what the user was trying to do. A refused save (a validation error, a 400/409 the
+     * server raised) keeps the user on the page with the usual summary - the dialog closes, because
+     * the message it hides is the answer to the question it asked.
+     */
+    async leaveSave() {
+      const proceed = this.leaveProceed;
+      this.leaveBusy = true;
+      try {
+        await this.save();
+      } catch (e) {
+        console.error('[leaveGuard] save failed', e);
+      } finally {
+        this.leaveBusy = false;
+      }
+      this.leaveOpen = false;
+      this.leaveProceed = null;
+      if (this.isDirty()) return;   // refused: the page reports why, and stays
+      if (proceed) proceed();
     },
 
     /**

@@ -81,6 +81,8 @@ class DependsOnHarmoniaTestProject extends BaseTestProject {
         // watcher that re-filters the City options.
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", "Bulgaria");
 
+        verifyUnsavedChangesGuard();
+
         // City depends on Country: opening it now must offer only Bulgaria's cities. The offered
         // options are asserted on the option element itself, not on a <span>: since Harmonia 2.7 an
         // option renders its label inside a text COLUMN (a span wrapping the label span, so a
@@ -91,5 +93,35 @@ class DependsOnHarmoniaTestProject extends BaseTestProject {
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "option", "Sofia");
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "option", "Varna");
         browser.assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType.SPAN, "Milano");
+    }
+
+    /**
+     * The unsaved-changes guard (dirigible #7359), on the form the user is standing on.
+     *
+     * <p>
+     * Until it existed every exit from an edited form - Back to list, Cancel, a sidebar entry, the
+     * browser's own Back button - dropped the edit without a word, and nothing in the page said the
+     * form was dirty at all. The mechanism lives in the SHARED runtime (basePage snapshots the save
+     * payload, App.leaveGuard vetoes the route change) and is wired into every generated form, so it
+     * can only be proven in a browser: a snapshot taken at the wrong moment, a member Alpine cannot
+     * resolve in the view's scope, or a dialog Harmonia never opens all render as a page that looks
+     * exactly right and still loses the edit.
+     *
+     * <p>
+     * The picked Country is a real change against the create-mode snapshot, so at this point the form
+     * is dirty. Keep editing must leave it exactly as it was - which is the whole point of asking.
+     */
+    private void verifyUnsavedChangesGuard() {
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Unsaved changes");
+
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Back to list");
+
+        // The dialog, not the list: the exit was vetoed and the user is being asked.
+        browser.assertElementExistsByTypeAndContainsText("h2", "Unsaved changes");
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Save and leave");
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Keep editing");
+
+        // Still on the form, and the edit is still there.
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", "Bulgaria");
     }
 }

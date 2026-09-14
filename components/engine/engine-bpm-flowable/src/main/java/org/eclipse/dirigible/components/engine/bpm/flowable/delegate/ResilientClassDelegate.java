@@ -20,17 +20,24 @@ import org.flowable.engine.impl.bpmn.helper.ClassDelegate;
 import org.flowable.engine.impl.bpmn.parser.FieldDeclaration;
 
 /**
- * The {@link ClassDelegate} every {@code flowable:class} service task runs through (created by
- * {@link ResilientClassDelegateFactory}), adding the intent DSL's step resilience: when the
- * delegate's FINAL failed attempt happens on a task carrying an intent {@code onError} error
- * boundary, the failure is converted into the caught BPMN error instead of dead-lettering - see
+ * The {@link ClassDelegate} every {@code flowable:class} element runs through - a service task, and
+ * since #7222 an execution or task listener too (all created by
+ * {@link ResilientClassDelegateFactory}).
+ *
+ * <p>
+ * On a service task it adds the intent DSL's step resilience: when the delegate's FINAL failed
+ * attempt happens on a task carrying an intent {@code onError} error boundary, the failure is
+ * converted into the caught BPMN error instead of dead-lettering - see
  * {@link IntentStepResilience}. A {@code BpmnError} the delegate throws itself, and any failure on
  * a task without the intent boundary, keep the stock behaviour (the superclass handles both).
  *
  * <p>
- * It is also where a client delegate gets its collaborators: {@link #instantiateDelegate} routes
- * the class through the client bean container, so a {@code flowable:class} delegate is wired like
- * every other client class - see {@link ClientDelegateBeans}.
+ * It is also where a client class gets its collaborators: {@link #instantiateDelegate} routes the
+ * class through the client bean container, so a {@code flowable:class} delegate <em>or
+ * listener</em> is wired like every other client class - see {@link ClientDelegateBeans}. A
+ * listener's failure keeps the stock behaviour: {@link #execute} is the service-task entry point,
+ * and Flowable's own {@code notify} paths never reach it, so nothing about a listener is converted
+ * into a step error.
  */
 class ResilientClassDelegate extends ClassDelegate {
 

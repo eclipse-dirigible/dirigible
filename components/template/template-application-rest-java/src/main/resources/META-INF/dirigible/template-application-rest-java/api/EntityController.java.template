@@ -224,6 +224,9 @@ public class ${name}Controller {
 #if($isEntityPropertySecurityEnabled)
         applyOnCreate(entity);
 #end
+#if($workflowStatusProperty)
+        requireWorkflowStatusOnCreate(entity);
+#end
         validate(entity);
 #if($hasReferenceValidations)
         validateReferences(entity);
@@ -303,6 +306,9 @@ public class ${name}Controller {
 #end
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
         requireMutable(id);
+#end
+#if($workflowStatusProperty)
+        applyWorkflowStatus(id, entity);
 #end
 #if($masterLock)
         // Neither an edit inside a locked ${masterLock.entity} nor a move into one.
@@ -716,6 +722,48 @@ public class ${name}Controller {
     }
 
 #end
+#if($workflowStatusProperty)
+    // Workflow-owned status (dirigible #7339). ${workflowStatusProperty} is derived state owned by the
+    // flow that moves it - a `processes:` step or a `transitions[]` button - the same way a roll-up
+    // target is owned by its roll-up. Those writers reach the repository through the targeted
+    // updateProperty / updateProperties primitives, never through this controller, so refusing the
+    // column here takes nothing away from them: it closes the plain create/update that would otherwise
+    // jump a record to any status it likes, with every check, task and side effect of the flow skipped.
+    private void requireWorkflowStatusOnCreate(${name}Entity entity) {
+        if (entity.${workflowStatusProperty} == null) {
+            // Nothing said: the record starts where the model says it starts (the relation's `init:`,
+            // applied by the repository), which is what every generated form posts.
+            return;
+        }
+#if($workflowStatusInitial)
+        if (String.valueOf(entity.${workflowStatusProperty}).equals("${workflowStatusInitial}")) {
+            return;
+        }
+#end
+        throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);
+    }
+
+    // An absent value is not a change - a caller PUTs the fields its form edits - so it is taken from
+    // the stored row rather than refused, which is also what stops a partial payload from erasing the
+    // status. A value that DIFFERS is a direct edit of the flow's column and is refused.
+    private void applyWorkflowStatus(Object id, ${name}Entity entity) {
+        ${name}Entity stored = repository.findOne(id).orElse(null);
+        if (stored == null) {
+            return;
+        }
+        if (entity.${workflowStatusProperty} == null) {
+            entity.${workflowStatusProperty} = stored.${workflowStatusProperty};
+            return;
+        }
+        if (!java.util.Objects.equals(entity.${workflowStatusProperty}, stored.${workflowStatusProperty})) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);
+        }
+    }
+
+    private static final String WORKFLOW_STATUS_REFUSAL =
+            "'${workflowStatusProperty}' changes through the workflow, not a direct edit";
+
+#end
 #if($processDeleteGuards)
     // Delete guard (intent process `whenDeleted: refuse`): while a flow this record started is still
     // running, the record cannot be deleted through this REST surface - complete or abort the flow
@@ -902,10 +950,23 @@ public class ${name}Controller {
             }
         }
 #elseif($check.kind == "compare")
-## Two values of the SAME row, compared (intent `checks: compare`). A comparison is about two values
-## that exist, so an absent operand is not a violation - requiredness is its own declaration. Numbers
-## compare by value through BigDecimal (a decimal against a long still compares exactly); temporals
-## compare through their own compareTo, which is why the parser holds both fields to one family.
+## A value of the row compared with a second one (intent `checks: compare`) - another field of the
+## SAME row, or a LITERAL (#7338: the positive quantity, the percentage at most 100, the date that is
+## not in the past). A comparison is about values that EXIST, so an absent left operand is not a
+## violation - requiredness is its own declaration. Numbers compare by value through BigDecimal (a
+## decimal against a long still compares exactly); temporals compare through their own compareTo,
+## which is why the parser holds the two sides to one family - and why a moment literal is rendered
+## in the column's own shape (LocalDate for a date, Instant for a timestamp).
+#if($check.literal)
+        if (entity.${check.field} != null
+#if($check.numeric == "true")
+                && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(${check.literal}) ${check.op} 0)) {
+#else
+                && !(entity.${check.field}.compareTo(${check.literal}) ${check.op} 0)) {
+#end
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+        }
+#else
         if (entity.${check.field} != null && entity.${check.than} != null
 #if($check.numeric == "true")
                 && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(new java.math.BigDecimal(entity.${check.than}.toString())) ${check.op} 0)) {
@@ -914,6 +975,7 @@ public class ${name}Controller {
 #end
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
         }
+#end
 #else
         // Row-level check (intent `checks: exactlyOne`).
         {

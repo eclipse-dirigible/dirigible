@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.intent.generator;
 
 import java.util.Map;
 import java.util.Set;
+import org.eclipse.dirigible.components.ide.template.service.model.JavaLiterals;
 
 /**
  * Translates an {@code IntegrationIntent}'s {@code method}/{@code url} into the Java the generated
@@ -71,9 +72,7 @@ public final class IntegrationSupport {
                                                     .trim()
                     + "\")";
         }
-        return "\"" + trimmed.replace("\\", "\\\\")
-                             .replace("\"", "\\\"")
-                + "\"";
+        return "\"" + JavaLiterals.escape(trimmed) + "\"";
     }
 
     private static String normalize(String method) {

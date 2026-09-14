@@ -17,12 +17,14 @@ import org.eclipse.dirigible.engine.java.runtime.ClientBeansHolder;
 import org.flowable.engine.delegate.JavaDelegate;
 
 /**
- * Wires a client {@link JavaDelegate} through the client bean container, for the two paths that
- * instantiate one: {@code flowable:class} ({@link ResilientClassDelegate}) and
- * {@code flowable:delegateExpression="${JavaTask}"} ({@link DirigibleJavaCallDelegate}).
+ * Wires a client class Flowable instantiates through the client bean container: a
+ * {@link JavaDelegate} on either of its two paths - {@code flowable:class}
+ * ({@link ResilientClassDelegate}) and {@code flowable:delegateExpression="${JavaTask}"}
+ * ({@link DirigibleJavaCallDelegate}) - and a {@code flowable:class} execution or task listener,
+ * which shares the first one.
  *
  * <p>
- * A delegate is created by Flowable, so it is never a container-owned bean and {@code @Inject}
+ * Such a class is created by Flowable, so it is never a container-owned bean and {@code @Inject}
  * could not reach it; {@link ClientBeanFactory#createUnmanaged(Class)} constructs it with the
  * container's own injection rules without registering it. Empty means the class declares no
  * injection point, and the caller keeps its own plain instantiation.
@@ -40,7 +42,7 @@ final class ClientDelegateBeans {
     /**
      * The container-wired instance of {@code type}, or empty when there is nothing to wire.
      *
-     * @param <T> the delegate type
+     * @param <T> the client type
      * @param type the client class Flowable is about to instantiate
      * @return the wired instance, or empty when the class declares no injection point, Spring is not
      *         initialized (a standalone engine), or no client generation has been built yet

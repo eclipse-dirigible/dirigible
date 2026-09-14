@@ -168,6 +168,50 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * The defect: one authored default reaches several generated languages, and the SQL-quoted shape
+     * was read in the Java String arm only - so an integer column's {@code '20'} seeded 20 in the item
+     * dialog and emitted {@code Integer.valueOf("'20'")} in the repository, a NumberFormatException on
+     * every create that relied on it (#7293). The two literals are asserted together because agreeing
+     * is the whole invariant.
+     */
+    @Test
+    void readsAQuotedNumericDefaultTheSameWayInBothLanguages() {
+        Map<String, Object> quantity = property("Quantity", "INTEGER");
+        quantity.put("dataDefaultValue", "'20'");
+        Map<String, Object> rate = property("VatRate", "DECIMAL");
+        rate.put("dataDefaultValue", "'20.00'");
+        Map<String, Object> billable = property("Billable", "BOOLEAN");
+        billable.put("widgetType", "CHECKBOX");
+        billable.put("dataDefaultValue", "'true'");
+        ModelParameterProcessor.process(model(entity("Line", "Lines", quantity, rate, billable)), parameters());
+
+        assertEquals("Integer.valueOf(\"20\")", quantity.get("dataDefaultValueJavaLiteral"));
+        assertEquals("20", quantity.get("dataDefaultValueJsLiteral"));
+        assertEquals("new java.math.BigDecimal(\"20.00\")", rate.get("dataDefaultValueJavaLiteral"));
+        assertEquals("20.00", rate.get("dataDefaultValueJsLiteral"));
+        assertEquals("Boolean.TRUE", billable.get("dataDefaultValueJavaLiteral"));
+        assertEquals("true", billable.get("dataDefaultValueJsLiteral"));
+    }
+
+    /**
+     * A numeric default the property's own type cannot read is refused while the author is generating,
+     * naming the property - it used to compile into an expression that threw on every create.
+     */
+    @Test
+    void refusesANumericDefaultThatIsNotAValueOfItsType() {
+        Map<String, Object> quantity = property("Quantity", "INTEGER");
+        quantity.put("dataDefaultValue", "8.0");
+        Map<String, Object> model = model(entity("Line", "Lines", quantity));
+
+        IllegalArgumentException refusal =
+                assertThrows(IllegalArgumentException.class, () -> ModelParameterProcessor.process(model, parameters()));
+
+        assertTrue(refusal.getMessage()
+                          .contains("Line.Quantity"),
+                "the refusal must name the property, got: " + refusal.getMessage());
+    }
+
+    /**
      * The key's presence is what the template reads as "this property has a default to seed", so a
      * property with none must leave it absent rather than null.
      */
@@ -357,6 +401,26 @@ class ModelParameterProcessorTest {
         assertEquals(1, ModelValues.asList(entity.get("guardChecks"))
                                    .size());
         assertEquals(2, ModelValues.asList(entity.get("documentChecks"))
+                                   .size());
+    }
+
+    @Test
+    void aCompareSplitsByItsGateToo() {
+        Map<String, Object> ungated = new LinkedHashMap<>();
+        ungated.put("kind", "compare");
+        Map<String, Object> gated = new LinkedHashMap<>();
+        gated.put("kind", "compare");
+        gated.put("status", "2");
+        Map<String, Object> entity = entity("VacationRequest", "Requests", property("Days", "DECIMAL"));
+        entity.put("checks", List.of(ungated, gated));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        // A comparison holds on every user write unless it names the status it is enforced at (#7338):
+        // "days > 0 before SUBMITTED" is the repository's, so the draft being filled in is not refused.
+        assertEquals(1, ModelValues.asList(entity.get("rowChecks"))
+                                   .size());
+        assertEquals(1, ModelValues.asList(entity.get("documentChecks"))
                                    .size());
     }
 
@@ -838,6 +902,100 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * The authored prose a generated class writes into a Java string literal, escaped once here so no
+     * template has to re-derive it - and so a quote in it mis-values one field instead of failing the
+     * compile of the whole generated module (#7295).
+     */
+    @Test
+    void escapesTheAuthoredProseTheGeneratedJavaWritesIntoALiteral() {
+        Map<String, Object> property = property("Name", "VARCHAR");
+        property.put("description", "Customer's \"trade\" name");
+        property.put("numberSeries", "Sales \"Invoice\"");
+        ModelParameterProcessor.process(model(entity("Book", "Books", property)), parameters());
+
+        assertEquals("Customer's \\\"trade\\\" name", property.get("descriptionJavaLiteral"));
+        assertEquals("Sales \\\"Invoice\\\"", property.get("numberSeriesJavaLiteral"));
+        // The raw values stay for the surfaces that render them as text.
+        assertEquals("Customer's \"trade\" name", property.get("description"));
+    }
+
+    /**
+     * A property carrying neither gets no twin: a template reads the key's absence.
+     */
+    @Test
+    void aPropertyWithNoProseCarriesNoLiteralTwin() {
+        Map<String, Object> property = property("Name", "VARCHAR");
+        ModelParameterProcessor.process(model(entity("Book", "Books", property)), parameters());
+
+        assertNull(property.get("descriptionJavaLiteral"));
+        assertNull(property.get("numberSeriesJavaLiteral"));
+    }
+
+    /**
+     * A label pattern is authored around the fields it interpolates, and its literal segments and
+     * formats are written into the generated name computation as Java literals.
+     */
+    @Test
+    void escapesTheLiteralSegmentsAndFormatsOfALabelPattern() {
+        Map<String, Object> property = property("Code", "VARCHAR");
+        Map<String, Object> entity = entity("Book", "Books", property);
+        Map<String, Object> literal = new LinkedHashMap<>();
+        literal.put("kind", "literal");
+        literal.put("text", "the \"good\" one - ");
+        Map<String, Object> field = new LinkedHashMap<>();
+        field.put("kind", "field");
+        field.put("property", "Code");
+        field.put("format", "dd\\MM");
+        entity.put("labelParts", List.of(literal, field));
+        Map<String, Object> parameters = parameters();
+        // The label computation is a client-Java surface, so the pass that resolves it runs there.
+        parameters.put("javaRuntime", "true");
+        ModelParameterProcessor.process(model(entity), parameters);
+
+        assertEquals("the \\\"good\\\" one - ", literal.get("textJavaLiteral"));
+        assertEquals("dd\\\\MM", field.get("formatJavaLiteral"));
+    }
+
+    /**
+     * The seeded status names a lifecycle refusal quotes travel structurally, escaped per entry - a
+     * comma in a name used to shift every entry after it, a quote broke the literal.
+     */
+    @Test
+    void readsTheSeededStatusNamesStructurally() {
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Id", "INTEGER"));
+        entity.put("lifecycleStatusNameList",
+                List.of(Map.of("id", "1", "name", "Sent, awaiting reply"), Map.of("id", "2", "name", "\"P\"")));
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        List<Map<String, Object>> entries = (List<Map<String, Object>>) entity.get("lifecycleStatusNameEntries");
+        assertEquals(2, entries.size());
+        assertEquals("1", entries.get(0)
+                                 .get("idJavaLiteral"));
+        assertEquals("Sent, awaiting reply", entries.get(0)
+                                                    .get("nameJavaLiteral"));
+        assertEquals("\\\"P\\\"", entries.get(1)
+                                         .get("nameJavaLiteral"));
+    }
+
+    /**
+     * A model written before the structured list still carries the {@code id=name,} join, and the pass
+     * reads it back so nothing regenerates differently for a name that never held a separator.
+     */
+    @Test
+    void fallsBackToTheJoinedSeededStatusNames() {
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Id", "INTEGER"));
+        entity.put("lifecycleStatusNames", "1=DRAFT,2=POSTED");
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        List<Map<String, Object>> entries = (List<Map<String, Object>>) entity.get("lifecycleStatusNameEntries");
+        assertEquals(2, entries.size());
+        assertEquals("DRAFT", entries.get(0)
+                                     .get("nameJavaLiteral"));
+        assertEquals("2", entries.get(1)
+                                 .get("idJavaLiteral"));
+    }
+
+    /**
      * Builds a model around the given entities.
      *
      * @param entities the entities
@@ -878,6 +1036,76 @@ class ModelParameterProcessorTest {
         property.put("name", name);
         property.put("dataType", dataType);
         return property;
+    }
+
+    /**
+     * A composition child inherits its master's personal scope, and with dirigible #7340 it may opt
+     * that inherited surface out of WRITES on its own edge - the shape of a user-authored header whose
+     * lines only an engine writes. The master's own surface stays writable.
+     */
+    @Test
+    void aCompositionChildsOwnEdgeCanMakeTheInheritedPersonalSurfaceSeeOnly() {
+        Map<String, Object> owner = property("Employee", "INTEGER");
+        owner.put("widgetType", "DROPDOWN");
+        owner.put("relationshipEntityName", "Employee");
+        owner.put("relationshipEntityPerspectiveName", "hr");
+        owner.put("relationshipPersonal", "true");
+        owner.put("relationshipIdentityProperty", "Email");
+        Map<String, Object> request = entity("VacationRequest", "hr", property("Id", "INTEGER"), owner);
+
+        Map<String, Object> parentFk = compositionTo("VacationRequest", "hr");
+        parentFk.put("relationshipPersonalReadOnly", "true");
+        Map<String, Object> day = entity("VacationDay", "hr", property("Id", "INTEGER"), parentFk);
+
+        ModelParameterProcessor.process(model(request, day), javaParameters());
+
+        assertEquals(Boolean.TRUE, day.get("personalReadOnly"), "the child's own edge makes its personal surface see-only");
+        assertEquals(Boolean.FALSE, request.get("personalReadOnly"), "the master it inherits the scope from stays writable");
+    }
+
+    /** Without the marker the child inherits the master's writable personal surface, as before. */
+    @Test
+    void withoutTheMarkerTheChildInheritsTheMastersWritableSurface() {
+        Map<String, Object> owner = property("Employee", "INTEGER");
+        owner.put("widgetType", "DROPDOWN");
+        owner.put("relationshipEntityName", "Employee");
+        owner.put("relationshipEntityPerspectiveName", "hr");
+        owner.put("relationshipPersonal", "true");
+        owner.put("relationshipIdentityProperty", "Email");
+        Map<String, Object> request = entity("VacationRequest", "hr", property("Id", "INTEGER"), owner);
+        Map<String, Object> day = entity("VacationDay", "hr", property("Id", "INTEGER"), compositionTo("VacationRequest", "hr"));
+
+        ModelParameterProcessor.process(model(request, day), javaParameters());
+
+        assertEquals(Boolean.FALSE, day.get("personalReadOnly"));
+    }
+
+    /**
+     * The items panel lives on the MASTER's document page, so the flag the document template gates Add
+     * / Fill Month / row delete on is the master's - derived from the items child, which is what
+     * actually refuses the write.
+     */
+    @Test
+    void aSeeOnlyItemsChildMakesTheDocumentsItemsPanelSeeOnly() {
+        Map<String, Object> owner = property("Employee", "INTEGER");
+        owner.put("widgetType", "DROPDOWN");
+        owner.put("relationshipEntityName", "Employee");
+        owner.put("relationshipEntityPerspectiveName", "hr");
+        owner.put("relationshipPersonal", "true");
+        owner.put("relationshipIdentityProperty", "Email");
+        Map<String, Object> request = entity("VacationRequest", "hr", property("Id", "INTEGER"), owner);
+        request.put("layoutType", "MANAGE_DOCUMENT");
+        request.put("documentItemsEntity", "VacationDay");
+
+        Map<String, Object> parentFk = compositionTo("VacationRequest", "hr");
+        parentFk.put("relationshipPersonalReadOnly", "true");
+        Map<String, Object> day = entity("VacationDay", "hr", property("Id", "INTEGER"), parentFk);
+
+        ModelParameterProcessor.process(model(request, day), javaParameters());
+
+        assertEquals(Boolean.TRUE, request.get("documentItemsReadOnly"));
+        // ... and the panel the master renders for it carries the same refusal, so it offers no Add.
+        assertEquals(Boolean.TRUE, ((Map<String, Object>) ((List<Object>) request.get("myChildren")).get(0)).get("readOnly"));
     }
 
     /**

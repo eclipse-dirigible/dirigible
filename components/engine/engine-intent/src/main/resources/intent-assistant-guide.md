@@ -522,13 +522,29 @@ field may declare:
 - `checks:` (entity-level) - **declarative cross-field / cross-line validations**:
   - `{ kind: exactlyOne, fields: [debit, credit], message: "..." }` (row-level): exactly one of the
     listed own fields is non-null - enforced on every user write (400).
-  - `{ kind: compare, field: due, op: ge, than: date, message: "..." }` (row-level): two values of
-    the SAME record must stand in a relation to each other - a due date not before the document
-    date, a validity `to` not before its `from`, a delivery date not before the order date.
-    `op:` is one of `ge`, `gt`, `le`, `lt`, `eq`, `ne`; both operands are the entity's own fields
-    (never relations) and must be both dates, both timestamps or both numbers. Enforced on every
-    user write (400 with the authored message); an absent operand is not a violation - a comparison
-    is about two values that exist, and requiredness is its own declaration.
+  - `{ kind: compare, field: due, op: ge, than: date, message: "..." }`: a value of the record must
+    stand in a relation to a second one - a due date not before the document date, a validity `to`
+    not before its `from`, a delivery date not before the order date. `op:` is one of `ge`, `gt`,
+    `le`, `lt`, `eq`, `ne`; the left operand is the entity's own field (never a relation) and the
+    right one is either another of its own fields (`than:`) or a LITERAL (`value:`) - exactly one of
+    the two. Enforced on every user write (400 with the authored message); an absent operand is not
+    a violation - a comparison is about values that exist, and requiredness is its own declaration.
+  - `{ kind: compare, field: days, op: gt, value: 0, message: "..." }`: the same check against a
+    constant - **this is how "a quantity is positive", "a percentage is at most 100" and "a date is
+    not in the past" are declared.** Do not hand-edit the generated controller's `validate()` for
+    them (the next regeneration drops it, silently) and do not smuggle them into a
+    `calculatedActionOnCreate` that throws (that is a calculation, not a refusal, and it only fires
+    on the field that declares it). The literal is typed by the field it is compared with: a number
+    for a numeric field; for a `date`/`timestamp` either a moment (`CURRENT_DATE`,
+    `CURRENT_TIMESTAMP`, `NOW`, with at most one signed ISO-8601 offset such as `CURRENT_DATE+P7D`,
+    resolved against the clock of the write) or a QUOTED ISO-8601 date / instant - an unquoted
+    `2026-01-01` is read by the YAML loader as a date object and refused here.
+  - A `compare` takes an OPTIONAL `status:` gate, the same routing `requiredWhen` has: without one
+    it holds on every user write, with one the repository enforces it when the record is persisted
+    carrying that status. `{ kind: compare, field: days, op: gt, value: 0, status: SUBMITTED }` is
+    "a submitted request covers at least one day" without forbidding the draft still being filled
+    in - the rule to reach for instead of mis-authoring it as an `itemsMin` over a child the
+    approval step has not created yet. A gated compare needs the `function: EntityStatus` relation.
   - `{ kind: itemsSumEqual, over: [debit, credit], status: 2, message: "..." }` (document-level):
     the sums of the two item fields must be equal - the double-entry invariant. Enforced in the
     repository whenever the document is persisted CARRYING the `status` gate seed id, i.e. at the
@@ -747,6 +763,33 @@ through the normal create path so the number (`calculatedActionOnCreate`), the i
 source's identity/system/status fields are dropped). Use it for documents users routinely copy
 (invoices, orders). It has no effect on non-document entities.
 
+Everything else is copied, which is wrong for exactly the fields a business rule says must be fresh:
+copied verbatim, "same invoice as last month" opens dated last month, due last month, with last
+month's tax event - and a `calculatedActionOnCreate` cannot repair it, because those fill an EMPTY
+value and respect a present one. Say so with the object form:
+
+```yaml
+- name: SalesInvoice
+  duplicable:
+    defaults: { date: now }        # constants written into the clone
+    reset: [due, taxEventDate]     # dropped, so the entity's own create-time rule refills them
+```
+
+`reset:` is for a field that HAS a create-time rule (a `calculatedActionOnCreate`, a `defaultValue`)
+and must be handed back to it; `defaults:` is for a field that has none, where the copy needs a value
+stated here. `now` is today in the field's own shape (a `date` field -> `YYYY-MM-DD`, a `month` field
+-> `YYYY-MM`, a `week` field -> `YYYY-Www`), the same token `generates.defaults` takes; any other
+value is a literal coerced to the property's type. Both keys name the entity's own fields and to-one
+relations - no `relation.field` paths.
+
+Refused at parse: a name that is neither a field nor a to-one relation of the entity; one that is
+already dropped anyway (the primary key, the `number:` field, the `function: EntityStatus` relation,
+a `readOnly` or an `aggregate` field) - naming it would let you believe you control something the
+Duplicate decided long before reading the block; the same name in both lists; `now` on a property
+that is not a date / month / week; and a `reset` on a **required** field with neither a
+`defaultValue` nor a create-time rule, which would make every duplicate fail on the server's own
+"field is required".
+
 **Control order (`order:`):** by default the generated UI controls (form inputs, list columns, detail
 rows) follow the declaration order - all fields first, then the to-one relations, so relations end up
 last. Give an entity an `order:` list of property names to sequence them explicitly, interleaving
@@ -787,7 +830,14 @@ serves the scoped reads but its create/update/delete return **403**, and the my 
 write affordance at all - no New on the list, no Save/Delete on the form or the document, and no
 Add on a child panel or on the document's items - for records the owner may view but never author
 (a leave-balance account, a payslip); the regular (power) controller still writes them normally.
-The regular controller is unaffected. Sensitivity propagates to derived fields automatically: a rollup target (`op: sum` /
+The regular controller is unaffected. The same key on a CHILD's **composition** relation makes only
+that child's inherited surface see-only while the parent it inherits the scope from stays writable -
+the scope still comes from the parent, the writes do not - which is the shape of a header the person
+authors whose lines only an engine writes (a leave request whose day rows a delegate charges against
+an entitlement): the child's `MyController` 403s and the parent's my/document page renders no Add on
+that items panel, no row actions and no Add on that child panel. It is refused anywhere it would be
+carried nowhere - on a plain association, on a second composition, or on a child whose master has no
+personal surface to inherit. Sensitivity propagates to derived fields automatically: a rollup target (`op: sum` /
 `latest`) whose `of:` child field is sensitive, and an `aggregate: true` master field fed by a
 same-named sensitive item field, are treated as sensitive whenever their entity has a personal
 surface (own `personal:` relation, or scope inherited through a composition parent chain) - the
@@ -2717,6 +2767,7 @@ Where the block can sit - the three places an intent acts, plus the standalone `
 | `serviceTask` `args.notify` | the process's trigger record | the flow reaches that step ("after Issue, mail it") |
 | `transitions[].notify` | the transitioned record | AFTER the status flip commits ("on Void, tell the customer") |
 | `schedules[].notify` | each matched row | on every cron tick, per row (dunning runs) |
+| `schedules[].notify` + `generate` | each matched row, once per natural key | a tick that mails AND records what it sent |
 | `notifications[]` | the event record | on the entity's create / update / delete |
 
 **Rules:** `attach` is `print` (the record the block is about - inside a fan-out, the ROW) or
@@ -2943,7 +2994,9 @@ processes:
 ### schedules - run on a cron and notify or generate records
 
 **Use when:** something must run **on a schedule** (cron), find records matching conditions, and, per
-matching row, perform **exactly one** per-row action: `notify` (email) or `generate` (create a record).
+matching row, perform a per-row action: `notify` (email), `generate` (create a record), or **both** -
+one tick that mails AND records what it sent (dunning). An `escalate:` ladder additionally picks
+WHICH level the row is at from how overdue it is.
 
 **notify** - e.g. "every morning, email members with overdue loans":
 
@@ -3128,6 +3181,75 @@ schedules:
           forEach: { days: workingDays }   # one child per working day of the period
           dayField: day
 ```
+
+**notify AND generate together - a tick that records what it sent.** A `notify` mails but leaves no
+trace, so a reminder history fed only by it fills from manual clicks and never from the automated
+sends. Declare both: per matched row the target record is created first and the mail goes out after
+it, in the same fail-soft try, and the `generate.unique:` key gates **both** - a row whose record
+already exists is skipped entirely, mail included. `unique:` is therefore **required** on a combined
+schedule (refused without it): without a key the tick re-mails every matched row every time it fires
+and writes another record beside each send.
+
+**`escalate:` - pick the level from a days-past-due ladder.** Real dunning is not one wording repeated
+weekly: it is First reminder -> Second reminder -> Final notice as the document ages, each sent once.
+The ladder is an ordinary entity of the model (the `function: Setting` table the module already has),
+the threshold an integer column on it, and the date the days are counted from a `date` field of the
+queried row:
+
+```yaml
+entities:
+  - name: ReminderLevel                      # the ladder, seeded First(3) / Second(14) / Final(30)
+    function: Setting
+    fields:
+      - { name: id,           type: integer, primaryKey: true, generated: true }
+      - { name: name,         type: string }
+      - { name: daysAfterDue, type: integer }
+      - { name: wording,      type: string, length: 500 }
+  - name: PaymentReminder                    # the HISTORY - what was actually sent, and at which level
+    fields:
+      - { name: id,     type: integer, primaryKey: true, generated: true }
+      - { name: sentOn, type: date }
+    relations:
+      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+      - { name: Level,        kind: manyToOne, to: ReminderLevel }
+
+schedules:
+  - name: overdue-invoice-reminders
+    cron: "0 0 8 * * MON"                    # every Monday at 08:00
+    entity: SalesInvoice
+    where:
+      - { field: Status, op: eq, value: OVERDUE }
+      - { field: dueOn,  op: lt, value: CURRENT_DATE }
+    escalate:
+      ladder: ReminderLevel                  # the levels
+      after: daysAfterDue                    # the integer threshold on the ladder
+      since: dueOn                           # the row's date the days are counted from
+      into: Level                            # where the chosen level is written on the target
+    generate:
+      to: PaymentReminder
+      unique: [SalesInvoice, Level]          # (document, level) - each level goes out ONCE
+      map: { SalesInvoice: id }
+      defaults: { sentOn: now }
+    notify:
+      to: contactEmail
+      subject: "Invoice {number} - {escalation.name}"
+      body: "{escalation.wording}"           # the level's own text - per-level wording
+      attach: print
+```
+
+- The level applied is the **highest** whose `after` threshold the row has passed
+  (`today - since >= after`). A row that has passed **none** is left for a later tick - not mailed at
+  the bottom rung - and the tick logs how many those were.
+- `escalate` requires a `generate`, and `into` must be a term of its `unique:` key. That is what makes
+  each level go out once: keyed on the document alone, the guard finds the FIRST reminder forever and
+  the seeded second and final notices are never applied. Both are refused at parse.
+- `{escalation.<field>}` reads **one field of the chosen level** in the subject and body - the
+  per-level wording. A field the ladder does not declare is an authoring error, not a placeholder that
+  mails its own braces to the customer.
+- `into` may not also be assigned by `map` / `defaults` (the escalation is what picks it), and an
+  escalating schedule must have a **local** source and a **local** generate target: the days are
+  counted off the row's own date, and whether the target property points at this model's ladder is
+  knowable only here.
 
 **Cross-model source (`model:`).** By default the `entity` is a **local** entity of this model. When
 the module that owns the CREATED rows is not where the source entity lives, add `model: <uses alias>`
@@ -3859,6 +3981,8 @@ or a seeded name.
 - "send the invoice / payslip / document itself to its customer or employee by e-mail" -> a **notify block with `attach: print`** (on a `serviceTask` step, a `transitions[]`, or a `schedules[]`)
 - "mail each customer their statement / activity list for the period" -> a **notify block with `attach: { report, bind }`** over a report whose `parameters:` scope it to the recipient (a `schedules[]` for the periodic run, a `transitions[]` for on demand)
 - "every day/hour, check X and notify" -> **schedules** (`notify`)
+- "dunning / payment reminders that escalate and are recorded" -> **schedules** with `notify` AND
+  `generate` plus an `escalate:` ladder (the record is what sends each level once)
 - "show whether the invoice / payslip / reminder actually went out, and react when it did not" -> **`outcome:` on the notify block** plus, for the reaction, `event: { onNotifyFailed: <Entity> }` on a `notifications:` / `integrations:` / `outbound:` entry or a process `trigger:`; the retry is an ordinary `transitions[]` button from the failure status carrying the same notify block
 - "on a schedule / every month, create a Y for each X / recurring invoices / auto-generate timesheets" -> **schedules** (`generate`)
 - "post / notify / create from a value a listener computes AFTER the record is inserted (a moving-average cost, a snapshot column, an external lookup)" -> declare a **`phases:`** entry on the entity and bind **`event: { onPhase: <Entity>, phase: <name> }`** - never `onCreate`, which races the listener

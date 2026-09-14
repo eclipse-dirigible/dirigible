@@ -41,7 +41,7 @@ public class ${className} implements JavaDelegate {
         int updated = repository.updateProperty(((Number) key).${keyAccessor}(), "${field}",
                 errorMessage == null ? "" : errorMessage.toString());
 #else
-        int updated = repository.updateProperty(((Number) key).${keyAccessor}(), "${field}", "${value}");
+        int updated = repository.updateProperty(((Number) key).${keyAccessor}(), "${field}", "${valueJavaLiteral}");
 #end
         if (updated == 0) {
             return;

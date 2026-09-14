@@ -37,6 +37,7 @@ import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSuppor
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
+import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.ScheduleSupport;
 import org.eclipse.dirigible.components.intent.generator.StatementSupport;
 import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
@@ -45,12 +46,14 @@ import org.eclipse.dirigible.components.intent.model.ActionIntent;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
+import org.eclipse.dirigible.components.intent.model.DuplicateIntent;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
 import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.PostIntent;
 import org.eclipse.dirigible.components.intent.model.PostingIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
+import org.eclipse.dirigible.components.intent.model.EscalateIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
@@ -130,16 +133,6 @@ public final class IntentParser {
     /** The comparisons a {@code checks: compare} entry may declare. */
     private static final Set<String> COMPARE_OPS = Set.of("ge", "gt", "le", "lt", "eq", "ne");
 
-    /**
-     * A field type a {@code checks: compare} entry may compare, as the family the generated comparison
-     * belongs to. Two fields compare only within one family: the generated code compares two temporals
-     * through {@code compareTo}, which needs the SAME class (a {@code LocalDate} does not compare to an
-     * {@code Instant}), and two numbers by value through {@code BigDecimal}, which is exact across the
-     * numeric widths. Everything else - a string, a boolean, a {@code month}/{@code week} label - is
-     * out of scope rather than silently ordered lexicographically.
-     */
-    private static final Map<String, String> COMPARE_FAMILIES = Map.of("date", "date", "timestamp", "timestamp", "integer", "number", "int",
-            "number", "long", "number", "decimal", "number", "double", "number");
     /** Numeric field types a sum roll-up (its field / {@code of} / capacity / balance) may use. */
     private static final Set<String> NUMERIC_TYPES = Set.of("integer", "int", "long", "decimal", "double");
     private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany", "subset");
@@ -241,6 +234,9 @@ public final class IntentParser {
     /** The {@code {record.<path>}} placeholders of a subject / body. */
     private static final java.util.regex.Pattern RECORD_PLACEHOLDER =
             java.util.regex.Pattern.compile("\\{(" + RECORD_SCOPE + "\\.[A-Za-z0-9_.]*)\\}");
+    /** The {@code {escalation.<field>}} placeholders of a subject / body (issue #7276). */
+    private static final java.util.regex.Pattern ESCALATION_PLACEHOLDER =
+            java.util.regex.Pattern.compile("\\{(" + NotificationSupport.ESCALATION_LOCAL + "\\.[A-Za-z0-9_.]*)\\}");
     /** A {@code {path}} placeholder of a notify subject / body - a field or a one-hop path. */
     private static final java.util.regex.Pattern NOTIFY_PLACEHOLDER =
             java.util.regex.Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?)\\}");
@@ -331,6 +327,7 @@ public final class IntentParser {
         rejectLifecycleOn(tree);
         moveGeneratesItemLines(tree);
         expandUniqueShorthand(tree);
+        normalizeDuplicable(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
         // together with the structural issues below.
@@ -390,6 +387,7 @@ public final class IntentParser {
         validateFunctions(model, issues);
         validateViews(model, issues);
         validateDocumentItemsLayout(model, issues);
+        validateDuplicable(model, issues);
         validateOrders(model, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
@@ -572,6 +570,156 @@ public final class IntentParser {
             return flagged;
         }
         return compositionChildren == 1 ? sole : null;
+    }
+
+    /** Whether the given value is present and not blank. */
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    /**
+     * Validate an entity's {@code duplicable} object form: every name it mentions must be a property of
+     * the entity the copy is made of, must be one the copy actually carries, and must end up with a
+     * value.
+     *
+     * <p>
+     * The built-in drops (identity, audit, status, number, read-only, aggregate) were never authorable
+     * and stay that way: naming one is refused rather than accepted and ignored, or an author would
+     * believe they control something the Duplicate action decided long before reading this block.
+     *
+     * @param model the typed model
+     * @param issues collected issues
+     */
+    private static void validateDuplicable(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            DuplicateIntent duplicate = entity.getDuplicable();
+            if (entity.getName() == null || duplicate == null) {
+                continue;
+            }
+            String subject = "entity [" + entity.getName() + "] duplicable";
+            Set<String> reset = new LinkedHashSet<>();
+            for (String name : duplicate.getReset()) {
+                if (name == null || name.isBlank()) {
+                    issues.add(subject + ".reset has a blank entry");
+                    continue;
+                }
+                reset.add(name.trim()
+                              .toLowerCase(Locale.ROOT));
+                validateDuplicableProperty(entity, subject + ".reset", name.trim(), true, null, issues);
+            }
+            for (Map.Entry<String, String> assignment : duplicate.getDefaults()
+                                                                 .entrySet()) {
+                String name = assignment.getKey();
+                if (name == null || name.isBlank()) {
+                    issues.add(subject + ".defaults has a blank key");
+                    continue;
+                }
+                if (reset.contains(name.trim()
+                                       .toLowerCase(Locale.ROOT))) {
+                    issues.add(subject + " names [" + name.trim() + "] in both reset and defaults - a field is either handed back to the"
+                            + " entity's create-time rule or assigned here, never both");
+                    continue;
+                }
+                validateDuplicableProperty(entity, subject + ".defaults", name.trim(), false, assignment.getValue(), issues);
+            }
+        }
+    }
+
+    /**
+     * One {@code reset} entry or {@code defaults} key: it must be a field or a to-one relation of this
+     * entity, must not be one of the built-in drops, and - for a {@code reset} - must be a value the
+     * create it posts can supply on its own.
+     *
+     * @param entity the entity being duplicated
+     * @param subject the message prefix (the block and key being checked)
+     * @param name the authored property name
+     * @param isReset whether this is a {@code reset} entry (else a {@code defaults} key)
+     * @param value the authored default value, for a {@code defaults} key
+     * @param issues collected issues
+     */
+    private static void validateDuplicableProperty(EntityIntent entity, String subject, String name, boolean isReset, String value,
+            List<String> issues) {
+        for (FieldIntent field : entity.getFields()) {
+            if (!name.equalsIgnoreCase(field.getName())) {
+                continue;
+            }
+            if (field.isPrimaryKey() || "uuid".equalsIgnoreCase(field.getType())) {
+                issues.add(subject + " names [" + name + "] - the record's identity is minted by the server and never copied");
+                return;
+            }
+            if (field.getNumber() != null) {
+                issues.add(subject + " names [" + name + "] - the document number is minted by the server and never copied");
+                return;
+            }
+            if (field.isAggregate()) {
+                issues.add(subject + " names [" + name + "] - an aggregate is derived from the lines and never copied");
+                return;
+            }
+            if (field.isReadOnly()) {
+                issues.add(subject + " names [" + name + "] - a readOnly field is never copied");
+                return;
+            }
+            if (isReset) {
+                validateDuplicableReset(subject, name, field, issues);
+            } else {
+                validateDuplicableDefault(subject, name, field.getType(), value, issues);
+            }
+            return;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (!name.equalsIgnoreCase(relation.getName())) {
+                continue;
+            }
+            if (!"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
+                issues.add(subject + " names [" + name + "] - only a field or a to-one relation is copied, so only one can be reset or"
+                        + " defaulted");
+                return;
+            }
+            if (relation.isEntityStatus()) {
+                issues.add(subject + " names [" + name + "] - the status of a copy is the lifecycle's initial one and never copied");
+                return;
+            }
+            if (!isReset) {
+                validateDuplicableDefault(subject, name, "integer", value, issues);
+            }
+            return;
+        }
+        issues.add(subject + " names [" + name + "] which is not a field or a to-one relation of entity [" + entity.getName() + "]");
+    }
+
+    /**
+     * A {@code reset} hands the field back to the create path, so the create has to be able to fill it.
+     * A required field with neither a {@code defaultValue} nor a create-time rule would make every
+     * duplicate fail with the server's own "field is required" - at authoring time that is a mistake,
+     * not a decision.
+     */
+    private static void validateDuplicableReset(String subject, String name, FieldIntent field, List<String> issues) {
+        boolean filled =
+                hasText(field.getDefaultValue()) || hasText(field.getCalculatedActionOnCreate()) || hasText(field.getCalculatedOnCreate());
+        if (field.isRequired() && !filled) {
+            issues.add(subject + " names required field [" + name + "], which has no defaultValue and no create-time rule - resetting it"
+                    + " would make every duplicate fail; give it a defaults: value or a create-time rule");
+        }
+    }
+
+    /**
+     * A {@code defaults} value: {@code now} is today in the field's own shape, so it is only meaningful
+     * on a field that HOLDS a date - the same rule and the same wording {@code generates.defaults}
+     * uses. Anything else is a literal, coerced to the property's type at generation.
+     */
+    private static void validateDuplicableDefault(String subject, String name, String type, String value, List<String> issues) {
+        if (value == null || value.isBlank()) {
+            issues.add(subject + " assigns [" + name + "] a blank value - give it a value or list it under reset:");
+            return;
+        }
+        if (!"now".equals(value.trim())) {
+            return;
+        }
+        String kind = type == null ? "" : type.toLowerCase(Locale.ROOT);
+        if (!"date".equals(kind) && !"month".equals(kind) && !"week".equals(kind)) {
+            issues.add(subject + " assigns [" + name + "] the value now, but that property is not a date - now is today in the field's own"
+                    + " shape, so it is only a value for a date / month / week field");
+        }
     }
 
     /**
@@ -937,14 +1085,15 @@ public final class IntentParser {
                 validateScheduleMoment(condition, source, "schedule [" + name + "]", issues);
                 validateWhereStatusValue(condition, source, "schedule [" + name + "]", issues);
             }
-            // A schedule performs exactly one per-row action: notify (mail) or generate (create-from).
+            // A schedule performs at least one per-row action: notify (mail), generate (create-from), or
+            // BOTH (issue #7276) - one tick that records what it sent, which is what a reminder history
+            // needs to be a record of the automated sends and not only of manual clicks.
             boolean hasNotify = schedule.getNotify() != null;
             boolean hasGenerate = schedule.getGenerate() != null;
-            if (hasNotify && hasGenerate) {
-                issues.add("schedule [" + name + "] has both notify and generate - a schedule performs exactly one per-row action");
-            } else if (!hasNotify && !hasGenerate) {
+            if (!hasNotify && !hasGenerate) {
                 issues.add("schedule [" + name + "] has no action (add a notify or a generate)");
-            } else if (hasNotify) {
+            }
+            if (hasNotify) {
                 if (crossModelSource) {
                     // The source's own properties are the OWNER's, resolved at GENERATION time against
                     // its .model (dirigible #7030) - the same split validation the where / map / generate
@@ -955,10 +1104,197 @@ public final class IntentParser {
                 } else {
                     validateNotifyBlock(schedule.getNotify(), "schedule [" + name + "] notify", schedule.getEntity(), model, false, issues);
                 }
-            } else {
+            }
+            if (hasGenerate) {
                 validateScheduleGenerate(schedule, source, byName, entityNames, usesAliases, issues);
             }
+            if (hasNotify && hasGenerate && !schedule.getGenerate()
+                                                     .hasUnique()) {
+                // The natural key is ADVISORY for a generate-only schedule (every intent authored before
+                // it keeps generating what it did), but a combined tick has no such history: without it
+                // the same row is mailed again on every single tick, forever, and the record written
+                // beside each send says it was a new one. That is the failure the combined form exists to
+                // remove, so it is refused rather than advised.
+                issues.add("schedule [" + name + "] declares both notify and generate but no generate unique: natural key"
+                        + " - the key is what makes one (row, level) send once; without it every tick re-mails every matched ["
+                        + schedule.getEntity() + "] and writes another record beside it");
+            }
+            validateScheduleEscalate(schedule, source, byName, crossModelSource, issues);
+            validateEscalationPlaceholders(schedule, byName, issues);
         }
+    }
+
+    /**
+     * The {@code {escalation.<field>}} placeholders of a schedule's message (issue #7276) - the
+     * per-level wording the ladder exists to make possible.
+     *
+     * <p>
+     * An unresolvable placeholder degrades to its own literal text at generation, which for a dunning
+     * mail means the customer is sent the characters {@code {escalation.Name}} where the level's name
+     * should be. That is the silent failure this parser refuses everywhere else, so both ways of
+     * getting there - no ladder at all, and a field the ladder does not declare - are errors here.
+     */
+    private static void validateEscalationPlaceholders(ScheduleIntent schedule, Map<String, EntityIntent> byName, List<String> issues) {
+        NotificationIntent notify = schedule.getNotify();
+        if (notify == null) {
+            return;
+        }
+        List<String> paths = new ArrayList<>();
+        collectEscalationScopedPaths(notify.getSubject(), paths);
+        collectEscalationScopedPaths(notify.getBody(), paths);
+        if (paths.isEmpty()) {
+            return;
+        }
+        String subject = "schedule [" + schedule.getName() + "] notify";
+        EscalateIntent escalate = schedule.getEscalate();
+        if (escalate == null) {
+            issues.add(subject + " uses the " + NotificationSupport.ESCALATION_LOCAL + ". scope in [{" + paths.get(0)
+                    + "}] but the schedule declares no escalate: ladder - there is no level to read");
+            return;
+        }
+        EntityIntent ladder = escalate.getLadder() == null ? null : byName.get(escalate.getLadder());
+        if (ladder == null) {
+            return; // the ladder itself is already reported
+        }
+        for (String path : paths) {
+            String field = path.substring(NotificationSupport.ESCALATION_LOCAL.length() + 1);
+            if (field.isEmpty() || field.indexOf('.') >= 0 || fieldByName(ladder, field) == null) {
+                issues.add(subject + " placeholder [{" + path + "}] is not a field of the escalate ladder [" + ladder.getName()
+                        + "] - one field of the level, never a walk on");
+            }
+        }
+    }
+
+    /** The {@code {escalation.<field>}} placeholder paths of a subject / body. */
+    private static void collectEscalationScopedPaths(String text, List<String> paths) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        java.util.regex.Matcher matcher = ESCALATION_PLACEHOLDER.matcher(text);
+        while (matcher.find()) {
+            paths.add(matcher.group(1));
+        }
+    }
+
+    /**
+     * The days-past-due escalation ladder of a schedule (issue #7276): a row is placed at the HIGHEST
+     * level whose {@code after} threshold it has passed, that level lands on the generated record
+     * through {@code into}, and the record's natural key is what sends each level once.
+     *
+     * <p>
+     * The rules are the ones that make the ladder mean what it reads as. It needs a {@code generate}:
+     * without a record there is nothing that distinguishes a level already sent from one still due, so
+     * a {@code notify}-only escalation would re-send its top level on every tick - the exact behaviour
+     * the ladder is there to replace. It needs a LOCAL source, because the days are counted off a date
+     * of the queried row and a cross-model row's properties are the owner's. And {@code into} must be
+     * part of the {@code unique:} key: a key without the level identifies the FIRST reminder of a
+     * document and then skips it forever, so the second and final notices are seeded but never sent -
+     * which is precisely the symptom reported.
+     */
+    private static void validateScheduleEscalate(ScheduleIntent schedule, EntityIntent source, Map<String, EntityIntent> byName,
+            boolean crossModelSource, List<String> issues) {
+        EscalateIntent escalate = schedule.getEscalate();
+        if (escalate == null) {
+            return;
+        }
+        String subject = "schedule [" + schedule.getName() + "] escalate";
+        GeneratesIntent g = schedule.getGenerate();
+        if (g == null) {
+            issues.add(subject + " has no generate - an escalation records the level it applied on the generated record,"
+                    + " which is what sends each level once; add a generate with a unique: key naming the into: property");
+            return;
+        }
+        if (crossModelSource) {
+            issues.add(subject + " counts days off [" + escalate.getSince() + "] of the cross-model source [" + schedule.getEntity()
+                    + "], whose properties belong to the [" + schedule.getModel() + "] model - keep an escalating schedule"
+                    + " in the model that owns the row it ages");
+            return;
+        }
+        String ladder = escalate.getLadder();
+        EntityIntent ladderEntity = ladder == null ? null : byName.get(ladder);
+        if (ladderEntity == null) {
+            issues.add(subject + " ladder [" + ladder + "] is not an entity of this model");
+        }
+        FieldIntent after = ladderEntity == null || escalate.getAfter() == null ? null : fieldByName(ladderEntity, escalate.getAfter());
+        if (ladderEntity != null && after == null) {
+            issues.add(subject + " after [" + escalate.getAfter() + "] is not a field of the ladder [" + ladder + "]");
+        } else if (after != null && !"integer".equals(after.getType())) {
+            issues.add(subject + " after [" + escalate.getAfter() + "] is a [" + after.getType()
+                    + "] field - the threshold is a whole number of days, so it must be an integer");
+        }
+        FieldIntent since = source == null || escalate.getSince() == null ? null : fieldByName(source, escalate.getSince());
+        if (source != null && since == null) {
+            issues.add(subject + " since [" + escalate.getSince() + "] is not a field of the queried entity [" + schedule.getEntity()
+                    + "] - the days are counted off a date of the row");
+        } else if (since != null && !"date".equals(since.getType())) {
+            issues.add(subject + " since [" + escalate.getSince() + "] is a [" + since.getType()
+                    + "] field - the ladder counts whole days, so it is measured from a date");
+        }
+        String into = escalate.getInto();
+        if (into == null || into.isBlank()) {
+            issues.add(subject + " has no into - name the property of [" + g.getTo() + "] the chosen level is written to");
+            return;
+        }
+        boolean crossModelTarget = g.getUses() != null && !g.getUses()
+                                                            .isBlank();
+        EntityIntent target = crossModelTarget || g.getTo() == null ? null : byName.get(g.getTo());
+        if (crossModelTarget) {
+            issues.add(subject + " writes into [" + into + "] of the cross-model target [" + g.getTo()
+                    + "] - whether that property points at this model's ladder is known only to the [" + g.getUses()
+                    + "] model, so keep the history entity local");
+            return;
+        }
+        if (target != null) {
+            RelationIntent relation = toOneRelationNamed(target, into);
+            if (relation == null) {
+                issues.add(subject + " into [" + into + "] is not a to-one relation of [" + g.getTo() + "]");
+            } else if (ladder != null && !ladder.equals(relation.getTo())) {
+                issues.add(subject + " into [" + into + "] points at [" + relation.getTo() + "], not at the ladder [" + ladder + "]");
+            }
+        }
+        if (assignsProperty(g, into)) {
+            issues.add(subject + " into [" + into + "] is also assigned by the generate's map or defaults"
+                    + " - the escalation is what picks the level, so remove the other assignment");
+        }
+        if (!uniqueNames(g, into)) {
+            issues.add(subject + " into [" + into + "] is not part of the generate unique: key - without the level in the key"
+                    + " the first reminder of a row is what the guard finds forever, so no row is ever escalated;"
+                    + " key on the row's back-reference AND [" + into + "]");
+        }
+    }
+
+    /** Whether a generate block's {@code map} or {@code defaults} already writes the named property. */
+    private static boolean assignsProperty(GeneratesIntent g, String property) {
+        String target = IntentNaming.pascalCase(property);
+        return namesProperty(g.getMap(), target) || namesProperty(g.getDefaults(), target);
+    }
+
+    /** Whether a map's keys, read as target properties, include the given PascalCase property. */
+    private static boolean namesProperty(Map<String, String> assignments, String target) {
+        if (assignments == null) {
+            return false;
+        }
+        for (String key : assignments.keySet()) {
+            if (key != null && target.equals(IntentNaming.pascalCase(key))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the generate's {@code unique:} natural key names the given target property. */
+    private static boolean uniqueNames(GeneratesIntent g, String property) {
+        if (!g.hasUnique()) {
+            return false;
+        }
+        for (UniqueKeyIntent entry : g.getUnique()) {
+            if (entry != null && !entry.isRun() && entry.getProperty() != null && IntentNaming.pascalCase(property)
+                                                                                              .equals(IntentNaming.pascalCase(
+                                                                                                      entry.getProperty()))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1109,7 +1445,12 @@ public final class IntentParser {
             issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
                     + " use an on-demand generates action for document-to-document cloning");
         }
-        validateScheduleGenerateUnique(name, g, crossModel, byName, issues);
+        // The escalation writes its chosen level onto the target too (issue #7276), so the natural key
+        // may - and must - name it, although no map / defaults entry does.
+        validateScheduleGenerateUnique(name, g, crossModel, byName, schedule.getEscalate() == null ? null
+                : schedule.getEscalate()
+                          .getInto(),
+                issues);
         if (g.getChildren() != null) {
             validateGenerateChildren(name, g.getChildren(), 1, source, entityNames, usesAliases, issues);
         }
@@ -1140,7 +1481,7 @@ public final class IntentParser {
      * the first matching row would generate and every other row be skipped as if it had already run.
      */
     private static void validateScheduleGenerateUnique(String name, GeneratesIntent g, boolean crossModel, Map<String, EntityIntent> byName,
-            List<String> issues) {
+            String escalatedInto, List<String> issues) {
         if (!g.hasUnique()) {
             return;
         }
@@ -1158,6 +1499,9 @@ public final class IntentParser {
             if (key != null) {
                 assigned.add(key.toLowerCase(Locale.ROOT));
             }
+        }
+        if (escalatedInto != null && !escalatedInto.isBlank()) {
+            assigned.add(escalatedInto.toLowerCase(Locale.ROOT));
         }
         int properties = 0;
         boolean run = false;
@@ -3745,6 +4089,7 @@ public final class IntentParser {
                             + "] is marked composition but only a manyToOne/oneToOne relation can be a composition");
                 }
                 validateWhenMasterDeleted(entity, relation, issues);
+                validateInheritedPersonalReadOnly(entity, relation, byName, issues);
                 boolean crossModel = relation.isCrossModel();
                 if (crossModel) {
                     // A cross-model relation references an entity owned by another intent model declared in
@@ -4677,6 +5022,50 @@ public final class IntentParser {
     }
 
     /**
+     * {@code personalReadOnly: true} on a relation that does NOT declare {@code personal: true}: the
+     * composition edge a child inherits its personal scope through, opting that child's personal
+     * surface out of writes while the parent's own stays writable (dirigible #7340). The scope still
+     * comes from the parent; the writes do not - which is what a user-authored header whose lines only
+     * an engine writes needs (a leave request whose day rows a delegate charges against an
+     * entitlement). Anywhere else the key would be carried nowhere, so it is refused rather than
+     * silently dropped: it must sit on a composition, on the entity's FIRST one (every later
+     * composition is emitted as a plain association, so nothing would read it), and on a child that
+     * really does inherit a personal surface through that parent.
+     *
+     * @param entity the entity declaring the relation
+     * @param relation the relation
+     * @param byName the declared entities of this model, by name
+     * @param issues the issue list to add to
+     */
+    private static void validateInheritedPersonalReadOnly(EntityIntent entity, RelationIntent relation,
+            java.util.Map<String, EntityIntent> byName, List<String> issues) {
+        if (!relation.isPersonalReadOnly() || relation.isPersonal()) {
+            return;
+        }
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        if (!relation.isComposition()) {
+            issues.add(subject + " declares personalReadOnly but neither personal: true nor composition: true - declare it alongside"
+                    + " personal: true to make this entity's own personal surface see-only, or on the composition relation the entity"
+                    + " inherits its personal scope through to make the inherited one see-only");
+            return;
+        }
+        for (RelationIntent candidate : entity.getRelations()) {
+            if (candidate.isComposition()) {
+                if (candidate != relation) {
+                    issues.add(subject + " declares personalReadOnly but the entity's owning composition is [" + candidate.getName()
+                            + "] - only the first composition carries the inherited personal scope, so declare it there");
+                    return;
+                }
+                break;
+            }
+        }
+        if (!hasPersonalSurface(byName, byName.get(relation.getTo()), new HashSet<>())) {
+            issues.add(subject + " declares personalReadOnly but its master [" + relation.getTo()
+                    + "] has no personal surface to inherit - there is no personal surface here to make see-only");
+        }
+    }
+
+    /**
      * {@code leafOnly: true} restricts a to-one relation to leaf nodes of its target's hierarchy, so
      * the target must declare one. A same-model target is checked here; a cross-model target is
      * validated at generation against the resolved owner model (like the relation target itself).
@@ -5061,23 +5450,39 @@ public final class IntentParser {
     }
 
     /**
-     * A {@code compare} check relates two values of the SAME row - the shape a plain
+     * A {@code compare} check relates a value of the row to a second value - the shape a plain
      * {@code required}/{@code unique} cannot express and the reason a document could be saved with a
-     * due date behind its own date (dirigible #7095). Both operands must be the entity's own fields
-     * (never a relation - a comparison of two foreign keys means nothing), the operator is explicit,
-     * and the two types must land in the same comparison family so the generated comparison compiles
-     * and means what it says. It is row-level like {@code exactlyOne}, so it takes no {@code status}
-     * gate: a rule about two values of one row holds from the first save, not from a transition.
+     * due date behind its own date (dirigible #7095). The right-hand side is either another of the
+     * entity's own fields ({@code than}: never a relation - a comparison of two foreign keys means
+     * nothing) or a LITERAL ({@code value}, issue #7338 - the commonest business validation of all: "a
+     * quantity is positive", "a percentage is at most 100"), never both and never neither, since a
+     * comparison has exactly one right-hand side. The operator is explicit, and the right-hand side
+     * must land in the left field's own comparison family so the generated comparison compiles and
+     * means what it says.
+     *
+     * <p>
+     * Row-level by default, like {@code exactlyOne}: a rule about the values of one row holds from the
+     * first save. The optional {@code status} gate is the routing, as on {@code requiredWhen} - with
+     * one, the rule holds when the record is persisted carrying that status (the transition), so "days
+     * &gt; 0 before SUBMITTED" is declarable without forbidding the draft that is still being filled
+     * in.
      */
     private static void validateCompareCheck(EntityIntent entity, CheckIntent check, String subject, List<String> issues) {
         String field = check.getField();
         String than = check.getThan();
-        if (field == null || field.isBlank() || than == null || than.isBlank()) {
-            issues.add(subject + " requires `field` and `than`: the two own fields to compare");
+        boolean hasThan = than != null && !than.isBlank();
+        boolean hasValue = check.getValue() != null;
+        if (field == null || field.isBlank() || hasThan == hasValue) {
+            issues.add(subject + " requires `field` and exactly one right-hand side: `than` (another own field of [" + entity.getName()
+                    + "]) or `value` (a literal)");
             return;
         }
         if (check.getStatus() != null) {
-            issues.add(subject + " is row-level and cannot carry a `status` gate - it must hold on every write");
+            if (check.getStatus() <= 0) {
+                issues.add(subject + " status gate [" + check.getStatus() + "] is not an EntityStatus seed id");
+            } else if (!hasEntityStatusRelation(entity)) {
+                issues.add(subject + " requires the entity to declare a `function: EntityStatus` relation for the gate");
+            }
         }
         String op = check.getOp() == null ? null
                 : check.getOp()
@@ -5086,18 +5491,27 @@ public final class IntentParser {
         if (op == null || !COMPARE_OPS.contains(op)) {
             issues.add(subject + " requires `op`: one of ge, gt, le, lt, eq, ne (got [" + check.getOp() + "])");
         }
+        FieldIntent left = fieldByName(entity, field);
+        if (left == null) {
+            issues.add(subject + " field [" + field + "] is not a field of [" + entity.getName() + "]");
+            return;
+        }
+        if (hasValue) {
+            // The literal is typed by the field it is compared with, by the one rule the generator
+            // renders with - so nothing is refused here that would have generated, and nothing generates
+            // that was not refused here.
+            CheckSupport.CompareLiteral literal = CheckSupport.compareLiteral(left.getType(), check.getValue());
+            if (!literal.valid()) {
+                issues.add(subject + " " + literal.problem());
+            }
+            return;
+        }
         if (field.equalsIgnoreCase(than)) {
             issues.add(subject + " compares [" + field + "] with itself - the outcome cannot depend on the record");
         }
-        FieldIntent left = fieldByName(entity, field);
         FieldIntent right = fieldByName(entity, than);
-        if (left == null) {
-            issues.add(subject + " field [" + field + "] is not a field of [" + entity.getName() + "]");
-        }
         if (right == null) {
             issues.add(subject + " than [" + than + "] is not a field of [" + entity.getName() + "]");
-        }
-        if (left == null || right == null) {
             return;
         }
         String leftFamily = compareFamily(left);
@@ -5116,10 +5530,7 @@ public final class IntentParser {
 
     /** The comparison family of a field, or null when its type does not compare. */
     private static String compareFamily(FieldIntent field) {
-        return field.getType() == null ? null
-                : COMPARE_FAMILIES.get(field.getType()
-                                            .trim()
-                                            .toLowerCase(java.util.Locale.ROOT));
+        return CheckSupport.compareFamily(field.getType());
     }
 
     /** Whether the name matches (case-insensitively) a field or to-one relation of the entity. */
@@ -5299,6 +5710,45 @@ public final class IntentParser {
      *
      * @param tree the SnakeYAML-loaded raw tree
      */
+    /**
+     * Normalize an entity's {@code duplicable} key to the object form the typed model maps:
+     * {@code true} becomes the empty mapping (no resets, no defaults - today's behaviour exactly) and
+     * {@code false} is removed, so nothing downstream has to know that the key was ever a boolean.
+     *
+     * <p>
+     * Done on the raw tree, before the unknown-key walk, for the reason {@link #expandUniqueShorthand}
+     * is: a shorthand and a full form share ONE typed class, and Gson maps a boolean onto an object
+     * with an exception rather than a message an author can act on. The walk then sees {@code defaults}
+     * / {@code reset} as declared fields of that class.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void normalizeDuplicable(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity) || !entity.containsKey("duplicable")) {
+                continue;
+            }
+            Object declared = entity.get("duplicable");
+            Map<Object, Object> writable = (Map<Object, Object>) entity;
+            if (declared == null || Boolean.FALSE.equals(declared)) {
+                writable.remove("duplicable");
+            } else if (Boolean.TRUE.equals(declared)) {
+                writable.put("duplicable", new LinkedHashMap<>());
+            } else if (!(declared instanceof Map)) {
+                issues.add("entity [" + entity.get("name") + "] duplicable [" + declared
+                        + "] is neither true/false nor a mapping - the object form takes defaults: and reset:");
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
+        }
+    }
+
     private static void expandUniqueShorthand(Object tree) {
         if (!(tree instanceof Map<?, ?> root)) {
             return;
