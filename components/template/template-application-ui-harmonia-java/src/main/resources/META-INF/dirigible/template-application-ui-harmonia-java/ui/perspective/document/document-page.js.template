@@ -138,6 +138,10 @@ document.addEventListener('alpine:init', () => {
 
     state: 'ready',          // empty-form | loading | ready | saving | validation-error | save-failure | load-failure
     mode: 'create',
+    // True when this session began as a NEW document (create route). Stays true after the header is
+    // saved and `mode` flips to 'edit' for adding line items, so the create flow shows Finish while an
+    // existing document opened for editing shows Save (issue #7403).
+    createFlow: false,
     id: null,
     record: {},              // the loaded master (drives the read-only totals footer + calculated header fields)
 
@@ -337,6 +341,9 @@ document.addEventListener('alpine:init', () => {
       // Read the live hash to tell /preview from /edit (Pinecone's context can lag the hash).
       const routePath = (window.location.hash || '').split('?')[0];
       this.mode = this.id == null ? 'create' : (routePath.endsWith('/preview') ? 'preview' : 'edit');
+      // The create flow: either the /create route, or the /edit page the Create button just navigated to
+      // carrying ?created=1 (the header is saved, its line items are being added). Both show Finish.
+      this.createFlow = this.mode === 'create' || this.queryParam('created') === '1';
 
       // The line-items child registered itself as a detail of this master; pick it by name.
       this.itemsDef = App.detailsFor('${name}').find(d => d.entity === '${documentItemsEntity}') || null;
@@ -627,7 +634,9 @@ document.addEventListener('alpine:init', () => {
             // The write landed, so there is nothing left to protect: clear the guard before the page
             // navigates itself, or it would veto its own route change.
             this.clearPristine();
-            window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(newId) + '/edit');
+            // ?created=1 marks this as the create flow across the route change, so the re-mounted page
+            // (now at /edit) still shows Finish while its line items are added, not Save (issue #7403).
+            window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(newId) + '/edit?created=1');
             await this.loadHeader();
             await this.loadItems();
           }
@@ -1405,6 +1414,20 @@ document.addEventListener('alpine:init', () => {
     // Every exit from the document goes through the guard: a dirty header is never dropped without
     // being asked about (issue #7359). A clean one leaves silently, as before.
     backToList() { this.guardExit(() => window.PineconeRouter.navigate('/${name}')); },
+
+    // "Finish" on a saved document (issue #7403). Line items persist as they are added, so the only
+    // thing that can still be unsaved is a header edit: save it first, and only leave if the save
+    // succeeded - a failed validation keeps the user on the page with the error, never navigating on
+    // failure. A clean header just returns to the list. Not offered on create (that is the Create
+    // button, which stays on the document so line items can be added).
+    async finish() {
+      if (this.isPreview) return;
+      if (this.isDirty()) {
+        await this.save();
+        if (this.state !== 'ready') return;
+      }
+      window.PineconeRouter.navigate('/${name}');
+    },
 
     // Preview -> the editable document for the same record.
     goEdit() { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(this.id) + '/edit'); },

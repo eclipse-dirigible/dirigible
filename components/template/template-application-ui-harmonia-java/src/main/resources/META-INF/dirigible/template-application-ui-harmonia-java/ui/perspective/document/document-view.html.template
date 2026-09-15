@@ -529,16 +529,13 @@
       </div>
     </template>
 
-    <!-- ===== Document footer: BPM user-task buttons on the LEFT; Cancel + Save/Create on the RIGHT ===== -->
+    <!-- ===== Document footer: utilities + Cancel/Discard on the LEFT; Create/Finish on the RIGHT
+         (workflow user-tasks live in the Process Inbox, not here - issue #7403) ===== -->
     <div x-h-toolbar.footer>
-#if($hasProcess)
-      <!-- Actionable BPM user-task buttons (edit only, hidden in read-only preview), left-aligned. -->
-      <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
-        <button type="button" x-h-button data-variant="primary" x-show="!isPreview" @click="$store.processTasks.openTask(task)">
-          <svg role="presentation" x-h-lucide data-lucide="inbox"></svg><span x-text="$store.processTasks.taskName(task)"></span>
-        </button>
-      </template>
-#end
+      <!-- Workflow user-tasks (Approve, Issue, ...) are NOT offered here: the editor footer is for
+           authoring the document, not advancing its lifecycle. The same tasks live in the Process
+           Inbox and the notification bell (both read /services/inbox/tasks), so nothing is lost by
+           keeping them out of the editing surface (issue #7403). -->
       <div x-h-toolbar-spacer></div>
       <span class="text-sm text-secondary-foreground" x-show="printError" x-text="printError"></span>
       <!-- Print: renders the CMS template (Templates/${name}/Print/<lang>/) to PDF; asks for the
@@ -568,12 +565,27 @@
       <button type="button" x-h-button data-variant="primary" x-show="isPreview#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="goEdit()">
         <svg role="presentation" x-h-lucide data-lucide="pencil"></svg><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
       </button>
-      <!-- The button says what it will do: leaving a dirty form discards the edit (issue #7359). -->
+      <!-- Always an escape hatch, kept visible next to Create/Finish as in every other view: Cancel a
+           clean document, or Discard unsaved header edits (the label flips on isDirty(), issue #7359). -->
       <button type="button" x-h-button data-variant="transparent" x-show="!isPreview" @click="backToList()" :disabled="state === 'saving'" x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
-      <!-- Nothing to save on an unchanged document; a create is always offerable. -->
-      <button type="button" x-h-button data-variant="primary" x-show="!isPreview" :disabled="state === 'saving' || (isEdit &amp;&amp; !isDirty())" @click="save()">
+      <!-- Create a new header, then STAY on the document (edit mode) so line items can be added. -->
+      <button type="button" x-h-button data-variant="primary" x-show="!isPreview &amp;&amp; !isEdit" :disabled="state === 'saving'" @click="save()">
         <span x-show="state === 'saving'" x-h-spinner></span>
-        <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
+        <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
+      </button>
+      <!-- Finish: ONLY while creating a new document (after its header is saved, its line items being
+           added). Line items save as you add them, so Finish saves any header change and returns to the
+           list - never a greyed Save on the new document (issue #7403). -->
+      <button type="button" x-h-button data-variant="primary" x-show="!isPreview &amp;&amp; isEdit &amp;&amp; createFlow" :disabled="state === 'saving'" @click="finish()">
+        <span x-show="state === 'saving'" x-h-spinner></span>
+        <svg x-h-lucide role="presentation" data-lucide="check" x-show="state !== 'saving'"></svg><span x-text="T('$projectName:${tprefix}.defaults.finish', 'Finish')"></span>
+      </button>
+      <!-- Save: editing an EXISTING document saves any header change and returns to the list (issue
+           #7403). Line items already persist as they are added, so this is the one primary exit; it
+           reuses finish() (save-if-changed, then back) so a failed check keeps the user on the page. -->
+      <button type="button" x-h-button data-variant="primary" x-show="!isPreview &amp;&amp; isEdit &amp;&amp; !createFlow" :disabled="state === 'saving'" @click="finish()">
+        <span x-show="state === 'saving'" x-h-spinner></span>
+        <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="T('$projectName:${tprefix}.defaults.update', 'Save')"></span>
       </button>
     </div>
     </div>

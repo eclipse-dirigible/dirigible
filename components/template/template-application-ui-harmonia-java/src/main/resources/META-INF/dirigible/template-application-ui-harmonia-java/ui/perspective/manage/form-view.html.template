@@ -457,17 +457,12 @@
     </div>
 
     <!-- Action footer at the very bottom of the main column (below the detail panels), matching the
-         document view. BPM user-task buttons on the LEFT; Cancel + Save/Create on the RIGHT. Save is
-         type=button @click=save() because it lives outside the header <form>. -->
+         document view. Cancel + Save/Create on the RIGHT; workflow user-tasks live in the Process
+         Inbox, not here (issue #7403). Save is type=button @click=save() because it lives outside the
+         header <form>. -->
     <div x-h-toolbar.footer>
-#if($hasProcess)
-      <!-- Actionable BPM user-task buttons (edit only, hidden in read-only preview), left-aligned. -->
-      <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
-        <button type="button" x-h-button data-variant="primary" x-show="!isPreview" @click="$store.processTasks.openTask(task)">
-          <svg role="presentation" x-h-lucide data-lucide="inbox"></svg><span x-text="$store.processTasks.taskName(task)"></span>
-        </button>
-      </template>
-#end
+      <!-- Workflow user-tasks are NOT offered in the editor footer: the same tasks live in the Process
+           Inbox and the notification bell, so the footer is for editing the record only (issue #7403). -->
       <div x-h-toolbar-spacer></div>
 #if($hasPrint == "true")
       <!-- Print: for a document master rendered through this shared form (a calendar/slots view that

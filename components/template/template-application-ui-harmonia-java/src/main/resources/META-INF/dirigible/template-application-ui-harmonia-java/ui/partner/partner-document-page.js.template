@@ -20,6 +20,10 @@ document.addEventListener('alpine:init', () => {
     ...basePage(),
     state: 'loading',
     mode: 'create',
+    // True when this session began as a NEW document (create route); stays true after the header is
+    // saved and `mode` flips to 'edit', so the create flow shows Finish and an existing document opened
+    // for editing shows Save (issue #7403).
+    createFlow: false,
     id: null,
     error: null,
     // The single header property a rejected save NAMED ("The 'Name' property is required"), else
@@ -105,6 +109,7 @@ document.addEventListener('alpine:init', () => {
       const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};
       this.id = params.id || null;
       this.mode = this.id ? 'edit' : 'create';
+      this.createFlow = this.mode === 'create';
       if (this.id) {
         try {
           const record = await App.services.api.get(this.apiPath + '/' + this.id);
@@ -524,5 +529,16 @@ document.addEventListener('alpine:init', () => {
     // A document with unsaved header edits asks before it is abandoned (issue #7359); a clean one
     // leaves silently, as before.
     goBack() { this.guardExit(() => this.navigate('/partner/${name}')); },
+
+    // "Finish" on a saved document (issue #7403). Line items persist as they are added, so the only
+    // thing still unsaved is a header edit: save it, and only leave if the save succeeded (a failure
+    // sets this.error and keeps the user on the page). A clean header just returns to the list.
+    async finish() {
+      if (this.isDirty()) {
+        await this.save();
+        if (this.error) return;
+      }
+      this.goBack();
+    },
   }));
 });
