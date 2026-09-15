@@ -341,7 +341,9 @@ document.addEventListener('alpine:init', () => {
       // Read the live hash to tell /preview from /edit (Pinecone's context can lag the hash).
       const routePath = (window.location.hash || '').split('?')[0];
       this.mode = this.id == null ? 'create' : (routePath.endsWith('/preview') ? 'preview' : 'edit');
-      this.createFlow = this.mode === 'create';
+      // The create flow: either the /create route, or the /edit page the Create button just navigated to
+      // carrying ?created=1 (the header is saved, its line items are being added). Both show Finish.
+      this.createFlow = this.mode === 'create' || this.queryParam('created') === '1';
 
       // The line-items child registered itself as a detail of this master; pick it by name.
       this.itemsDef = App.detailsFor('${name}').find(d => d.entity === '${documentItemsEntity}') || null;
@@ -632,7 +634,9 @@ document.addEventListener('alpine:init', () => {
             // The write landed, so there is nothing left to protect: clear the guard before the page
             // navigates itself, or it would veto its own route change.
             this.clearPristine();
-            window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(newId) + '/edit');
+            // ?created=1 marks this as the create flow across the route change, so the re-mounted page
+            // (now at /edit) still shows Finish while its line items are added, not Save (issue #7403).
+            window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(newId) + '/edit?created=1');
             await this.loadHeader();
             await this.loadItems();
           }
