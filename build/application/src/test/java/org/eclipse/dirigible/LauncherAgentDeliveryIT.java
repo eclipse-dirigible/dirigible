@@ -18,6 +18,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -94,9 +95,9 @@ class LauncherAgentDeliveryIT {
     @Test
     void a_jar_launch_installs_the_agent_before_main() throws IOException, InterruptedException {
         Path workingDirectory = Files.createDirectories(tempDir.resolve("launch"));
-        ProcessBuilder builder = new ProcessBuilder("java", "-jar", ExecutableJar.path()
-                                                                                 .toAbsolutePath()
-                                                                                 .toString());
+        ProcessBuilder builder = new ProcessBuilder(javaExecutable(), "-jar", ExecutableJar.path()
+                                                                                           .toAbsolutePath()
+                                                                                           .toString());
         builder.directory(workingDirectory.toFile());
         builder.redirectErrorStream(true);
         // an unclaimed port, so the probe never clashes with a locally running instance; the
@@ -120,6 +121,21 @@ class LauncherAgentDeliveryIT {
             process.waitFor(30, TimeUnit.SECONDS);
         }
         assertTrue(markerSeen, "the java -jar launch must print the agent's boot marker before the application starts");
+    }
+
+    /**
+     * The java executable of the JVM running this test, as an absolute path - so the launch exercises
+     * the JDK the build runs on rather than whichever {@code java} the PATH happens to resolve first,
+     * and so no PATH entry can substitute the binary.
+     *
+     * @return the java executable
+     */
+    private static String javaExecutable() {
+        String name = System.getProperty("os.name")
+                            .toLowerCase(Locale.ROOT)
+                            .contains("win") ? "java.exe" : "java";
+        return Path.of(System.getProperty("java.home"), "bin", name)
+                   .toString();
     }
 
 }
