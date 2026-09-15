@@ -1406,6 +1406,20 @@ document.addEventListener('alpine:init', () => {
     // being asked about (issue #7359). A clean one leaves silently, as before.
     backToList() { this.guardExit(() => window.PineconeRouter.navigate('/${name}')); },
 
+    // "Finish" on a saved document (issue #7403). Line items persist as they are added, so the only
+    // thing that can still be unsaved is a header edit: save it first, and only leave if the save
+    // succeeded - a failed validation keeps the user on the page with the error, never navigating on
+    // failure. A clean header just returns to the list. Not offered on create (that is the Create
+    // button, which stays on the document so line items can be added).
+    async finish() {
+      if (this.isPreview) return;
+      if (this.isDirty()) {
+        await this.save();
+        if (this.state !== 'ready') return;
+      }
+      window.PineconeRouter.navigate('/${name}');
+    },
+
     // Preview -> the editable document for the same record.
     goEdit() { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(this.id) + '/edit'); },
   }));

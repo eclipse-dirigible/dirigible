@@ -94,6 +94,7 @@
         "open": "Open",
         "readOnly": "Read-only",
         "update": "Update",
+        "finish": "Finish",
         "delete": "Delete",
         "cancel": "Cancel",
         "discard": "Discard",

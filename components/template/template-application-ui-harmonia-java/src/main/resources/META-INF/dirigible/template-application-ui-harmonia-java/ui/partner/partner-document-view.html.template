@@ -220,12 +220,20 @@
       <button x-h-button data-variant="negative" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="deleteOpen = true"
               x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
       <div class="flex-1"></div>
-      <!-- The button says what it will do: leaving a dirty form discards the edit (issue #7359). -->
-      <button x-h-button data-variant="transparent" @click="goBack()" :disabled="saving"
+      <!-- Cancel a new document, or discard unsaved header edits (issue #7359). Once a saved document
+           is clean there is nothing to discard, so this yields to Finish. -->
+      <button x-h-button data-variant="transparent" x-show="mode !== 'edit' || isDirty()" @click="goBack()" :disabled="saving"
               x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
-      <button x-h-button data-variant="primary"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end @click="save()" :disabled="saving || (mode === 'edit' &amp;&amp; !isDirty())">
+      <!-- Create a new header, then stay to add line items. -->
+      <button x-h-button data-variant="primary" x-show="mode !== 'edit'#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="save()" :disabled="saving">
         <span x-show="saving" x-h-spinner></span>
-        <span x-text="T('$projectName:${tprefix}.defaults.save', 'Save')"></span>
+        <span x-text="T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
+      </button>
+      <!-- Finish: line items save as you add them, so this saves any header change and returns to the
+           list - one honest primary action, never a greyed Save (issue #7403). -->
+      <button x-h-button data-variant="primary" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="finish()" :disabled="saving">
+        <span x-show="saving" x-h-spinner></span>
+        <span x-text="T('$projectName:${tprefix}.defaults.finish', 'Finish')"></span>
       </button>
     </div>
   </div>
