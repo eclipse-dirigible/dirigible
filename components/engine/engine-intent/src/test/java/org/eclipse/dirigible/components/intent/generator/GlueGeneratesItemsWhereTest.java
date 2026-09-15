@@ -282,6 +282,7 @@ class GlueGeneratesItemsWhereTest {
                     "properties": [
                       { "name": "Id", "dataName": "ID", "dataType": "INTEGER", "dataPrimaryKey": "true" },
                       { "name": "Quantity", "dataName": "QUANTITY", "dataType": "DECIMAL" },
+                      { "name": "IssuedOn", "dataName": "ISSUED_ON", "dataType": "DATE" },
                       { "name": "GoodsIssue", "dataName": "GOODSISSUE_ID", "dataType": "INTEGER",
                         "relationshipType": "COMPOSITION", "relationshipEntityName": "GoodsIssue", "widgetType": "DROPDOWN" },
                       { "name": "Status", "dataName": "STATUS_ID", "dataType": "INTEGER",
@@ -344,6 +345,40 @@ class GlueGeneratesItemsWhereTest {
                                                    .get(0);
 
         assertEquals(".gt(\"Quantity\", 0)", g.get("itemWhere"));
+    }
+
+    /**
+     * The rule's moments are held to the queried column's shape exactly as a schedule's {@code where}
+     * is (dirigible #7393): the two sites share the condition vocabulary, and a moment of the other
+     * shape than the column fails the query's bind on every click rather than matching nothing.
+     */
+    @Test
+    void aMomentOfTheOtherShapeThanACrossModelItemColumnIsRefused() {
+        IntentGenerationContext context =
+                contextWithOwnerModel(IntentParser.parse(CROSS_MODEL_YAML.replace("- { field: Status, op: eq, value: APPROVED }",
+                        "- { field: issuedOn, op: lt, value: \"CURRENT_TIMESTAMP-P1M\" }")));
+
+        IntentValidationException failure =
+                assertThrows(IntentValidationException.class, () -> GlueIntentGenerator.buildGeneratesForTest(context.getModel(), context));
+
+        assertTrue(failure.getIssues()
+                          .stream()
+                          .anyMatch(issue -> issue.contains("[issuedOn]") && issue.contains("[date]") && issue.contains("CURRENT_DATE")
+                                  && issue.contains("[inventory]")),
+                "the refusal must name the field, its shape and the owner model: " + failure.getIssues());
+    }
+
+    /** The matching shape renders exactly as a local rule does. */
+    @Test
+    void aMomentOfTheCrossModelItemColumnsOwnShapeRenders() {
+        IntentGenerationContext context =
+                contextWithOwnerModel(IntentParser.parse(CROSS_MODEL_YAML.replace("- { field: Status, op: eq, value: APPROVED }",
+                        "- { field: issuedOn, op: lt, value: \"CURRENT_DATE-P1M\" }")));
+
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(context.getModel(), context)
+                                                   .get(0);
+
+        assertEquals(".lt(\"IssuedOn\", java.time.LocalDate.now().minus(java.time.Period.parse(\"P1M\")))", g.get("itemWhere"));
     }
 
     /**

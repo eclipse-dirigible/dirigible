@@ -90,11 +90,16 @@ public final class CrossModelSupport {
      *        {@code multilingual} or the model was not resolved. A consumer reading the target's
      *        columns directly (a report SELECT) needs it to overlay the caller's language the way the
      *        target's own repository does
+     * @param propertyTypes the target's property name -&gt; JDBC data type (the owner's
+     *        {@code dataType}), the only place a consumer can learn what SHAPE a cross-model column is
+     *        compared in - a {@code where} moment on a {@code DATE} column must be a
+     *        {@code CURRENT_DATE}, or the query fails to bind on every tick (issue #7393); {@code null}
+     *        when the model was not resolved - callers then skip the check
      */
     public record TargetInfo(boolean resolved, String perspectiveName, String tableDataName, String keyField, String keyColumn,
             String labelField, String fkType, java.util.Set<String> propertyNames, String hierarchyProperty, String identityProperty,
             java.util.Map<String, String> propertyWidgets, String statusProperty, java.util.Map<String, String> propertyRelations,
-            java.util.Set<String> translatedProperties) {
+            java.util.Set<String> translatedProperties, java.util.Map<String, String> propertyTypes) {
     }
 
     @SuppressWarnings("unchecked")
@@ -475,11 +480,13 @@ public final class CrossModelSupport {
                 java.util.Set<String> propertyNames = null;
                 java.util.Map<String, String> propertyWidgets = null;
                 java.util.Map<String, String> propertyRelations = null;
+                java.util.Map<String, String> propertyTypes = null;
                 String statusProperty = null;
                 if (properties != null) {
                     propertyNames = new java.util.LinkedHashSet<>();
                     propertyWidgets = new java.util.LinkedHashMap<>();
                     propertyRelations = new java.util.LinkedHashMap<>();
+                    propertyTypes = new java.util.LinkedHashMap<>();
                     for (Map<String, Object> p : properties) {
                         if ("true".equals(String.valueOf(p.get("dataPrimaryKey")))) {
                             keyField = str(p.get("name"), keyField);
@@ -489,6 +496,10 @@ public final class CrossModelSupport {
                         String propertyName = str(p.get("name"), null);
                         if (propertyName != null) {
                             propertyNames.add(propertyName);
+                            String dataType = str(p.get("dataType"), null);
+                            if (dataType != null) {
+                                propertyTypes.put(propertyName, dataType);
+                            }
                             String widget = str(p.get("widgetType"), null);
                             if (widget != null) {
                                 propertyWidgets.put(propertyName, widget);
@@ -511,7 +522,7 @@ public final class CrossModelSupport {
                 String identityProperty = str(entity.get("identityProperty"), null);
                 return new TargetInfo(true, perspective, tableDataName, keyField, keyColumn, labelField, fkType, propertyNames,
                         hierarchyProperty, identityProperty, propertyWidgets, statusProperty, propertyRelations,
-                        translatedProperties("true".equals(String.valueOf(entity.get("multilingual"))), properties));
+                        translatedProperties("true".equals(String.valueOf(entity.get("multilingual"))), properties), propertyTypes);
             }
         } catch (RuntimeException e) {
             LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", LoggedValue.of(modelPath),
@@ -579,7 +590,7 @@ public final class CrossModelSupport {
         String table = IntentNaming.upperSnake(alias) + "_" + IntentNaming.upperSnake(targetEntity);
         String keyColumn = IntentNaming.upperSnake(targetEntity) + "_ID";
         return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null, null, null,
-                java.util.Set.of());
+                java.util.Set.of(), null);
     }
 
     /**
