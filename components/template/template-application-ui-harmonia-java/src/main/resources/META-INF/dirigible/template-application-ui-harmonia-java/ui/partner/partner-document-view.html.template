@@ -236,9 +236,10 @@
         <span x-show="saving" x-h-spinner></span>
         <span x-text="T('$projectName:${tprefix}.defaults.finish', 'Finish')"></span>
       </button>
-      <!-- Save: editing an EXISTING document updates the header and stays on the page; disabled when
-           there is nothing to save. -->
-      <button x-h-button data-variant="primary" x-show="mode === 'edit' &amp;&amp; !createFlow#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="save()" :disabled="saving || !isDirty()">
+      <!-- Save: editing an EXISTING document saves any header change and returns to the list (issue
+           #7403); line items already persist as they are added. Reuses finish() (save-if-changed,
+           then back), so a failed save keeps the user on the page. -->
+      <button x-h-button data-variant="primary" x-show="mode === 'edit' &amp;&amp; !createFlow#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="finish()" :disabled="saving">
         <span x-show="saving" x-h-spinner></span>
         <span x-text="T('$projectName:${tprefix}.defaults.update', 'Save')"></span>
       </button>
