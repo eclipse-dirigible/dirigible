@@ -220,9 +220,9 @@
       <button x-h-button data-variant="negative" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="deleteOpen = true"
               x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
       <div class="flex-1"></div>
-      <!-- Cancel a new document, or discard unsaved header edits (issue #7359). Once a saved document
-           is clean there is nothing to discard, so this yields to Finish. -->
-      <button x-h-button data-variant="transparent" x-show="mode !== 'edit' || isDirty()" @click="goBack()" :disabled="saving"
+      <!-- Always an escape hatch, kept visible next to Create/Finish as in every other view: Cancel a
+           clean document, or Discard unsaved header edits (the label flips on isDirty(), issue #7359). -->
+      <button x-h-button data-variant="transparent" @click="goBack()" :disabled="saving"
               x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
       <!-- Create a new header, then stay to add line items. -->
       <button x-h-button data-variant="primary" x-show="mode !== 'edit'#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="save()" :disabled="saving">

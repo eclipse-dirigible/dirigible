@@ -565,9 +565,9 @@
       <button type="button" x-h-button data-variant="primary" x-show="isPreview#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="goEdit()">
         <svg role="presentation" x-h-lucide data-lucide="pencil"></svg><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
       </button>
-      <!-- Cancel a new document, or discard unsaved header edits (issue #7359). Once a saved document
-           is clean there is nothing to discard, so this yields to Finish below. -->
-      <button type="button" x-h-button data-variant="transparent" x-show="!isPreview &amp;&amp; (!isEdit || isDirty())" @click="backToList()" :disabled="state === 'saving'" x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
+      <!-- Always an escape hatch, kept visible next to Create/Finish as in every other view: Cancel a
+           clean document, or Discard unsaved header edits (the label flips on isDirty(), issue #7359). -->
+      <button type="button" x-h-button data-variant="transparent" x-show="!isPreview" @click="backToList()" :disabled="state === 'saving'" x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
       <!-- Create a new header, then STAY on the document (edit mode) so line items can be added. -->
       <button type="button" x-h-button data-variant="primary" x-show="!isPreview &amp;&amp; !isEdit" :disabled="state === 'saving'" @click="save()">
         <span x-show="state === 'saving'" x-h-spinner></span>
