@@ -138,6 +138,10 @@ document.addEventListener('alpine:init', () => {
 
     state: 'ready',          // empty-form | loading | ready | saving | validation-error | save-failure | load-failure
     mode: 'create',
+    // True when this session began as a NEW document (create route). Stays true after the header is
+    // saved and `mode` flips to 'edit' for adding line items, so the create flow shows Finish while an
+    // existing document opened for editing shows Save (issue #7403).
+    createFlow: false,
     id: null,
     record: {},              // the loaded master (drives the read-only totals footer + calculated header fields)
 
@@ -337,6 +341,7 @@ document.addEventListener('alpine:init', () => {
       // Read the live hash to tell /preview from /edit (Pinecone's context can lag the hash).
       const routePath = (window.location.hash || '').split('?')[0];
       this.mode = this.id == null ? 'create' : (routePath.endsWith('/preview') ? 'preview' : 'edit');
+      this.createFlow = this.mode === 'create';
 
       // The line-items child registered itself as a detail of this master; pick it by name.
       this.itemsDef = App.detailsFor('${name}').find(d => d.entity === '${documentItemsEntity}') || null;

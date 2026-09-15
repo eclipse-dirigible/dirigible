@@ -20,6 +20,10 @@ document.addEventListener('alpine:init', () => {
     ...basePage(),
     state: 'loading',
     mode: 'create',
+    // True when this session began as a NEW document (create route); stays true after the header is
+    // saved and `mode` flips to 'edit', so the create flow shows Finish and an existing document opened
+    // for editing shows Save (issue #7403).
+    createFlow: false,
     id: null,
     error: null,
     // The single header property a rejected save NAMED ("The 'Name' property is required"), else
@@ -114,6 +118,7 @@ document.addEventListener('alpine:init', () => {
       const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};
       this.id = params.id || null;
       this.mode = this.id ? 'edit' : 'create';
+      this.createFlow = this.mode === 'create';
       if (this.id) {
         try {
           const record = await App.services.api.get(this.apiPath + '/' + this.id);

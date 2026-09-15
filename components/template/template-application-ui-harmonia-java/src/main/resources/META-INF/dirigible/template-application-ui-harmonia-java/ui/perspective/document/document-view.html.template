@@ -573,11 +573,18 @@
         <span x-show="state === 'saving'" x-h-spinner></span>
         <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
       </button>
-      <!-- Finish: line items are already saved as you add them, so this saves any header change and
-           returns to the list - one honest primary action, never a greyed Save (issue #7403). -->
-      <button type="button" x-h-button data-variant="primary" x-show="!isPreview &amp;&amp; isEdit" :disabled="state === 'saving'" @click="finish()">
+      <!-- Finish: ONLY while creating a new document (after its header is saved, its line items being
+           added). Line items save as you add them, so Finish saves any header change and returns to the
+           list - never a greyed Save on the new document (issue #7403). -->
+      <button type="button" x-h-button data-variant="primary" x-show="!isPreview &amp;&amp; isEdit &amp;&amp; createFlow" :disabled="state === 'saving'" @click="finish()">
         <span x-show="state === 'saving'" x-h-spinner></span>
         <svg x-h-lucide role="presentation" data-lucide="check" x-show="state !== 'saving'"></svg><span x-text="T('$projectName:${tprefix}.defaults.finish', 'Finish')"></span>
+      </button>
+      <!-- Save: editing an EXISTING document updates the header and stays on the page (issue #7359);
+           disabled when there is nothing to save. -->
+      <button type="button" x-h-button data-variant="primary" x-show="!isPreview &amp;&amp; isEdit &amp;&amp; !createFlow" :disabled="state === 'saving' || !isDirty()" @click="save()">
+        <span x-show="state === 'saving'" x-h-spinner></span>
+        <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="T('$projectName:${tprefix}.defaults.update', 'Save')"></span>
       </button>
     </div>
     </div>

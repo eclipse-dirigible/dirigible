@@ -229,11 +229,18 @@
         <span x-show="saving" x-h-spinner></span>
         <span x-text="T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
       </button>
-      <!-- Finish: line items save as you add them, so this saves any header change and returns to the
-           list - one honest primary action, never a greyed Save (issue #7403). -->
-      <button x-h-button data-variant="primary" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="finish()" :disabled="saving">
+      <!-- Finish: ONLY while creating a new document (adding its line items after the header is saved).
+           Saves any header change and returns to the list - never a greyed Save on the new document
+           (issue #7403). -->
+      <button x-h-button data-variant="primary" x-show="mode === 'edit' &amp;&amp; createFlow#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="finish()" :disabled="saving">
         <span x-show="saving" x-h-spinner></span>
         <span x-text="T('$projectName:${tprefix}.defaults.finish', 'Finish')"></span>
+      </button>
+      <!-- Save: editing an EXISTING document updates the header and stays on the page; disabled when
+           there is nothing to save. -->
+      <button x-h-button data-variant="primary" x-show="mode === 'edit' &amp;&amp; !createFlow#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="save()" :disabled="saving || !isDirty()">
+        <span x-show="saving" x-h-spinner></span>
+        <span x-text="T('$projectName:${tprefix}.defaults.update', 'Save')"></span>
       </button>
     </div>
   </div>
