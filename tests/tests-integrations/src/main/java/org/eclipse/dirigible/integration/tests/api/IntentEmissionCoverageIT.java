@@ -484,6 +484,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # run key must pick THIS field, not the string one, and the guard it compiles into
                   # is what the publish step below actually javac's.
                   - { name: filed, type: date }
+                  # #7392: a timestamp property is a java.time.Instant on the generated entity, so
+                  # the `now` default below has to render Instant.now(); the LocalDate.now() the
+                  # fall-through emitted failed the javac of the WHOLE client-Java batch. Alongside
+                  # `filed` (a date) and `period` (a month) so all three shapes compile in one pass.
+                  - { name: recordedAt, type: timestamp }
                   - { name: rate, type: decimal, sensitive: true }
                   - { name: totalCost, type: decimal }
                   # visibleTo: role-scoped on EVERY surface - stripped from the responses and
@@ -1140,7 +1145,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # emitted .between(...) over a LocalDate column is compiled by the publish below.
                   unique: [Person, { run: month }]
                   map: { Person: id }
-                  defaults: { note: monthly, Period: now, filed: now }
+                  defaults: { note: monthly, Period: now, filed: now, recordedAt: now }
                   children:
                     - to: ClaimLine
                       parent: Claim
@@ -3052,6 +3057,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // render the YYYY-MM string - the untyped LocalDate.now() would not even compile.
         assertTrue(job.contains(".Period = java.time.YearMonth.now().toString()"),
                 "a month field's `now` default must render the YYYY-MM string, not LocalDate");
+        // #7392: and a timestamp field is a java.time.Instant, so the same rule gives it Instant.now()
+        // - the LocalDate.now() the fall-through emitted failed the javac of the WHOLE module below.
+        assertTrue(job.contains(".RecordedAt = java.time.Instant.now()"),
+                "a timestamp field's `now` default must render the Instant of the moment, not LocalDate: " + job);
+        assertTrue(job.contains(".Filed = java.time.LocalDate.now()"), "a date field's `now` default keeps today's LocalDate: " + job);
         // run: month natural key (#7106/#7229): the guard ranges over the month of `filed` - the date
         // this run stamps - so a re-run in the same month finds the first tick's Claim. The key must
         // pick the date-typed field, not the month-typed Period, and the .between over a LocalDate

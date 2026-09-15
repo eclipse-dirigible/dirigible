@@ -1620,9 +1620,9 @@ public final class IntentParser {
         }
         // Pin the single resolved date onto `of` so the generator ranges the run period over exactly the
         // property this type check chose. Parser and generator must not each define "the date assigned
-        // from now" (issue #7229): the generator sees only rendered expressions, and `now` on a
-        // timestamp field renders as the same LocalDate.now() a `date` field does, so a string scan there
-        // counted a field this check excludes and refused a valid generate with a misleading message.
+        // from now" (issue #7229): the generator sees only rendered expressions, which carry the field's
+        // type and not the AUTHORED type this check reads, so a string scan there counted fields this
+        // check excludes and refused a valid generate with a misleading message.
         entry.setOf(candidates.get(0));
     }
 

@@ -129,8 +129,8 @@ class GlueSchedulesTest {
     @Test
     void generateScheduleRendersNowInTheTargetFieldsOwnShape() {
         // A month/week field is a plain String on the generated entity (VARCHAR at the JDBC
-        // level), so the untyped LocalDate.now() would not even compile against it - `now` must
-        // render the target field's own value shape.
+        // level) and a timestamp field is a java.time.Instant, so the untyped LocalDate.now() would
+        // not even compile against any of them - `now` must render the target field's own value shape.
         String yaml = """
                 name: hr
                 entities:
@@ -144,6 +144,7 @@ class GlueSchedulesTest {
                       - { name: period, type: month }
                       - { name: slot, type: week }
                       - { name: bookedOn, type: date }
+                      - { name: approvedAt, type: timestamp }
                     relations:
                       - { name: Employee, kind: manyToOne, to: Employee }
                 schedules:
@@ -158,6 +159,7 @@ class GlueSchedulesTest {
                         Period: now
                         Slot: now
                         BookedOn: now
+                        ApprovedAt: now
                 """;
         IntentModel model = IntentParser.parse(yaml);
         Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(model)
@@ -170,6 +172,8 @@ class GlueSchedulesTest {
                 "a week field's now must be the YYYY-Www ISO-week string: " + fields);
         assertTrue(fields.contains(Map.of("targetProp", "BookedOn", "expr", "java.time.LocalDate.now()")),
                 "a date field keeps today's LocalDate: " + fields);
+        assertTrue(fields.contains(Map.of("targetProp", "ApprovedAt", "expr", "java.time.Instant.now()")),
+                "a timestamp field's now must be the Instant of the moment: " + fields);
     }
 
     @Test
