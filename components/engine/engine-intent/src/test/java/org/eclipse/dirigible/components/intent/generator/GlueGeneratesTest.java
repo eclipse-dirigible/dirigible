@@ -504,6 +504,64 @@ class GlueGeneratesTest {
         assertEquals("", g.get("fromProject"));
     }
 
+    /**
+     * Issue #7392: {@code now} renders in the TARGET field's own shape for every temporal kind, not
+     * only the two that happen to be Strings. A {@code timestamp} property is a
+     * {@code java.time.Instant} on the generated entity, so the untyped {@code LocalDate.now()} the
+     * fall-through emitted did not compile - and the client-Java batch compiles as one unit, so the
+     * whole module failed to publish. The items child is the sibling site of the same rule.
+     */
+    @Test
+    void nowOnATimestampFieldRendersAnInstant() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Quote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: QuoteItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Quote, kind: manyToOne, to: Quote, composition: true, required: true }
+                  - name: Approval
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: approvedAt, type: timestamp }
+                      - { name: approvedOn, type: date }
+                  - name: ApprovalLine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: seenAt, type: timestamp }
+                    relations:
+                      - { name: Approval, kind: manyToOne, to: Approval, composition: true, required: true }
+                generates:
+                  - name: approval-from-quote
+                    from: Quote
+                    to: Approval
+                    defaults:
+                      ApprovedAt: now
+                      ApprovedOn: now
+                    items:
+                      from: QuoteItem
+                      to: ApprovalLine
+                      defaults:
+                        SeenAt: now
+                """;
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(yaml))
+                                                   .get(0);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> fields = (List<Map<String, Object>>) g.get("fieldAssignments");
+        assertTrue(fields.contains(Map.of("targetProp", "ApprovedAt", "expr", "java.time.Instant.now()")),
+                "a timestamp field's now must be the Instant of the moment: " + fields);
+        assertTrue(fields.contains(Map.of("targetProp", "ApprovedOn", "expr", "java.time.LocalDate.now()")),
+                "a date field keeps today's LocalDate: " + fields);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> itemFields = (List<Map<String, Object>>) g.get("itemFieldAssignments");
+        assertTrue(itemFields.contains(Map.of("targetProp", "SeenAt", "expr", "java.time.Instant.now()")),
+                "an items child's timestamp cell follows the same rule: " + itemFields);
+    }
+
     @Test
     void integerDecimalAndBooleanLiteralsRenderTyped() {
         String yaml = """

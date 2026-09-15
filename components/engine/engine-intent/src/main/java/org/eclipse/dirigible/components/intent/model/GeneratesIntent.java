@@ -38,7 +38,9 @@ import java.util.Map;
  * <p>
  * Mapping is split into two disjoint maps so the source-copy vs constant intent is unambiguous:
  * {@link #map} copies a source property onto a target property; {@link #defaults} sets a target
- * property to {@code now} (the current date) or a literal (string / integer / decimal / boolean).
+ * property to {@code now} (the current moment, in the target property's own shape - a
+ * {@code LocalDate}, an {@code Instant}, the {@code YYYY-MM} month or the {@code YYYY-Www} week) or
+ * a literal (string / integer / decimal / boolean).
  *
  * <p>
  * The composition line-items of the target are filled by exactly one of two mutually-exclusive
@@ -212,7 +214,10 @@ public class GeneratesIntent {
     /** Target property -> source property (a field or to-one relation name of {@link #from}). */
     private Map<String, String> map = new LinkedHashMap<>();
 
-    /** Target property -> {@code now} or a literal value (string / integer / decimal / boolean). */
+    /**
+     * Target property -> {@code now} (the current moment in that property's own shape) or a literal
+     * value (string / integer / decimal / boolean).
+     */
     private Map<String, String> defaults = new LinkedHashMap<>();
 
     /**

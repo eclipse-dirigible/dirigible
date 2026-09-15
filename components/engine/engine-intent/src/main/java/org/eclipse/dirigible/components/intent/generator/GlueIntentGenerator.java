@@ -3410,8 +3410,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 // `now` / a literal in the field's own shape (month -> YYYY-MM, week -> YYYY-Www, else
                 // LocalDate / boolean / quoted string).
                 String copy = bareSourceCopy(v, sourceProps);
-                String temporalKind = "month".equals(kind) || "week".equals(kind) ? kind : null;
-                return copy != null ? copy : literalExpression(v, temporalKind);
+                return copy != null ? copy : literalExpression(v, kind);
             }
             case "string":
                 return stringCellExpression(v, sourceProps);
@@ -3495,13 +3494,33 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return "";
     }
 
+    /** The logical kinds a {@code now} default renders in the field's own shape. */
+    private static final java.util.Set<String> TEMPORAL_KINDS = java.util.Set.of("date", "timestamp", "month", "week");
+
+    /**
+     * The widget an EDM property carries -> the logical temporal kind, or null for a non-temporal one.
+     */
+    private static String temporalKindOfWidget(String widget) {
+        return switch (widget == null ? "" : widget) {
+            case "MONTH" -> "month";
+            case "WEEK" -> "week";
+            case "DATE" -> "date";
+            case "DATETIME-LOCAL" -> "timestamp";
+            default -> null;
+        };
+    }
+
     /**
      * The logical temporal kind of the TARGET entity's fields, for the type-aware {@code now} default:
-     * PascalCase property name -> {@code month} / {@code week}; anything else absent (null). A
-     * same-model target reads its intent fields directly; a cross-model target reads the owner model's
-     * widget types through {@link CrossModelSupport.TargetInfo#propertyWidgets()} - the {@code .model}
-     * is the only cross-model carrier of the LOGICAL type, since month/week are plain VARCHAR at the
-     * JDBC level. An unresolved target (unit test / convention fallback) keeps the untyped behavior.
+     * PascalCase property name -> {@code date} / {@code timestamp} / {@code month} / {@code week};
+     * anything else absent (null). A same-model target reads its intent fields directly; a cross-model
+     * target reads the owner model's widget types through
+     * {@link CrossModelSupport.TargetInfo#propertyWidgets()} - the {@code .model} is the only
+     * cross-model carrier of the LOGICAL type, since month/week are plain VARCHAR at the JDBC level.
+     * Every temporal kind is carried, not only the two that render as a String: a {@code timestamp}
+     * property is a {@code java.time.Instant} on the generated entity, so the untyped
+     * {@code LocalDate.now()} does not compile against it either. An unresolved target (unit test /
+     * convention fallback) keeps the untyped behavior.
      */
     private static java.util.function.Function<String, String> temporalKinds(EntityIntent local, CrossModelSupport.TargetInfo target) {
         Map<String, String> kinds = new LinkedHashMap<>();
@@ -3510,20 +3529,18 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 if (field.getName() == null || field.getType() == null) {
                     continue;
                 }
-                String type = field.getType()
-                                   .toLowerCase(java.util.Locale.ROOT);
-                if ("month".equals(type) || "week".equals(type)) {
-                    kinds.put(IntentNaming.pascalCase(field.getName()), type);
+                String kind = kindOfIntentType(field.getType());
+                if (TEMPORAL_KINDS.contains(kind)) {
+                    kinds.put(IntentNaming.pascalCase(field.getName()), kind);
                 }
             }
         }
         if (target != null && target.propertyWidgets() != null) {
             for (Map.Entry<String, String> widget : target.propertyWidgets()
                                                           .entrySet()) {
-                if ("MONTH".equals(widget.getValue())) {
-                    kinds.put(widget.getKey(), "month");
-                } else if ("WEEK".equals(widget.getValue())) {
-                    kinds.put(widget.getKey(), "week");
+                String kind = temporalKindOfWidget(widget.getValue());
+                if (kind != null) {
+                    kinds.put(widget.getKey(), kind);
                 }
             }
         }
@@ -3540,10 +3557,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /**
      * A Java expression for a {@code defaults} value: {@code now} -> today's value in the TARGET
      * field's own shape - a {@code month} field gets the {@code YYYY-MM} string, a {@code week} field
-     * the {@code YYYY-Www} ISO-week string, anything else today's {@code LocalDate} (month/week are
-     * plain {@code String} properties on the generated entity, so the untyped {@code LocalDate.now()}
-     * would not even compile against them); an integer / decimal / boolean literal -> its Java form;
-     * anything else -> a quoted Java string.
+     * the {@code YYYY-Www} ISO-week string, a {@code timestamp} field the {@code Instant} of the
+     * moment, anything else today's {@code LocalDate}. The shape is not cosmetic: month/week are plain
+     * {@code String} properties on the generated entity and a timestamp is a {@code java.time.Instant},
+     * so the untyped {@code LocalDate.now()} would not even compile against any of them. An integer /
+     * decimal / boolean literal -> its Java form; anything else -> a quoted Java string.
      */
     private static String literalExpression(String value, String temporalKind) {
         String v = value.trim();
@@ -3554,6 +3572,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if ("week".equals(temporalKind)) {
                 return "String.format(\"%04d-W%02d\", java.time.LocalDate.now().get(java.time.temporal.IsoFields.WEEK_BASED_YEAR), "
                         + "java.time.LocalDate.now().get(java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR))";
+            }
+            if ("timestamp".equals(temporalKind)) {
+                return "java.time.Instant.now()";
             }
             return "java.time.LocalDate.now()";
         }
