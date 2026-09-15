@@ -98,6 +98,10 @@ document.addEventListener('alpine:init', () => {
           if (def.description) it.description = def.description;
           if (def.dashboard === false) it.dashboard = false;
           if (def.tId) it.tId = def.tId;
+          // The report's chart type (line / pie / bar / ...), when it declares one. The dashboard
+          // reads it to pick the tile shape: a chart preview is a padded, borderless card like the
+          // reference's chart cards, a row preview the bordered full-bleed table card.
+          if (def.chart) it.chart = def.chart;
           if (def.descriptionTId) it.descriptionTId = def.descriptionTId;
           // A report-attached KPI widget: the dashboard shows a compact KPI tile (count / single
           // aggregate value / top-N list) instead of the report's iframe preview tile.

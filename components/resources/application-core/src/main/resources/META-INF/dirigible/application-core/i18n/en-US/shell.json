@@ -46,7 +46,9 @@
     "dashboard": {
       "title": "Dashboard",
       "overview": "Overview of your published applications.",
-      "kpis": "Key Indicators"
+      "kpis": "Key Indicators",
+      "viewAll": "View all",
+      "viewAllOf": "Open the {{name}} report"
     },
     "inbox": {
       "refresh": "Refresh",
