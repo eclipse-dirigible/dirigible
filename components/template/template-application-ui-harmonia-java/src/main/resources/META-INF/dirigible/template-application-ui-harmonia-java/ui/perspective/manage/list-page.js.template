@@ -81,11 +81,30 @@ document.addEventListener('alpine:init', () => {
       if (match) { this.selected = match; this.refreshIcons(); }
     },
 
+    // True while this list is rendered inline on somebody else's route - the Settings master-detail
+    // loads this fragment into its detail pane. The page owns no route of its own there, so neither
+    // the selected row nor an edit may navigate: both would take the shell off the hosting page.
+    inlineHosted() {
+      const here = (window.location.hash || '').split('?')[0];
+      return here !== '#/${name}' && here.indexOf('#/${name}/') !== 0;
+    },
+
+    // Create / edit / preview while inline, through the shared related-record iframe dialog - the
+    // same path a master's detail panel opens its child form on, for the same reason: the hosting
+    // page keeps its state, and the list reloads when the dialog reports a save.
+    openInDialog(route, title) {
+      Alpine.store('related').create(window.location.pathname + '?embedded=1#' + route + '?embedded=1&dialog=1',
+              title, () => this.load());
+    },
+
     // Reflect the selected row in the URL (/${name}/:id) without re-rendering the list. Uses
     // replaceState (no Pinecone re-route) and notifies the embedding shell so the top-level
     // address bar stays in sync; deep-linking/reload is handled by selectFromRoute() above.
     syncSelectionUrl(row) {
       if (typeof window.history === 'undefined' || !window.history.replaceState) return;
+      // Inline, the selected row is not a destination of its own: rewriting the hash routes the
+      // shell away from the page that embeds us, straight out of Settings.
+      if (this.inlineHosted()) return;
       const path = '/${name}' + (row ? '/' + encodeURIComponent(row.${primaryKeysString}) : '');
       const url = '#' + path;
       if (window.location.hash === url) return;
@@ -343,9 +362,25 @@ document.addEventListener('alpine:init', () => {
     // Switch to the additional slot-picker page (intent `view: slots`), which owns /${name}.
     goSlots() { window.PineconeRouter.navigate('/${name}'); },
 #end
-    newEntity()  { window.PineconeRouter.navigate('/${name}/create'); },
-    editEntity(row) { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/edit'); },
-    previewEntity(row) { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/preview'); },
+    newEntity() {
+      const route = '/${name}/create';
+      if (this.inlineHosted()) return this.openInDialog(route, window.T ? T('application-core:shell.related.addNew', 'Add new') : 'Add new');
+      window.PineconeRouter.navigate(route);
+    },
+    editEntity(row) {
+      const route = '/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/edit';
+      if (this.inlineHosted()) return this.openInDialog(route, this.recordTitle());
+      window.PineconeRouter.navigate(route);
+    },
+    previewEntity(row) {
+      const route = '/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/preview';
+      if (this.inlineHosted()) return this.openInDialog(route, this.recordTitle());
+      window.PineconeRouter.navigate(route);
+    },
+    // The singular entity label, for the dialog that holds one record's form.
+    recordTitle() {
+      return window.T ? T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') : '${entityLabel}';
+    },
 #if($immutableStatusProperty || $immutableAlways)
 
     // Immutability mirror for the row affordances (intent `immutable`/`immutableWhen:`): computed

@@ -10,20 +10,27 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 /**
- * settingsPage — the built-in Settings section as a master-detail (mirrors the Process Inbox and the
- * entity master-detail view). The setting entities are listed on the left; selecting one loads that
- * entity's generated manage-list view fragment inline on the right via x-html — which initializes
- * Alpine on the injected markup and binds its <Entity>ManageListPage component — so a setting's CRUD
- * list opens in place instead of taking over the main pane. Create/edit still route to the entity's
- * own form page (then return to that entity's list route).
+ * settingsPage — the built-in Settings section as a master-detail: every settings item is a row in
+ * the list on the left, its content opens in the pane on the right. A platform preference (Region &
+ * Language and the display formats) share one pane and render from the page's own markup; a SETTING
+ * entity's generated manage-list view fragment is fetched only when its row is picked and rendered
+ * inline via x-html — which initializes Alpine on the injected markup and binds its
+ * <Entity>ManageListPage component — so a module declaring many nomenclatures loads one of them, not
+ * all of them. That embedded list opens create/edit/preview in the shared related-record dialog
+ * instead of navigating, so this pane keeps its place (the list page's inlineHosted()).
  */
 document.addEventListener('alpine:init', () => {
   Alpine.data('settingsPage', () => ({
     ...basePage(),
-    selected: null,   // the selected setting entity name
-    content: '',      // the selected entity's manage-list fragment HTML (rendered via x-html)
+    selected: null,     // 'regionLanguage' | the selected setting entity's name
+    selectedTitle: '',  // its label - the compact toolbar names what is open, the list being hidden
+    entityUrl: null,    // the selected entity's view fragment; null for a platform preference
+    content: '',        // the fetched fragment HTML (rendered via x-html)
     loading: false,
     error: null,
+    // Below the breakpoint the list and the detail pane take turns (the split hides one of them), so
+    // the detail pane shows a back control instead of leaving the list unreachable.
+    isCompact: false,
     // Region & Language: the platform's single language flag, mirrored from the locale store so the
     // picker's x-model has a plain component property; changes persist through the store (and take
     // effect on the next data load - the fetch client sends the value as Accept-Language).
@@ -35,6 +42,11 @@ document.addEventListener('alpine:init', () => {
         this.language = locale.value;
         this.$watch('language', (v) => locale.set(v));
       }
+      this._breakpoint = Harmonia.getBreakpointListener((isNarrow) => { this.isCompact = isNarrow; }, 1024);
+    },
+
+    destroy() {
+      if (this._breakpoint) this._breakpoint.remove();
     },
 
     // The platform's supported language codes and their display names (delegates to the locale store).
@@ -44,23 +56,37 @@ document.addEventListener('alpine:init', () => {
       return locale.languages().map((code) => ({ value: code, text: locale.displayName(code) }));
     },
 
-    async select(name, url) {
+    // Open a settings item. A platform preference passes no url and renders from the page's own
+    // markup; a setting entity passes its view fragment, which is fetched here.
+    async select(name, url, title) {
       if (this.selected === name) return;
       this.selected = name;
+      this.selectedTitle = title || '';
+      this.entityUrl = url || null;
       this.error = null;
-      this.loading = true;
       this.content = '';
+      if (!url) return;
+      this.loading = true;
       try {
         const r = await fetch(url, { credentials: 'same-origin' });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         this.content = await r.text();
       } catch (e) {
-        console.error('settings: failed to load view for ' + name, e);
-        this.error = 'Could not load ' + name + '.';
+        console.error('settings: failed to load the view for ' + name, e);
+        this.error = window.T ? T('application-core:shell.settings.loadFailed', 'Could not load this setting.')
+                : 'Could not load this setting.';
       } finally {
         this.loading = false;
-        this.refreshIcons();
       }
+    },
+
+    // Back to the list on a narrow screen, where the split shows one panel at a time.
+    back() {
+      this.selected = null;
+      this.selectedTitle = '';
+      this.entityUrl = null;
+      this.content = '';
+      this.error = null;
     },
   }));
 }, { once: true });
