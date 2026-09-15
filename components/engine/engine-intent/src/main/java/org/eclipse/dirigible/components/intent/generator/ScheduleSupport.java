@@ -36,6 +36,14 @@ public final class ScheduleSupport {
     static final Map<String, Moment.Shape> TEMPORAL_TYPES = Map.of("date", Moment.Shape.DATE, "timestamp", Moment.Shape.TIMESTAMP);
 
     /**
+     * The same two shapes, keyed by the JDBC type a {@code .model} carries - the only spelling a
+     * CROSS-MODEL source's properties are ever known by (the owner's intent types are not readable from
+     * here, only what its generation emitted).
+     */
+    private static final Map<String, Moment.Shape> TEMPORAL_COLUMN_TYPES =
+            Map.of("DATE", Moment.Shape.DATE, "TIMESTAMP", Moment.Shape.TIMESTAMP);
+
+    /**
      * A moment value: one of the now-tokens, optionally followed by a single signed ISO-8601 duration.
      * Anchored, so a trailing anything (a second offset, a stray word) simply is not a moment and the
      * caller reports it as one.
@@ -187,6 +195,19 @@ public final class ScheduleSupport {
      */
     public static Moment.Shape shapeOf(String fieldType) {
         return fieldType == null ? null : TEMPORAL_TYPES.get(fieldType);
+    }
+
+    /**
+     * The shape a column of the given JDBC type is compared in - the cross-model counterpart of
+     * {@link #shapeOf(String)}, which reads an authored intent type. Both answer the same question, and
+     * a cross-model {@code where} must be held to the same rule as a same-model one (issue #7393): a
+     * moment of the other shape fails the query's bind on every tick.
+     *
+     * @param columnType the owner {@code .model}'s {@code dataType}, may be {@code null}
+     * @return the shape, or {@code null} when the column is not temporal
+     */
+    public static Moment.Shape shapeOfColumn(String columnType) {
+        return columnType == null ? null : TEMPORAL_COLUMN_TYPES.get(columnType.toUpperCase(java.util.Locale.ROOT));
     }
 
     /**

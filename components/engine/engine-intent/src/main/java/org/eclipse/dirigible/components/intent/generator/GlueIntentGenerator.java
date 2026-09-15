@@ -1084,6 +1084,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                             + namedStatus.getValue() + "] of [" + items.getFrom() + "], which belongs to model [" + g.getFromUses()
                             + "] and is seeded there - a cross-model status must be referenced by its numeric seed id"));
                 }
+                // ... and its moments against the item's own columns (#7393), for the same reason the
+                // schedule's where is checked: the two sites share the rule vocabulary, so a rule the
+                // parser could not check here must be checked here.
+                String itemMomentMismatch =
+                        items.hasWhere() ? crossModelMomentMismatch(items.getWhere(), itemSource, items.getFrom(), g.getFromUses()) : null;
+                if (itemMomentMismatch != null) {
+                    throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(
+                            List.of("generates [" + g.getName() + "] items " + itemMomentMismatch));
+                }
                 e.put("fromItemPerspective", itemSource != null ? itemSource.perspectiveName()
                         : IntentEntities.resolvePerspective(items.getFrom(), compositionParents, model));
                 // The source line's own key, so a line the target refuses is reported with the row it came
@@ -4183,6 +4192,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                             + namedStatus.getValue() + "] of [" + entity + "], which belongs to model [" + schedule.getModel()
                             + "] and is seeded there - a cross-model status must be referenced by its numeric seed id"));
                 }
+                // The row query's moment against a cross-model column (#7393): the parser could not see
+                // the field's type either, and a moment of the other shape than the column fails the
+                // query's bind on every tick. Held to the same rule the same-model case is, off the
+                // owner .model's own dataType.
+                String momentMismatch = crossModelMomentMismatch(schedule.getWhere(), sourceTarget, entity, schedule.getModel());
+                if (momentMismatch != null) {
+                    throw new IntentValidationException(List.of("schedule [" + schedule.getName() + "] " + momentMismatch));
+                }
             }
 
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -4778,6 +4795,62 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                          .equalsIgnoreCase(target.statusProperty())
                     && !isSeedId(condition.getValue())) {
                 return condition;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The message describing the first condition of a cross-model row query whose MOMENT value is of
+     * another shape than the column it is compared against, or {@code null} when every moment matches
+     * (issue #7393).
+     *
+     * <p>
+     * The parser holds a same-model {@code where} to exactly this rule, but bails out when it cannot
+     * see the field - which a cross-model source's fields never are, their properties living in the
+     * owner model. The comment there promised the check happens at generation time; only EXISTENCE ever
+     * did ({@link #firstUnresolvableScheduleRef}), so a {@code CURRENT_TIMESTAMP} compared with a
+     * {@code date} column parsed, generated, published and compiled, and then threw
+     * {@code QueryArgumentException} on every tick - the same bind failure #7384 removed for the
+     * same-model case, reachable by the other route.
+     *
+     * <p>
+     * A property this model does not resolve (an unresolved owner, the convention fallback of a unit
+     * test) or that the owner does not declare is left alone: whether a reference exists at all is
+     * {@link #firstUnresolvableScheduleRef}'s question, and answering it twice with two wordings helps
+     * nobody.
+     *
+     * @param conditions the authored conditions
+     * @param target the owner's resolved facts
+     * @param entity the queried entity, for the message
+     * @param modelAlias the owner model's alias, for the message
+     * @return the message, or {@code null}
+     */
+    private static String crossModelMomentMismatch(List<ScheduleConditionIntent> conditions, CrossModelSupport.TargetInfo target,
+            String entity, String modelAlias) {
+        if (conditions == null || target == null || target.propertyTypes() == null) {
+            return null;
+        }
+        for (ScheduleConditionIntent condition : conditions) {
+            ScheduleSupport.Moment moment = ScheduleSupport.moment(condition.getValue());
+            if (moment == null || condition.getField() == null) {
+                continue; // an ordinary literal
+            }
+            String columnType = target.propertyTypes()
+                                      .get(IntentNaming.pascalCase(condition.getField()));
+            if (columnType == null) {
+                continue; // not a property of the owner - an existence question, answered elsewhere
+            }
+            String owned = "] of [" + entity + "], which belongs to model [" + modelAlias + "], ";
+            ScheduleSupport.Moment.Shape columnShape = ScheduleSupport.shapeOfColumn(columnType);
+            if (columnShape == null) {
+                return "where-condition compares the non-temporal field [" + condition.getField() + owned + "and whose column is ["
+                        + columnType + "], with the moment [" + condition.getValue() + "]";
+            }
+            if (columnShape != moment.shape()) {
+                return "where-condition compares the [" + columnType.toLowerCase(java.util.Locale.ROOT) + "] field [" + condition.getField()
+                        + owned + "with a moment of the other shape - use "
+                        + (columnShape == ScheduleSupport.Moment.Shape.DATE ? "CURRENT_DATE" : "CURRENT_TIMESTAMP");
             }
         }
         return null;

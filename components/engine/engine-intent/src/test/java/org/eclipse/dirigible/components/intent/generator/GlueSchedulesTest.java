@@ -693,6 +693,8 @@ class GlueSchedulesTest {
                     "properties": [
                       { "name": "Id", "dataName": "ID", "dataType": "INTEGER", "dataPrimaryKey": "true" },
                       { "name": "Number", "dataName": "NUMBER", "dataType": "VARCHAR" },
+                      { "name": "DueDate", "dataName": "DUE_DATE", "dataType": "DATE" },
+                      { "name": "UpdatedAt", "dataName": "UPDATED_AT", "dataType": "TIMESTAMP" },
                       { "name": "Status", "dataName": "STATUS_ID", "dataType": "INTEGER",
                         "relationshipEntityName": "SalesInvoiceStatus", "widgetType": "DOCUMENT_STATUS" }
                     ]
@@ -752,6 +754,73 @@ class GlueSchedulesTest {
                                                    .get(0);
 
         assertEquals("Criteria.create().eq(\"Number\", \"SI-1\")", s.get("criteriaExpression"));
+    }
+
+    /**
+     * The same rule the parser holds a SAME-MODEL {@code where} to, at the one point a cross-model
+     * column's type is knowable: a {@code CURRENT_TIMESTAMP} compared with a {@code date} column
+     * parsed, generated, published and compiled, and then threw {@code QueryArgumentException} on every
+     * tick - #7384's bind failure, reachable by the cross-model route because the parser cannot see the
+     * field and the promised generation-time check only ever covered EXISTENCE (dirigible #7393).
+     */
+    @Test
+    void aMomentOfTheOtherShapeThanACrossModelColumnIsRefused() {
+        IntentGenerationContext context =
+                contextWithOwnerModel(IntentParser.parse(CROSS_MODEL_DUNNING.replace("{ field: Status, op: eq, value: OVERDUE }",
+                        "{ field: dueDate, op: lt, value: \"CURRENT_TIMESTAMP-P1M\" }")));
+
+        IntentValidationException failure =
+                assertThrows(IntentValidationException.class, () -> GlueIntentGenerator.buildSchedulesForTest(context.getModel(), context));
+
+        assertTrue(failure.getIssues()
+                          .stream()
+                          .anyMatch(issue -> issue.contains("[dueDate]") && issue.contains("[date]") && issue.contains("CURRENT_DATE")
+                                  && issue.contains("[invoices]")),
+                "the refusal must name the field, its shape and the owner model: " + failure.getIssues());
+    }
+
+    /** The matching shape is the cross-model form, and it renders exactly as a local query does. */
+    @Test
+    void aMomentOfTheCrossModelColumnsOwnShapeRenders() {
+        IntentGenerationContext context =
+                contextWithOwnerModel(IntentParser.parse(CROSS_MODEL_DUNNING.replace("{ field: Status, op: eq, value: OVERDUE }",
+                        "{ field: dueDate, op: lt, value: \"CURRENT_DATE-P1M\" }")));
+
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(context.getModel(), context)
+                                                   .get(0);
+
+        assertEquals("Criteria.create().lt(\"DueDate\", java.time.LocalDate.now().minus(java.time.Period.parse(\"P1M\")))",
+                s.get("criteriaExpression"));
+    }
+
+    /** An audit column of the owner is a {@code TIMESTAMP} like any other, and typed as one. */
+    @Test
+    void aTimestampMomentOnACrossModelTimestampColumnRenders() {
+        IntentGenerationContext context =
+                contextWithOwnerModel(IntentParser.parse(CROSS_MODEL_DUNNING.replace("{ field: Status, op: eq, value: OVERDUE }",
+                        "{ field: updatedAt, op: lt, value: \"CURRENT_TIMESTAMP-PT30M\" }")));
+
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(context.getModel(), context)
+                                                   .get(0);
+
+        assertEquals("Criteria.create().lt(\"UpdatedAt\", java.time.Instant.now().minus(java.time.Duration.parse(\"PT30M\")))",
+                s.get("criteriaExpression"));
+    }
+
+    /** A moment against a column that is not temporal at all is the third way the query cannot bind. */
+    @Test
+    void aMomentOnANonTemporalCrossModelColumnIsRefused() {
+        IntentGenerationContext context =
+                contextWithOwnerModel(IntentParser.parse(CROSS_MODEL_DUNNING.replace("{ field: Status, op: eq, value: OVERDUE }",
+                        "{ field: number, op: eq, value: CURRENT_DATE }")));
+
+        IntentValidationException failure =
+                assertThrows(IntentValidationException.class, () -> GlueIntentGenerator.buildSchedulesForTest(context.getModel(), context));
+
+        assertTrue(failure.getIssues()
+                          .stream()
+                          .anyMatch(issue -> issue.contains("non-temporal") && issue.contains("[number]") && issue.contains("[VARCHAR]")),
+                "the refusal must name the field and its column type: " + failure.getIssues());
     }
 
     private static IntentGenerationContext contextWithOwnerModel(IntentModel model) {
