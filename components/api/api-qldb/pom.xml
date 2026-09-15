@@ -22,6 +22,19 @@
 		</dependency>
 
 		<!-- QLDB dependencies -->
+		<!-- The driver was last published in 2021 and names the AWS SDK v2 modules of the 2.15.x
+		     line. Everything it drags in is realigned onto ${awssdk.version} by the BOM the root pom
+		     imports, except the two artifacts excluded here:
+
+		     - qldbsession, which the BOM does not manage (AWS discontinued QLDB and stopped
+		       publishing the module) and which is therefore declared below at its own last version;
+		     - apache-client, the 2.15.x default synchronous HTTP client. Every module of the current
+		       line ships apache5-client instead, and the two both declare
+		       META-INF/services/software.amazon.awssdk.http.SdkHttpService - with both on the
+		       classpath the SDK's default discovery has two implementations to choose between and
+		       refuses. apache-client enters the fat jar through this dependency alone, so excluding
+		       it here leaves exactly one provider and the QLDB client discovers apache5-client like
+		       every other client does. -->
 		<dependency>
 			<groupId>software.amazon.qldb</groupId>
 			<artifactId>amazon-qldb-driver-java</artifactId>
@@ -31,7 +44,38 @@
 					<groupId>com.amazon.ion</groupId>
 					<artifactId>ion-java</artifactId>
 				</exclusion>
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>qldbsession</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>apache-client</artifactId>
+				</exclusion>
 			</exclusions>
+		</dependency>
+		<!-- Declared rather than inherited from the driver: the driver names 2.15.79, whose generated
+		     client cannot run on the sdk-core of ${awssdk.version} (it builds no CLIENT_ENDPOINT_PROVIDER
+		     and every QLDBRepository construction fails with an NPE). ${qldbsession.version} is the last
+		     version AWS published and does build on that core. -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>qldbsession</artifactId>
+			<version>${qldbsession.version}</version>
+			<exclusions>
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>apache-client</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<!-- The synchronous HTTP implementation the QLDB client discovers through
+		     META-INF/services/software.amazon.awssdk.http.SdkHttpService - declared here rather than
+		     inherited, so excluding the 2.15.x apache-client above leaves this module able to open a
+		     connection on its own instead of borrowing api-s3's copy. Version from the AWS SDK BOM. -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>apache5-client</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>com.amazon.ion</groupId>

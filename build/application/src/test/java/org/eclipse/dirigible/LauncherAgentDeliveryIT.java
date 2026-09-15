@@ -15,7 +15,6 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,7 +22,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
-import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -47,7 +45,7 @@ class LauncherAgentDeliveryIT {
 
     @Test
     void the_executable_jar_carries_the_agent_delivery() throws IOException {
-        Path executableJar = executableJar();
+        Path executableJar = ExecutableJar.path();
         try (JarFile jar = new JarFile(executableJar.toFile())) {
             Manifest manifest = jar.getManifest();
             assertEquals("org.eclipse.dirigible.launcher.agent.DirigibleLauncherAgent", manifest.getMainAttributes()
@@ -77,7 +75,8 @@ class LauncherAgentDeliveryIT {
 
     @Test
     void the_executable_jar_carries_the_provided_bom() throws IOException {
-        try (JarFile jar = new JarFile(executableJar().toFile())) {
+        try (JarFile jar = new JarFile(ExecutableJar.path()
+                                                    .toFile())) {
             // the ZIP-layout repackage keeps the original jar's META-INF at the ROOT, where the
             // system classloader sees it on -jar launches
             ZipEntry bom = jar.getEntry("META-INF/dirigible-provided-bom.xml");
@@ -95,8 +94,9 @@ class LauncherAgentDeliveryIT {
     @Test
     void a_jar_launch_installs_the_agent_before_main() throws IOException, InterruptedException {
         Path workingDirectory = Files.createDirectories(tempDir.resolve("launch"));
-        ProcessBuilder builder = new ProcessBuilder("java", "-jar", executableJar().toAbsolutePath()
-                                                                                   .toString());
+        ProcessBuilder builder = new ProcessBuilder("java", "-jar", ExecutableJar.path()
+                                                                                 .toAbsolutePath()
+                                                                                 .toString());
         builder.directory(workingDirectory.toFile());
         builder.redirectErrorStream(true);
         // an unclaimed port, so the probe never clashes with a locally running instance; the
@@ -120,25 +120,6 @@ class LauncherAgentDeliveryIT {
             process.waitFor(30, TimeUnit.SECONDS);
         }
         assertTrue(markerSeen, "the java -jar launch must print the agent's boot marker before the application starts");
-    }
-
-    /**
-     * The executable jar this module just packaged - the newest one, so a stale jar of a previous
-     * version surviving in a non-clean target directory is never picked.
-     *
-     * @return the jar path
-     */
-    private static Path executableJar() {
-        try (Stream<Path> files = Files.list(Path.of("target"))) {
-            return files.filter(file -> file.getFileName()
-                                            .toString()
-                                            .endsWith("-executable.jar"))
-                        .max(java.util.Comparator.comparingLong(file -> file.toFile()
-                                                                            .lastModified()))
-                        .orElseThrow(() -> new IllegalStateException("the executable jar is not in target - run the package phase first"));
-        } catch (IOException e) {
-            throw new UncheckedIOException("Cannot list the target directory", e);
-        }
     }
 
 }

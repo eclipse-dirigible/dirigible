@@ -209,9 +209,17 @@
         <snowflake.version>4.3.4</snowflake.version>
         <mysql.version>8.4.0</mysql.version>
 
+        <!-- AWS SDK v2 - the single line every software.amazon.awssdk artifact in the fat jar
+             carries, imported as a BOM below so no consumer pins its own. -->
+        <awssdk.version>2.54.16</awssdk.version>
+
         <!-- QLDB -->
         <qldb.driver.version>2.3.1</qldb.driver.version>
         <qldb.sdk.version>1.12.797</qldb.sdk.version>
+        <!-- The one artifact that cannot join ${awssdk.version}: AWS discontinued QLDB, so
+             software.amazon.awssdk:qldbsession stopped being published after this version and the
+             AWS SDK BOM no longer manages it. See components/api/api-qldb/pom.xml. -->
+        <qldbsession.version>2.37.1</qldbsession.version>
 
         <!-- jETCD -->
         <jetcd.core.version>0.8.7</jetcd.core.version>
@@ -987,6 +995,20 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
                 <version>${spring.boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- The AWS SDK v2 line, for every module that reaches it: api-s3 through
+                 s3-transfer-manager and api-qldb through the QLDB driver. Without it the two chains
+                 are mediated independently (nearest wins per artifact), which is how the fat jar came
+                 to ship aws-json-protocol and apache-client from the 2.15.x line under a 2.54.x
+                 sdk-core - a mix no client survives and that no version number in a stack trace names
+                 (#7397). The BOM manages only software.amazon.awssdk artifacts, so it cannot shadow
+                 anything the Spring Boot BOM above pins. -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${awssdk.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
