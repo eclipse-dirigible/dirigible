@@ -561,7 +561,8 @@ field may declare:
     reject-twin - it refuses the write while its condition holds and reads no value, so it carries no
     `field`. Its one reach beyond `requiredWhen` is that a term may name a one-hop `Relation.field`, so
     a composition child can refuse a write based on its parent's state (no allocation onto an already
-    PAID invoice). `message` is mandatory on both.
+    PAID invoice). `message` is mandatory on a `forbidWhen` (the refusal is its whole point) and always
+    worth writing on a `requiredWhen`.
   - Both take the same OPTIONAL `status:` gate as `compare`, and the gate is what decides WHERE the rule
     runs: **without one** it holds on every user write (the controllers, 400); **with one** the
     repository enforces it when the record is persisted carrying that status - which is the only form
@@ -3446,9 +3447,9 @@ those two CREATE a document per transition and an unguarded one is nearly always
 
 #### `when:` - the guard grammar
 
-A `when:` is a closed set of **equality comparisons over the record's own columns, ANDed** - not an
-expression language. One term is a string, a list of terms is ANDed (dirigible #6957); there is no OR
-(author two consumers instead, or route to two statuses).
+A `when:` is a closed set of **equality comparisons over the record's own columns** - not an expression
+language, and not one grammar either: each construct holds its guard to its own shape, listed below, and
+the parser refuses what does not fit rather than degrading it.
 
 ```
 <Property> ==|!= <literal>
@@ -3457,23 +3458,39 @@ expression language. One term is a string, a list of terms is ANDed (dirigible #
 - **`<Property>`** is a field or a to-one relation **of the record itself**. The condition is read off
   the row, so nothing is loaded to evaluate it and a dotted `Relation.field` is refused here (the one
   exception is a `checks: forbidWhen`, which may hop one relation so a child can test its parent).
-- **`<literal>`** is a number, a **status name** (resolved to its seed id before anything else sees it,
+- **`<literal>`** is an integer, a **status name** (resolved to its seed id before anything else sees it,
   so `Status == POSTED` and `Status == 3` are the same guard), a quoted string, a bare word, or a
   boolean.
-- Only **string, integer and boolean** properties are guardable - the types an equality is exact on. A
-  decimal, a double or a date is refused rather than compared, because a boxed comparison across types
-  is silently always-false, which switches the rule off while looking authored.
+- Where a list is accepted, it is the AND of its terms (dirigible #6957); there is no OR anywhere
+  (author two consumers instead, or route to two statuses).
 
-Nothing restricts a guard to the status column. A term may read any own property the types allow -
-including a `resolves:` `outcome:` trace, which is how the outcomes of one lookup are told apart
-without minting a status per outcome:
+What each construct accepts:
+
+- **`notifications` / `integrations` / `outbound`** - the full shape: any number of terms, `==` or `!=`,
+  over the entity's **string, integer and boolean** properties (a to-one by its key). A decimal, a
+  double or a date is refused rather than compared, because a boxed comparison across types is silently
+  always-false, which switches the rule off while looking authored. The guard is **optional** here,
+  `onTransition` included - "on any status change" is a legitimate thing to ask for.
+- **`generates` `event:`** - exactly **one** status term (`<Status> == <name|id>`, `==` only) plus any
+  number of `<StringField> ==|!= <literal>` terms over the source's own **string/text** fields. An
+  integer or boolean field cannot carry a literal guard here, and a property guarded twice is refused.
+  The status term is **mandatory** on `onTransition`, optional on `onCreate` / `onPhase`.
+- **`postings` `event:`** - exactly one `<Status> == <name|id>` term: **no list**, no string term.
+  Mandatory on `onTransition`, optional on `onCreate` / `onPhase`.
+- **process `trigger:`** - a comparison or a list of them, optional; a **`wait` step's `when`** - one
+  comparison, optional. Neither is held to the grammar at parse time, so a term with a typo renders as
+  `true` and fires on every event - proofread them.
+- **`resolves` `event:`** and **`transitions[].when`** - one comparison, no list.
+
+So nothing restricts a glue or `generates` guard to the status column. A string term may read a
+`resolves:` `outcome:` trace, which is how the outcomes of one lookup are told apart without minting a
+status per outcome (declare the trace field `readOnly: true` - a guard on a field the user can edit
+turns "how did this record get here" into "what does the field say today", and Generate warns about
+it):
 
 ```yaml
     event: { onTransition: Fine, mode: append, when: ["Status == UNRESOLVED", "resolution == notFound"] }
 ```
-
-An `onTransition` binding **requires** a guard (it would otherwise fire on every status move); on the
-other axes it is optional.
 
 A step event fires when the running process arrives at that step (`onStepReached` - e.g. a user task
 has just become available in the inbox) or when it has just finished it (`onStepCompleted` - after
@@ -3864,9 +3881,11 @@ record. Route each outcome with `setStatus` and/or record it with `outcome:` so 
 are a filterable worklist a human can finish, and so a process `decision` can branch on them.
 
 **Two outcomes you must tell apart downstream need two statuses OR a guard that reads `outcome:`.**
-A `when:` guard is a list of ANDed equality terms over the record's OWN columns (see *the event axis*),
-so `outcome:` is readable like any other field - the example above could equally route both failures to
-one `UNRESOLVED` and separate the audit rows on the outcome:
+A `generates` guard takes, next to its status term, terms over the source's own STRING fields (see *the
+event axis*), so `outcome:` is readable there - the example above could equally route both failures to
+one `UNRESOLVED` and separate the audit rows on the outcome, as long as the rows are minted by a
+`generates` (`mode: append`); a `postings:` guard is the status term alone, so a posting per outcome
+still needs a status per outcome:
 
 ```yaml
     notFound:  { setStatus: UNRESOLVED }
