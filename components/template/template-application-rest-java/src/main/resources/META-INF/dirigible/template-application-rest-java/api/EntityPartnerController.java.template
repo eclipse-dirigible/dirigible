@@ -625,7 +625,7 @@ public class ${name}PartnerController {
             ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
 #end
             Object requiredValue = ${check.valueExpression};
-            if ((${check.guard}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
+            if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
             }
         }
@@ -638,7 +638,7 @@ public class ${name}PartnerController {
             Object ${load.local}Fk = ${load.sourceExpression};
             ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
 #end
-            if (${check.guard}) {
+            if (${check.guardJavaExpression}) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.message}");
             }
         }
@@ -650,12 +650,12 @@ public class ${name}PartnerController {
 ## decimal against a long still compares exactly); temporals compare through their own compareTo,
 ## which is why the parser holds the two sides to one family - and why a moment literal is rendered
 ## in the column's own shape (LocalDate for a date, Instant for a timestamp).
-#if($check.literal)
+#if($check.literalJavaExpression)
         if (entity.${check.field} != null
 #if($check.numeric == "true")
-                && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(${check.literal}) ${check.op} 0)) {
+                && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
 #else
-                && !(entity.${check.field}.compareTo(${check.literal}) ${check.op} 0)) {
+                && !(entity.${check.field}.compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
 #end
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
         }

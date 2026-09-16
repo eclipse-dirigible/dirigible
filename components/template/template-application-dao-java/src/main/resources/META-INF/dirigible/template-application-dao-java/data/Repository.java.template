@@ -1043,7 +1043,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
 #end
             Object requiredValue = ${check.valueExpression};
-            if ((${check.guard}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
+            if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
                 throw new ValidationException("${check.messageJavaLiteral}");
             }
 #elseif($check.kind == "forbidWhen")
@@ -1054,7 +1054,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             Object ${load.local}Fk = ${load.sourceExpression};
             ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
 #end
-            if (${check.guard}) {
+            if (${check.guardJavaExpression}) {
                 throw new ValidationException("${check.message}");
             }
 #elseif($check.kind == "compare")
@@ -1062,12 +1062,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             // of the same row, or a literal (#7338) - gated on the status at which it must finally hold:
             // "days > 0 before SUBMITTED" refuses the transition, not the draft still being filled in.
             // An absent left operand is not a violation here either; requiredness is its own declaration.
-#if($check.literal)
+#if($check.literalJavaExpression)
             if (entity.${check.field} != null
 #if($check.numeric == "true")
-                    && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(${check.literal}) ${check.op} 0)) {
+                    && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
 #else
-                    && !(entity.${check.field}.compareTo(${check.literal}) ${check.op} 0)) {
+                    && !(entity.${check.field}.compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
 #end
                 throw new ValidationException("${check.messageJavaLiteral}");
             }

@@ -454,6 +454,53 @@ class ModelParameterProcessorTest {
         assertEquals("INVOICE_\\\"NUMBER\\\"", unique.get("nameJavaLiteral"));
     }
 
+    /**
+     * The model carries a check's literal and its condition as DATA (#7405); the Java twin is derived
+     * HERE, next to the message twin and the default-value twin, so an artefact an author opens in the
+     * modeler never holds a java.math.BigDecimal.
+     */
+    @Test
+    void derivesTheJavaTwinsOfACheckSNeutralLiteralAndCondition() {
+        Map<String, Object> compare = new LinkedHashMap<>();
+        compare.put("kind", "compare");
+        compare.put("field", "Days");
+        compare.put("op", ">");
+        compare.put("value", Map.of("kind", "number", "text", "0"));
+        Map<String, Object> forbid = new LinkedHashMap<>();
+        forbid.put("kind", "forbidWhen");
+        forbid.put("when", List.of(
+                Map.of("owner", "hop0", "property", "Status", "equal", true, "type", "integer", "value", "7", "numericKey", false)));
+        Map<String, Object> entity = entity("VacationRequest", "VacationRequests", property("Days", "DECIMAL"));
+        entity.put("checks", List.of(compare, forbid));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        // The neutral halves stay - they are what a non-Java template reads - and the Java rides
+        // alongside them rather than replacing them.
+        assertEquals(Map.of("kind", "number", "text", "0"), compare.get("value"));
+        assertEquals("new java.math.BigDecimal(\"0\")", compare.get("literalJavaExpression"));
+        assertEquals("java.util.Objects.equals((hop0 == null ? null : hop0.Status), 7)", forbid.get("guardJavaExpression"));
+    }
+
+    /**
+     * A half that does not render is left ABSENT, as the default value literal is: the key's presence
+     * is what a template reads.
+     */
+    @Test
+    void leavesACheckSJavaTwinAbsentWhereThereIsNothingToRender() {
+        Map<String, Object> compare = new LinkedHashMap<>();
+        compare.put("kind", "compare");
+        compare.put("field", "Days");
+        compare.put("than", "Allowed");
+        Map<String, Object> entity = entity("VacationRequest", "VacationRequests", property("Days", "DECIMAL"));
+        entity.put("checks", List.of(compare));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertFalse(compare.containsKey("literalJavaExpression"));
+        assertFalse(compare.containsKey("guardJavaExpression"));
+    }
+
     @Test
     void leavesTheMessageLiteralAbsentWhereNoMessageIsAuthored() {
         Map<String, Object> check = new LinkedHashMap<>();

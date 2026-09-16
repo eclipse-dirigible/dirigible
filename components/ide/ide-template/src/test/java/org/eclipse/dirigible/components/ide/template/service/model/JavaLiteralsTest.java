@@ -9,6 +9,10 @@
  */
 package org.eclipse.dirigible.components.ide.template.service.model;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -131,5 +135,113 @@ class JavaLiteralsTest {
         assertNull(JavaLiterals.defaultValueExpression("String", null, "E.P"));
         assertNull(JavaLiterals.defaultValueExpression("String", "", "E.P"));
         assertNull(JavaLiterals.defaultValueExpression(null, "DRAFT", "E.P"));
+    }
+
+    /**
+     * The #7405 half: the model carries the READING of a compare literal, and the Java appears only
+     * here. A number compares by value through BigDecimal, so a decimal column and a long one still
+     * compare exactly.
+     */
+    @Test
+    void rendersACompareLiteralFromItsNeutralReading() {
+        assertEquals("new java.math.BigDecimal(\"0\")", JavaLiterals.compareLiteralExpression(Map.of("kind", "number", "text", "0")));
+        assertEquals("new java.math.BigDecimal(\"100.50\")",
+                JavaLiterals.compareLiteralExpression(Map.of("kind", "number", "text", "100.50")));
+    }
+
+    /**
+     * A moment is resolved against the clock of the WRITE, and in the shape the generated column
+     * carries - a comparison across LocalDate and Instant does not compile.
+     */
+    @Test
+    void rendersAMomentInTheShapeItsColumnCarries() {
+        assertEquals("java.time.LocalDate.now()", JavaLiterals.compareLiteralExpression(Map.of("kind", "moment", "shape", "date")));
+        assertEquals("java.time.Instant.now()", JavaLiterals.compareLiteralExpression(Map.of("kind", "moment", "shape", "timestamp")));
+        assertEquals("java.time.LocalDate.now().plus(java.time.Period.parse(\"P1D\"))",
+                JavaLiterals.compareLiteralExpression(Map.of("kind", "moment", "shape", "date", "offset", "P1D", "forward", "true")));
+        assertEquals("java.time.Instant.now().minus(java.time.Duration.parse(\"PT1H\"))", JavaLiterals.compareLiteralExpression(
+                Map.of("kind", "moment", "shape", "timestamp", "offset", "PT1H", "forward", "false")));
+    }
+
+    @Test
+    void rendersATemporalLiteralInTheShapeItsColumnCarries() {
+        assertEquals("java.time.LocalDate.parse(\"2026-01-01\")",
+                JavaLiterals.compareLiteralExpression(Map.of("kind", "temporal", "shape", "date", "text", "2026-01-01")));
+        assertEquals("java.time.Instant.parse(\"2026-01-01T00:00:00Z\")",
+                JavaLiterals.compareLiteralExpression(Map.of("kind", "temporal", "shape", "timestamp", "text", "2026-01-01T00:00:00Z")));
+    }
+
+    @Test
+    void hasNoCompareExpressionForAReadingItDoesNotRecognise() {
+        assertNull(JavaLiterals.compareLiteralExpression(null));
+        assertNull(JavaLiterals.compareLiteralExpression(Map.of()));
+        assertNull(JavaLiterals.compareLiteralExpression(Map.of("kind", "number")));
+        assertNull(JavaLiterals.compareLiteralExpression(Map.of("kind", "colour", "text", "red")));
+    }
+
+    /**
+     * The other #7405 half: a condition reaches the model as typed terms, each rendered against the
+     * type the generator resolved for it - a string quoted, an integer bare, a long suffixed.
+     */
+    @Test
+    void rendersAConditionFromItsNeutralTerms() {
+        assertEquals("java.util.Objects.equals(entity.SentMethod, 1)",
+                JavaLiterals.conditionExpression(List.of(term("entity", "SentMethod", true, "integer", "1", false))));
+        assertEquals("!java.util.Objects.equals(entity.Kind, \"export\")",
+                JavaLiterals.conditionExpression(List.of(term("entity", "Kind", false, "string", "export", false))));
+        assertEquals("java.util.Objects.equals(entity.SentMethod, 1) && java.util.Objects.equals(entity.Kind, \"export\")",
+                JavaLiterals.conditionExpression(List.of(term("entity", "SentMethod", true, "integer", "1", false),
+                        term("entity", "Kind", true, "string", "export", false))));
+    }
+
+    /**
+     * A term reading a loaded hop goes through that hop's null guard - the hop may not have resolved.
+     */
+    @Test
+    void readsALoadedHopThroughItsNullGuard() {
+        assertEquals("java.util.Objects.equals((hop0 == null ? null : hop0.Status), 7)",
+                JavaLiterals.conditionExpression(List.of(term("hop0", "Status", true, "integer", "7", false))));
+    }
+
+    /**
+     * A foreign key of an unknown width is compared by VALUE: Objects.equals(Long, Integer) never
+     * holds, and the boxed form would switch the guard off while looking authored (#7237).
+     */
+    @Test
+    void comparesAKeyOfUnknownWidthByValue() {
+        assertEquals("(entity.Status != null && entity.Status.longValue() == 4L)",
+                JavaLiterals.conditionExpression(List.of(term("entity", "Status", true, "long", "4", true))));
+        assertEquals("!(entity.Status != null && entity.Status.longValue() == 4L)",
+                JavaLiterals.conditionExpression(List.of(term("entity", "Status", false, "long", "4", true))));
+    }
+
+    /**
+     * A term the generator did not type yields NO expression rather than a weaker guard - a condition
+     * degraded to something that always holds is the failure the whole check exists to refuse.
+     */
+    @Test
+    void hasNoConditionForATermItCannotType() {
+        assertNull(JavaLiterals.conditionExpression(null));
+        assertNull(JavaLiterals.conditionExpression(List.of()));
+        assertNull(JavaLiterals.conditionExpression(List.of(term("entity", "Days", true, "integer", "many", false))));
+        assertNull(JavaLiterals.conditionExpression(List.of(term("entity", "Filed", true, "date", "2026-01-01", false))));
+    }
+
+    /** The escape applies inside a rendered literal exactly as it does inside a default. */
+    @Test
+    void escapesTheValueItRendersIntoALiteral() {
+        assertEquals("java.util.Objects.equals(entity.Size, \"6\\\"\")",
+                JavaLiterals.conditionExpression(List.of(term("entity", "Size", true, "string", "6\"", false))));
+    }
+
+    private static Map<String, Object> term(String owner, String property, boolean equal, String type, String value, boolean numericKey) {
+        Map<String, Object> term = new LinkedHashMap<>();
+        term.put("owner", owner);
+        term.put("property", property);
+        term.put("equal", equal);
+        term.put("type", type);
+        term.put("value", value);
+        term.put("numericKey", numericKey);
+        return term;
     }
 }
