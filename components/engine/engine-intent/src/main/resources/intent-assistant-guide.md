@@ -562,7 +562,12 @@ field may declare:
     `field`. Its one reach beyond `requiredWhen` is that a term may name a one-hop `Relation.field`, so
     a composition child can refuse a write based on its parent's state (no allocation onto an already
     PAID invoice). `message` is mandatory on a `forbidWhen` (the refusal is its whole point) and always
-    worth writing on a `requiredWhen`.
+    worth writing on a `requiredWhen`. A `forbidWhen` also refuses the **DELETE** of a row it guards
+    (#7372) - it is the one check kind about the write HAPPENING rather than about the values it
+    carries, and removing a line is the largest of the three changes the child panel hides (Add, row
+    edit, row delete). That half is on the controllers whatever the gate says, because a delete is
+    nobody's transition; the master's own cascade is untouched, since whether THAT delete is allowed is
+    what `whenMasterDeleted:` declares.
   - Both take the same OPTIONAL `status:` gate as `compare`, and the gate is what decides WHERE the rule
     runs: **without one** it holds on every user write (the controllers, 400); **with one** the
     repository enforces it when the record is persisted carrying that status - which is the only form

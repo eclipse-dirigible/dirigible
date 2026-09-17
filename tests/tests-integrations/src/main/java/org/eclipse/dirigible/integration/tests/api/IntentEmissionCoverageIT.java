@@ -424,6 +424,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Campaign, kind: manyToOne, to: Campaign, composition: true, required: true }
 
+              # forbidWhen's DELETE half (#7372), on the one collection whose refusals can ONLY come
+              # from the check: `locksWithMaster: false` keeps the inherited 409 out of the way, so a
+              # 400 here is the authored rule and nothing else. EntryLine carries the same construct
+              # but sits behind its master's lock, which answers first on every verb - which is
+              # exactly how the delete gap stayed invisible: the UI hid the entry, the lock covered
+              # the locked documents, and an unlocked guarded child walked straight through.
+              - name: CampaignTask
+                locksWithMaster: false
+                checks:
+                  - { kind: forbidWhen, when: "Campaign.Status == 2", message: "A closed campaign's tasks are frozen" }
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: title, type: string, length: 200 }
+                relations:
+                  - { name: Campaign, kind: manyToOne, to: Campaign, composition: true, required: true }
+
               # A calendar SCOPED by a MASTER (#6546). The scope target's record surfaces must link
               # into the filtered calendar - for a master that surface is the detail PANE of the
               # selected row, which is a different template from the form Person covers below. The
@@ -2285,6 +2301,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         && lineController.contains("java.util.Objects.equals((hop0 == null ? null : hop0.Status), 2)")
                         && lineController.contains("Cannot add a line to a posted entry"),
                 "an ungated forbidWhen must load the parent hop and refuse the write on the REST controller, got: " + lineController);
+        // ...and the same rule reaches the DELETE verb (#7372): removing a guarded row is a change like
+        // any other, and the largest of the three the panel hides. Checked against the STORED row,
+        // since a delete carries no payload.
+        assertTrue(
+                lineController.contains("private static void requireDeletable(EntryLineEntity entity) {")
+                        && lineController.contains("repository.findOne(id).ifPresent(stored -> requireDeletable(stored));"),
+                "an ungated forbidWhen must refuse the delete of the row it guards, got: " + lineController);
+        // The check kinds about the VALUES a write carries have nothing to say about a delete, so the
+        // guard is emitted for forbidWhen alone - Doc carries an ungated requiredWhen and no forbidWhen.
+        assertFalse(docController.contains("requireDeletable"),
+                "only forbidWhen reaches the delete verb - a requiredWhen is about the content of a write, got: " + docController);
         // The document's own line items are the same story through a different layout - and it is the
         // one where the child literally resums the master (BillLineRepository -> BillRepository).
         assertTrue(contentOf("gen/emission/api/bill/BillLineController.java").contains("requireMasterMutable"),
@@ -4678,6 +4705,63 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/campaign/CampaignNoteController")
                                                  .then()
                                                  .statusCode(200));
+
+        // forbidWhen refuses the REMOVAL of a guarded row as well as its create and its update
+        // (#7372). The rule read "no task changes once the campaign is closed" and the panel hid all
+        // three affordances, but only two thirds of it was enforced: the DELETE returned 200 and the
+        // row was gone - the largest of the three changes, reachable from any caller that is not the
+        // generated page. The task created BEFORE the campaign closed is the control: the same three
+        // verbs were all legal while the condition did not hold.
+        AtomicInteger openCampaign = new AtomicInteger();
+        restAssuredExecutor.execute(() -> openCampaign.set(given().contentType("application/json")
+                                                                  .body("{\"Name\":\"Autumn\"}")
+                                                                  .when()
+                                                                  .post(API + "/campaign/CampaignController")
+                                                                  .then()
+                                                                  .statusCode(200)
+                                                                  .extract()
+                                                                  .path("Id")));
+        AtomicInteger task = new AtomicInteger();
+        restAssuredExecutor.execute(() -> task.set(given().contentType("application/json")
+                                                          .body("{\"Campaign\":" + openCampaign.get() + ",\"Title\":\"book the venue\"}")
+                                                          .when()
+                                                          .post(API + "/campaign/CampaignTaskController")
+                                                          .then()
+                                                          .statusCode(200)
+                                                          .extract()
+                                                          .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + openCampaign.get() + ",\"Name\":\"Autumn\",\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/campaign/CampaignController/" + openCampaign.get())
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Campaign\":" + openCampaign.get() + ",\"Title\":\"late addition\"}")
+                                                 .when()
+                                                 .post(API + "/campaign/CampaignTaskController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString("A closed campaign's tasks are frozen")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + task.get() + ",\"Campaign\":" + openCampaign.get()
+                                                         + ",\"Title\":\"renamed\"}")
+                                                 .when()
+                                                 .put(API + "/campaign/CampaignTaskController/" + task.get())
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString("A closed campaign's tasks are frozen")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(API + "/campaign/CampaignTaskController/" + task.get())
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString("A closed campaign's tasks are frozen")));
+        // ...and the refused delete really wrote nothing - the row the panel would not let go of.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/campaign/CampaignTaskController/" + task.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Title", equalTo("book the venue")));
 
         // history: the whole life of the record is readable from one endpoint - the create, and the
         // status hop the user made with both sides of it recorded, so "who changed this from what"

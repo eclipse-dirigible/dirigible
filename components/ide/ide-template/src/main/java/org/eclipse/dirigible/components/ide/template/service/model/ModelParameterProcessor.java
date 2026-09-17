@@ -207,7 +207,9 @@ final class ModelParameterProcessor {
     /**
      * Splits the declarative checks by the scope that enforces them: a row-level check goes to the REST
      * validation, a guard to the repository's create/update precondition, and everything else to the
-     * repository's document-level block.
+     * repository's document-level block. A {@code forbidWhen} additionally lands in the delete list,
+     * whatever its gate - the one check kind that is about the write happening at all rather than about
+     * the values it carries (#7372).
      *
      * @param entity the entity
      */
@@ -220,6 +222,7 @@ final class ModelParameterProcessor {
         List<Object> guardChecks = new ArrayList<>();
         List<Object> documentChecks = new ArrayList<>();
         List<Object> forbidWhenGuards = new ArrayList<>();
+        List<Object> deleteChecks = new ArrayList<>();
         for (Map<String, Object> check : checks) {
             String kind = str(check, "kind");
             resolveMessageLiteral(check);
@@ -247,6 +250,20 @@ final class ModelParameterProcessor {
                     if (!masterGuard.isEmpty()) {
                         forbidWhenGuards.add(masterGuard);
                     }
+                    // ...and the third affordance that panel hides is the row's DELETE, which the server
+                    // half did not cover (#7372): a rule reading "no line may change while the quotation
+                    // is sent" refused the create and the update and let the line be REMOVED - the
+                    // largest of the three changes - because forbidWhen is built on requiredWhen, which
+                    // is about the CONTENT of a write and so has no delete semantics to inherit. Every
+                    // forbidWhen - gated or not - therefore reaches the three controllers' delete verb as
+                    // well, and the gate rides along with it rather than routing it elsewhere: a delete
+                    // is nobody's transition (no process step deletes a record, and `whenDeleted:` only
+                    // REACTS to one), so there is no repository-side write for a gated check to sit on.
+                    // Keeping it out of the repository is also what leaves the composition cascade alone:
+                    // a master sweeping its own children away goes through their repositories, and
+                    // whether THAT delete is allowed is `whenMasterDeleted:`'s question, not a child
+                    // check's.
+                    deleteChecks.add(check);
                 }
             } else {
                 documentChecks.add(check);
@@ -256,6 +273,7 @@ final class ModelParameterProcessor {
         entity.put("guardChecks", guardChecks);
         entity.put("documentChecks", documentChecks);
         entity.put("forbidWhenGuards", forbidWhenGuards);
+        entity.put("deleteChecks", deleteChecks);
     }
 
     /**
