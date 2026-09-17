@@ -223,6 +223,7 @@ final class ModelParameterProcessor {
         for (Map<String, Object> check : checks) {
             String kind = str(check, "kind");
             resolveMessageLiteral(check);
+            resolveCheckJavaExpressions(check);
             resolveCheckPathLoads(check, parameters);
             if ("exactlyOne".equals(kind)) {
                 rowChecks.add(check);
@@ -280,6 +281,53 @@ final class ModelParameterProcessor {
         if (message != null) {
             holder.put("messageJavaLiteral", JavaLiterals.escape(message));
         }
+    }
+
+    /**
+     * Derives the Java twins of a check's NEUTRAL halves - the literal a {@code compare} tests against
+     * and the condition a {@code requiredWhen} / {@code forbidWhen} is gated by (issue #7405).
+     *
+     * <p>
+     * The model carries both as data: {@code value} is the reading of the authored literal,
+     * {@code when} the typed terms of the condition. The generator resolved and refused them while the
+     * author was generating; turning them into Java is this layer's business, exactly as a property's
+     * {@code dataDefaultValue} becomes a {@code dataDefaultValueJavaLiteral} here rather than in the
+     * model. That split is what lets the same check reach a non-Java template - and what keeps a
+     * {@code java.math.BigDecimal} out of an artefact an author opens in the modeler.
+     *
+     * <p>
+     * A half that does not render is left absent rather than empty, as the default value literal is:
+     * the key's presence is what the templates read.
+     *
+     * @param check the check
+     */
+    private static void resolveCheckJavaExpressions(Map<String, Object> check) {
+        Object value = check.get("value");
+        if (value instanceof Map<?, ?> reading) {
+            String expression = JavaLiterals.compareLiteralExpression(asStringKeyed(reading));
+            if (expression != null) {
+                check.put("literalJavaExpression", expression);
+            }
+        }
+        List<Map<String, Object>> when = asMaps(check.get("when"));
+        if (!when.isEmpty()) {
+            String expression = JavaLiterals.conditionExpression(when);
+            if (expression != null) {
+                check.put("guardJavaExpression", expression);
+            }
+        }
+    }
+
+    /**
+     * A nested model map under the key type the renderers take - a {@code .model} is JSON, so its keys
+     * are strings whatever the deserialiser's wildcard says.
+     *
+     * @param map the nested map
+     * @return the same map, string-keyed
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> asStringKeyed(Map<?, ?> map) {
+        return (Map<String, Object>) map;
     }
 
     /**

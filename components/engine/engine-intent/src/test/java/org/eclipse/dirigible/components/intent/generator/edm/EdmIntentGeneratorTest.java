@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.ide.template.service.model.JavaLiterals;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.junit.jupiter.api.Test;
 
@@ -1396,7 +1397,14 @@ class EdmIntentGeneratorTest {
         Map<String, Object> overHop = checks.get(0);
         // The value is read through the relation, so the hop the reader must load rides along - the
         // .model twin cannot re-derive it, and this is what lets the check reach a related record.
-        assertEquals("java.util.Objects.equals(entity.SentMethod, 1)", overHop.get("guard"));
+        // The condition is carried as DATA (#7405) - the terms, typed, not the Java that tests them -
+        // and JavaLiterals renders it in the template layer. Both halves are pinned here so the model
+        // shape and the code it ends up as cannot drift apart.
+        assertEquals(List.of(
+                Map.of("owner", "entity", "property", "SentMethod", "equal", true, "type", "integer", "value", "1", "numericKey", false)),
+                overHop.get("when"));
+        assertNull(overHop.get("guard"), "the model carries no Java");
+        assertEquals("java.util.Objects.equals(entity.SentMethod, 1)", guardJava(overHop));
         assertEquals("(hop0 == null ? null : hop0.Email)", overHop.get("valueExpression"));
         assertEquals("Customer.Email", overHop.get("label"));
         List<Map<String, Object>> loads = (List<Map<String, Object>>) overHop.get("pathLoads");
@@ -1414,7 +1422,7 @@ class EdmIntentGeneratorTest {
         // A list condition is an implicit AND, and each comparison is rendered against its property's
         // declared type - a string literal quoted, an integer bare.
         assertEquals("java.util.Objects.equals(entity.SentMethod, 1) && java.util.Objects.equals(entity.Kind, \"export\")",
-                ownField.get("guard"));
+                guardJava(ownField));
         assertEquals("entity.Reference", ownField.get("valueExpression"));
         assertNull(ownField.get("pathLoads"));
         // No gate declared, so the rule holds on every user write and carries no status at all.
@@ -1453,9 +1461,16 @@ class EdmIntentGeneratorTest {
                 """;
         Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
         List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "SalesInvoice").get("checks");
+        // The key's term carries numericKey, and the renderer is what turns that into a comparison by
+        // value - the model says WHY, not HOW.
+        List<Map<String, Object>> when = (List<Map<String, Object>>) checks.get(0)
+                                                                           .get("when");
+        assertEquals("long", when.get(0)
+                                 .get("type"));
+        assertEquals(true, when.get(0)
+                               .get("numericKey"));
         assertEquals("(entity.Status != null && entity.Status.longValue() == 4L)" + " && !java.util.Objects.equals(entity.SentMethod, 1)",
-                checks.get(0)
-                      .get("guard"));
+                guardJava(checks.get(0)));
     }
 
     /**
@@ -1502,7 +1517,10 @@ class EdmIntentGeneratorTest {
         assertEquals(1, checks.size());
         Map<String, Object> check = checks.get(0);
         // The parent's status is loaded by FK and compared to the resolved seed id; there is no value.
-        assertEquals("java.util.Objects.equals((hop0 == null ? null : hop0.Status), 7)", check.get("guard"));
+        assertEquals(
+                List.of(Map.of("owner", "hop0", "property", "Status", "equal", true, "type", "integer", "value", "7", "numericKey", false)),
+                check.get("when"));
+        assertEquals("java.util.Objects.equals((hop0 == null ? null : hop0.Status), 7)", guardJava(check));
         assertNull(check.get("valueExpression"));
         List<Map<String, Object>> loads = (List<Map<String, Object>>) check.get("pathLoads");
         assertEquals("hop0", loads.get(0)
@@ -1608,16 +1626,21 @@ class EdmIntentGeneratorTest {
         assertEquals("Days", positive.get("field"));
         assertEquals(">", positive.get("op"));
         assertEquals("true", positive.get("numeric"));
-        assertEquals("new java.math.BigDecimal(\"0\")", positive.get("literal"));
+        // The reading is data - the kind and the exact decimal - and the Java appears only downstream.
+        assertEquals(Map.of("kind", "number", "text", "0"), positive.get("value"));
+        assertNull(positive.get("literal"), "the model carries no Java");
+        assertEquals("new java.math.BigDecimal(\"0\")", literalJava(positive));
         assertNull(positive.get("than"), "a literal comparison has no second property");
         assertEquals("2", positive.get("status"), "the gate routes the check to the repository");
         assertEquals("Status", positive.get("statusProperty"));
         Map<String, Object> notPast = checks.get(1);
         assertEquals("false", notPast.get("numeric"));
-        assertEquals("java.time.LocalDate.now()", notPast.get("literal"));
+        assertEquals(Map.of("kind", "moment", "shape", "date"), notPast.get("value"));
+        assertEquals("java.time.LocalDate.now()", literalJava(notPast));
         assertNull(notPast.get("status"), "an ungated comparison stays the controllers' - every user write");
-        assertEquals("java.time.Instant.now().plus(java.time.Duration.parse(\"PT1H\"))", checks.get(2)
-                                                                                               .get("literal"),
+        assertEquals(Map.of("kind", "moment", "shape", "timestamp", "offset", "PT1H", "forward", "true"), checks.get(2)
+                                                                                                                .get("value"));
+        assertEquals("java.time.Instant.now().plus(java.time.Duration.parse(\"PT1H\"))", literalJava(checks.get(2)),
                 "a timestamp column binds java.time.Instant, so the moment renders in THAT shape");
     }
 
@@ -2920,5 +2943,17 @@ class EdmIntentGeneratorTest {
                                                                                                               .toList();
             assertFalse(names.contains("DisplacedStatus"), other + " is not the parent of the roll-up");
         }
+    }
+
+    /** The Java a check's neutral condition renders as - the template layer's half of #7405. */
+    @SuppressWarnings("unchecked")
+    private static String guardJava(Map<String, Object> check) {
+        return JavaLiterals.conditionExpression((List<Map<String, Object>>) check.get("when"));
+    }
+
+    /** The Java a check's neutral literal reading renders as - the template layer's half of #7405. */
+    @SuppressWarnings("unchecked")
+    private static String literalJava(Map<String, Object> check) {
+        return JavaLiterals.compareLiteralExpression((Map<String, Object>) check.get("value"));
     }
 }

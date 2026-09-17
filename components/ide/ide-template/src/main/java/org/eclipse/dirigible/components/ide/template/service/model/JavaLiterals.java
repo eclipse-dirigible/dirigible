@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.ide.template.service.model;
 
+import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -131,5 +133,125 @@ public final class JavaLiterals {
                     + "], which is not a value of its type [" + javaClass + "] - every create applying it would fail.", ex);
         }
         return factory + "(\"" + escape(value) + "\")";
+    }
+
+    /**
+     * The Java expression a {@code checks: compare} literal renders as, from the NEUTRAL reading the
+     * model carries (issue #7405).
+     *
+     * <p>
+     * The model describes what the author wrote - {@code {kind: number, text: "0"}}, a moment with an
+     * optional signed ISO-8601 offset, or an ISO-8601 temporal - and the language appears only here,
+     * the same split a property default has had all along through {@link #defaultValueExpression}. The
+     * generator has already refused everything this cannot render: a number that is not one, an offset
+     * a date cannot take, a moment of the wrong shape. A reading it still does not recognise yields
+     * null rather than a guess, and the template reads the key's absence as "no literal" exactly as it
+     * reads a missing default.
+     *
+     * <p>
+     * A number compares by VALUE through {@code BigDecimal}, so a decimal and a long still compare
+     * exactly; a temporal compares in the SHAPE the generated column carries ({@code LocalDate} for a
+     * date, {@code Instant} for a timestamp), because a comparison across those two does not compile.
+     *
+     * @param reading the reading the model carries, as the check's {@code value}
+     * @return the Java expression, or null when there is no reading to render
+     */
+    public static String compareLiteralExpression(Map<String, ?> reading) {
+        if (reading == null) {
+            return null;
+        }
+        String kind = text(reading, "kind");
+        if ("number".equals(kind)) {
+            String number = text(reading, "text");
+            return number == null ? null : "new java.math.BigDecimal(\"" + escape(number) + "\")";
+        }
+        boolean date = "date".equals(text(reading, "shape"));
+        if ("temporal".equals(kind)) {
+            String value = text(reading, "text");
+            return value == null ? null : (date ? "java.time.LocalDate.parse(\"" : "java.time.Instant.parse(\"") + escape(value) + "\")";
+        }
+        if (!"moment".equals(kind)) {
+            return null;
+        }
+        String now = date ? "java.time.LocalDate.now()" : "java.time.Instant.now()";
+        String offset = text(reading, "offset");
+        if (offset == null) {
+            return now;
+        }
+        String amount = (date ? "java.time.Period.parse(\"" : "java.time.Duration.parse(\"") + escape(offset) + "\")";
+        return now + ("false".equals(text(reading, "forward")) ? ".minus(" : ".plus(") + amount + ")";
+    }
+
+    /**
+     * The Java boolean a {@code requiredWhen} / {@code forbidWhen} condition renders as, from the
+     * NEUTRAL terms the model carries (issue #7405) - the comparisons ANDed, each against the type the
+     * generator resolved for it.
+     *
+     * <p>
+     * A term whose value is a foreign key of an unknown width ({@code numericKey}) is compared by
+     * VALUE, not as a boxed equality: the column is typed from the target's key, and
+     * {@code Objects.equals(Long, Integer)} never holds, so the boxed form would switch the guard off
+     * while looking authored (dirigible #7237). A term reading a loaded hop goes through that hop's
+     * null guard, because the hop may not have resolved.
+     *
+     * @param terms the terms the model carries, as the check's {@code when}
+     * @return the Java expression, or null when there are no terms to render
+     */
+    public static String conditionExpression(List<? extends Map<String, ?>> terms) {
+        if (terms == null || terms.isEmpty()) {
+            return null;
+        }
+        StringBuilder expression = new StringBuilder();
+        for (Map<String, ?> term : terms) {
+            String literal = guardLiteral(text(term, "type"), text(term, "value"));
+            if (literal == null) {
+                return null; // a term the generator did not type - never rendered as a weaker guard
+            }
+            String owner = text(term, "owner");
+            String property = text(term, "property");
+            String access = owner == null || "entity".equals(owner) ? "entity." + property
+                    : "(" + owner + " == null ? null : " + owner + "." + property + ")";
+            boolean equal = flag(term, "equal");
+            String comparison = flag(term, "numericKey") ? "(" + access + " != null && " + access + ".longValue() == " + literal + ")"
+                    : "java.util.Objects.equals(" + access + ", " + literal + ")";
+            if (expression.length() > 0) {
+                expression.append(" && ");
+            }
+            expression.append(equal ? comparison : "!" + comparison);
+        }
+        return expression.toString();
+    }
+
+    /**
+     * A guard term's value as a Java literal of its type - the exact equality the term was typed
+     * against, and null for a type that has none.
+     *
+     * @param type the type the generator resolved the term against
+     * @param value the authored value, unquoted
+     * @return the Java literal, or null
+     */
+    private static String guardLiteral(String type, String value) {
+        if (type == null || value == null) {
+            return null;
+        }
+        return switch (type) {
+            case "string", "text" -> "\"" + escape(value) + "\"";
+            case "integer", "int" -> value.matches("-?\\d+") ? value : null;
+            case "long" -> value.matches("-?\\d+") ? value + "L" : null;
+            case "boolean" -> "true".equals(value) || "false".equals(value) ? value : null;
+            default -> null;
+        };
+    }
+
+    /** A model value as text, or null when it is absent - a model carries everything as strings. */
+    private static String text(Map<String, ?> holder, String key) {
+        Object value = holder == null ? null : holder.get(key);
+        return value == null ? null : String.valueOf(value);
+    }
+
+    /** A model flag, which reaches here as a boolean or as the text one serialised to. */
+    private static boolean flag(Map<String, ?> holder, String key) {
+        Object value = holder == null ? null : holder.get(key);
+        return value instanceof Boolean bool ? bool : "true".equals(String.valueOf(value));
     }
 }

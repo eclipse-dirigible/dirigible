@@ -83,9 +83,14 @@ public final class ResolvePathSupport {
      * @param terminalType the declared type of the terminal field, {@link #RELATION_TERMINAL} when the
      *        terminal is a to-one, or {@code null} when it sits on a cross-model target and is
      *        therefore not known here
+     * @param owner where the value is read from - {@link CheckSupport#RECORD} for a bare property, else
+     *        the local holding the last hop's record. With {@code property}, this is {@code expression}
+     *        taken apart, for a caller that must describe the read as data rather than emit it as code
+     *        (issue #7405)
+     * @param property the terminal segment in its generated PascalCase form
      * @param failure the reason the path did not resolve, or {@code null} when it did
      */
-    public record Path(String expression, String label, String terminalType, String failure) {
+    public record Path(String expression, String label, String terminalType, String owner, String property, String failure) {
 
         /**
          * @return whether the path resolved
@@ -223,7 +228,7 @@ public final class ResolvePathSupport {
             if (terminal.failure() != null) {
                 return failed(authored, terminal.failure());
             }
-            return new Path(access(owner, last), label.toString(), terminal.type(), null);
+            return new Path(access(owner, last), label.toString(), terminal.type(), owner, pascal, null);
         }
 
         /**
@@ -251,7 +256,7 @@ public final class ResolvePathSupport {
         }
 
         private static Path failed(String authored, String reason) {
-            return new Path("", authored == null ? "" : authored, null, "[" + authored + "] " + reason);
+            return new Path("", authored == null ? "" : authored, null, RECORD_LOCAL, "", "[" + authored + "] " + reason);
         }
 
         /** A null-guarded property read off the local holding the record it belongs to. */

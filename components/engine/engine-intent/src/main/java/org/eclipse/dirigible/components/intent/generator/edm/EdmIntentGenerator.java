@@ -2192,11 +2192,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 }
                 checkMap.put("valueExpression", path.expression());
                 checkMap.put("label", path.label());
-                String guard = requiredWhenGuard(entity, byName, check.getWhen());
-                if (guard == null) {
+                List<Map<String, Object>> when = requiredWhenTerms(entity, byName, check.getWhen());
+                if (when == null) {
                     continue; // the parser already reported it
                 }
-                checkMap.put("guard", guard);
+                checkMap.put("when", when);
                 List<Map<String, Object>> pathLoads = pathLoadsOf(walker);
                 if (!pathLoads.isEmpty()) {
                     checkMap.put("pathLoads", pathLoads);
@@ -2222,11 +2222,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // as requiredWhen's value path does. No value expression: the check rejects on the
                 // condition alone.
                 ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
-                String guard = forbidWhenGuard(entity, byName, walker, check.getWhen());
-                if (guard == null) {
+                List<Map<String, Object>> when = forbidWhenTerms(entity, byName, walker, check.getWhen());
+                if (when == null) {
                     continue; // the parser already reported it
                 }
-                checkMap.put("guard", guard);
+                checkMap.put("when", when);
                 List<Map<String, Object>> pathLoads = pathLoadsOf(walker);
                 if (!pathLoads.isEmpty()) {
                     checkMap.put("pathLoads", pathLoads);
@@ -2273,7 +2273,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     if (!literal.valid()) {
                         continue; // the parser already reported it
                     }
-                    checkMap.put("literal", literal.javaExpression());
+                    checkMap.put("value", literal.reading());
                     checkMap.put("numeric", isNumericType(left.getType()) ? "true" : "false");
                 } else {
                     Boolean numeric = isNumericCompare(entity, check);
@@ -2393,8 +2393,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      *         already reported it, and a condition that silently degrades to {@code true} would make
      *         the value unconditionally required)
      */
-    private static String requiredWhenGuard(EntityIntent entity, Map<String, EntityIntent> byName, Object when) {
-        return CheckSupport.condition(entity, byName, when);
+    private static List<Map<String, Object>> requiredWhenTerms(EntityIntent entity, Map<String, EntityIntent> byName, Object when) {
+        return CheckSupport.conditionTerms(entity, byName, when);
     }
 
     /**
@@ -2418,36 +2418,37 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Compiles a {@code forbidWhen} condition into the Java boolean the generated reject tests. Each
-     * term is either the record's own property ({@code entity.Prop}) or a one-hop
-     * {@code Relation.field} whose parent the walker loads first - the added reach over
-     * {@code requiredWhen}, which is why a child can refuse a write on its parent's state. Rendered
-     * against each operand's DECLARED type (a to-one is compared by its integer foreign key), ANDed,
-     * and null when a comparison does not compile - the parser has already reported it, and a condition
-     * degrading to {@code true} would refuse every write.
+     * Reads a {@code forbidWhen} condition into the neutral terms the model carries (issue #7405). Each
+     * term reads either the record's own property or a one-hop {@code Relation.field} whose parent the
+     * walker loads first - the added reach over {@code requiredWhen}, which is why a child can refuse a
+     * write on its parent's state. Typed against each operand's DECLARED type (a to-one by its integer
+     * foreign key), and null when a comparison does not read - the parser has already reported it, and
+     * a condition degrading to {@code true} would refuse every write.
      *
      * @param entity the entity carrying the check
      * @param byName the local entities by name
      * @param walker the shared path walker, which accumulates the hops the terms read through
      * @param when the authored condition
-     * @return the Java expression, or {@code null} when a comparison does not compile
+     * @return the terms, or {@code null} when a comparison does not read
      */
-    private static String forbidWhenGuard(EntityIntent entity, Map<String, EntityIntent> byName, ResolvePathSupport.Walker walker,
-            Object when) {
-        List<String> conditions = new ArrayList<>();
+    private static List<Map<String, Object>> forbidWhenTerms(EntityIntent entity, Map<String, EntityIntent> byName,
+            ResolvePathSupport.Walker walker, Object when) {
+        List<Map<String, Object>> terms = new ArrayList<>();
         for (String term : CheckSupport.terms(when)) {
             CheckSupport.Comparison comparison = CheckSupport.parse(term);
             if (comparison == null) {
                 return null;
             }
-            String access;
+            String owner;
+            String property;
             String type;
             if (ResolvePathSupport.isPath(comparison.property())) {
                 ResolvePathSupport.Path path = walker.resolve(comparison.property());
                 if (!path.resolved()) {
                     return null;
                 }
-                access = path.expression();
+                owner = path.owner();
+                property = path.property();
                 type = ResolvePathSupport.RELATION_TERMINAL.equals(path.terminalType()) ? "integer"
                         : path.terminalType() != null ? path.terminalType() : inferGuardType(comparison.literal());
             } else {
@@ -2456,16 +2457,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 if (field == null && relation == null) {
                     return null;
                 }
-                access = "entity." + IntentNaming.pascalCase(comparison.property());
+                owner = CheckSupport.RECORD;
+                property = IntentNaming.pascalCase(comparison.property());
                 type = field != null ? field.getType() : relationKeyType(relation, byName);
             }
-            String literal = CheckSupport.javaLiteral(type, comparison.literal());
-            if (literal == null) {
+            Map<String, Object> read = CheckSupport.term(owner, property, comparison, type, false);
+            if (read == null) {
                 return null;
             }
-            conditions.add(CheckSupport.comparison(access, comparison.equal(), literal));
+            terms.add(read);
         }
-        return conditions.isEmpty() ? null : String.join(" && ", conditions);
+        return terms.isEmpty() ? null : terms;
     }
 
     /**

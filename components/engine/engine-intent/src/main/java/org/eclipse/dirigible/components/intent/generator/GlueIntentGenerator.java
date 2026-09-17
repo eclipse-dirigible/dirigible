@@ -2226,7 +2226,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     private static ResolvePathSupport.Path operand(String authored, ResolvePathSupport.Walker walker) {
         if (!ResolvePathSupport.isPath(authored)) {
             String pascal = IntentNaming.pascalCase(authored);
-            return new ResolvePathSupport.Path(ResolvePathSupport.RECORD_LOCAL + "." + pascal, pascal, null, null);
+            return new ResolvePathSupport.Path(ResolvePathSupport.RECORD_LOCAL + "." + pascal, pascal, null,
+                    ResolvePathSupport.RECORD_LOCAL, pascal, null);
         }
         ResolvePathSupport.Path path = walker.resolve(authored);
         return path.resolved() ? path : null;
