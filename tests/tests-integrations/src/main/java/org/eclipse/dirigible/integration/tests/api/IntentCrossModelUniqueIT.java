@@ -10,7 +10,9 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.lessThan;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -264,7 +266,7 @@ class IntentCrossModelUniqueIT extends IntegrationTest {
             restAssuredExecutor.execute(() -> given().when()
                                                      .delete("/services/ide/publisher/" + WORKSPACE + "/" + project)
                                                      .then()
-                                                     .statusCode(greaterThanOrEqualTo(200)));
+                                                     .statusCode(both(greaterThanOrEqualTo(200)).and(lessThan(300))));
             if (repository.hasCollection(projectPath(project))) {
                 repository.removeCollection(projectPath(project));
             }
