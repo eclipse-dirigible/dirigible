@@ -1789,13 +1789,28 @@ public final class IntentParser {
                                               .isBlank()) {
                 // A CROSS-MODEL parent (the roll-up maintains a field on an entity another model owns).
                 // Its properties are not in this document, so they are validated at GENERATION time
-                // against the owner's model - the same split every cross-model reference uses. Only the
-                // capacity/balance/status variants stay local-only: they need the parent's own status
-                // seeds and stamp a capacity guard that reads the parent's table, which is a deeper
-                // change than resolving coordinates.
-                if (rollup.getCapacity() != null || rollup.getBalance() != null || rollup.getStatus() != null) {
+                // against the owner's model - the same split every cross-model reference uses. That now
+                // covers `capacity` and `balance` too: both are pure arithmetic on the parent's own
+                // numeric fields, and the guard they install is emitted into the CHILD's repository,
+                // which this model owns (#7410). Only `status` stays local-only - it names seeds of the
+                // owner's status nomenclature and moves the parent through them, which is the owner's
+                // lifecycle to declare.
+                if (rollup.getStatus() != null && !rollup.getStatus()
+                                                         .isBlank()) {
                     issues.add("rollup [" + name + "] maintains a cross-model parent [" + via.getModel() + ":" + via.getTo()
-                            + "], so capacity / balance / status are not supported - keep those in the model that owns the parent");
+                            + "], so status is not supported - it moves the parent through the owner's own status seeds;"
+                            + " keep the status move in the model that owns the parent (capacity / balance are supported)");
+                }
+                // `balance` is written only where the capacity is known, so a lone one is a column
+                // nothing ever fills. Refused on this direction only: it is new surface, so no model can
+                // already carry it (the local direction has ignored it since the roll-up shipped).
+                if (rollup.getBalance() != null && !rollup.getBalance()
+                                                          .isBlank()
+                        && (rollup.getCapacity() == null || rollup.getCapacity()
+                                                                  .isBlank())) {
+                    issues.add("rollup [" + name + "] declares balance [" + rollup.getBalance()
+                            + "] on a cross-model parent without a capacity - the balance is capacity minus the sum,"
+                            + " so declare the capacity field too");
                 }
                 if (sum && (rollup.getOf() == null || rollup.getOf()
                                                             .isBlank())) {

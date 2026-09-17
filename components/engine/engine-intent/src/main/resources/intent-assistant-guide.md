@@ -3795,8 +3795,24 @@ misspelt one is reported there rather than at parse. Three limits, all deliberat
 
 **A cross-model PARENT** is the mirror direction and needs no new key: give the child's `via` relation
 its own `model:` alias (the child is local and owns the event, the total lands in the owner's model).
-There `capacity` / `balance` / `status` ARE refused - they read the foreign parent's own fields and
-status seeds, which this model does not own.
+`capacity` and `balance` work here, **overdraw guard included** - the check is a READ of the foreign
+parent's capacity plus a re-sum of this model's own child rows, and it is emitted into the CHILD's
+repository, which this model generates. That is what lets both sides of an allocation be guarded from
+the module that owns the link rows:
+```yaml
+uses:
+  - { model: customer-payments }
+rollups:
+  # CustomerPayment.allocated = the sum of its allocation rows; unapplied = amount - allocated, and a
+  # row allocating past the payment's amount is refused with the same 400 the local direction emits.
+  - { name: paymentAllocated, entity: SalesInvoiceCustomerPayment, via: CustomerPayment,
+      field: allocated, op: sum, of: amount, capacity: amount, balance: unapplied }
+```
+`capacity` and `balance` name fields of the FOREIGN parent, so - like `field:` - they are checked
+against the owner's generated model at Generate time, and a `balance` without a `capacity` is refused
+at parse (the balance IS capacity minus the sum). `status` stays refused on this direction: it moves
+the parent through the owner's own status seeds and its displaced-status column, which is the owner's
+lifecycle to declare.
 
 **Rules:** `via` must be a to-one (`manyToOne` / `oneToOne`) relation of the child entity; `field`
 must be an existing field on the parent (**integer** for `count`, **numeric** for `sum`). For the sum
