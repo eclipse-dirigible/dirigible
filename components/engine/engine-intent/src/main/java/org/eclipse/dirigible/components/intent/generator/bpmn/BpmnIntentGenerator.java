@@ -276,7 +276,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * {@code userTask} is the delegate inserted after the task - and the writer that persists the
      * reviewer's edits is inserted <em>before</em> it, so that one has to stay in the transaction too
      * or its own async boundary commits the completion before the gate is ever reached. Everything else
-     * on the chain (number stamping, snapshots, mail) keeps its async boundary.
+     * on the chain (number stamping, snapshots, mail) keeps its async boundary - unless it stands
+     * between a completing user task and a gate, which is {@link #completingTransactionNodes}' walk.
      *
      * @param setters every validated field setter of the model
      * @param byName the model's entities, by name
@@ -455,10 +456,20 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * through routing alone, and every node on the way loses its boundary too.
      *
      * <p>
-     * The walk stops at anything that is not a {@code decision}: a second user task is its own wait
-     * state, and an authored service task in between is real asynchronous work whose completion the
-     * person is no longer waiting on - the action it belongs to has already succeeded, so its gate is
-     * legitimately a background incident.
+     * The walk crosses authored service tasks too (issue #7371). A custom {@code delegate:} between the
+     * decision and the setter - {@code base-inventory}'s posting flows are the shape - used to stop it,
+     * on the reasoning that its own completion is what the person waited for; measured, that is not how
+     * it reads to them. Its boundary commits the completion, so the gate refuses a detached job:
+     * {@code 200} with an empty body, the task consumed, the document never moved, and once the job's
+     * retries are exhausted the instance is stranded with no task in anyone's Inbox. So the whole
+     * stretch from the completing task to the gate runs in one transaction, and the step's own work
+     * rolls back with the refusal.
+     *
+     * <p>
+     * The walk still stops at anything the completing transaction cannot span - see
+     * {@link #joinsTheCompletingTransaction}: a second user task or a {@code wait} is its own wait
+     * state, {@code end} is the end, and a step declaring {@code retry:} needs the job its boundary
+     * creates.
      *
      * @param process the authored process
      * @param gatedSteps the authored step names carrying a check-gated status write
@@ -488,7 +499,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             // delegates inserted BEFORE it ran when the execution arrived, in the previous transaction.
             List<String> ownNodes = nodesByStep.getOrDefault(step.getName(), List.of(step.getName()));
             List<String> afterTheWait = ownNodes.subList(Math.min(ownNodes.indexOf(step.getName()) + 1, ownNodes.size()), ownNodes.size());
-            Set<String> onGateRoutes = gateReachingSteps(step, byName, process.getSteps(), gatedSteps);
+            Set<String> onGateRoutes = gateReachingSteps(step, byName, process.getSteps(), gatedSteps, false);
+            warnAboutGatesBehindARetryingStep(process, step, byName, gatedSteps, onGateRoutes);
             if (onGateRoutes.isEmpty()) {
                 continue;
             }
@@ -522,7 +534,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * @return the authored step names on the gate-reaching routes
      */
     private static Set<String> gateReachingSteps(StepIntent userTask, Map<String, StepIntent> byName, List<StepIntent> authored,
-            Set<String> gatedSteps) {
+            Set<String> gatedSteps, boolean crossRetryingSteps) {
         Map<String, List<String>> continuationsByStep = new LinkedHashMap<>();
         Set<String> reachable = new LinkedHashSet<>();
         Deque<String> forward = new ArrayDeque<>(continuations(userTask, authored));
@@ -535,8 +547,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 continue; // the gate is where the completing transaction ends
             }
             StepIntent step = byName.get(name);
-            if (step == null || !"decision".equals(step.getKind())) {
-                continue; // a wait state, real asynchronous work, or `end` - the transaction ends here
+            if (step == null || !(joinsTheCompletingTransaction(step) || crossRetryingSteps && "serviceTask".equals(step.getKind()))) {
+                continue; // a wait state, a retrying step, or `end` - the transaction ends here
             }
             List<String> targets = continuations(step, authored);
             continuationsByStep.put(name, targets);
@@ -563,6 +575,78 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             }
         }
         return onGateRoutes;
+    }
+
+    /**
+     * Log the gates a {@code retry:} step shuts the completing transaction out of - the one shape
+     * {@link #joinsTheCompletingTransaction} cannot repair.
+     *
+     * <p>
+     * Its refusal will reach nobody: the boundary the retry cycle needs commits the completion first,
+     * so the gate fails a detached job and the person who acted gets a {@code 200} with an empty body
+     * (issue #7371). Nothing about that is visible in the generated output, so it is said here, at the
+     * one moment both halves are known. The author's way out is to drop the {@code retry:} (the step
+     * then runs in the completing transaction like any other), or to move the retrying work off the
+     * route between the task and the gate.
+     *
+     * @param process the authored process
+     * @param userTask the completing user task
+     * @param byName the authored steps by name
+     * @param gatedSteps the authored step names carrying a check-gated status write
+     * @param onGateRoutes the steps the completing transaction does reach
+     */
+    private static void warnAboutGatesBehindARetryingStep(ProcessIntent process, StepIntent userTask, Map<String, StepIntent> byName,
+            Set<String> gatedSteps, Set<String> onGateRoutes) {
+        if (!LOGGER.isWarnEnabled()) {
+            return;
+        }
+        Set<String> shutOut = new LinkedHashSet<>(gateReachingSteps(userTask, byName, process.getSteps(), gatedSteps, true));
+        shutOut.retainAll(gatedSteps);
+        shutOut.removeAll(onGateRoutes);
+        for (String gate : shutOut) {
+            LOGGER.warn(
+                    "Process [{}]: the check-gated status write of step [{}] is reachable from user task [{}] only across a step declaring `retry:`,"
+                            + " whose async boundary commits the task completion - a refusal there will dead-letter instead of reaching the person who acted."
+                            + " Drop the `retry:` from that step, or move it off the route between the task and the gate.",
+                    process.getName(), gate, userTask.getName());
+        }
+    }
+
+    /**
+     * Whether the execution can carry the completing transaction <b>through</b> this step on its way to
+     * a gate - i.e. whether the step may lose its {@code flowable:async} boundary.
+     *
+     * <p>
+     * A {@code decision} is pure routing and always can. An authored {@code serviceTask} can too: the
+     * work it does (posting stock movements, stamping a number, sending a mail) belongs to the very
+     * action the gate is about to refuse, and its async boundary commits the user-task completion
+     * before the gate is ever reached - the task is consumed, the refusal fails a detached job, and the
+     * approver gets a 200 with an empty body (issue #7371). Run in the completing transaction, the
+     * step's own work rolls back with the refusal and the 400 carries the authored message out of
+     * {@code POST /services/inbox/tasks/&lt;id&gt;}.
+     *
+     * <p>
+     * The one service task that keeps its boundary is one declaring {@code retry:}: a Flowable
+     * failed-job retry cycle re-runs a <em>job</em>, and there is no job without the boundary, so
+     * crossing it would silently drop the declared re-attempts. (An {@code onError:} route needs no job
+     * - {@code IntentStepResilience} converts a synchronous first-and-final failure to the caught BPMN
+     * error just as it does an exhausted asynchronous one - so a step that only routes its failure is
+     * crossed like any other.) A gate reachable only across a retrying step therefore still refuses
+     * into a dead-letter incident; the generator says so in the log rather than silently.
+     *
+     * <p>
+     * Everything else stops the walk: a second {@code userTask} is its own wait state, a {@code wait}
+     * is one by definition, and {@code end} is where the process stops - nobody's completing action is
+     * waiting on a gate behind them.
+     *
+     * @param step the authored step the route passes through
+     * @return {@code true} when the step may be emitted without its async boundary
+     */
+    private static boolean joinsTheCompletingTransaction(StepIntent step) {
+        if ("decision".equals(step.getKind())) {
+            return true;
+        }
+        return "serviceTask".equals(step.getKind()) && ProcessResilienceSupport.retryCycle(step) == null;
     }
 
     /**
@@ -1278,10 +1362,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
 
     private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName, String processName, String eventsPackage,
             List<String> clears, boolean async) {
-        // `async` is false only for a node synchronousNodes marked - a check-gated status write, which
-        // has to run in the transaction of the action that reached it. Everything else keeps the async
-        // boundary. A `delegate:` step is never marked (the parser refuses it a setField /
-        // setRelationField), so appendDelegateServiceTask stays unconditionally async.
+        // `async` is false for every node completingTransactionNodes marked - a check-gated status
+        // write, and everything the completing execution passes through on its way to it, a
+        // `delegate:` step included (#7371). Everything else keeps the async boundary.
         // Five service-task shapes:
         // - a generator-synthesized resolver carries a javaHandler (a client JavaDelegate FQN) -> JavaTask;
         // - an author-declared serviceTask with a `setField` (or its `clearField` erasure twin) ->
@@ -1302,7 +1385,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // this is how a reusable, parameterized delegate (e.g. a document number generator) is invoked.
         String delegate = stringArg(step, "delegate");
         if (delegate != null && !delegate.isBlank()) {
-            appendDelegateServiceTask(sb, step, moduleScopedDelegate(delegate.trim(), eventsPackage), clears);
+            appendDelegateServiceTask(sb, step, moduleScopedDelegate(delegate.trim(), eventsPackage), clears, async);
             return;
         }
         String javaHandler = stringArg(step, "javaHandler");
@@ -1344,9 +1427,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // retry: { count, every } -> the Flowable failed-job retry cycle, exactly as on the
         // flowable:class path (appendDelegateServiceTask): the cycle is read off the flow element, so it
         // is implementation-agnostic. It re-runs the failed job only because the task keeps its async
-        // boundary - which it does: the only nodes synchronousNodes / completingTransactionNodes strip
-        // it from are the check-gated setters and the decisions on the way to them, and the DSL refuses
-        // these keys on a setter step for that very reason (dirigible #7056).
+        // boundary - which it does: completingTransactionNodes never crosses a step declaring retry:
+        // (#7371), and the DSL refuses the key on a setter step for that very reason (dirigible #7056).
         String retryCycle = ProcessResilienceSupport.retryCycle(step);
         if (hasHandler || retryCycle != null || !clears.isEmpty()) {
             sb.append("      <extensionElements>\n");
@@ -1394,19 +1476,21 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * reusable, parameterized delegate can be configured per step. (The delegate's own collaborators
      * are wired by the client bean container on both paths.)
      */
-    private static void appendDelegateServiceTask(StringBuilder sb, StepIntent step, String delegateClass, List<String> clears) {
+    private static void appendDelegateServiceTask(StringBuilder sb, StepIntent step, String delegateClass, List<String> clears,
+            boolean async) {
         sb.append("    <serviceTask id=\"")
           .append(escapeXmlAttribute(step.getName()))
           .append("\" name=\"")
           .append(escapeXmlAttribute(IntentNaming.humanize(step.getName())))
-          .append("\" flowable:async=\"true\" flowable:class=\"")
+          .append(async ? "\" flowable:async=\"true\" flowable:class=\"" : "\" flowable:class=\"")
           .append(escapeXmlAttribute(delegateClass))
           .append("\">\n");
         Map<String, String> fields = delegateFields(step);
         // retry: { count, every } -> the Flowable failed-job retry cycle (R<count+1>/<every> - the R
-        // number counts TOTAL attempts). The task is already flowable:async, so the cycle re-runs the
-        // failed job with the declared spacing; exhaustion dead-letters (an incident) unless an onError
-        // boundary converts it.
+        // number counts TOTAL attempts). The cycle re-runs the failed JOB with the declared spacing, so
+        // it needs the async boundary - which a retrying step always keeps, since
+        // joinsTheCompletingTransaction refuses to cross one (#7371). Exhaustion dead-letters (an
+        // incident) unless an onError boundary converts it.
         String retryCycle = ProcessResilienceSupport.retryCycle(step);
         if (!fields.isEmpty() || retryCycle != null || !clears.isEmpty()) {
             sb.append("      <extensionElements>\n");
