@@ -20,12 +20,12 @@
 ## unrestricted property. Owning the record (or being the partner it belongs to) does not grant a
 ## role, so this surface hides exactly what its own controller strips from the wire.
 #macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
-<div x-data="${name}MyFormPage" class="vbox size-full">
+<div x-data="${name}MyFormPage" class="vbox w-full">
 
-  <!-- Sticky action bar (issue #7434): pinned to the top on scroll, own background + bottom border.
-       Back at the far left; the title + status in the middle; the dismiss + submit at the far right. -->
-  <div x-h-toolbar data-variant="transparent" class="sticky top-0 z-10 bg-background border-b border-border">
-    <button x-h-button data-variant="transparent" class="shrink-0" @click="goBack()" x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
+  <!-- Sticky action bar (issue #7434): the Harmonia `clear` toolbar paints the page background so the
+       form never shows through, pinned to the top on scroll (the page root grows with its content).
+       Title + status on the left; the dismiss + submit + Back on the right. -->
+  <div x-h-toolbar data-variant="clear" class="sticky top-0 z-10 border-b border-border">
     <span x-h-toolbar-title class="shrink-0"
           x-text="(mode === 'edit' ? T('$projectName:${tprefix}.defaults.edit', 'Edit') : T('$projectName:${tprefix}.defaults.new', 'New')) + ' ' + T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}')"></span>
 #if($statusProp != "")
@@ -40,8 +40,8 @@
     <!-- Unsaved-changes marker (issue #7359): a dirty form used to look exactly like a saved one. -->
     <span x-h-badge class="shrink-0" data-variant="warning" x-show="isDirty()" x-text="T('$projectName:${tprefix}.messages.unsavedChanges', 'Unsaved changes')"></span>
 #if(!$personalReadOnly)
-    <!-- Delete (edit only), then Cancel/Discard + Save, anchored right. A personal read-only surface
-         has no write action - only the Back at the far left. -->
+    <!-- Delete (edit only), then Cancel/Discard + Save. A personal read-only surface has no write
+         action - only the Back below. -->
     <button x-h-button data-variant="negative" class="shrink-0" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="deleteOpen = true" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
     <!-- The button says what it will do: leaving a dirty form discards the edit (issue #7359). -->
     <button x-h-button data-variant="transparent" class="shrink-0" @click="goBack()" :disabled="saving" x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
@@ -50,6 +50,8 @@
       <span x-text="T('$projectName:${tprefix}.defaults.save', 'Save')"></span>
     </button>
 #end
+    <!-- Back: navigation away, to the right of the form actions (the only action on a read-only surface). -->
+    <button x-h-button data-variant="transparent" class="shrink-0" @click="goBack()" x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
   </div>
 
   <div x-show="state === 'loading'" class="p-4"><div x-h-spinner></div></div>

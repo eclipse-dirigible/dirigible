@@ -17,20 +17,18 @@
 #foreach($property in $properties)
 #if($property.widgetType == "DOCUMENT_STATUS")#set($statusProp = $property.name)#end
 #end
-<div x-data="${name}FormPage" class="vbox size-full">
+<div x-data="${name}FormPage" class="vbox w-full">
 
   <!-- Hidden ONLY inside the FK "Add" iframe dialog (?dialog=1), which provides its own header. The
        shell-hosted app also passes ?embedded but is NOT a dialog, so the caption must still show there
        (matching the list/master/document views, which have no such guard) - gate on isDialog, not
        isEmbedded. -->
-  <!-- Sticky action bar (issue #7434): pinned to the top on scroll, own background + bottom border,
-       above the form body. Back to list at the far left; the entity caption + status in the middle;
-       the action cluster (BPM task, discretionary overflow menu, dismiss, submit) at the far right.
-       Hidden inside the FK "Add" iframe dialog (?dialog=1), which supplies its own chrome - a create
-       dialog carries its Cancel/Save in the slim footer below. -->
-  <div x-h-toolbar data-variant="transparent" x-show="!isDialog" class="sticky top-0 z-10 bg-background border-b border-border">
-    <!-- Back to list: far left (navigation away). -->
-    <button type="button" x-h-button data-variant="transparent" class="shrink-0" @click="guardExit(() => navigateBack('/${name}'))" x-text="T('$projectName:${tprefix}.defaults.backToList', 'Back to list')"></button>
+  <!-- Sticky action bar (issue #7434): the Harmonia `clear` toolbar paints the page background so the
+       form never shows through, pinned to the top on scroll (the page root grows with its content).
+       Caption + status on the left; the action cluster (BPM task, Cancel, Save, Back to list, overflow
+       menu) on the right. Hidden inside the FK "Add" iframe dialog (?dialog=1), which supplies its own
+       chrome - a create dialog carries its Cancel/Save in the slim footer below. -->
+  <div x-h-toolbar data-variant="clear" x-show="!isDialog" class="sticky top-0 z-10 border-b border-border">
     <!-- Page caption in the document title style: the uppercased entity label (e.g. CUSTOMER),
          text-2xl normal weight - matches the document header look. This caption is intentionally only
          on the create/edit form, NOT on the list/master browse views. -->
@@ -65,10 +63,22 @@
       </button>
     </template>
 #end
+    <!-- Dismiss then submit. Preview: Close + Edit; edit/create: Cancel/Discard + Save/Create. -->
+    <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="isPreview" @click="cancel()" x-text="T('$projectName:${tprefix}.defaults.close', 'Close')"></button>
+    <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" @click="cancel()" :disabled="state === 'saving'" x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
+    <button type="button" x-h-button data-variant="primary" class="shrink-0" x-show="isPreview#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="goEdit()">
+      <svg role="presentation" x-h-lucide data-lucide="pencil"></svg><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
+    </button>
+    <button type="button" x-h-button data-variant="primary" class="shrink-0" x-show="!isPreview" :disabled="state === 'saving' || (isEdit &amp;&amp; !isDirty())" @click="save()">
+      <span x-show="state === 'saving'" x-h-spinner></span>
+      <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
+    </button>
+    <!-- Back to list: navigation away, to the right of the form actions. -->
+    <button type="button" x-h-button data-variant="transparent" class="shrink-0" @click="guardExit(() => navigateBack('/${name}'))" x-text="T('$projectName:${tprefix}.defaults.backToList', 'Back to list')"></button>
 #if($hasPrint == "true")
     <!-- Discretionary actions collapse into one overflow menu (issue #7434). For this shared form the
          only one is Print (a document master rendered through a calendar/slots view); the trigger is
-         hidden until the record is saved, so it never shows an empty menu. -->
+         hidden until the record is saved, so it never shows an empty menu. Rightmost. -->
     <span class="text-sm text-secondary-foreground" x-show="printError" x-text="printError"></span>
     <button type="button" x-h-button data-variant="outline" data-size="icon" class="shrink-0" x-h-menu-trigger.dropdown aria-label="More actions" x-show="(isEdit || isPreview) &amp;&amp; id">
       <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
@@ -79,16 +89,6 @@
       </li>
     </ul>
 #end
-    <!-- Dismiss + submit, anchored right. Preview: Close + Edit; edit/create: Cancel/Discard + Save/Create. -->
-    <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="isPreview" @click="cancel()" x-text="T('$projectName:${tprefix}.defaults.close', 'Close')"></button>
-    <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" @click="cancel()" :disabled="state === 'saving'" x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
-    <button type="button" x-h-button data-variant="primary" class="shrink-0" x-show="isPreview#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="goEdit()">
-      <svg role="presentation" x-h-lucide data-lucide="pencil"></svg><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
-    </button>
-    <button type="button" x-h-button data-variant="primary" class="shrink-0" x-show="!isPreview" :disabled="state === 'saving' || (isEdit &amp;&amp; !isDirty())" @click="save()">
-      <span x-show="state === 'saving'" x-h-spinner></span>
-      <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
-    </button>
   </div>
 
   <!-- Load failure (edit) -->
