@@ -157,8 +157,9 @@ class GluePostingsAmendTest {
         // before the insert (#7104/#7115) - while the derived one still holds null, so comparing the
         // two raw made `unchanged` unreachable and EVERY redelivery rewrote the whole post.
         Map<String, Object> posting = posting(WITH_STATUS);
-        assertEquals("new java.math.BigDecimal(\"0\")", comparedProperty(posting, "Debit").get("derivedDefault"));
-        assertEquals("new java.math.BigDecimal(\"0\")", comparedProperty(posting, "Credit").get("derivedDefault"));
+        assertEquals(Map.of("kind", "number", "text", "0"), comparedProperty(posting, "Debit").get("derivedDefaultValue"));
+        assertEquals("new java.math.BigDecimal(\"0\")", GlueRendering.derivedDefault(comparedProperty(posting, "Debit")));
+        assertEquals("new java.math.BigDecimal(\"0\")", GlueRendering.derivedDefault(comparedProperty(posting, "Credit")));
         assertEquals(Boolean.FALSE, comparedProperty(posting, "Debit").get("compareOnlyWhenDerived"));
     }
 
@@ -166,7 +167,7 @@ class GluePostingsAmendTest {
     void aComparedColumnWithNoDefaultIsComparedAsItStands() {
         // Nothing to apply: a null on the derived side genuinely means the column is left empty.
         Map<String, Object> posting = posting(WITH_STATUS);
-        assertEquals("", comparedProperty(posting, "Account").get("derivedDefault"));
+        assertEquals("", GlueRendering.derivedDefault(comparedProperty(posting, "Account")));
         assertEquals(Boolean.FALSE, comparedProperty(posting, "Account").get("compareOnlyWhenDerived"));
     }
 
@@ -184,7 +185,7 @@ class GluePostingsAmendTest {
                                            .replace("- { Account: rule(revenueAccount), credit: \"Net\" }",
                                                    "- { Account: rule(revenueAccount), credit: \"Net\", valueDate: \"IssueDate\" }"));
         assertEquals(Boolean.TRUE, comparedProperty(posting, "ValueDate").get("compareOnlyWhenDerived"));
-        assertEquals("", comparedProperty(posting, "ValueDate").get("derivedDefault"));
+        assertEquals("", GlueRendering.derivedDefault(comparedProperty(posting, "ValueDate")));
     }
 
     @Test
@@ -197,8 +198,7 @@ class GluePostingsAmendTest {
                                      .get("targetProp"));
         assertEquals("header1", header.get(0)
                                       .get("local"));
-        assertEquals("", header.get(0)
-                               .get("derivedDefault")); // reason declares none
+        assertEquals("", GlueRendering.derivedDefault(header.get(0))); // reason declares none
     }
 
     @Test
@@ -207,8 +207,9 @@ class GluePostingsAmendTest {
         // carrying the target column's default.
         Map<String, Object> posting = postingOf(yaml(WITH_STATUS).replace("      - { name: reason, type: string, length: 400 }",
                 "      - { name: reason, type: string, length: 400, defaultValue: 'automatic' }"));
-        assertEquals("\"automatic\"", headerAssignments(posting).get(0)
-                                                                .get("derivedDefault"));
+        assertEquals(Map.of("kind", "string", "text", "automatic"), headerAssignments(posting).get(0)
+                                                                                              .get("derivedDefaultValue"));
+        assertEquals("\"automatic\"", GlueRendering.derivedDefault(headerAssignments(posting).get(0)));
     }
 
     @Test

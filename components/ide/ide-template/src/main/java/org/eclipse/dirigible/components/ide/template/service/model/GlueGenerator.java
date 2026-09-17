@@ -404,8 +404,8 @@ class GlueGenerator {
         // job renders exactly what it always did.
         boolean generates = item.containsKey("generates") ? truthy(item, "generates") : "generate".equals(str(item, "action"));
         boolean notifies = item.containsKey("notifies") ? truthy(item, "notifies") : !"generate".equals(str(item, "action"));
-        copy(context, item, "name", "className", "cron", "entity", "perspective", "criteriaExpression", "toExpression", "subjectExpression",
-                "bodyExpression", "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty",
+        copy(context, item, "name", "className", "cron", "entity", "perspective", "toExpression", "subjectExpression", "bodyExpression",
+                "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty",
                 "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport", "genToEntity", "genToPk", "genFieldAssignments",
                 // The scheduled generation's natural key (issue #7070). Absent on a .glue written
                 // before it existed, which `copy` turns into an absent context key - so the guard's
@@ -414,6 +414,10 @@ class GlueGenerator {
                 // The days-past-due escalation ladder (issue #7276), likewise absent on an older .glue.
                 "hasEscalation", "escalationEntity", "escalationLocal", "escalationKeyProperty", "escalationAfterProperty",
                 "escalationSinceProperty", "escalationIntoProperty");
+        bindCriteria(context, item);
+        if (item.containsKey("genUnique")) {
+            context.put("genUnique", uniqueTerms(item.get("genUnique")));
+        }
         copyJavaLiterals(context, item, "cron");
         context.put("generates", generates);
         context.put("notifies", notifies);
@@ -600,7 +604,8 @@ class GlueGenerator {
      */
     private static void bindExpansion(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "className", "masterEntity", "masterPerspective", "masterPk", "childEntity", "childPk", "fkProperty",
-                "startProperty", "endProperty", "mapProperty", "unit", "criteriaExpression");
+                "startProperty", "endProperty", "mapProperty", "unit");
+        bindForeignKeyCriteria(context, item, "master", strOr(item, "masterPk", "Id"));
         context.put("javaMasterPerspective", sanitize(item, "masterPerspective"));
         context.put("javaChildPerspective", sanitize(item, "childPerspective"));
         String unit = str(item, "unit");
@@ -625,7 +630,8 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindExpansionCleanup(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "className", "masterEntity", "masterPerspective", "masterPk", "childEntity", "criteriaExpression");
+        copy(context, item, "className", "masterEntity", "masterPerspective", "masterPk", "childEntity");
+        bindForeignKeyCriteria(context, item, "master", strOr(item, "masterPk", "Id"));
         context.put("javaMasterPerspective", sanitize(item, "masterPerspective"));
         context.put("javaChildPerspective", sanitize(item, "childPerspective"));
         context.put("topicSuffix", strOr(item, "topicSuffix", "-deleted"));
@@ -729,7 +735,8 @@ class GlueGenerator {
         // authored message an unqualified row refuses the whole create-from with. Both default to the
         // empty string, so a .glue written before the keys existed renders the unfiltered clone loop it
         // always had rather than its own literal into Java that would not compile.
-        context.put("itemWhere", strOr(item, "itemWhere", ""));
+        context.put("itemWhere", item.containsKey("itemCriteria") ? JavaLiterals.criteriaChain(asMaps(item.get("itemCriteria")))
+                : strOr(item, "itemWhere", ""));
         context.put("itemRefuse", strOr(item, "itemRefuse", ""));
         // The refusal is written into a Java string literal, so a quote or a backslash in the authored
         // message would end that literal and fail the compile of the whole generated module (#7241).
@@ -882,7 +889,7 @@ class GlueGenerator {
             assignment.put("hoisted", !local.isEmpty());
             assignment.put("local", local);
             assignment.put("value", local.isEmpty() ? expr : local);
-            assignment.put("derivedDefault", strOr(declared, "derivedDefault", ""));
+            assignment.put("derivedDefault", derivedDefault(declared));
             assignment.put("compareOnlyWhenDerived", comparesOnlyWhenDerived(declared));
             assignment.put("overwrittenOnSave", truthy(declared, "overwrittenOnSave"));
             assignments.add(assignment);
@@ -907,9 +914,28 @@ class GlueGenerator {
             if (!resolved.containsKey("compareOnlyWhenDerived") && resolved.containsKey("expressionDefault")) {
                 resolved.put("compareOnlyWhenDerived", comparesOnlyWhenDerived(cell));
             }
+            resolved.put("derivedDefault", derivedDefault(cell));
             cells.add(resolved);
         }
         return cells;
+    }
+
+    /**
+     * The Java literal {@code same()} compares a defaulted column against, rendered from the READING
+     * the glue carries (issue #7406) - the default the insert would fill the column with, which is what
+     * makes a redelivery distinguishable from an amendment (#7131).
+     *
+     * <p>
+     * The empty string is the "no default" answer, not an absent key: the template's own {@code #if}
+     * reads it, and an undefined Velocity variable renders as its own name. A .glue written before the
+     * split carries the Java itself and is read exactly as it always was.
+     *
+     * @param entry the assignment or compared cell as the descriptor carries it
+     * @return the literal, or the empty string
+     */
+    private static String derivedDefault(Map<String, Object> entry) {
+        String rendered = JavaLiterals.derivedDefaultExpression(entry.get("derivedDefaultValue"));
+        return rendered != null ? rendered : strOr(entry, "derivedDefault", "");
     }
 
     /**
@@ -1127,7 +1153,10 @@ class GlueGenerator {
                 aggregateBlock.append(RollupAggregates.render(rollup));
             }
             Map<String, Object> context = ModelValues.copy(parameters);
-            copy(context, first, "className", "childEntity", "childPerspective", "parentEntity", "fkProperty", "criteriaExpression");
+            copy(context, first, "className", "childEntity", "childPerspective", "parentEntity", "fkProperty");
+            // A roll-up recomputes from the store for the parent the fired child row points at, so the
+            // key is read off that row itself.
+            bindForeignKeyCriteria(context, first, "entity", strOr(first, "fkProperty", ""));
             context.put("javaChildPerspective", sanitize(first, "childPerspective"));
             context.put("javaParentPerspective", sanitize(first, "parentPerspective"));
             // A cross-model roll-up writes into the owner model's generated package.
@@ -1356,6 +1385,84 @@ class GlueGenerator {
                 target.put(key + "JavaLiteral", JavaLiterals.escape(value));
             }
         }
+    }
+
+    /**
+     * Derives a descriptor's {@code Criteria} expression from the NEUTRAL clauses it carries (issue
+     * #7406).
+     *
+     * <p>
+     * The glue describes the query as clauses - an operator, a property, a value reading - and the
+     * builder call is written here, the layer that knows it is generating Java. A descriptor written
+     * before the split carries the rendered {@code criteriaExpression} instead and is bound as it
+     * always was, so an unregenerated project renders byte-identically.
+     *
+     * @param target the template context
+     * @param source the descriptor
+     */
+    static void bindCriteria(Map<String, Object> target, Map<String, Object> source) {
+        if (source.containsKey("criteria")) {
+            target.put("criteriaExpression", JavaLiterals.criteriaExpression(asMaps(source.get("criteria"))));
+        } else {
+            copy(target, source, "criteriaExpression");
+        }
+    }
+
+    /**
+     * The {@code Criteria} a roll-up or an expansion queries the affected rows by: the foreign key
+     * alone, read off the row that fired the event or off the master being reconciled (issue #7406).
+     *
+     * <p>
+     * Both used to reach here pre-rendered. The key and the owner are descriptor values this binder
+     * already reads, so nothing is lost by writing the two-call builder here - and the
+     * {@code org.eclipse.dirigible.sdk} package leaves the process description. A descriptor that still
+     * carries the rendered expression keeps it.
+     *
+     * @param target the template context
+     * @param source the descriptor
+     * @param owner the variable the key is read off - {@code entity} for a roll-up's child row,
+     *        {@code master} for an expansion's master
+     * @param keyProperty the property on that variable holding the key
+     */
+    static void bindForeignKeyCriteria(Map<String, Object> target, Map<String, Object> source, String owner, String keyProperty) {
+        if (source.containsKey("criteriaExpression")) {
+            copy(target, source, "criteriaExpression");
+            return;
+        }
+        String fkProperty = str(source, "fkProperty");
+        target.put("criteriaExpression", "Criteria.create().eq(\"" + JavaLiterals.escape(fkProperty == null ? "" : fkProperty) + "\", "
+                + owner + "." + keyProperty + ")");
+    }
+
+    /**
+     * The scheduled generation's natural key terms, with the Java the guard queries by derived from the
+     * PERIOD each range term carries (issue #7406).
+     *
+     * <p>
+     * A term naming a period is rendered into the two bounds of the current one - or, for a
+     * {@code day}, into today itself; a term written before the split carries its own {@code lower} /
+     * {@code upper} / {@code expr} and is passed through, so an unregenerated project renders
+     * byte-identically.
+     *
+     * @param raw the declared terms
+     * @return the terms, each carrying what the template reads
+     */
+    static List<Map<String, Object>> uniqueTerms(Object raw) {
+        List<Map<String, Object>> terms = new ArrayList<>();
+        for (Map<String, Object> declared : asMaps(raw)) {
+            Map<String, Object> term = ModelValues.copy(declared);
+            String period = str(declared, "period");
+            String lower = JavaLiterals.periodLowerExpression(period);
+            if (lower != null) {
+                term.put("lower", lower);
+                term.put("upper", JavaLiterals.periodUpperExpression(period));
+            } else if ("day".equals(period)) {
+                // A single day needs no range: `between(today, today)` is not what `run: day` says.
+                term.put("expr", JavaLiterals.todayExpression());
+            }
+            terms.add(term);
+        }
+        return terms;
     }
 
     /**
