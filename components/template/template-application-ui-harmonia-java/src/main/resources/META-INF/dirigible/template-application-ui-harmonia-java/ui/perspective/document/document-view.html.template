@@ -61,14 +61,6 @@
     <!-- Unsaved-changes marker (issue #7359): a dirty form used to look exactly like a saved one. -->
     <span x-h-badge class="shrink-0" data-variant="warning" x-show="isDirty()" x-text="T('$projectName:${tprefix}.messages.unsavedChanges', 'Unsaved changes')"></span>
     <div x-h-toolbar-spacer></div>
-#if($hasProcess)
-    <!-- BPM user-task action(s), standalone (edit only, hidden in read-only preview). -->
-    <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
-      <button type="button" x-h-button data-variant="primary" class="shrink-0" x-show="!isPreview" @click="$store.processTasks.openTask(task)">
-        <svg role="presentation" x-h-lucide data-lucide="inbox"></svg><span x-text="$store.processTasks.taskName(task)"></span>
-      </button>
-    </template>
-#end
     <!-- Dismiss then submit. Preview: Close + Edit; edit/create: Cancel/Discard + Save/Create. -->
     <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="isPreview" @click="backToList()" x-text="T('$projectName:${tprefix}.defaults.close', 'Close')"></button>
     <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" @click="backToList()" :disabled="state === 'saving'" x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
@@ -590,8 +582,29 @@
 #foreach($property in $properties)
 #if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)#set($hasReadOnly = true)#end
 #end
-#if($hasReadOnly || $docStatusProp != "" || $history == "true")
+#if($hasReadOnly || $docStatusProp != "" || $history == "true" || $hasProcess)
     <div class="vbox gap-4 shrink-0" style="width: 18rem;" x-show="isEdit || isPreview">
+#if($hasProcess)
+      <!-- Workflow "next step" card (issue #7434, option A): the record's actionable BPM task(s) - the
+           next step in the document's lifecycle - as their own card at the TOP of the sidebar, styled
+           like Details, so the workflow action never competes with the form's Save/Cancel. Shown in
+           edit AND preview whenever the record has an actionable task; otherwise Details is first. -->
+      <template x-if="$store.processTasks.getTasks(form).length">
+        <div x-h-card>
+          <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.messages.workflowStep', 'Your next step')"></h3></div>
+          <div x-h-card-content>
+            <div class="vbox gap-3">
+              <span class="text-sm text-muted-foreground" x-text="$store.processTasks.processName($store.processTasks.getTasks(form)[0])"></span>
+              <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
+                <button type="button" x-h-button data-variant="primary" class="w-full" @click="$store.processTasks.openTask(task)">
+                  <svg role="presentation" x-h-lucide data-lucide="inbox"></svg><span x-text="$store.processTasks.taskName(task)"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+        </div>
+      </template>
+#end
 #if($hasReadOnly)
       <div x-h-card>
         <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.defaults.details', 'Details')"></h3></div>
