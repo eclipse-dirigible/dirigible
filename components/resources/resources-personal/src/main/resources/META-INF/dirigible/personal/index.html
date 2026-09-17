@@ -35,22 +35,24 @@
     <link href="./css/app.css" rel="stylesheet" />
   </head>
 
-  <body class="vbox size-full" x-data="app">
-    <!-- Narrow-viewport drawer host. -->
-    <div x-h-sheet-overlay="isOpen">
-      <div x-h-sheet data-align="left" x-ref="overlay"></div>
+  <body class="vbox size-full bg-sidebar" x-data="app">
+    <!-- Narrow-screen drawer. appShell.js moves the ONE sidebar element between this sheet and its
+         wide-screen slot below at the 1024px breakpoint. -->
+    <div x-h-sheet-overlay="showSidebarSheet">
+      <div x-h-sheet data-align="left" x-ref="sidebarSheet"></div>
     </div>
 
     <!-- x-cloak hides the shell until Alpine + Harmonia upgrade the markup (no raw-chrome flash). -->
-    <div x-cloak x-h-split class="size-full" data-orientation="horizontal" data-variant="border">
-      <!-- Sidebar -->
-      <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="256" data-min="220" data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
-        <div x-h-sidebar x-ref="sidebar" style="--sidebar-width: 100%">
+    <div x-cloak class="hbox size-full">
+      <!-- Wide-screen home of the sidebar - a plain flex slot, not a resizable panel: the sidebar has
+           one right width (--sidebar-width) and nothing here benefits from dragging it. -->
+      <div x-ref="sidebarSlot" class="vbox shrink-0">
+        <div x-h-sidebar x-ref="sidebar" data-borderless="true">
           <!-- Instance brand mark (DIRIGIBLE_BRANDING_LOGO / _NAME / _SUBTITLE via the `branding` store),
                the Harmonia counterpart of the AngularJS shell header. With 2+ projections declared
                (the application-projections extension point) it becomes the Harmonia
                product-switch-header: the selected projection filters the shell. -->
-          <div x-h-sidebar-header>
+          <div x-h-sidebar-header data-borderless="true">
             <template x-if="projections.length > 1">
               <div>
                 <button x-h-sidebar-menu-button data-size="lg" x-h-menu-trigger.dropdown>
@@ -77,17 +79,18 @@
               </div>
             </template>
             <template x-if="projections.length <= 1">
-              <div class="hbox items-center gap-2 p-1">
-                <img :src="$store.branding.logo" :alt="$store.branding.name" class="size-5" />
-                <div class="vbox">
-                  <span class="font-bold leading-tight" x-text="$store.branding.name"></span>
-                  <span x-show="$store.branding.subtitle" class="text-xs text-muted-foreground leading-tight" x-text="$store.branding.subtitle"></span>
+              <div x-h-sidebar-header-item>
+                <img :src="$store.branding.logo" alt="" aria-hidden="true" class="size-8 rounded-control" />
+                <div class="vbox min-w-0">
+                  <span class="truncate" x-text="$store.branding.name"></span>
+                  <span x-show="$store.branding.subtitle" class="truncate text-sm font-normal text-muted-foreground" x-text="$store.branding.subtitle"></span>
                 </div>
               </div>
             </template>
           </div>
 
-          <div x-h-sidebar-content>
+          <!-- x-h-sidebar carries no landmark role of its own, so the navigation says what it is. -->
+          <nav x-h-sidebar-content :aria-label="T('application-core:shell.nav.application', 'Application')">
             <!-- Built-in shell sections (native Harmonia, reused from the shared runtime). -->
             <div x-h-sidebar-group>
               <div x-h-sidebar-group-label x-text="T('application-core:shell.nav.application', 'Application')"></div>
@@ -129,10 +132,10 @@
                 </div>
               </div>
             </template>
-          </div>
+          </nav>
 
           <!-- Settings pinned to the footer; it aggregates every app's SETTING entities. -->
-          <div x-h-sidebar-footer>
+          <div x-h-sidebar-footer data-borderless="true">
             <nav :aria-label="T('application-core:shell.nav.settings', 'Settings')">
               <ul x-h-sidebar-menu>
                 <li x-h-sidebar-menu-item x-show="visibleSettingsItems().length > 0">
@@ -146,11 +149,13 @@
         </div>
       </div>
 
-      <!-- Main panel -->
-      <div x-h-split-panel>
-        <div class="vbox size-full">
+      <!-- Content column. min-w-0 is load-bearing: a flex item defaults to min-width:auto, so a long
+           truncated line inside would refuse to shrink and scroll the whole document sideways.
+           Narrow drops the gutter and the card chrome and uses the full width. -->
+      <div class="min-w-0 flex-1 overflow-hidden" :class="isSmallScreen ? '' : 'p-2'">
+        <main class="vbox size-full overflow-hidden bg-background" :class="isSmallScreen ? '' : 'rounded-xl border shadow-sm'">
           <div x-h-toolbar data-variant="transparent" x-cloak>
-            <button x-show="hiddenPanels.left" x-h-button data-variant="transparent" aria-label="Navigation" @click="openSideNav()" data-size="icon">
+            <button x-show="isSmallScreen" x-h-button data-variant="transparent" aria-label="Navigation" @click="openSideNav()" data-size="icon">
               <svg role="presentation" x-h-lucide data-lucide="menu"></svg>
             </button>
             <span x-h-toolbar-title x-text="T('application-core:shell.nav.personal', 'Personal')"></span>
@@ -203,19 +208,13 @@
               </ol>
             </div>
 
-            <!-- Logged-in user: avatar; the dropdown shows the user name and Log out. -->
-            <button id="user-menu-trigger" x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm" :aria-label="$store.currentUser.name || 'Account'">
-              <svg role="presentation" x-h-lucide data-lucide="circle-user"></svg>
-            </button>
+            <!-- An avatar carrying the user's initials; the dropdown names them. x-h-menu-label is a
+                 legal direct child of the menu, so the identity line needs no presentational li wrapper. -->
+            <button id="user-menu-trigger" x-h-avatar x-h-menu-trigger.dropdown :aria-label="$store.currentUser.name || 'Account'" x-text="$store.currentUser.initials"></button>
             <ul x-h-menu aria-label="User menu" data-align="bottom-end">
-              <li role="presentation">
-                <div x-h-tile class="mb-1">
-                  <div x-h-tile-media><svg role="presentation" x-h-lucide data-lucide="circle-user" class="size-6"></svg></div>
-                  <div x-h-tile-content>
-                    <div x-h-tile-title x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></div>
-                  </div>
-                </div>
-              </li>
+              <div x-h-menu-label>
+                <span x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></span>
+              </div>
               <div x-h-menu-separator></div>
               <!-- Act as (delegated entry): entitled users arm an acting identity; while armed the
                    personal surfaces and the Inbox serve that person's world (the banner rules). -->
@@ -261,15 +260,24 @@
             </button>
           </div>
 
+          <!-- Route progress: the router is fetching the next view's fragment. The zero-height
+               positioning parent keeps the bar from shifting the page it sits above. -->
+          <div class="relative">
+            <div class="absolute top-0 left-0 z-20 w-full rounded-none" x-show="routeLoading" x-cloak>
+              <div x-h-progress="0" data-loading="true" aria-label="Loading page"></div>
+            </div>
+          </div>
+
           <!-- Built-in pages (incl. the Settings master-detail) render here via Pinecone; a hosted
-               domain app shows in the iframe instead. -->
+               domain app shows in the iframe instead - INSIDE the card, so the app inherits the frame
+               it deliberately does not draw in embedded mode. -->
           <div id="app" x-show="!hostedUrl" class="size-full overflow-auto flex-1">
             <!-- Pinecone Router renders the matched built-in view fragment here. -->
           </div>
           <div x-show="hostedUrl" class="flex-1 size-full" style="position: relative">
             <iframe :src="hostedUrl" title="Application" @load="onIframeLoad($event)" style="position: absolute; inset: 0; width: 100%; height: 100%; border: 0"></iframe>
           </div>
-        </div>
+        </main>
       </div>
     </div>
 

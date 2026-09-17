@@ -14,8 +14,16 @@ document.addEventListener('alpine:init', () => {
   });
 
   Alpine.data('app', () => ({
-    hiddenPanels: { left: false },
-    isOpen: false,
+    // Narrow viewport (below the 1024px breakpoint). The sidebar then lives in the x-h-sheet drawer
+    // and the content frame drops its gutter and card chrome to use the full width.
+    isSmallScreen: false,
+
+    // The narrow-screen sidebar drawer, two-way bound to the x-h-sheet-overlay.
+    showSidebarSheet: false,
+
+    // A route template is being fetched - drives the toolbar's indefinite progress bar.
+    routeLoading: false,
+
     currentPath: '/overview',
 
     init() {
@@ -27,16 +35,16 @@ document.addEventListener('alpine:init', () => {
       };
       window.addEventListener('popstate', applyRoute);
       document.addEventListener('pinecone:end', applyRoute);
+      document.addEventListener('pinecone:start', () => { this.routeLoading = true; });
+      document.addEventListener('pinecone:fetch-error', () => { this.routeLoading = false; });
+      document.addEventListener('pinecone:end', () => { this.routeLoading = false; });
       applyRoute();
 
-      // Below 1024px the sidebar moves into the Harmonia drawer.
       this._breakpoint = Harmonia.getBreakpointListener((isNarrow) => {
-        this.hiddenPanels.left = isNarrow;
-        if (isNarrow) {
-          this.$refs.overlay.appendChild(this.$refs.sidebar);
-        } else {
-          this.$refs.sidebarPanel.appendChild(this.$refs.sidebar);
-        }
+        this.isSmallScreen = isNarrow;
+        // The sidebar is ONE element, moved between its wide-screen slot and the drawer.
+        const home = isNarrow ? this.$refs.sidebarSheet : this.$refs.sidebarSlot;
+        home.appendChild(this.$refs.sidebar);
       }, 1024);
     },
 
@@ -53,7 +61,7 @@ document.addEventListener('alpine:init', () => {
       return this.currentPath === route;
     },
 
-    openSideNav() { this.isOpen = true; },
-    closeSideNav() { if (window.matchMedia('(max-width: 1024px)').matches) this.isOpen = false; },
+    openSideNav() { this.showSidebarSheet = true; },
+    closeSideNav() { this.showSidebarSheet = false; },
   }));
 }, { once: true });
