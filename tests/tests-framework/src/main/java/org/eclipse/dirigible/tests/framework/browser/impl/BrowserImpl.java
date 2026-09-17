@@ -356,6 +356,16 @@ class BrowserImpl implements Browser {
     @Override
     public Optional<SelenideElement> findOptionalElementInAllFrames(By by, long totalSearchTimeoutSeconds,
             WebElementCondition... conditions) {
+        return findOptionalElementInAllFrames(by, totalSearchTimeoutSeconds, true, conditions);
+    }
+
+    /**
+     * Finds an element in any frame, retrying until the timeout. When {@code failOnMultiple} is false,
+     * the first of several matches is returned instead of failing - for a label the page legitimately
+     * shows in more than one place.
+     */
+    private Optional<SelenideElement> findOptionalElementInAllFrames(By by, long totalSearchTimeoutSeconds, boolean failOnMultiple,
+            WebElementCondition... conditions) {
 
         long maxWaitTime = System.currentTimeMillis() + (totalSearchTimeoutSeconds * 1000);
 
@@ -368,12 +378,12 @@ class BrowserImpl implements Browser {
                     .defaultContent();
 
             Set<SelenideElement> elements = findElementsInFramesRecursively(by, conditions);
-            if (elements.size() > 1) {
+            if (failOnMultiple && elements.size() > 1) {
                 failWithScreenshot("Found [" + elements.size() + "] elements by [" + by + "] and conditions [" + Arrays.toString(conditions)
                         + "] but expected at most one.");
             }
 
-            if (elements.size() == 1) {
+            if (!elements.isEmpty()) {
                 LOGGER.debug("Element by [{}] and conditions [{}] was FOUND.", by, Arrays.toString(conditions));
                 return Optional.of(elements.iterator()
                                            .next());
@@ -654,6 +664,22 @@ class BrowserImpl implements Browser {
     @Override
     public void assertElementExistsByIdAndContainsText(String id, String text) {
         getElementByIdAndContainsText(id, text);
+    }
+
+    @Override
+    public void assertAnyElementExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text) {
+        assertAnyElementExistsByTypeAndContainsText(htmlElementType.getType(), text);
+    }
+
+    @Override
+    public void assertAnyElementExistsByTypeAndContainsText(String elementType, String text) {
+        By by = constructCssSelectorByType(elementType);
+        WebElementCondition[] conditions = {Condition.exist, Condition.matchText(Pattern.quote(text))};
+
+        Optional<SelenideElement> element = findOptionalElementInAllFrames(by, FRAME_SEARCH_TOTAL_SECONDS, false, conditions);
+        if (element.isEmpty()) {
+            failWithScreenshot("Found no element by [" + by + "] and conditions [" + Arrays.toString(conditions) + "].");
+        }
     }
 
     @Override

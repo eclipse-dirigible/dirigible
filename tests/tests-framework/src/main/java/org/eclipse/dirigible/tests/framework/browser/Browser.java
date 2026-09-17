@@ -42,6 +42,25 @@ public interface Browser {
 
     void assertElementExistsByIdAndContainsText(String id, String text);
 
+    /**
+     * Asserts that at least one element of the given type contains the text. Unlike
+     * {@link #assertElementExistsByTypeAndContainsText(HtmlElementType, String)}, more than one match
+     * is not a failure - use it for a label the page legitimately shows in more than one place, e.g. a
+     * sidebar entry and the breadcrumb of the page that entry opens.
+     *
+     * @param htmlElementType element type
+     * @param text text the element must contain
+     */
+    void assertAnyElementExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text);
+
+    /**
+     * Asserts that at least one element of the given type contains the text.
+     *
+     * @param htmlElementType element type
+     * @param text text the element must contain
+     */
+    void assertAnyElementExistsByTypeAndContainsText(String htmlElementType, String text);
+
     void assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType htmlElementType, String text);
 
     void assertElementDoesNotExistsByTypeAndContainsText(String htmlElementType, String text);

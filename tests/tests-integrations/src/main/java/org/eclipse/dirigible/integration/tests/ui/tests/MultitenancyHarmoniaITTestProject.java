@@ -101,8 +101,9 @@ class MultitenancyHarmoniaITTestProject extends BaseMultitenantTestProject {
         boolean forceLogin = !tenant.isDefaultTenant();
         ide.login(forceLogin);
 
-        // The Harmonia shell renders a "Dashboard" entry in its Application sidebar group.
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Dashboard");
+        // The Harmonia shell renders a "Dashboard" entry in its Application sidebar group, and the
+        // dashboard it opens names itself in the breadcrumb - so the label is on the page twice.
+        browser.assertAnyElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Dashboard");
     }
 
     /**
