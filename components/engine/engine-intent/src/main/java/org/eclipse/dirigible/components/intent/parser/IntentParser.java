@@ -718,9 +718,17 @@ public final class IntentParser {
     }
 
     /**
-     * A {@code defaults} value: {@code now} is today in the field's own shape, so it is only meaningful
-     * on a field that HOLDS a date - the same rule and the same wording {@code generates.defaults}
-     * uses. Anything else is a literal, coerced to the property's type at generation.
+     * The field types a {@code now} default is meaningful on: the ones that HOLD the current moment,
+     * each rendered in its own shape. A {@code timestamp} is one of them - it differs from a
+     * {@code date} only in precision, and the copy of a document is made now in both cases (#7396).
+     */
+    private static final Set<String> NOW_FIELD_TYPES = Set.of("date", "timestamp", "month", "week");
+
+    /**
+     * A {@code defaults} value: {@code now} is the current moment in the field's own shape, so it is
+     * only meaningful on a field that HOLDS one - the same rule and the same wording
+     * {@code generates.defaults} uses. Anything else is a literal, coerced to the property's type at
+     * generation.
      */
     private static void validateDuplicableDefault(String subject, String name, String type, String value, List<String> issues) {
         if (value == null || value.isBlank()) {
@@ -731,9 +739,9 @@ public final class IntentParser {
             return;
         }
         String kind = type == null ? "" : type.toLowerCase(Locale.ROOT);
-        if (!"date".equals(kind) && !"month".equals(kind) && !"week".equals(kind)) {
-            issues.add(subject + " assigns [" + name + "] the value now, but that property is not a date - now is today in the field's own"
-                    + " shape, so it is only a value for a date / month / week field");
+        if (!NOW_FIELD_TYPES.contains(kind)) {
+            issues.add(subject + " assigns [" + name + "] the value now, but that property does not hold a moment - now is the current"
+                    + " moment in the field's own shape, so it is only a value for a date / timestamp / month / week field");
         }
     }
 

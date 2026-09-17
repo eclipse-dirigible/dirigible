@@ -34,16 +34,17 @@ import java.util.Map;
  * The two keys compose and never overlap: {@code reset} is for a field that HAS a create-time rule
  * (a {@code calculatedActionOnCreate}, a {@code defaultValue}) and must be handed back to it - a
  * copied value would be respected by that rule and stick; {@code defaults} is for a field that has
- * none, where the copy needs a value stated here. {@code now} renders today in the field's own
- * shape, the same token and the same rendering {@code generates.defaults} uses.
+ * none, where the copy needs a value stated here. {@code now} renders the current moment in the
+ * field's own shape, the same token and the same rendering {@code generates.defaults} uses.
  */
 public class DuplicateIntent {
 
     /**
      * Constants written into the cloned header after the resets, by the entity's own field / to-one
-     * relation name. {@code now} is today in the field's shape ({@code date} -> {@code YYYY-MM-DD}, a
-     * {@code month} field -> {@code YYYY-MM}, a {@code week} field -> {@code YYYY-Www}); any other
-     * value is a literal coerced to the property's type.
+     * relation name. {@code now} is the current moment in the field's shape ({@code date} ->
+     * {@code YYYY-MM-DD}, a {@code timestamp} field -> the ISO instant, a {@code month} field ->
+     * {@code YYYY-MM}, a {@code week} field -> {@code YYYY-Www}); any other value is a literal coerced
+     * to the property's type.
      */
     private Map<String, String> defaults = new LinkedHashMap<>();
 
