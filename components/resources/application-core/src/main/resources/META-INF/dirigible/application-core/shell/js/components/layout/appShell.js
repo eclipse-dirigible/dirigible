@@ -94,7 +94,11 @@ document.addEventListener('alpine:init', () => {
     // a built-in shell section, or an entity route /<Entity>[/create | /:id/edit]. The last crumb
     // is the current page (no route); earlier crumbs link back.
     get breadcrumbTrail() {
-      if (this.isDashboard) return [];
+      // The dashboard names itself like every other page: the home icon ahead of it is the route,
+      // this crumb is the label - the page itself carries no heading of its own.
+      if (this.isDashboard) {
+        return [{ label: window.T ? T('application-core:shell.nav.dashboard', 'Dashboard') : 'Dashboard', route: null }];
+      }
       const segments = this.currentPath.split('/').filter(Boolean);
       const top = segments[0];
       const crumbs = [];

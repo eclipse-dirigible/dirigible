@@ -136,7 +136,14 @@
         </div>
       </div>
 
-      <div x-show="state === 'default'" class="vbox gap-2 p-4 flex-1 overflow-auto">
+      <!-- The dashboard embeds this page in a tile (?preview=1) whose card already frames the rows,
+           so preview drops this page's own gutter and the table's box and grid lines - the reference's
+           dashboard table card is flush and borderless, while the report page itself keeps all three.
+           The container's data-border is read ONCE when the directive initializes (it just adds
+           `border rounded-md`), so the preview branch sets those classes directly rather than binding
+           the attribute and racing Alpine's directive order; data-borders is a pure CSS hook and does
+           bind. -->
+      <div x-show="state === 'default'" class="vbox gap-2 flex-1 overflow-auto" :class="preview ? '' : 'p-4'">
 #if($chart)
 ## Native Harmonia chart directive for this report's chart type (a generation-time constant).
 #if($chart == "line")#set($chartDirective = "x-h-chart-line")#elseif($chart == "pie")#set($chartDirective = "x-h-chart-pie")#elseif($chart == "doughnut")#set($chartDirective = "x-h-chart-doughnut")#elseif($chart == "polarArea")#set($chartDirective = "x-h-chart-polar-area")#elseif($chart == "radar")#set($chartDirective = "x-h-chart-radar")#else#set($chartDirective = "x-h-chart-bar")#end
@@ -146,8 +153,8 @@
         </div>
         <div x-show="view === 'table'" class="vbox gap-2">
 #end
-        <div x-h-table-container.scroll data-border="true">
-          <table x-h-table data-borders="both">
+        <div x-h-table-container.scroll :class="preview ? '' : 'border rounded-md'">
+          <table x-h-table :data-borders="preview ? null : 'both'">
             <thead x-h-table-header>
               <tr x-h-table-row>
                 <template x-for="(col, i) in columns" :key="i"><th x-h-table-head scope="col" :class="alignClass(col)" x-text="col"></th></template>

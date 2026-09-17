@@ -75,6 +75,12 @@ document.addEventListener('alpine:init', () => {
 
     kpiState(r) { return this.kpiData[r.name] || { loaded: false }; },
 
+    // KPI widgets split by the shape they render as. A scalar reads as a compact number tile and a
+    // list as a top-N table, so each kind gets a row of its own - in one grid the wide list tiles
+    // leave holes between the narrow ones.
+    get summaryKpis() { return this.kpis.filter(r => r.widget.kind !== 'list'); },
+    get listKpis() { return this.kpis.filter(r => r.widget.kind === 'list'); },
+
     // Custom widgets, split by how they render: number tiles (kpi) vs embedded pages.
     get customKpis() { return this.customWidgets.filter(w => w.kind !== 'page'); },
     get customPages() { return this.customWidgets.filter(w => w.kind === 'page'); },
