@@ -587,14 +587,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     continue;
                 }
                 parentTarget = CrossModelSupport.resolve(context, uses, via.getTo());
-                String counter = IntentNaming.pascalCase(rollup.getField());
-                if (parentTarget.resolved() && parentTarget.propertyNames() != null && !parentTarget.propertyNames()
-                                                                                                    .contains(counter)) {
-                    // The owner model WAS read and carries no such property. The parser cannot catch this
-                    // (the entity is not local), so surface it here rather than emit a handler that would
-                    // fail the client-Java batch.
-                    reportDroppedGlue(context, "Roll-up [" + rollup.getName() + "] field [" + rollup.getField()
-                            + "] is not a property of cross-model parent [" + via.getModel() + ":" + via.getTo() + "] - not generated");
+                // Every parent column this roll-up writes or reads - the counter, and (since #7410) the
+                // capacity it measures against and the balance it keeps. The owner model WAS read and
+                // carries no such property: the parser cannot catch this (the entity is not local), so
+                // surface it here rather than emit a handler that would fail the client-Java batch.
+                String missingParentProperty = firstUnresolvableParentProperty(rollup, parentTarget);
+                if (missingParentProperty != null) {
+                    reportDroppedGlue(context, "Roll-up [" + rollup.getName() + "] " + missingParentProperty
+                            + " is not a property of cross-model parent [" + via.getModel() + ":" + via.getTo() + "] - not generated");
                     continue;
                 }
             } else if (parent == null) {
@@ -722,6 +722,35 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             rollups.add(rollupEntry(base, className + "RollupOnRekey", "-rekeyed"));
         }
         return rollups;
+    }
+
+    /**
+     * The first property this roll-up writes or reads on a cross-model PARENT that the owner's model
+     * does not declare - its {@code field:} counter, and the {@code capacity:} / {@code balance:} of a
+     * capacity-bearing sum. Returns null when everything resolves, and also when the owner's model
+     * could not be read (the convention fallback), which is the same rule the child side uses: never
+     * fail a generation on a model that was not there to check against.
+     *
+     * @param rollup the roll-up
+     * @param parent the resolved cross-model parent
+     * @return a description of the first unresolvable property, or null
+     */
+    private static String firstUnresolvableParentProperty(RollupIntent rollup, CrossModelSupport.TargetInfo parent) {
+        if (!parent.resolved() || parent.propertyNames() == null) {
+            return null;
+        }
+        java.util.Map<String, String> written = new LinkedHashMap<>();
+        written.put("field", rollup.getField());
+        written.put("capacity", rollup.getCapacity());
+        written.put("balance", rollup.getBalance());
+        for (Map.Entry<String, String> entry : written.entrySet()) {
+            String property = entry.getValue();
+            if (property != null && !property.isBlank() && !parent.propertyNames()
+                                                                  .contains(IntentNaming.pascalCase(property))) {
+                return entry.getKey() + " [" + property + "]";
+            }
+        }
+        return null;
     }
 
     /**

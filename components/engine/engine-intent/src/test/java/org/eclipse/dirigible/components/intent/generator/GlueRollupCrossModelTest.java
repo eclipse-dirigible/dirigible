@@ -104,17 +104,42 @@ class GlueRollupCrossModelTest {
         assertEquals("", first.get("parentModel"), "a local parent must leave the model empty so the local gen folder is used");
     }
 
+    @SuppressWarnings("unchecked")
     @Test
-    void capacityBalanceAndStatusStayLocalOnly() {
-        // These stamp a capacity guard that reads the parent's table and reference the parent's own
-        // status seeds; supporting them across models is a deeper change than resolving coordinates, so
-        // they are rejected with a message that says where to put them instead.
+    void aCrossModelParentTakesCapacityAndBalance() {
+        // Both are pure arithmetic on the foreign parent's own numeric fields - the capacity is READ and
+        // the balance is a second column on the targeted write the sum already makes - so the two sides
+        // of an allocation can finally be guarded symmetrically (#7410).
         String withCapacity = YAML.replace("op: sum, of: hours }", "op: sum, of: hours, capacity: budgetHours, balance: remainingHours }");
-        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(withCapacity));
+        Map<String, Object> first = GlueIntentGenerator.buildRollupsForTest(IntentParser.parse(withCapacity))
+                                                       .get(0);
+        assertEquals(Boolean.TRUE, first.get("parentCrossModel"));
+        assertEquals("BudgetHours", first.get("capacityField"));
+        assertEquals("RemainingHours", first.get("balanceField"));
+    }
+
+    @Test
+    void aCrossModelParentStillRefusesStatus() {
+        // A status move reads the OWNER's status seeds and its displaced-status column: it is the
+        // owner's lifecycle, not arithmetic on a column this roll-up already writes.
+        String withStatus = YAML.replace("op: sum, of: hours }",
+                "op: sum, of: hours, capacity: budgetHours, status: Status, statusWhenFull: 2, statusWhenPartial: 1 }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(withStatus));
         assertTrue(ex.getIssues()
                      .stream()
-                     .anyMatch(i -> i.contains("capacity / balance / status are not supported")),
-                "expected a cross-model capacity issue, got: " + ex.getIssues());
+                     .anyMatch(i -> i.contains("status is not supported")),
+                "expected a cross-model status issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void aCrossModelBalanceWithoutACapacityIsRefused() {
+        // The balance IS capacity minus the sum, so a lone one names a column nothing would ever fill.
+        String lonely = YAML.replace("op: sum, of: hours }", "op: sum, of: hours, balance: remainingHours }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(lonely));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("without a capacity")),
+                "expected a balance-without-capacity issue, got: " + ex.getIssues());
     }
 
     @Test
@@ -341,6 +366,84 @@ class GlueRollupCrossModelTest {
                           .stream()
                           .anyMatch(i -> i.contains("references [SalesInvoice], not the parent [CustomerPayment]")),
                 "the drop must name both entities, got: " + context.getIssues());
+    }
+
+    /**
+     * The mirror direction's owner model: the projects module's {@code Project}, carrying the counter
+     * the roll-up writes and the capacity it measures against.
+     */
+    private static final String PARENT_OWNER_MODEL = """
+            {
+              "model": {
+                "entities": [
+                  {
+                    "name": "Project",
+                    "perspectiveName": "Project",
+                    "dataName": "PROJECTS_PROJECT",
+                    "properties": [
+                      { "name": "Id", "dataName": "ID", "dataType": "INTEGER", "dataPrimaryKey": "true" },
+                      { "name": "ActualHours", "dataName": "ACTUAL_HOURS", "dataType": "DECIMAL" },
+                      { "name": "BudgetHours", "dataName": "BUDGET_HOURS", "dataType": "DECIMAL" },
+                      { "name": "RemainingHours", "dataName": "REMAINING_HOURS", "dataType": "DECIMAL" }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+    private static IntentGenerationContext contextWithParentOwnerModel(IntentModel model) {
+        IRepository repository = mock(IRepository.class);
+        IResource missing = mock(IResource.class);
+        when(missing.exists()).thenReturn(false);
+        IResource owner = mock(IResource.class);
+        when(owner.exists()).thenReturn(true);
+        when(owner.getContent()).thenReturn(PARENT_OWNER_MODEL.getBytes(StandardCharsets.UTF_8));
+        when(repository.getResource(anyString())).thenReturn(missing);
+        when(repository.getResource("/users/admin/workspace/projects/projects.model")).thenReturn(owner);
+        return TestContexts.context(model, repository, "/users/admin/workspace/timesheets", "app");
+    }
+
+    @Test
+    void aCrossModelCapacityIsCheckedAgainstTheOwnersModel() {
+        String withCapacity = YAML.replace("op: sum, of: hours }", "op: sum, of: hours, capacity: budgetHours, balance: remainingHours }");
+        IntentGenerationContext context = contextWithParentOwnerModel(IntentParser.parse(withCapacity));
+        Map<String, Object> first = GlueIntentGenerator.buildRollupsForTest(context.getModel(), context)
+                                                       .get(0);
+        assertEquals("BudgetHours", first.get("capacityField"));
+        assertEquals("RemainingHours", first.get("balanceField"));
+        assertTrue(context.getIssues()
+                          .isEmpty(),
+                "a fully resolvable roll-up must report nothing: " + context.getIssues());
+    }
+
+    @Test
+    void aCrossModelCapacityTheOwnerDoesNotDeclareIsDroppedLoudly() {
+        // The parser cannot see the foreign parent's fields, so a misspelt capacity would otherwise
+        // reach javac as a field access on a type that has no such member - which fails the whole
+        // client-Java batch, not just this handler.
+        String misspelt = YAML.replace("op: sum, of: hours }", "op: sum, of: hours, capacity: budgetedHours }");
+        IntentGenerationContext context = contextWithParentOwnerModel(IntentParser.parse(misspelt));
+        assertTrue(GlueIntentGenerator.buildRollupsForTest(context.getModel(), context)
+                                      .isEmpty(),
+                "a roll-up measuring against a column the owner does not declare must not be generated");
+        assertTrue(context.getIssues()
+                          .stream()
+                          .anyMatch(i -> i.contains("capacity [budgetedHours]")),
+                "the drop must name the unresolvable capacity, got: " + context.getIssues());
+    }
+
+    @Test
+    void aCrossModelBalanceTheOwnerDoesNotDeclareIsDroppedLoudly() {
+        String misspelt = YAML.replace("op: sum, of: hours }", "op: sum, of: hours, capacity: budgetHours, balance: leftoverHours }");
+        IntentGenerationContext context = contextWithParentOwnerModel(IntentParser.parse(misspelt));
+        assertTrue(GlueIntentGenerator.buildRollupsForTest(context.getModel(), context)
+                                      .isEmpty(),
+                "a roll-up writing a balance column the owner does not declare must not be generated");
+        assertTrue(context.getIssues()
+                          .stream()
+                          .anyMatch(i -> i.contains("balance [leftoverHours]")),
+                "the drop must name the unresolvable balance, got: " + context.getIssues());
     }
 
     @Test
