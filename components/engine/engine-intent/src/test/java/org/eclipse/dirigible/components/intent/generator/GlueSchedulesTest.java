@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.ide.template.service.model.JavaLiterals;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
@@ -115,8 +116,9 @@ class GlueSchedulesTest {
         assertEquals("Employee", s.get("entity"));
         assertEquals("EmployeeTimesheet", s.get("genToEntity"));
         assertEquals(false, s.get("genCrossModel"));
-        assertTrue(((String) s.get("criteriaExpression")).contains(".eq(\"Status\", \"ACTIVE\")"),
-                "criteria: " + s.get("criteriaExpression"));
+        assertTrue(GlueRendering.criteria(s)
+                                .contains(".eq(\"Status\", \"ACTIVE\")"),
+                "criteria: " + GlueRendering.criteria(s));
 
         List<Map<String, Object>> fields = (List<Map<String, Object>>) s.get("genFieldAssignments");
         // The loop variable in the job template is "entity"; map copies the row, defaults render
@@ -289,7 +291,9 @@ class GlueSchedulesTest {
         // Convention fallback (no repository): the owner perspective + key default to the entity name / Id.
         assertEquals("Project", s.get("perspective"));
         assertEquals("Id", s.get("attachKeyProperty"));
-        assertTrue(((String) s.get("criteriaExpression")).contains(".eq(\"Status\", 2)"), "criteria: " + s.get("criteriaExpression"));
+        assertTrue(GlueRendering.criteria(s)
+                                .contains(".eq(\"Status\", 2)"),
+                "criteria: " + GlueRendering.criteria(s));
 
         List<Map<String, Object>> children = (List<Map<String, Object>>) s.get("genChildren");
         assertEquals(1, children.size());
@@ -386,10 +390,12 @@ class GlueSchedulesTest {
         assertEquals(true, s.get("hasGenUnique"));
         List<Map<String, Object>> unique = (List<Map<String, Object>>) s.get("genUnique");
         assertEquals(Map.of("property", "Supplier", "expr", "entity.Supplier"), unique.get(0));
-        // The bounds are built from the assignment's own LocalDate.now(), so the period the guard
-        // queries is by construction the period the row is dated into.
-        assertEquals(Map.of("kind", "range", "property", "Date", "lower", "java.time.LocalDate.now().withDayOfMonth(1)", "upper",
-                "java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1).minusDays(1)"), unique.get(1));
+        // The glue carries the PERIOD the author declared (issue #7406); the template layer turns it
+        // into the two bounds, which stay derived from one another - so the period the guard queries is
+        // by construction the period the row is dated into.
+        assertEquals(Map.of("kind", "range", "property", "Date", "period", "month"), unique.get(1));
+        assertEquals("java.time.LocalDate.now().withDayOfMonth(1)", JavaLiterals.periodLowerExpression("month"));
+        assertEquals("java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1).minusDays(1)", JavaLiterals.periodUpperExpression("month"));
     }
 
     @SuppressWarnings("unchecked")
@@ -437,8 +443,9 @@ class GlueSchedulesTest {
         assertEquals(true, s.get("hasGenUnique"));
         List<Map<String, Object>> unique = (List<Map<String, Object>>) s.get("genUnique");
         assertEquals(Map.of("property", "Supplier", "expr", "entity.Supplier"), unique.get(0));
-        assertEquals(Map.of("kind", "range", "property", "Date", "lower", "java.time.LocalDate.now().withDayOfMonth(1)", "upper",
-                "java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1).minusDays(1)"), unique.get(1));
+        assertEquals(Map.of("kind", "range", "property", "Date", "period", "month"), unique.get(1));
+        assertEquals("java.time.LocalDate.now().withDayOfMonth(1)", JavaLiterals.periodLowerExpression("month"));
+        assertEquals("java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1).minusDays(1)", JavaLiterals.periodUpperExpression("month"));
     }
 
     @SuppressWarnings("unchecked")
@@ -477,11 +484,12 @@ class GlueSchedulesTest {
                                                                                           .get(0)
                                                                                           .get("genUnique");
 
-        assertEquals("java.time.LocalDate.now().with(java.time.temporal.IsoFields.DAY_OF_QUARTER, 1)", unique.get(1)
-                                                                                                             .get("lower"));
+        assertEquals("quarter", unique.get(1)
+                                      .get("period"));
+        assertEquals("java.time.LocalDate.now().with(java.time.temporal.IsoFields.DAY_OF_QUARTER, 1)",
+                JavaLiterals.periodLowerExpression("quarter"));
         assertEquals("java.time.LocalDate.now().with(java.time.temporal.IsoFields.DAY_OF_QUARTER, 1).plusMonths(3).minusDays(1)",
-                unique.get(1)
-                      .get("upper"));
+                JavaLiterals.periodUpperExpression("quarter"));
     }
 
     @SuppressWarnings("unchecked")
@@ -527,7 +535,7 @@ class GlueSchedulesTest {
         Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(IntentParser.parse(DUNNING))
                                                    .get(0);
 
-        assertEquals("Criteria.create().eq(\"Status\", 3).lt(\"DueOn\", java.time.LocalDate.now())", s.get("criteriaExpression"));
+        assertEquals("Criteria.create().eq(\"Status\", 3).lt(\"DueOn\", java.time.LocalDate.now())", GlueRendering.criteria(s));
     }
 
     /**
@@ -648,8 +656,8 @@ class GlueSchedulesTest {
         List<Map<String, Object>> unique = (List<Map<String, Object>>) s.get("genUnique");
         assertEquals(List.of("property", "expr"), List.copyOf(unique.get(0)
                                                                     .keySet()));
-        assertEquals(List.of("kind", "property", "lower", "upper"), List.copyOf(unique.get(1)
-                                                                                      .keySet()));
+        assertEquals(List.of("kind", "property", "period"), List.copyOf(unique.get(1)
+                                                                              .keySet()));
     }
 
     /**
@@ -740,7 +748,7 @@ class GlueSchedulesTest {
                                                    .get(0);
 
         assertEquals(true, s.get("sourceCrossModel"));
-        assertEquals("Criteria.create().eq(\"Status\", 4)", s.get("criteriaExpression"));
+        assertEquals("Criteria.create().eq(\"Status\", 4)", GlueRendering.criteria(s));
         // Read off the owner model, not guessed from the entity name.
         assertEquals("SalesInvoice", s.get("perspective"));
     }
@@ -757,7 +765,7 @@ class GlueSchedulesTest {
         Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(context.getModel(), context)
                                                    .get(0);
 
-        assertEquals("Criteria.create().eq(\"Number\", \"SI-1\")", s.get("criteriaExpression"));
+        assertEquals("Criteria.create().eq(\"Number\", \"SI-1\")", GlueRendering.criteria(s));
     }
 
     /**
@@ -794,7 +802,7 @@ class GlueSchedulesTest {
                                                    .get(0);
 
         assertEquals("Criteria.create().lt(\"DueDate\", java.time.LocalDate.now().minus(java.time.Period.parse(\"P1M\")))",
-                s.get("criteriaExpression"));
+                GlueRendering.criteria(s));
     }
 
     /** An audit column of the owner is a {@code TIMESTAMP} like any other, and typed as one. */
@@ -808,7 +816,7 @@ class GlueSchedulesTest {
                                                    .get(0);
 
         assertEquals("Criteria.create().lt(\"UpdatedAt\", java.time.Instant.now().minus(java.time.Duration.parse(\"PT30M\")))",
-                s.get("criteriaExpression"));
+                GlueRendering.criteria(s));
     }
 
     /** A moment against a column that is not temporal at all is the third way the query cannot bind. */

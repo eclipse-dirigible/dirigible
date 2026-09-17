@@ -34,6 +34,9 @@ import java.util.function.Consumer;
  */
 public final class JavaLiterals {
 
+    /** The current date, the anchor every period range is derived from. */
+    private static final String TODAY = "java.time.LocalDate.now()";
+
     /**
      * Not instantiable.
      */
@@ -223,6 +226,204 @@ public final class JavaLiterals {
     }
 
     /**
+     * The Java {@code Criteria} builder chain a neutral criteria list renders as (issue #7406) - the
+     * clauses in declared order, each an operator, a property and a bound value.
+     *
+     * <p>
+     * A {@code .glue} used to carry the chain itself, {@code Criteria.create().lt("Due",
+     * java.time.LocalDate.now())} - the builder's package and {@code java.time} written into the
+     * process description every template reads. It now carries the clauses as data and the language
+     * appears only here, the same split {@code checks} took in #7405.
+     *
+     * @param terms the clauses the glue carries, may be null
+     * @return the chain, e.g. {@code .eq("Status", 3).gt("TotalHours", 0)}, empty for no clauses
+     */
+    public static String criteriaChain(List<? extends Map<String, ?>> terms) {
+        if (terms == null) {
+            return "";
+        }
+        StringBuilder chain = new StringBuilder();
+        for (Map<String, ?> term : terms) {
+            String operator = text(term, "op");
+            String property = text(term, "property");
+            String value = criteriaValueExpression(term.get("value"));
+            // A clause the generator did not write in full cannot be narrowed into a guess: the operator
+            // set and the value vocabulary are both closed and validated while the author is generating,
+            // so anything else here is a glue no generation of this build produced.
+            if (operator == null || property == null || value == null) {
+                continue;
+            }
+            chain.append('.')
+                 .append(operator)
+                 .append("(\"")
+                 .append(escape(property))
+                 .append("\", ")
+                 .append(value)
+                 .append(')');
+        }
+        return chain.toString();
+    }
+
+    /**
+     * The same clauses as a whole criteria, for a caller that opens one rather than appending to one.
+     *
+     * @param terms the clauses the glue carries, may be null
+     * @return e.g. {@code Criteria.create().eq("Active", true)}
+     */
+    public static String criteriaExpression(List<? extends Map<String, ?>> terms) {
+        return "Criteria.create()" + criteriaChain(terms);
+    }
+
+    /**
+     * One criteria clause's bound value as a Java expression, from the reading the glue carries.
+     *
+     * <p>
+     * The value is BOUND by the criteria rather than compared in generated code, so a number renders as
+     * the number it is - a {@code BigDecimal} wrapper would change the bind's type - while a moment
+     * renders in the shape the queried COLUMN carries, which is what makes the comparison bind at all
+     * (issue #7384).
+     *
+     * @param raw the reading, as the clause's {@code value}
+     * @return the Java expression, or null when the reading is not one this renders
+     */
+    private static String criteriaValueExpression(Object raw) {
+        if (!(raw instanceof Map<?, ?> reading)) {
+            return null;
+        }
+        String kind = text(reading, "kind");
+        if (kind == null) {
+            return null;
+        }
+        String value = text(reading, "text");
+        return switch (kind) {
+            case "null" -> "null";
+            case "number", "boolean" -> value;
+            case "string" -> value == null ? null : "\"" + escape(value) + "\"";
+            case "moment" -> momentExpression(reading);
+            default -> null;
+        };
+    }
+
+    /**
+     * A now-token, optionally offset, as the Java expression the generated job evaluates at each
+     * firing.
+     *
+     * <p>
+     * A calendar amount has no fixed length in seconds, so on a timestamp it is applied on the calendar
+     * of the run's own zone and handed back as the instant the column holds - the meaning a
+     * {@code Duration} could not express at all. The offset's own spelling says which it is: an
+     * ISO-8601 amount carrying a time component is a {@code Duration}, a date-only one a
+     * {@code Period}.
+     *
+     * @param reading the moment reading
+     * @return the expression
+     */
+    private static String momentExpression(Map<?, ?> reading) {
+        boolean date = "date".equals(text(reading, "shape"));
+        String offset = text(reading, "offset");
+        if (offset == null) {
+            return date ? "java.time.LocalDate.now()" : "java.time.Instant.now()";
+        }
+        String movement = "false".equals(text(reading, "forward")) ? ".minus(" : ".plus(";
+        if (date) {
+            return "java.time.LocalDate.now()" + movement + "java.time.Period.parse(\"" + escape(offset) + "\"))";
+        }
+        if (offset.indexOf('T') >= 0 || offset.indexOf('t') >= 0) {
+            return "java.time.Instant.now()" + movement + "java.time.Duration.parse(\"" + escape(offset) + "\"))";
+        }
+        return "java.time.ZonedDateTime.now()" + movement + "java.time.Period.parse(\"" + escape(offset) + "\")).toInstant()";
+    }
+
+    /**
+     * The first day of the current period, as a {@code java.time.LocalDate} expression (issue #7406).
+     *
+     * <p>
+     * A scheduled generation's {@code run:} key term used to reach the glue as this arithmetic already
+     * written out. What the author declared is a PERIOD - a month, a quarter - and that is what the
+     * glue now carries; where the month begins is a rendering, and it belongs here with every other
+     * one.
+     *
+     * @param period the declared period
+     * @return the expression, or null for a period that has no range (a {@code day}, or an unknown one)
+     */
+    public static String periodLowerExpression(String period) {
+        if (period == null) {
+            return null;
+        }
+        return switch (period) {
+            case "week" -> TODAY + ".with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))";
+            case "month" -> TODAY + ".withDayOfMonth(1)";
+            case "quarter" -> TODAY + ".with(java.time.temporal.IsoFields.DAY_OF_QUARTER, 1)";
+            case "year" -> TODAY + ".withDayOfYear(1)";
+            default -> null;
+        };
+    }
+
+    /**
+     * The last day of the current period, derived from its first - so the range the generated guard
+     * queries is by construction the period the row is dated into.
+     *
+     * @param period the declared period
+     * @return the expression, or null for a period that has no range
+     */
+    public static String periodUpperExpression(String period) {
+        String lower = periodLowerExpression(period);
+        if (lower == null) {
+            return null;
+        }
+        return lower + switch (period) {
+            case "week" -> ".plusDays(6)";
+            case "month" -> ".plusMonths(1).minusDays(1)";
+            case "quarter" -> ".plusMonths(3).minusDays(1)";
+            default -> ".plusYears(1).minusDays(1)";
+        };
+    }
+
+    /**
+     * Today, the expression a {@code run: day} key term compares against - a single day needs no range,
+     * and rendering it as one would make the generated guard say {@code between(today, today)} where
+     * the author wrote {@code run: day}.
+     *
+     * @return the expression
+     */
+    public static String todayExpression() {
+        return TODAY;
+    }
+
+    /**
+     * The Java expression a posting's compared DEFAULT renders as, from the neutral reading the glue
+     * carries (issue #7406) - the value the generated {@code save()} would have written into the column
+     * had the intent not derived one, which is what makes a redelivery distinguishable from an
+     * amendment (issue #7131).
+     *
+     * <p>
+     * The reading is the column's own, taken at generation against the SQL type the property becomes,
+     * so this renders it and does not re-decide it: a {@code number} compares by value through
+     * {@code BigDecimal}, a {@code boolean} through the boxed constants the column holds, and a
+     * {@code string} as the stored text - always quoted, even when it reads as a number, because a bare
+     * {@code 0} would compare unequal to the stored {@code "0"}.
+     *
+     * @param raw the reading the glue carries, as the assignment's {@code derivedDefaultValue}
+     * @return the Java expression, or null when there is no reading to render
+     */
+    public static String derivedDefaultExpression(Object raw) {
+        if (!(raw instanceof Map<?, ?> reading)) {
+            return null;
+        }
+        String kind = text(reading, "kind");
+        String value = text(reading, "text");
+        if (kind == null || value == null) {
+            return null;
+        }
+        return switch (kind) {
+            case "number" -> "new java.math.BigDecimal(\"" + escape(value) + "\")";
+            case "boolean" -> "true".equals(value) ? "Boolean.TRUE" : "Boolean.FALSE";
+            case "string" -> "\"" + escape(value) + "\"";
+            default -> null;
+        };
+    }
+
+    /**
      * A guard term's value as a Java literal of its type - the exact equality the term was typed
      * against, and null for a type that has none.
      *
@@ -244,13 +445,13 @@ public final class JavaLiterals {
     }
 
     /** A model value as text, or null when it is absent - a model carries everything as strings. */
-    private static String text(Map<String, ?> holder, String key) {
+    private static String text(Map<?, ?> holder, String key) {
         Object value = holder == null ? null : holder.get(key);
         return value == null ? null : String.valueOf(value);
     }
 
     /** A model flag, which reaches here as a boolean or as the text one serialised to. */
-    private static boolean flag(Map<String, ?> holder, String key) {
+    private static boolean flag(Map<?, ?> holder, String key) {
         Object value = holder == null ? null : holder.get(key);
         return value instanceof Boolean bool ? bool : "true".equals(String.valueOf(value));
     }
