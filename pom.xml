@@ -187,7 +187,7 @@
         <maven-resolver-maven.version>3.9.16</maven-resolver-maven.version>
 
         <!-- Camel -->
-        <camel.version>4.22.0</camel.version>
+        <camel.version>4.22.1</camel.version>
 
 
         <!-- Velocity -->
