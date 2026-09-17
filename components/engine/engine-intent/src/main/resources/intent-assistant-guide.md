@@ -556,7 +556,12 @@ field may declare:
     `field` is the entity's own field or a one-hop `Relation.field`; `when` is a guard (see *the event
     axis*) over the record's own columns. This is how "a fine cannot be marked identified without a
     driver" is declared - the requiredness that `required: true` cannot express because the value is
-    legitimately empty earlier in the life of the record.
+    legitimately empty earlier in the life of the record. The `status:` gate is OPTIONAL, and its
+    PRESENCE is the routing: without one the rule holds on every user write (each generated
+    controller's `validate()`, a 400 with the authored message), with one the repository enforces it
+    when the record is persisted carrying that status - so a draft may still be filled in, and the
+    refusal reaches the person completing the task that sets the status rather than dead-lettering
+    as a process incident. A gated one needs the `function: EntityStatus` relation.
   - `{ kind: forbidWhen, when: "SalesInvoice.Status == PAID", message: "..." }` (#7275): the
     reject-twin - it refuses the write while its condition holds and reads no value, so it carries no
     `field`. Its one reach beyond `requiredWhen` is that a term may name a one-hop `Relation.field`, so
