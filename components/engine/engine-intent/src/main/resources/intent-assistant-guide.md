@@ -551,6 +551,24 @@ field may declare:
     "a submitted request covers at least one day" without forbidding the draft still being filled
     in - the rule to reach for instead of mis-authoring it as an `itemsMin` over a child the
     approval step has not created yet. A gated compare needs the `function: EntityStatus` relation.
+  - `{ kind: requiredWhen, field: driver, when: "Status == IDENTIFIED", status: IDENTIFIED, message: "..." }`
+    (#7094): a **conditionally required** value - `field` must be present whenever `when` holds.
+    `field` is the entity's own field or a one-hop `Relation.field`; `when` is a guard (see *the event
+    axis*) over the record's own columns. This is how "a fine cannot be marked identified without a
+    driver" is declared - the requiredness that `required: true` cannot express because the value is
+    legitimately empty earlier in the life of the record.
+  - `{ kind: forbidWhen, when: "SalesInvoice.Status == PAID", message: "..." }` (#7275): the
+    reject-twin - it refuses the write while its condition holds and reads no value, so it carries no
+    `field`. Its one reach beyond `requiredWhen` is that a term may name a one-hop `Relation.field`, so
+    a composition child can refuse a write based on its parent's state (no allocation onto an already
+    PAID invoice). `message` is mandatory on a `forbidWhen` (the refusal is its whole point) and always
+    worth writing on a `requiredWhen`.
+  - Both take the same OPTIONAL `status:` gate as `compare`, and the gate is what decides WHERE the rule
+    runs: **without one** it holds on every user write (the controllers, 400); **with one** the
+    repository enforces it when the record is persisted carrying that status - which is the only form
+    that catches a workflow's own `setField`/`setRelationField`, since those are repository writes and
+    never pass through a controller. A rule meant to gate a status the workflow sets needs the gate,
+    and a gated check needs the `function: EntityStatus` relation.
   - `{ kind: itemsSumEqual, over: [debit, credit], status: 2, message: "..." }` (document-level):
     the sums of the two item fields must be equal - the double-entry invariant. Enforced in the
     repository whenever the document is persisted CARRYING the `status` gate seed id, i.e. at the
@@ -3427,6 +3445,53 @@ The guard is **optional** on these three (and on a `trigger:` / `wait`) - "on an
 legitimate thing to ask for. It is **mandatory** on `postings:` and on a `generates` `event:`, because
 those two CREATE a document per transition and an unguarded one is nearly always a mistake.
 
+#### `when:` - the guard grammar
+
+A `when:` is a closed set of **equality comparisons over the record's own columns** - not an expression
+language, and not one grammar either: each construct holds its guard to its own shape, listed below, and
+the parser refuses what does not fit rather than degrading it.
+
+```
+<Property> ==|!= <literal>
+```
+
+- **`<Property>`** is a field or a to-one relation **of the record itself**. The condition is read off
+  the row, so nothing is loaded to evaluate it and a dotted `Relation.field` is refused here (the one
+  exception is a `checks: forbidWhen`, which may hop one relation so a child can test its parent).
+- **`<literal>`** is an integer, a **status name** (resolved to its seed id before anything else sees it,
+  so `Status == POSTED` and `Status == 3` are the same guard), a quoted string, a bare word, or a
+  boolean.
+- Where a list is accepted, it is the AND of its terms (dirigible #6957); there is no OR anywhere
+  (author two consumers instead, or route to two statuses).
+
+What each construct accepts:
+
+- **`notifications` / `integrations` / `outbound`** - the full shape: any number of terms, `==` or `!=`,
+  over the entity's **string, integer and boolean** properties (a to-one by its key). A decimal, a
+  double or a date is refused rather than compared, because a boxed comparison across types is silently
+  always-false, which switches the rule off while looking authored. The guard is **optional** here,
+  `onTransition` included - "on any status change" is a legitimate thing to ask for.
+- **`generates` `event:`** - exactly **one** status term (`<Status> == <name|id>`, `==` only) plus any
+  number of `<StringField> ==|!= <literal>` terms over the source's own **string/text** fields. An
+  integer or boolean field cannot carry a literal guard here, and a property guarded twice is refused.
+  The status term is **mandatory** on `onTransition`, optional on `onCreate` / `onPhase`.
+- **`postings` `event:`** - exactly one `<Status> == <name|id>` term: **no list**, no string term.
+  Mandatory on `onTransition`, optional on `onCreate` / `onPhase`.
+- **process `trigger:`** - a comparison or a list of them, optional; a **`wait` step's `when`** - one
+  comparison, optional. Neither is held to the grammar at parse time, so a term with a typo renders as
+  `true` and fires on every event - proofread them.
+- **`resolves` `event:`** and **`transitions[].when`** - one comparison, no list.
+
+So nothing restricts a glue or `generates` guard to the status column. A string term may read a
+`resolves:` `outcome:` trace, which is how the outcomes of one lookup are told apart without minting a
+status per outcome (declare the trace field `readOnly: true` - a guard on a field the user can edit
+turns "how did this record get here" into "what does the field say today", and Generate warns about
+it):
+
+```yaml
+    event: { onTransition: Fine, mode: append, when: ["Status == UNRESOLVED", "resolution == notFound"] }
+```
+
 A step event fires when the running process arrives at that step (`onStepReached` - e.g. a user task
 has just become available in the inbox) or when it has just finished it (`onStepCompleted` - after
 the reviewer's edits and any status set have been persisted). It is delivered as a message about the
@@ -3815,13 +3880,25 @@ candidates, because a silently-wrong driver (or price, or approver) is worse tha
 record. Route each outcome with `setStatus` and/or record it with `outcome:` so the unresolved ones
 are a filterable worklist a human can finish, and so a process `decision` can branch on them.
 
-**Two outcomes you must tell apart downstream need two statuses.** Note that the example above routes
-`notFound` and `ambiguous` to DIFFERENT statuses, and that is not decoration. A `generates:` /
-`postings:` / process `trigger:` guard compares a **status** and nothing else - `when:` cannot read the
-`outcome:` string - so two outcomes sharing one status become permanently indistinguishable to every
-reaction downstream. If one needs a `NO_MATCH` audit row and the other a `MULTIPLE_MATCHES` one, or if
-they route to different fallback processes, they need separate statuses and separate seed rows. Reuse a
-single status only when nothing downstream cares which of the two happened.
+**Two outcomes you must tell apart downstream need two statuses OR a guard that reads `outcome:`.**
+A `generates` guard takes, next to its status term, terms over the source's own STRING fields (see *the
+event axis*), so `outcome:` is readable there - the example above could equally route both failures to
+one `UNRESOLVED` and separate the audit rows on the outcome, as long as the rows are minted by a
+`generates` (`mode: append`); a `postings:` guard is the status term alone, so a posting per outcome
+still needs a status per outcome:
+
+```yaml
+    notFound:  { setStatus: UNRESOLVED }
+    ambiguous: { setStatus: UNRESOLVED }
+# ...
+    event: { onTransition: Fine, mode: append, when: ["Status == UNRESOLVED", "resolution == notFound"] }
+```
+
+Prefer that when the two failures are handled the SAME way and differ only in what the trail records:
+one status, one fallback process, one worklist. Prefer separate statuses when they are handled
+DIFFERENTLY - a process binds at most one trigger and a guard list is ANDed, never ORed, so two failure
+kinds that need two different flows need two statuses to start them. What is never right is one status
+plus no outcome term: the two are then indistinguishable to everything downstream.
 
 Because each outcome's `setStatus:` publishes `-transitioned` (see *which writes are observable*), the
 whole automatic path is bindable without writing any Java:
@@ -3984,6 +4061,8 @@ or a seeded name.
 - "the flow waits for a reply / a payment / a goods receipt (a data event resumes it)" -> **processes** (a `wait` step)
 - "remind / escalate if a task is not handled in N days (SLA)" -> **processes** (userTask `timeout:`)
 - "who/which was assigned / in force / valid on that date (from a register with from-to dates)" -> **resolves**
+- "X must be filled in before/when it reaches STATUS (but may be empty while it is a draft)" -> **checks** `requiredWhen` WITH the `status:` gate - a workflow's own status set is a repository write and never reaches a controller
+- "this must not be changed/added once the parent is PAID/CLOSED" -> **checks** `forbidWhen`
 - "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)
 - "cancel the in-flight approval when the document is voided/cancelled (no orphaned Inbox task)" -> **processes** (`abortOn:`)
 - "deleting a document under approval must kill the approval / must be refused while it runs" -> **processes** (`whenDeleted: abort | refuse`; the cancelling `-deleted` listener is generated regardless)
