@@ -576,7 +576,12 @@ field may declare:
     `field`. Its one reach beyond `requiredWhen` is that a term may name a one-hop `Relation.field`, so
     a composition child can refuse a write based on its parent's state (no allocation onto an already
     PAID invoice). `message` is mandatory on a `forbidWhen` (the refusal is its whole point) and always
-    worth writing on a `requiredWhen`.
+    worth writing on a `requiredWhen`. A `forbidWhen` also refuses the **DELETE** of a row it guards
+    (#7372) - it is the one check kind about the write HAPPENING rather than about the values it
+    carries, and removing a line is the largest of the three changes the child panel hides (Add, row
+    edit, row delete). That half is on the controllers whatever the gate says, because a delete is
+    nobody's transition; the master's own cascade is untouched, since whether THAT delete is allowed is
+    what `whenMasterDeleted:` declares.
   - Both take the same OPTIONAL `status:` gate as `compare`, and the gate is what decides WHERE the rule
     runs: **without one** it holds on every user write (the controllers, 400); **with one** the
     repository enforces it when the record is persisted carrying that status - which is the only form
@@ -3809,8 +3814,24 @@ misspelt one is reported there rather than at parse. Three limits, all deliberat
 
 **A cross-model PARENT** is the mirror direction and needs no new key: give the child's `via` relation
 its own `model:` alias (the child is local and owns the event, the total lands in the owner's model).
-There `capacity` / `balance` / `status` ARE refused - they read the foreign parent's own fields and
-status seeds, which this model does not own.
+`capacity` and `balance` work here, **overdraw guard included** - the check is a READ of the foreign
+parent's capacity plus a re-sum of this model's own child rows, and it is emitted into the CHILD's
+repository, which this model generates. That is what lets both sides of an allocation be guarded from
+the module that owns the link rows:
+```yaml
+uses:
+  - { model: customer-payments }
+rollups:
+  # CustomerPayment.allocated = the sum of its allocation rows; unapplied = amount - allocated, and a
+  # row allocating past the payment's amount is refused with the same 400 the local direction emits.
+  - { name: paymentAllocated, entity: SalesInvoiceCustomerPayment, via: CustomerPayment,
+      field: allocated, op: sum, of: amount, capacity: amount, balance: unapplied }
+```
+`capacity` and `balance` name fields of the FOREIGN parent, so - like `field:` - they are checked
+against the owner's generated model at Generate time, and a `balance` without a `capacity` is refused
+at parse (the balance IS capacity minus the sum). `status` stays refused on this direction: it moves
+the parent through the owner's own status seeds and its displaced-status column, which is the owner's
+lifecycle to declare.
 
 **Rules:** `via` must be a to-one (`manyToOne` / `oneToOne`) relation of the child entity; `field`
 must be an existing field on the parent (**integer** for `count`, **numeric** for `sum`). For the sum

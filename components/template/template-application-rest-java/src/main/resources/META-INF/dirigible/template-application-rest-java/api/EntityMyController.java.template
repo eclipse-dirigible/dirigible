@@ -298,6 +298,11 @@ public class ${name}MyController {
 #if($processDeleteGuards)
         requireNoRunningProcess(existing);
 #end
+#if($deleteChecks && $deleteChecks.size() > 0)
+        // A `checks: forbidWhen` refuses the REMOVAL of a row it guards too, not only its create and
+        // its update - the delete is the third affordance the master-detail panel hides (#7372).
+        requireDeletable(existing);
+#end
         try {
             repository.deleteById(id);
         } catch (RuntimeException e) {
@@ -683,7 +688,7 @@ public class ${name}MyController {
             ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
 #end
             if (${check.guardJavaExpression}) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.message}");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
             }
         }
 #elseif($check.kind == "agree")
@@ -772,6 +777,40 @@ public class ${name}MyController {
 #end
 #end
     }
+#if($deleteChecks && $deleteChecks.size() > 0)
+    /**
+     * The {@code checks: forbidWhen} refusal on a DELETE (#7372). That construct is the one check kind
+     * about the write HAPPENING rather than about the values it carries, so removing a row it guards is
+     * a change like any other - and the largest of the three the master-detail panel hides (Add, row
+     * edit, row delete). Checked against the STORED row, since a delete carries no payload.
+     *
+     * <p>
+     * The gate rides along here instead of routing the rule to the repository, as it does for a create
+     * and an update: a delete is nobody's transition - no process step deletes a record - so there is
+     * no repository-side write for a gated check to sit on. It also keeps the composition cascade out
+     * of this: a master sweeping its own children away goes through their repositories and never this
+     * verb, and whether THAT is allowed is what {@code whenMasterDeleted:} declares.
+     */
+    private static void requireDeletable(${name}Entity entity) {
+#foreach($check in $deleteChecks)
+#if($check.status && $check.status != "")
+        if (entity.${check.statusProperty} != null && entity.${check.statusProperty} == ${check.status}) {
+#end
+        {
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            if (${check.guardJavaExpression}) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+            }
+        }
+#if($check.status && $check.status != "")
+        }
+#end
+#end
+    }
+#end
 #end
 
 #if($hasReferenceValidations && !$personalReadOnly)

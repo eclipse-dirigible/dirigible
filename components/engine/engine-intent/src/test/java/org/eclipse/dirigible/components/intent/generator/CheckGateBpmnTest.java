@@ -82,6 +82,31 @@ class CheckGateBpmnTest {
                           - { name: enrich,   kind: serviceTask, args: { delegate: custom.billing.Enrich, next: settle } }
                           - { name: settle,   kind: serviceTask, args: { setRelationField: Status, value: 2, next: over } }
                           - { name: over,     kind: end }
+                      - name: InvoicePosting
+                        trigger: { onCreate: Invoice }
+                        steps:
+                          - { name: post,     kind: userTask, args: { assignee: clerk, form: DecideInvoice } }
+                          - { name: decide,   kind: decision, args: { if: "action == 'approve'", then: apply, else: reject } }
+                          - name: apply
+                            kind: serviceTask
+                            args:
+                              delegate: custom.billing.Post
+                              next: activate
+                          - { name: activate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: done } }
+                          - { name: reject,   kind: serviceTask, args: { setRelationField: Status, value: 8, next: done } }
+                          - { name: done,     kind: end }
+                      - name: InvoiceRetrying
+                        trigger: { onCreate: Invoice }
+                        steps:
+                          - { name: send,     kind: userTask, args: { assignee: clerk, form: ApproveInvoice, next: transmit } }
+                          - name: transmit
+                            kind: serviceTask
+                            args:
+                              delegate: custom.billing.Transmit
+                              retry: { count: 3, every: PT30S }
+                              next: settle
+                          - { name: settle,   kind: serviceTask, args: { setRelationField: Status, value: 2, next: over } }
+                          - { name: over,     kind: end }
                       - name: InvoiceDecision
                         trigger: { onCreate: Invoice }
                         steps:
@@ -148,6 +173,16 @@ class CheckGateBpmnTest {
 
     private static void assertAsynchronous(String bpmn, String id) {
         assertTrue(bpmn.contains("<serviceTask id=\"" + id + "\" name=\"" + name(bpmn, id) + "\" flowable:async=\"true\""),
+                "[" + id + "] must keep its async boundary in:\n" + bpmn);
+    }
+
+    private static void assertSynchronousDelegate(String bpmn, String id) {
+        assertTrue(bpmn.contains("<serviceTask id=\"" + id + "\" name=\"" + name(bpmn, id) + "\" flowable:class="),
+                "[" + id + "] must run in the completing transaction (no flowable:async) in:\n" + bpmn);
+    }
+
+    private static void assertAsynchronousDelegate(String bpmn, String id) {
+        assertTrue(bpmn.contains("<serviceTask id=\"" + id + "\" name=\"" + name(bpmn, id) + "\" flowable:async=\"true\" flowable:class="),
                 "[" + id + "] must keep its async boundary in:\n" + bpmn);
     }
 
@@ -222,13 +257,44 @@ class CheckGateBpmnTest {
     }
 
     @Test
-    void authoredWorkBetweenTheTaskAndTheGateKeepsItsAsyncBoundary() {
+    void authoredWorkBetweenTheTaskAndTheGateRunsInTheCompletingTransaction() {
         String bpmn = bpmn("InvoiceHandover");
 
-        // The walk back from a gate stops at real asynchronous work: the completion the delegate commits
-        // has already succeeded, so nobody is waiting on the gate behind it.
-        assertAsynchronous(bpmn, "invoiceHandoverHandWrite");
-        assertAsynchronous(bpmn, "enrich");
+        // A delegate between the completing task and the gate used to keep its boundary, on the
+        // reasoning that its own completion is what the person waited for. Measured, that boundary
+        // commits the completion and the gate then refuses a detached job: 200 with an empty body, the
+        // task consumed, the document never moved (issue #7371). The whole stretch is one transaction.
+        assertSynchronous(bpmn, "invoiceHandoverHandWrite");
+        assertSynchronousDelegate(bpmn, "enrich");
+        assertSynchronous(bpmn, "settle");
+    }
+
+    @Test
+    void aGatedSetterBehindADecisionAndACustomDelegateRunsInTheCompletingTransaction() {
+        String bpmn = bpmn("InvoicePosting");
+
+        // base-inventory's six posting flows, exactly: userTask -> decision -> custom posting delegate
+        // -> gated status setter. The delegate is bound with flowable:class rather than ${JavaTask}, so
+        // it is emitted on its own path - which used to hard-code flowable:async (issue #7371).
+        assertSynchronousDelegate(bpmn, "apply");
+        assertSynchronous(bpmn, "activate");
+        // The ungated branch of the same decision is nobody's gate, and keeps its boundary.
+        assertAsynchronous(bpmn, "reject");
+    }
+
+    @Test
+    void aRetryingStepBetweenTheTaskAndTheGateKeepsItsAsyncBoundary() {
+        String bpmn = bpmn("InvoiceRetrying");
+
+        // The one step the completing transaction may not swallow: a Flowable failed-job retry cycle
+        // re-runs a JOB, and there is no job without the boundary. The gate behind it still refuses
+        // into a dead-letter incident - the generator logs that rather than dropping the declared
+        // re-attempts silently.
+        assertAsynchronousDelegate(bpmn, "transmit");
+        assertAsynchronous(bpmn, "invoiceRetryingSendWrite");
+        // The gated set itself is synchronous either way (#7014): it is the write the gate stands
+        // in front of.
+        assertSynchronous(bpmn, "settle");
     }
 
     @Test

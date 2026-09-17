@@ -90,10 +90,17 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## Capacity guard: reject a create/update that would drive the parent's balance negative. Derived from a
 ## capacity-bearing roll-up (child -> parent via FK; parent.capacity vs sum of the children's `of` field).
 ## Recomputed synchronously from the store (not the async-maintained balance field), excluding this row.
+## A parent owned by ANOTHER model is addressed by its fully-qualified generated type rather than
+## imported, so nothing this DAO imports can collide with it; a local parent keeps its plain name.
 #macro(rollupGuardCheck)
 #if($rollupGuard)
+#if($rollupGuard.parentGenFolder && $rollupGuard.parentGenFolder != "")
+#set($guardParentType = "gen.${rollupGuard.parentGenFolder}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}")
+#else
+#set($guardParentType = "${rollupGuard.parentEntity}")
+#end
         if (entity.${rollupGuard.fkProperty} != null) {
-            ${rollupGuard.parentEntity}Entity guardParent = new ${rollupGuard.parentEntity}Repository().findById(entity.${rollupGuard.fkProperty});
+            ${guardParentType}Entity guardParent = new ${guardParentType}Repository().findById(entity.${rollupGuard.fkProperty});
             if (guardParent != null && guardParent.${rollupGuard.capacityField} != null) {
                 java.math.BigDecimal guardConsumed = java.math.BigDecimal.ZERO;
                 for (${name}Entity guardRow : findAll(Criteria.create().eq("${rollupGuard.fkProperty}", entity.${rollupGuard.fkProperty}))) {
@@ -288,8 +295,10 @@ import gen.${javaGenFolderName}.data.${documentMaster.javaChildPerspective}.${do
 #if(!$documentMaster && $multilingual != "true")
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
+#if(!$rollupGuard.parentGenFolder || $rollupGuard.parentGenFolder == "")
 import gen.${javaGenFolderName}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}Entity;
 import gen.${javaGenFolderName}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}Repository;
+#end
 #end
 #if($haveItemChecks && $multilingual != "true" && !$documentMaster && !$rollupGuard)
 ## The item-counting document checks need Criteria to load the items; deduped against the other
@@ -1055,7 +1064,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
 #end
             if (${check.guardJavaExpression}) {
-                throw new ValidationException("${check.message}");
+                throw new ValidationException("${check.messageJavaLiteral}");
             }
 #elseif($check.kind == "compare")
             // A value of the row compared with a second one (intent `checks: compare`) - another field

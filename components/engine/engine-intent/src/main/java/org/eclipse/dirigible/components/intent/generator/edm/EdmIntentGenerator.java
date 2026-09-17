@@ -209,7 +209,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // that would drive the parent's balance negative. Stamp the guard metadata onto the child so its
         // generated DAO enforces it synchronously (the DAO is generated from this .model, which otherwise
         // does not see the roll-ups - those live in the .glue).
-        Map<String, Map<String, Object>> rollupGuards = buildRollupGuards(model, byName, compositionParents);
+        Map<String, Map<String, Object>> rollupGuards = buildRollupGuards(context, model, byName, compositionParents, usesByAlias);
         // The read / write gates the intent's `permissions[].can:` tokens authorize. An entity a token
         // names is gated by the roles the author declared instead of the convention-derived names,
         // which nothing else in the intent mentions.
@@ -881,12 +881,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * rejects a create/update that would push the parent's balance below zero. Keyed by child entity
      * name; the DAO template ({@code #rollupGuardCheck}) reads {@code rollupGuard} off the entity.
      */
-    private static Map<String, Map<String, Object>> buildRollupGuards(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents) {
+    private static Map<String, Map<String, Object>> buildRollupGuards(IntentGenerationContext context, IntentModel model,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, Map<String, UsesIntent> usesByAlias) {
         Map<String, Map<String, Object>> guards = new HashMap<>();
         for (RollupIntent rollup : model.getRollups()) {
-            // A cross-model child cannot carry a guard (the parser refuses capacity there) and must not
-            // be confused with a local entity of the same name.
+            // A cross-model child cannot carry a guard - the rows are written by the owner's repository,
+            // not by anything this model generates - and must not be confused with a local entity of the
+            // same name.
             if (rollup.isCrossModelChild()) {
                 continue;
             }
@@ -898,13 +899,45 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             EntityIntent child = byName.get(rollup.getEntity());
             RelationIntent via = child == null ? null : toOneRelationByName(child, rollup.getVia());
-            EntityIntent parent = via == null ? null : byName.get(via.getTo());
-            if (parent == null || guards.containsKey(rollup.getEntity())) {
+            if (via == null || guards.containsKey(rollup.getEntity())) {
                 continue;
             }
+            // A cross-model PARENT carries the guard just the same (#7410): the check is a READ of the
+            // parent's capacity plus a re-sum of THIS model's own child rows, and it is emitted into the
+            // child's repository, which this model generates. Only the parent's coordinates come from
+            // the owner's .model - and the guard addresses it by its fully-qualified generated type, so
+            // no import of this DAO can collide with it.
+            String parentEntity;
+            String parentPerspective;
+            String parentGenFolder = "";
+            if (notBlank(via.getModel())) {
+                UsesIntent uses = usesByAlias.get(via.getModel());
+                if (uses == null) {
+                    continue; // the parser already reported the undeclared alias
+                }
+                CrossModelSupport.TargetInfo target = CrossModelSupport.resolve(context, uses, via.getTo());
+                if (target.resolved() && target.propertyNames() != null && !target.propertyNames()
+                                                                                  .contains(
+                                                                                          IntentNaming.pascalCase(rollup.getCapacity()))) {
+                    continue; // the glue generator reports the missing capacity column and drops the roll-up
+                }
+                parentEntity = via.getTo();
+                parentPerspective = target.perspectiveName();
+                parentGenFolder = via.getModel();
+            } else {
+                EntityIntent parent = byName.get(via.getTo());
+                if (parent == null) {
+                    continue;
+                }
+                parentEntity = parent.getName();
+                parentPerspective = IntentEntities.resolvePerspective(parent.getName(), compositionParents, model);
+            }
             Map<String, Object> guard = new LinkedHashMap<>();
-            guard.put("parentEntity", parent.getName());
-            guard.put("parentPerspective", IntentEntities.resolvePerspective(parent.getName(), compositionParents, model));
+            guard.put("parentEntity", parentEntity);
+            guard.put("parentPerspective", parentPerspective);
+            // Empty for a local parent - the DAO then imports it from this project's own gen folder, so
+            // a local guard renders exactly as before.
+            guard.put("parentGenFolder", parentGenFolder);
             guard.put("fkProperty", IntentNaming.pascalCase(rollup.getVia()));
             guard.put("capacityField", IntentNaming.pascalCase(rollup.getCapacity()));
             guard.put("ofField", IntentNaming.pascalCase(rollup.getOf()));
